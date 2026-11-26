@@ -1214,6 +1214,254 @@
     color: var(--text-2);
     line-height: 1.45;
   }
+  /* Syntopik v3.2: Vignettes, Assertion-Reason, Confidence, EV Skip & Distractor Autopsy */
+  .premortem-banner {
+    margin-bottom: 16px;
+    padding: 12px 15px;
+    border-radius: 10px;
+    border: 1px solid var(--amber);
+    border-left: 4px solid var(--amber);
+    background: var(--amber-bg);
+    max-width: 860px;
+  }
+  .premortem-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    margin-bottom: 7px;
+    font-size: 12.5px;
+    font-weight: 750;
+    color: var(--amber);
+  }
+  .premortem-list {
+    margin: 0;
+    padding-left: 18px;
+    font-size: 13px;
+    line-height: 1.5;
+    color: var(--text);
+  }
+  .premortem-list li { margin-bottom: 4px; }
+  .vignette-banner {
+    margin-bottom: 18px;
+    border: 1.5px solid var(--border-strong);
+    border-left: 4px solid var(--accent);
+    border-radius: 10px;
+    background: var(--bg-subtle);
+    max-width: 860px;
+    overflow: hidden;
+  }
+  .vignette-banner > summary {
+    padding: 10px 14px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+    font-size: 13px;
+    font-weight: 750;
+    color: var(--text);
+    background: var(--bg-card);
+    border-bottom: 1px solid var(--border);
+    list-style: none;
+  }
+  .vignette-banner > summary::-webkit-details-marker { display: none; }
+  .vignette-kind {
+    font-size: 10.5px;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    padding: 2px 7px;
+    border-radius: 999px;
+    background: var(--accent-bg);
+    color: var(--accent);
+    border: 1px solid var(--accent);
+    font-weight: 750;
+  }
+  .vignette-siblings {
+    margin-left: auto;
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    flex-wrap: wrap;
+  }
+  .vig-jump {
+    font-size: 11px;
+    font-weight: 700;
+    padding: 2px 8px;
+    border-radius: 6px;
+    border: 1px solid var(--border-strong);
+    background: var(--bg-elev);
+    color: var(--text-2);
+    cursor: pointer;
+  }
+  .vig-jump.active {
+    background: var(--accent);
+    border-color: var(--accent-strong);
+    color: #fff;
+  }
+  .vignette-body {
+    padding: 13px 16px;
+    font-family: var(--font-prose);
+    font-size: 14.5px;
+    line-height: 1.6;
+    color: var(--text);
+    max-height: 280px;
+    overflow-y: auto;
+  }
+  .ar-statements {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 10px;
+    margin: 0 0 16px;
+    max-width: 860px;
+  }
+  .ar-card {
+    padding: 12px 15px;
+    border-radius: 10px;
+    border: 1.5px solid var(--border);
+    background: var(--bg-card);
+  }
+  .ar-card.ar-assertion { border-left: 4px solid var(--accent); }
+  .ar-card.ar-reason { border-left: 4px solid var(--purple); }
+  .ar-label {
+    font-size: 11.5px;
+    font-weight: 800;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--accent);
+    margin-bottom: 5px;
+  }
+  .ar-card.ar-reason .ar-label { color: var(--purple); }
+  .ar-text {
+    font-family: var(--font-prose);
+    font-size: 15px;
+    line-height: 1.58;
+    color: var(--text);
+  }
+  .opt-card.eliminated { opacity: 0.52; }
+  .opt-card.eliminated .opt-text { text-decoration: line-through; }
+  .opt-strike-btn {
+    margin-left: auto;
+    flex-shrink: 0;
+    background: transparent;
+    border: 1px solid var(--border);
+    color: var(--muted);
+    border-radius: 6px;
+    width: 24px;
+    height: 24px;
+    font-size: 13px;
+    font-weight: 700;
+    line-height: 1;
+    cursor: pointer;
+    display: inline-grid;
+    place-items: center;
+  }
+  .opt-strike-btn:hover { border-color: var(--red); color: var(--red); background: var(--red-bg); }
+  .opt-why-wrong {
+    margin-top: 5px;
+    font-size: 12px;
+    line-height: 1.45;
+    color: var(--muted);
+  }
+  .opt-card.rev-wrong .opt-why-wrong { color: var(--red); font-weight: 600; }
+  .conf-bar {
+    margin-top: 16px;
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    flex-wrap: wrap;
+    max-width: 860px;
+    font-size: 12px;
+    color: var(--muted);
+  }
+  .conf-pill {
+    padding: 4px 10px;
+    border-radius: 999px;
+    border: 1px solid var(--border-strong);
+    background: var(--bg-elev);
+    color: var(--text-2);
+    font-size: 11.5px;
+    font-weight: 650;
+    cursor: pointer;
+  }
+  .conf-pill:hover { border-color: var(--accent); color: var(--accent); }
+  .conf-pill.active { background: var(--accent); border-color: var(--accent-strong); color: #fff; }
+  .matrix-row-badge {
+    display: inline-block;
+    font-size: 11px;
+    font-weight: 750;
+    padding: 2px 7px;
+    border-radius: 999px;
+  }
+  .matrix-row-badge.correct { background: var(--green-bg); color: var(--green); }
+  .matrix-row-badge.wrong { background: var(--red-bg); color: var(--red); }
+  .matrix-row-badge.blank { background: var(--bg-subtle); color: var(--muted); }
+  .ev-discipline-strip {
+    margin-top: 12px;
+    padding: 10px 13px;
+    border-radius: 9px;
+    border: 1px solid var(--border);
+    background: var(--bg-card);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    flex-wrap: wrap;
+    font-size: 12.5px;
+  }
+  .ev-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 3px 10px;
+    border-radius: 999px;
+    font-family: "SF Mono", ui-monospace, Menlo, monospace;
+    font-size: 12px;
+    font-weight: 750;
+    background: var(--accent-bg);
+    border: 1px solid var(--accent);
+    color: var(--accent);
+  }
+  .ev-badge.good { background: var(--green-bg); border-color: var(--green); color: var(--green); }
+  .ev-badge.warn { background: var(--amber-bg); border-color: var(--amber); color: var(--amber); }
+  .ev-badge.bad { background: var(--red-bg); border-color: var(--red); color: var(--red); }
+  .distractor-autopsy-details {
+    margin-top: 12px;
+    border: 1px solid var(--border);
+    border-radius: 9px;
+    background: var(--bg-card);
+    overflow: hidden;
+  }
+  .distractor-autopsy-details > summary {
+    padding: 9px 13px;
+    cursor: pointer;
+    font-size: 12.5px;
+    font-weight: 750;
+    color: var(--text);
+    background: var(--bg-subtle);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+  }
+  .distractor-autopsy-list {
+    padding: 10px 13px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    font-size: 12.5px;
+  }
+  .distractor-row {
+    padding: 8px 10px;
+    border-radius: 7px;
+    border: 1px solid var(--border);
+    border-left: 3px solid var(--red);
+    background: var(--bg-elev);
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+  }
+
   @media (max-width: 720px) {
     .autopsy-grid { grid-template-columns: 1fr; }
   }
@@ -1365,9 +1613,13 @@
       </div>
 
       <div class="q-scroll" id="qScroll">
+        <div id="qPreMortemSlot"></div>
+        <div id="qVignetteSlot"></div>
         <div class="q-stem" id="qStem"></div>
+        <div id="qAssertionSlot"></div>
         <div id="qFigureContainer"></div>
         <div id="qResponseArea"></div>
+        <div id="qConfidenceSlot"></div>
         <div id="qReviewContainer"></div>
       </div>
 
@@ -1481,6 +1733,7 @@
 
 <script>
 window.__EXAM_SPEC__ = __EXAM_SPEC_JSON__;
+window.__EXAM_SEALED_POST__ = "__EXAM_SEALED_POST_B64__";
 </script>
 <script>
 (function () {
@@ -1860,9 +2113,111 @@ window.__EXAM_SPEC__ = __EXAM_SPEC_JSON__;
   }
 
   /* ---------------- Deterministic Client-Side Scorer (Matches exam_runner.py) ---------------- */
+  const AR_TRUTH_TABLE = {
+    A: [true, true, true],
+    B: [true, true, false],
+    C: [true, false, false],
+    D: [false, true, false],
+    E: [false, false, false]
+  };
+
+  function arErrorKindLocal(chosen, expected) {
+    const c = String(chosen || "").trim().toUpperCase();
+    const e = String(expected || "").trim().toUpperCase();
+    if (!c || !e || c === e) return null;
+    if ((c === "A" && e === "B") || (c === "B" && e === "A")) return "causal_link_trap";
+    const tc = AR_TRUTH_TABLE[c];
+    const te = AR_TRUTH_TABLE[e];
+    if (tc && te) {
+      const aDiff = tc[0] !== te[0];
+      const rDiff = tc[1] !== te[1];
+      if (aDiff && rDiff) return "double_truth_flip";
+      if (aDiff) return "assertion_truth_error";
+      if (rDiff) return "reason_truth_error";
+    }
+    return "causal_link_trap";
+  }
+
+  let _sealedAutopsyCache = null;
+  let _sealedHydrated = false;
+  const _hydratedKeysByQid = {};
+  function decodeSealedPost() {
+    if (!state || !state.submitted) return {};
+    if (_sealedAutopsyCache !== null) return _sealedAutopsyCache;
+    _sealedAutopsyCache = {};
+    try {
+      const rawB64 = String(window.__EXAM_SEALED_POST__ || "").trim();
+      if (!rawB64 || rawB64.indexOf("__EXAM_SEALED") !== -1) return _sealedAutopsyCache;
+      const binStr = atob(rawB64);
+      const bytes = new Uint8Array(binStr.length);
+      for (let i = 0; i < binStr.length; i++) bytes[i] = binStr.charCodeAt(i);
+      const jsonStr = (typeof TextDecoder === "function")
+        ? new TextDecoder("utf-8").decode(bytes)
+        : binStr;
+      const parsed = JSON.parse(jsonStr);
+      if (parsed && typeof parsed === "object") _sealedAutopsyCache = parsed;
+    } catch (_e) {
+      _sealedAutopsyCache = {};
+    }
+    return _sealedAutopsyCache;
+  }
+
+  function decodeSealedDistractors() {
+    return decodeSealedPost();
+  }
+
+  function hydrateSubmittedQuestions() {
+    if (!state || !state.submitted || _sealedHydrated) return;
+    const sealed = decodeSealedPost();
+    const qMap = (sealed && sealed._questions && typeof sealed._questions === "object") ? sealed._questions : {};
+    QUESTIONS.forEach(function (q) {
+      const sq = qMap[q.id];
+      if (!sq || typeof sq !== "object") return;
+      const added = _hydratedKeysByQid[q.id] || [];
+      Object.keys(sq).forEach(function (k) {
+        if (!Object.prototype.hasOwnProperty.call(q, k) || q[k] === undefined || q[k] === null) {
+          if (added.indexOf(k) === -1) added.push(k);
+        }
+        q[k] = cloneVal(sq[k]);
+      });
+      _hydratedKeysByQid[q.id] = added;
+    });
+    _sealedHydrated = true;
+  }
+
+  function unhydrateSubmittedQuestions() {
+    QUESTIONS.forEach(function (q) {
+      const added = _hydratedKeysByQid[q.id];
+      if (Array.isArray(added)) {
+        added.forEach(function (k) { delete q[k]; });
+      }
+      delete _hydratedKeysByQid[q.id];
+    });
+    _sealedHydrated = false;
+    _sealedAutopsyCache = null;
+  }
+
+  function getOptionDistractorMeta(q, optId) {
+    if (!state || !state.submitted) return null;
+    const oid = String(optId || "").toUpperCase();
+    const sealedMap = decodeSealedDistractors();
+    const fromSealed = (sealedMap[q.id] && sealedMap[q.id][oid]) ? sealedMap[q.id][oid] : null;
+    if (fromSealed) return fromSealed;
+    const opts = Array.isArray(q.options) ? q.options : [];
+    const found = opts.find(function (o) { return String(o.id || "").toUpperCase() === oid; });
+    if (found && (found.whyWrong || found.trapCategory || found.confusedWith)) {
+      return {
+        whyWrong: found.whyWrong || "",
+        trapCategory: found.trapCategory || "",
+        confusedWith: found.confusedWith || ""
+      };
+    }
+    return null;
+  }
+
   function isEmptyAnswer(q, ans) {
     if (ans === null || ans === undefined) return true;
-    if (q.type === "single_correct") return String(ans).trim() === "";
+    if (q.type === "single_correct" || q.type === "assertion_reason") return String(ans).trim() === "";
     if (q.type === "multi_correct") return !Array.isArray(ans) || ans.length === 0;
     if (q.type === "numerical") {
       const s = String(ans).trim();
@@ -1870,6 +2225,7 @@ window.__EXAM_SPEC__ = __EXAM_SPEC_JSON__;
       return !Number.isFinite(Number(s));
     }
     if (q.type === "matrix_match") {
+      if (typeof ans === "string") return ans.trim() === "";
       if (typeof ans !== "object" || Array.isArray(ans)) return true;
       return Object.keys(ans).every(function (k) {
         const v = ans[k];
@@ -1881,11 +2237,23 @@ window.__EXAM_SPEC__ = __EXAM_SPEC_JSON__;
 
   function scoreQuestionLocal(q, rawAns) {
     const maxMarks = Number(q.marksCorrect != null ? q.marksCorrect : 4);
-    const mWrong = Number(q.marksWrong != null ? q.marksWrong : (q.type === "single_correct" ? -1 : q.type === "multi_correct" ? -2 : 0));
+    const mWrong = Number(q.marksWrong != null ? q.marksWrong : ((q.type === "single_correct" || q.type === "assertion_reason") ? -1 : q.type === "multi_correct" ? -2 : 0));
     const mUnatt = Number(q.marksUnattempted != null ? q.marksUnattempted : 0);
 
     if (isEmptyAnswer(q, rawAns)) {
-      return { status: "unattempted", marks: mUnatt, maxMarks: maxMarks, negativeLost: 0 };
+      const base = { status: "unattempted", marks: mUnatt, maxMarks: maxMarks, negativeLost: mUnatt < 0 ? Math.abs(mUnatt) : 0 };
+      if (q.type === "multi_correct") {
+        base.wrongSelected = [];
+        base.missedCorrect = (q.answer || []).slice().sort();
+      } else if (q.type === "assertion_reason") {
+        base.arErrorKind = null;
+      } else if (q.type === "matrix_match") {
+        const rr = {};
+        const rKeys = (q.answer && typeof q.answer === "object") ? Object.keys(q.answer) : (q.rows || []).map(function (r) { return r.id; });
+        rKeys.forEach(function (rk) { rr[rk] = "blank"; });
+        base.rowResults = rr;
+      }
+      return base;
     }
 
     if (q.type === "single_correct") {
@@ -1894,29 +2262,57 @@ window.__EXAM_SPEC__ = __EXAM_SPEC_JSON__;
       return { status: ok ? "correct" : "wrong", marks: marks, maxMarks: maxMarks, negativeLost: marks < 0 ? Math.abs(marks) : 0 };
     }
 
+    if (q.type === "assertion_reason") {
+      const chosen = String(rawAns).trim().toUpperCase();
+      const expected = String(q.answer).trim().toUpperCase();
+      const ok = chosen === expected;
+      const marks = ok ? maxMarks : mWrong;
+      return {
+        status: ok ? "correct" : "wrong",
+        marks: marks,
+        maxMarks: maxMarks,
+        negativeLost: marks < 0 ? Math.abs(marks) : 0,
+        arErrorKind: ok ? null : arErrorKindLocal(chosen, expected)
+      };
+    }
+
     if (q.type === "multi_correct") {
       const correctSet = new Set((q.answer || []).map(function (x) { return String(x).trim().toUpperCase(); }));
       const chosen = Array.from(new Set((Array.isArray(rawAns) ? rawAns : [rawAns]).map(function (x) { return String(x).trim().toUpperCase(); }).filter(Boolean)));
-      const hasWrong = chosen.some(function (x) { return !correctSet.has(x); });
-      if (hasWrong) {
-        return { status: "wrong", marks: mWrong, maxMarks: maxMarks, negativeLost: mWrong < 0 ? Math.abs(mWrong) : 0 };
+      const wrongSelected = chosen.filter(function (x) { return !correctSet.has(x); }).sort();
+      const missedCorrect = Array.from(correctSet).filter(function (x) { return chosen.indexOf(x) === -1; }).sort();
+      if (wrongSelected.length > 0) {
+        return {
+          status: "wrong", marks: mWrong, maxMarks: maxMarks, negativeLost: mWrong < 0 ? Math.abs(mWrong) : 0,
+          wrongSelected: wrongSelected, missedCorrect: missedCorrect
+        };
       }
       if (chosen.length === correctSet.size) {
-        return { status: "correct", marks: maxMarks, maxMarks: maxMarks, negativeLost: 0 };
+        return {
+          status: "correct", marks: maxMarks, maxMarks: maxMarks, negativeLost: 0,
+          wrongSelected: [], missedCorrect: []
+        };
       }
       if (q.partialMarking === false) {
-        return { status: "wrong", marks: mWrong, maxMarks: maxMarks, negativeLost: mWrong < 0 ? Math.abs(mWrong) : 0 };
+        return {
+          status: "wrong", marks: mWrong, maxMarks: maxMarks, negativeLost: mWrong < 0 ? Math.abs(mWrong) : 0,
+          wrongSelected: [], missedCorrect: missedCorrect
+        };
       }
       let pts = 0;
       const nTot = correctSet.size;
       const nCh = chosen.length;
+      const prof = String(q.markingProfile || "jee_adv_msq").toLowerCase();
       if (q.partialMarks && q.partialMarks[String(nCh)] != null) pts = Number(q.partialMarks[String(nCh)]);
-      else if (maxMarks !== 4) pts = Math.round((maxMarks * (nCh / nTot)) * 100) / 100;
+      else if (prof === "proportional" || maxMarks !== 4) pts = Math.round((maxMarks * (nCh / nTot)) * 100) / 100;
       else if (nTot >= 4 && nCh === 3) pts = 3;
       else if (nTot >= 3 && nCh === 2) pts = 2;
       else if (nTot >= 2 && nCh === 1) pts = 1;
       else pts = Math.min(nCh, Math.max(0, maxMarks - 1));
-      return { status: "partial", marks: pts, maxMarks: maxMarks, negativeLost: 0 };
+      return {
+        status: "partial", marks: pts, maxMarks: maxMarks, negativeLost: 0,
+        wrongSelected: [], missedCorrect: missedCorrect
+      };
     }
 
     if (q.type === "numerical") {
@@ -1936,23 +2332,59 @@ window.__EXAM_SPEC__ = __EXAM_SPEC_JSON__;
     }
 
     if (q.type === "matrix_match") {
+      if (q.matrixMode === "code_options" && typeof q.answer === "string") {
+        const chosenCode = String(rawAns).trim().toUpperCase();
+        const expCode = String(q.answer).trim().toUpperCase();
+        const ok = chosenCode === expCode;
+        const marks = ok ? maxMarks : mWrong;
+        const rr = {};
+        const optRowMap = (q.optionRowMap && typeof q.optionRowMap === "object") ? q.optionRowMap : {};
+        const expRows = (q.rowAnswer && typeof q.rowAnswer === "object") ? q.rowAnswer : optRowMap[expCode];
+        const chRows = optRowMap[chosenCode];
+        if (expRows && typeof expRows === "object" && chRows && typeof chRows === "object") {
+          Object.keys(expRows).forEach(function (rk) {
+            const ev = (Array.isArray(expRows[rk]) ? expRows[rk] : (expRows[rk] ? [expRows[rk]] : []))
+              .map(function (c) { return String(c).trim().toUpperCase(); }).filter(Boolean).sort();
+            const cv = (Array.isArray(chRows[rk]) ? chRows[rk] : (chRows[rk] ? [chRows[rk]] : []))
+              .map(function (c) { return String(c).trim().toUpperCase(); }).filter(Boolean).sort();
+            if (cv.length === 0) rr[rk] = "blank";
+            else if (cv.length === ev.length && cv.every(function (v, idx) { return v === ev[idx]; })) rr[rk] = "correct";
+            else rr[rk] = "wrong";
+          });
+        } else {
+          (q.rows || []).forEach(function (r) { rr[r.id] = ok ? "correct" : "wrong"; });
+        }
+        return {
+          status: ok ? "correct" : "wrong",
+          marks: marks,
+          maxMarks: maxMarks,
+          negativeLost: marks < 0 ? Math.abs(marks) : 0,
+          rowResults: rr
+        };
+      }
       const exp = q.answer || {};
       const rowKeys = Object.keys(exp);
       let matched = 0;
       let wrongRows = 0;
+      const rowResults = {};
       rowKeys.forEach(function (rk) {
         const expArr = (Array.isArray(exp[rk]) ? exp[rk] : [exp[rk]]).map(function (c) { return String(c).trim().toUpperCase(); }).sort();
         const rawRow = rawAns[rk];
         const chArr = (Array.isArray(rawRow) ? rawRow : (rawRow ? [rawRow] : [])).map(function (c) { return String(c).trim().toUpperCase(); }).filter(Boolean).sort();
-        if (chArr.length === 0) return;
-        if (chArr.length === expArr.length && chArr.every(function (v, idx) { return v === expArr[idx]; })) matched++;
-        else wrongRows++;
+        if (chArr.length === 0) { rowResults[rk] = "blank"; return; }
+        if (chArr.length === expArr.length && chArr.every(function (v, idx) { return v === expArr[idx]; })) {
+          matched++;
+          rowResults[rk] = "correct";
+        } else {
+          wrongRows++;
+          rowResults[rk] = "wrong";
+        }
       });
       if (matched === rowKeys.length && wrongRows === 0) {
-        return { status: "correct", marks: maxMarks, maxMarks: maxMarks, negativeLost: 0 };
+        return { status: "correct", marks: maxMarks, maxMarks: maxMarks, negativeLost: 0, rowResults: rowResults };
       }
       if (q.partialMarking === false) {
-        return { status: "wrong", marks: mWrong, maxMarks: maxMarks, negativeLost: mWrong < 0 ? Math.abs(mWrong) : 0 };
+        return { status: "wrong", marks: mWrong, maxMarks: maxMarks, negativeLost: mWrong < 0 ? Math.abs(mWrong) : 0, rowResults: rowResults };
       }
       const perRow = q.marksPerRow != null ? Number(q.marksPerRow) : (rowKeys.length ? maxMarks / rowKeys.length : 1);
       const wrongPerRow = q.marksWrongPerRow != null ? Number(q.marksWrongPerRow) : mWrong;
@@ -1962,7 +2394,8 @@ window.__EXAM_SPEC__ = __EXAM_SPEC_JSON__;
         status: matched > 0 ? "partial" : "wrong",
         marks: marks,
         maxMarks: maxMarks,
-        negativeLost: Math.round(Math.abs(negDed) * 100) / 100
+        negativeLost: Math.round(Math.abs(negDed) * 100) / 100,
+        rowResults: rowResults
       };
     }
 
@@ -1971,10 +2404,11 @@ window.__EXAM_SPEC__ = __EXAM_SPEC_JSON__;
 
   function formatAnswerDisplay(q, ans) {
     if (isEmptyAnswer(q, ans)) return "Unattempted";
-    if (q.type === "single_correct") return String(ans).toUpperCase();
+    if (q.type === "single_correct" || q.type === "assertion_reason") return String(ans).toUpperCase();
     if (q.type === "multi_correct") return (Array.isArray(ans) ? ans : [ans]).map(function (x) { return String(x).toUpperCase(); }).sort().join(", ");
     if (q.type === "numerical") return String(ans);
     if (q.type === "matrix_match") {
+      if (typeof ans === "string") return ans.toUpperCase();
       return Object.keys(ans).sort().map(function (k) {
         const vals = Array.isArray(ans[k]) ? ans[k] : [ans[k]];
         return vals.length ? (k + " → " + vals.join(",")) : null;
@@ -1998,7 +2432,9 @@ window.__EXAM_SPEC__ = __EXAM_SPEC_JSON__;
         status: "not_visited",
         timeSpentSec: 0,
         markedForReview: false,
-        visited: false
+        visited: false,
+        confidence: null,
+        eliminated: []
       };
     });
     return {
@@ -2007,6 +2443,7 @@ window.__EXAM_SPEC__ = __EXAM_SPEC_JSON__;
       submitted: false,
       reviewMode: false,
       paused: false,
+      preMortemDismissed: false,
       currentIndex: 0,
       activeSubject: SUBJECTS.length > 1 ? "ALL" : (SUBJECTS[0] || "ALL"),
       remainingSec: Math.max(60, Math.round(Number(SPEC.durationMinutes || 60) * 60)),
@@ -2025,7 +2462,10 @@ window.__EXAM_SPEC__ = __EXAM_SPEC_JSON__;
       Object.assign(base, parsed);
       QUESTIONS.forEach(function (q) {
         if (!base.responses[q.id]) {
-          base.responses[q.id] = { answer: null, status: "not_visited", timeSpentSec: 0, markedForReview: false, visited: false };
+          base.responses[q.id] = { answer: null, status: "not_visited", timeSpentSec: 0, markedForReview: false, visited: false, confidence: null, eliminated: [] };
+        } else {
+          if (base.responses[q.id].confidence === undefined) base.responses[q.id].confidence = null;
+          if (!Array.isArray(base.responses[q.id].eliminated)) base.responses[q.id].eliminated = [];
         }
       });
       if (base.currentIndex < 0 || base.currentIndex >= QUESTIONS.length) base.currentIndex = 0;
@@ -2114,6 +2554,53 @@ window.__EXAM_SPEC__ = __EXAM_SPEC_JSON__;
     return "";
   }
 
+  function renderEvAndDistractorHtml(evCal, distSummary) {
+    let out = "";
+    if (evCal && typeof evCal === "object") {
+      const sc = Number(evCal.evDisciplineScore != null ? evCal.evDisciplineScore : 100);
+      const badgeCls = sc >= 80 ? "good" : (sc >= 55 ? "warn" : "bad");
+      const basisLbl = evCal.evBasis === "confidence_exact"
+        ? "Confidence Exact"
+        : (evCal.evBasis === "elimination_derived" ? "Elimination Bound" : "Negative-Mark Proxy");
+      const details = [
+        "-EV Gambles: " + (evCal.negEvGamblesCount || 0) + (evCal.marksLostToNegEv ? (" (-" + evCal.marksLostToNegEv + "m)") : ""),
+        "Underconfident Skips: " + (evCal.underconfidentSkipsCount || 0) + (evCal.marksLeftOnTable ? (" (+" + evCal.marksLeftOnTable + "m EV)") : ""),
+        "Basis: " + basisLbl
+      ];
+      out +=
+        '<div class="ev-discipline-strip">' +
+          '<span class="ev-badge ' + badgeCls + '">EV Skip Discipline: ' + escHtml(String(sc)) + "/100</span>" +
+          '<span style="color:var(--text-2);font-size:12px;">' + escHtml(details.join(" · ")) + "</span>" +
+        "</div>";
+    }
+    const items = (distSummary && Array.isArray(distSummary.items)) ? distSummary.items : [];
+    if (items.length > 0) {
+      out +=
+        '<details class="distractor-autopsy-details">' +
+          "<summary>" +
+            "<span>Why-Wrong Distractor Autopsy (" + items.length + " triggered)</span>" +
+            '<span style="font-size:11px;color:var(--muted);">Click to expand</span>' +
+          "</summary>" +
+          '<div class="distractor-autopsy-list">' +
+            items.map(function (it) {
+              const qid = String(it.questionId || "");
+              const oid = String(it.optionId || "");
+              const cat = it.trapCategory ? (' <span class="badge">' + escHtml(it.trapCategory) + "</span>") : "";
+              const cw = it.confusedWith ? (' <span class="badge">Confused with: ' + escHtml(it.confusedWith) + "</span>") : "";
+              return '<div class="distractor-row">' +
+                '<div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;">' +
+                  '<button type="button" class="autopsy-chip" data-jump-qid="' + escHtml(qid) + '">' + escHtml(qid) + "</button>" +
+                  "<strong>Picked Option " + escHtml(oid) + "</strong>" + cat + cw +
+                "</div>" +
+                '<div>' + renderRichText(it.whyWrong || "Triggered distractor option.") + "</div>" +
+              "</div>";
+            }).join("") +
+          "</div>" +
+        "</details>";
+    }
+    return out;
+  }
+
   function renderLiveAutopsyHtml() {
     if (liveSubmissionState.status === "idle") return "";
     if (liveSubmissionState.status === "saving") {
@@ -2186,6 +2673,7 @@ window.__EXAM_SPEC__ = __EXAM_SPEC_JSON__;
           "</div>" +
           egoHtml +
           escHtmlBlock +
+          renderEvAndDistractorHtml(scored.evCalibration || null, scored.distractorSummary || null) +
         "</div>";
     }
     return html;
@@ -2195,6 +2683,10 @@ window.__EXAM_SPEC__ = __EXAM_SPEC_JSON__;
     const slot = document.getElementById("liveAutopsySlot");
     if (!slot) return;
     slot.innerHTML = renderLiveAutopsyHtml();
+    const localEvSlot = document.getElementById("localEvDistractorSlot");
+    if (localEvSlot && liveSubmissionState.status === "saved") {
+      localEvSlot.innerHTML = "";
+    }
     slot.querySelectorAll("[data-jump-qid]").forEach(function (btn) {
       btn.addEventListener("click", function () {
         const qid = btn.getAttribute("data-jump-qid");
@@ -2248,26 +2740,43 @@ window.__EXAM_SPEC__ = __EXAM_SPEC_JSON__;
     showToast._timer = setTimeout(function () { t.classList.remove("show"); }, 2400);
   }
 
+  function profileLabel(prof) {
+    const p = String(prof || "").toLowerCase();
+    if (p === "gate_msq") return "GATE MSQ";
+    if (p === "strict_all_or_nothing") return "All-or-Nothing";
+    if (p === "proportional") return "Proportional";
+    if (p === "jee_adv_msq") return "JEE Adv MSQ";
+    return "";
+  }
+
   function markingLabel(q) {
     const mc = q.marksCorrect != null ? q.marksCorrect : 4;
     if (q.type === "multi_correct") {
       const mw = q.marksWrong != null ? q.marksWrong : -2;
-      return q.partialMarking === false ? ("+" + mc + " / " + mw) : ("+" + mc + " / partial / " + mw);
+      const pLbl = profileLabel(q.markingProfile);
+      const base = q.partialMarking === false ? ("+" + mc + " / " + mw) : ("+" + mc + " / partial / " + mw);
+      return pLbl ? (base + " · " + pLbl) : base;
     }
     if (q.type === "matrix_match") {
+      if (q.matrixMode === "code_options" && (typeof q.answer === "string" || (Array.isArray(q.options) && q.options.length > 0))) {
+        const mwCode = q.marksWrong != null ? q.marksWrong : -1;
+        return "+" + mc + " / " + mwCode;
+      }
       const pr = q.marksPerRow != null ? q.marksPerRow : (q.rows && q.rows.length ? mc / q.rows.length : 1);
       const mw = q.marksWrong != null ? q.marksWrong : 0;
       return "+" + pr + "/row (max +" + mc + ") / " + mw;
     }
-    const mw = q.marksWrong != null ? q.marksWrong : (q.type === "single_correct" ? -1 : 0);
+    const mw = q.marksWrong != null ? q.marksWrong : ((q.type === "single_correct" || q.type === "assertion_reason") ? -1 : 0);
     return "+" + mc + " / " + mw;
   }
 
-  function typeLabel(t) {
+  function typeLabel(t, q) {
     if (t === "single_correct") return "Single Correct";
+    if (t === "assertion_reason") return "Assertion – Reason";
     if (t === "multi_correct") return "One or More Correct";
     if (t === "numerical") return "Numerical Value";
-    if (t === "matrix_match") return "Matrix Match";
+    if (t === "matrix_match") return (q && q.matrixMode === "code_options") ? "Matrix Match (Codes)" : "Matrix Match";
+    if (t === "vignette_stem") return "Case Vignette";
     return t;
   }
 
@@ -2439,12 +2948,133 @@ window.__EXAM_SPEC__ = __EXAM_SPEC_JSON__;
     }
     const rec = state.responses[q.id];
     document.getElementById("qNumTitle").textContent = "Question No. " + (state.currentIndex + 1) + " of " + QUESTIONS.length + " (" + q.id + ")";
-    document.getElementById("qTypeBadge").textContent = typeLabel(q.type);
+    document.getElementById("qTypeBadge").textContent = typeLabel(q.type, q);
     document.getElementById("qMarkingBadge").textContent = markingLabel(q);
-    document.getElementById("qChapterBadge").textContent = (q.subject || "General") + (q.chapter ? " · " + q.chapter : "");
+    document.getElementById("qChapterBadge").textContent =
+      (SPEC.blindChapterLabels === true && !state.submitted)
+        ? "Blind Interleaved"
+        : ((q.subject || "General") + (q.chapter ? " · " + q.chapter : ""));
     updateTimerUI();
 
+    // Optional Pre-Mortem Shield Banner (pre-submit, dismissible)
+    const pmSlot = document.getElementById("qPreMortemSlot");
+    pmSlot.innerHTML = "";
+    const rawShield = SPEC.preMortemShield;
+    const pmBullets = Array.isArray(rawShield)
+      ? rawShield
+      : (rawShield && Array.isArray(rawShield.bullets) ? rawShield.bullets : []);
+    if (!state.submitted && !state.preMortemDismissed && pmBullets.length > 0) {
+      const box = document.createElement("div");
+      box.className = "premortem-banner";
+      box.innerHTML =
+        '<div class="premortem-head">' +
+          "<span>Pre-Mortem Failure Shield (" + Math.min(3, pmBullets.length) + " Observed Traps)</span>" +
+          '<button type="button" class="modal-close" id="dismissPreMortemBtn">Dismiss</button>' +
+        "</div>" +
+        '<ul class="premortem-list">' +
+          pmBullets.slice(0, 3).map(function (b) {
+            const ifTxt = (b && typeof b === "object") ? (b.ifCue || "") : String(b);
+            const thTxt = (b && typeof b === "object" && b.thenAction) ? (" " + b.thenAction) : "";
+            return "<li><strong>" + escHtml(ifTxt) + "</strong>" + escHtml(thTxt) + "</li>";
+          }).join("") +
+        "</ul>";
+      pmSlot.appendChild(box);
+      const disBtn = document.getElementById("dismissPreMortemBtn");
+      if (disBtn) {
+        disBtn.addEventListener("click", function () {
+          state.preMortemDismissed = true;
+          saveState();
+          renderQuestion();
+        });
+      }
+    }
+
+    // Shared Collapsible Vignette / Passage Banner
+    const vigSlot = document.getElementById("qVignetteSlot");
+    vigSlot.innerHTML = "";
+    if (q.vignetteId && SPEC.vignettes && SPEC.vignettes[q.vignetteId]) {
+      const vig = SPEC.vignettes[q.vignetteId];
+      const siblings = [];
+      QUESTIONS.forEach(function (item, i) {
+        if (item.vignetteId === q.vignetteId) siblings.push({ idx: i, id: item.id });
+      });
+      const det = document.createElement("details");
+      det.className = "vignette-banner";
+      det.open = true;
+      const sum = document.createElement("summary");
+      const kindLbl = String(vig.kind || "passage").replace(/_/g, " ");
+      sum.innerHTML =
+        '<span class="vignette-kind">' + escHtml(kindLbl) + "</span>" +
+        "<span>" + escHtml(vig.title || vig.id) + "</span>" +
+        (q.vignetteOrder && q.vignetteCount ? ('<span class="badge">Item ' + q.vignetteOrder + " / " + q.vignetteCount + "</span>") : "");
+      if (siblings.length > 1) {
+        const sibWrap = document.createElement("span");
+        sibWrap.className = "vignette-siblings";
+        siblings.forEach(function (s, k) {
+          const jb = document.createElement("button");
+          jb.type = "button";
+          jb.className = "vig-jump" + (s.idx === state.currentIndex ? " active" : "");
+          jb.textContent = "Q" + (k + 1) + "/" + siblings.length;
+          jb.addEventListener("click", function (ev) {
+            ev.preventDefault();
+            ev.stopPropagation();
+            if (s.idx !== state.currentIndex) navigateTo(s.idx, "passive_switch");
+          });
+          sibWrap.appendChild(jb);
+        });
+        sum.appendChild(sibWrap);
+      }
+      det.appendChild(sum);
+      const bodyDiv = document.createElement("div");
+      bodyDiv.className = "vignette-body";
+      bodyDiv.innerHTML = renderRichText(vig.body || "");
+      if (vig.figureSvg || vig.figureDataUri) {
+        const fWrap = document.createElement("div");
+        fWrap.className = "q-figure-wrap";
+        if (vig.figureSvg) {
+          const h = document.createElement("div");
+          h.innerHTML = vig.figureSvg;
+          fWrap.appendChild(h);
+        } else if (vig.figureDataUri) {
+          const im = document.createElement("img");
+          im.src = vig.figureDataUri;
+          im.alt = vig.figureCaption || ("Vignette figure " + vig.id);
+          fWrap.appendChild(im);
+        }
+        if (vig.figureCaption) {
+          const cp = document.createElement("div");
+          cp.className = "q-figure-caption";
+          cp.innerHTML = renderRichText(vig.figureCaption);
+          fWrap.appendChild(cp);
+        }
+        bodyDiv.appendChild(fWrap);
+      }
+      det.appendChild(bodyDiv);
+      vigSlot.appendChild(det);
+    }
+
     document.getElementById("qStem").innerHTML = renderRichText(q.stem || "");
+
+    // Assertion-Reason Dual-Statement Cards
+    const arSlot = document.getElementById("qAssertionSlot");
+    arSlot.innerHTML = "";
+    if (q.type === "assertion_reason") {
+      const labels = (Array.isArray(q.statementLabels) && q.statementLabels.length === 2)
+        ? q.statementLabels
+        : ["Assertion (A)", "Reason (R)"];
+      const arWrap = document.createElement("div");
+      arWrap.className = "ar-statements";
+      arWrap.innerHTML =
+        '<div class="ar-card ar-assertion">' +
+          '<div class="ar-label">' + escHtml(labels[0]) + "</div>" +
+          '<div class="ar-text">' + renderRichText(q.assertion || "") + "</div>" +
+        "</div>" +
+        '<div class="ar-card ar-reason">' +
+          '<div class="ar-label">' + escHtml(labels[1]) + "</div>" +
+          '<div class="ar-text">' + renderRichText(q.reason || "") + "</div>" +
+        "</div>";
+      arSlot.appendChild(arWrap);
+    }
 
     // Embedded figure
     const figBox = document.getElementById("qFigureContainer");
@@ -2476,14 +3106,12 @@ window.__EXAM_SPEC__ = __EXAM_SPEC_JSON__;
     respArea.innerHTML = "";
     const disabled = state.submitted;
     const shownAnswer = disabled ? rec.answer : draftAnswer;
+    const elimList = Array.isArray(rec.eliminated) ? rec.eliminated : [];
 
-    if (q.type === "single_correct" || q.type === "multi_correct") {
-      const isMulti = q.type === "multi_correct";
+    function renderOptionCards(isMulti, hintText) {
       const hint = document.createElement("div");
       hint.className = "opt-hint";
-      hint.textContent = isMulti
-        ? "Select ONE OR MORE correct options (partial marking applies if no wrong option is chosen)."
-        : "Select the SINGLE most appropriate option.";
+      hint.textContent = hintText;
       respArea.appendChild(hint);
 
       const list = document.createElement("div");
@@ -2496,7 +3124,8 @@ window.__EXAM_SPEC__ = __EXAM_SPEC_JSON__;
       (q.options || []).forEach(function (opt) {
         const card = document.createElement("div");
         const isSel = chosenList.indexOf(opt.id) !== -1;
-        card.className = "opt-card" + (isSel ? " selected" : "");
+        const isElim = !disabled && elimList.indexOf(opt.id) !== -1;
+        card.className = "opt-card" + (isSel ? " selected" : "") + (isElim ? " eliminated" : "");
         if (disabled) {
           if (correctSet.has(opt.id)) card.classList.add("rev-correct");
           else if (isSel && !correctSet.has(opt.id)) card.classList.add("rev-wrong");
@@ -2510,11 +3139,43 @@ window.__EXAM_SPEC__ = __EXAM_SPEC_JSON__;
         const otxt = document.createElement("div");
         otxt.className = "opt-text";
         otxt.innerHTML = renderRichText(opt.text || "");
+
+        // Post-submit 1-line distractor rationale
+        if (disabled && !correctSet.has(opt.id)) {
+          const dMeta = getOptionDistractorMeta(q, opt.id);
+          if (dMeta && (dMeta.whyWrong || dMeta.confusedWith)) {
+            const whyDiv = document.createElement("div");
+            whyDiv.className = "opt-why-wrong";
+            const bits = [];
+            if (dMeta.whyWrong) bits.push(dMeta.whyWrong);
+            if (dMeta.confusedWith) bits.push("Confused with: " + dMeta.confusedWith);
+            whyDiv.innerHTML = renderRichText(bits.join(" · "));
+            otxt.appendChild(whyDiv);
+          }
+        }
+
         card.appendChild(ctrl);
         card.appendChild(oid);
         card.appendChild(otxt);
 
         if (!disabled) {
+          const strikeBtn = document.createElement("button");
+          strikeBtn.type = "button";
+          strikeBtn.className = "opt-strike-btn";
+          strikeBtn.title = isElim ? "Restore option" : "Strike through option";
+          strikeBtn.textContent = isElim ? "↺" : "×";
+          strikeBtn.addEventListener("click", function (ev) {
+            ev.stopPropagation();
+            const curE = Array.isArray(rec.eliminated) ? rec.eliminated.slice() : [];
+            const ep = curE.indexOf(opt.id);
+            if (ep === -1) curE.push(opt.id);
+            else curE.splice(ep, 1);
+            rec.eliminated = curE.sort();
+            saveState();
+            renderQuestion();
+          });
+          card.appendChild(strikeBtn);
+
           card.addEventListener("click", function () {
             if (isMulti) {
               const arr = Array.isArray(draftAnswer) ? draftAnswer.slice() : [];
@@ -2532,6 +3193,18 @@ window.__EXAM_SPEC__ = __EXAM_SPEC_JSON__;
         list.appendChild(card);
       });
       respArea.appendChild(list);
+    }
+
+    if (q.type === "single_correct" || q.type === "multi_correct" || q.type === "assertion_reason") {
+      const isMulti = q.type === "multi_correct";
+      const hintTxt = isMulti
+        ? (q.partialMarking === false
+            ? "Select ONE OR MORE correct options (all-or-nothing scoring; no partial credit)."
+            : "Select ONE OR MORE correct options (partial marking applies if no wrong option is chosen).")
+        : (q.type === "assertion_reason"
+            ? "Evaluate both statements and whether Reason (R) causally explains Assertion (A)."
+            : "Select the SINGLE most appropriate option.");
+      renderOptionCards(isMulti, hintTxt);
     } else if (q.type === "numerical") {
       const hint = document.createElement("div");
       hint.className = "opt-hint";
@@ -2609,80 +3282,127 @@ window.__EXAM_SPEC__ = __EXAM_SPEC_JSON__;
       lists.appendChild(c2);
       respArea.appendChild(lists);
 
-      const hint = document.createElement("div");
-      hint.className = "opt-hint";
-      hint.textContent = q.matrixSinglePerRow
-        ? "Select ONE matching column for each row."
-        : "Click cells to toggle matches (each row may match one or more columns).";
-      respArea.appendChild(hint);
+      if (q.matrixMode === "code_options" && Array.isArray(q.options) && q.options.length > 0) {
+        renderOptionCards(false, "Select the matching List I → List II code option.");
+      } else {
+        const hint = document.createElement("div");
+        hint.className = "opt-hint";
+        hint.textContent = q.matrixSinglePerRow
+          ? "Select ONE matching column for each row."
+          : "Click cells to toggle matches (each row may match one or more columns).";
+        respArea.appendChild(hint);
 
-      const curMap = (shownAnswer && typeof shownAnswer === "object") ? shownAnswer : {};
-      const expMap = q.answer || {};
-      const tw = document.createElement("div");
-      tw.className = "matrix-table-wrap";
-      const tbl = document.createElement("table");
-      tbl.className = "matrix-grid";
-      const thead = document.createElement("thead");
-      const hr = document.createElement("tr");
-      hr.innerHTML = "<th>Row \\ Col</th>" + (q.cols || []).map(function (c) { return "<th>" + escHtml(c.id) + "</th>"; }).join("") + "<th>Selected</th>";
-      thead.appendChild(hr);
-      tbl.appendChild(thead);
+        const curMap = (shownAnswer && typeof shownAnswer === "object") ? shownAnswer : {};
+        const expMap = q.answer || {};
+        const scMatrix = disabled ? scoreQuestionLocal(q, rec.answer) : null;
+        const rowResMap = (scMatrix && scMatrix.rowResults) ? scMatrix.rowResults : {};
+        const tw = document.createElement("div");
+        tw.className = "matrix-table-wrap";
+        const tbl = document.createElement("table");
+        tbl.className = "matrix-grid";
+        const thead = document.createElement("thead");
+        const hr = document.createElement("tr");
+        hr.innerHTML =
+          "<th>Row \\ Col</th>" +
+          (q.cols || []).map(function (c) { return "<th>" + escHtml(c.id) + "</th>"; }).join("") +
+          "<th>Selected</th>" +
+          (disabled ? "<th>Result</th>" : "");
+        thead.appendChild(hr);
+        tbl.appendChild(thead);
 
-      const tbody = document.createElement("tbody");
-      (q.rows || []).forEach(function (r) {
-        const tr = document.createElement("tr");
-        const rth = document.createElement("th");
-        rth.textContent = r.id;
-        tr.appendChild(rth);
-        const selCols = Array.isArray(curMap[r.id]) ? curMap[r.id] : (curMap[r.id] ? [curMap[r.id]] : []);
-        const expCols = Array.isArray(expMap[r.id]) ? expMap[r.id] : (expMap[r.id] ? [expMap[r.id]] : []);
+        const tbody = document.createElement("tbody");
+        (q.rows || []).forEach(function (r) {
+          const tr = document.createElement("tr");
+          const rth = document.createElement("th");
+          rth.textContent = r.id;
+          tr.appendChild(rth);
+          const selCols = Array.isArray(curMap[r.id]) ? curMap[r.id] : (curMap[r.id] ? [curMap[r.id]] : []);
+          const expCols = Array.isArray(expMap[r.id]) ? expMap[r.id] : (expMap[r.id] ? [expMap[r.id]] : []);
 
-        (q.cols || []).forEach(function (c) {
-          const td = document.createElement("td");
-          const btn = document.createElement("button");
-          btn.type = "button";
-          const isChk = selCols.indexOf(c.id) !== -1;
-          btn.className = "matrix-cell-btn" + (isChk ? " checked" : "");
+          (q.cols || []).forEach(function (c) {
+            const td = document.createElement("td");
+            const btn = document.createElement("button");
+            btn.type = "button";
+            const isChk = selCols.indexOf(c.id) !== -1;
+            btn.className = "matrix-cell-btn" + (isChk ? " checked" : "");
+            if (disabled) {
+              const isExp = expCols.indexOf(c.id) !== -1;
+              if (isChk && isExp) btn.classList.add("rev-right");
+              else if (!isChk && isExp) btn.classList.add("rev-miss");
+              else if (isChk && !isExp) btn.classList.add("rev-extra");
+            }
+            btn.textContent = isChk ? "✓" : c.id;
+            btn.disabled = disabled;
+            if (!disabled) {
+              btn.addEventListener("click", function () {
+                const nextMap = (draftAnswer && typeof draftAnswer === "object") ? cloneVal(draftAnswer) : {};
+                const cur = Array.isArray(nextMap[r.id]) ? nextMap[r.id].slice() : [];
+                if (q.matrixSinglePerRow) {
+                  nextMap[r.id] = (cur.length === 1 && cur[0] === c.id) ? [] : [c.id];
+                } else {
+                  const pos = cur.indexOf(c.id);
+                  if (pos === -1) cur.push(c.id);
+                  else cur.splice(pos, 1);
+                  cur.sort();
+                  nextMap[r.id] = cur;
+                }
+                if (nextMap[r.id].length === 0) delete nextMap[r.id];
+                draftAnswer = Object.keys(nextMap).length ? nextMap : null;
+                renderQuestion();
+              });
+            }
+            td.appendChild(btn);
+            tr.appendChild(td);
+          });
+
+          const sumTd = document.createElement("td");
+          sumTd.style.fontFamily = '"SF Mono", ui-monospace, Menlo, monospace';
+          sumTd.style.fontSize = "12px";
+          sumTd.textContent = selCols.length ? selCols.join(", ") : "—";
+          tr.appendChild(sumTd);
+
           if (disabled) {
-            const isExp = expCols.indexOf(c.id) !== -1;
-            if (isChk && isExp) btn.classList.add("rev-right");
-            else if (!isChk && isExp) btn.classList.add("rev-miss");
-            else if (isChk && !isExp) btn.classList.add("rev-extra");
+            const rSt = rowResMap[r.id] || "blank";
+            const resTd = document.createElement("td");
+            const rLbl = rSt === "correct" ? "✓ Exact" : (rSt === "wrong" ? "✗ Wrong" : "— Blank");
+            resTd.innerHTML = '<span class="matrix-row-badge ' + escHtml(rSt) + '">' + escHtml(rLbl) + "</span>";
+            tr.appendChild(resTd);
           }
-          btn.textContent = isChk ? "✓" : c.id;
-          btn.disabled = disabled;
-          if (!disabled) {
-            btn.addEventListener("click", function () {
-              const nextMap = (draftAnswer && typeof draftAnswer === "object") ? cloneVal(draftAnswer) : {};
-              const cur = Array.isArray(nextMap[r.id]) ? nextMap[r.id].slice() : [];
-              if (q.matrixSinglePerRow) {
-                nextMap[r.id] = (cur.length === 1 && cur[0] === c.id) ? [] : [c.id];
-              } else {
-                const pos = cur.indexOf(c.id);
-                if (pos === -1) cur.push(c.id);
-                else cur.splice(pos, 1);
-                cur.sort();
-                nextMap[r.id] = cur;
-              }
-              if (nextMap[r.id].length === 0) delete nextMap[r.id];
-              draftAnswer = Object.keys(nextMap).length ? nextMap : null;
-              renderQuestion();
-            });
-          }
-          td.appendChild(btn);
-          tr.appendChild(td);
+          tbody.appendChild(tr);
         });
+        tbl.appendChild(tbody);
+        tw.appendChild(tbl);
+        respArea.appendChild(tw);
+      }
+    }
 
-        const sumTd = document.createElement("td");
-        sumTd.style.fontFamily = '"SF Mono", ui-monospace, Menlo, monospace';
-        sumTd.style.fontSize = "12px";
-        sumTd.textContent = selCols.length ? selCols.join(", ") : "—";
-        tr.appendChild(sumTd);
-        tbody.appendChild(tr);
+    // Optional Calm Confidence Selector (before submit; zero forced clicks)
+    const confSlot = document.getElementById("qConfidenceSlot");
+    confSlot.innerHTML = "";
+    if (!disabled) {
+      const bar = document.createElement("div");
+      bar.className = "conf-bar";
+      const lbl = document.createElement("span");
+      lbl.textContent = "Confidence (optional, for EV skip audit):";
+      bar.appendChild(lbl);
+      [
+        { v: 0.25, t: "25% Guess" },
+        { v: 0.50, t: "50%" },
+        { v: 0.75, t: "75%" },
+        { v: 0.95, t: "95% Sure" }
+      ].forEach(function (cOpt) {
+        const pb = document.createElement("button");
+        pb.type = "button";
+        pb.className = "conf-pill" + (rec.confidence === cOpt.v ? " active" : "");
+        pb.textContent = cOpt.t;
+        pb.addEventListener("click", function () {
+          rec.confidence = (rec.confidence === cOpt.v) ? null : cOpt.v;
+          saveState();
+          renderQuestion();
+        });
+        bar.appendChild(pb);
       });
-      tbl.appendChild(tbody);
-      tw.appendChild(tbl);
-      respArea.appendChild(tw);
+      confSlot.appendChild(bar);
     }
 
     // Review Solution Panel (only post-submit)
@@ -2701,9 +3421,34 @@ window.__EXAM_SPEC__ = __EXAM_SPEC_JSON__;
           '<span class="verdict-pill ' + sc.status + '">' + escHtml(sc.status) + " (" + escHtml(marksText) + ")</span>" +
           '<span class="badge">Time Spent: ' + formatMS(rec.timeSpentSec) + "</span>" +
           (q.propId ? '<span class="badge">KG: ' + escHtml(q.propId) + "</span>" : "") +
+          (sc.arErrorKind ? '<span class="badge" style="border-color:var(--red);color:var(--red);">AR Error: ' + escHtml(sc.arErrorKind) + "</span>" : "") +
         "</div>" +
         '<div class="review-ans-line"><strong>Your Answer:</strong> ' + escHtml(formatAnswerDisplay(q, rec.answer)) +
         ' &nbsp;|&nbsp; <strong>Official Answer:</strong> ' + escHtml(correctDisplay) + "</div>";
+
+      if (q.type === "assertion_reason") {
+        const trExp = AR_TRUTH_TABLE[String(q.answer || "").toUpperCase()];
+        if (trExp) {
+          html +=
+            '<div class="review-ans-line"><strong>Truth Breakdown:</strong> ' +
+            "A: " + (trExp[0] ? "True" : "False") +
+            " · R: " + (trExp[1] ? "True" : "False") +
+            " · Causal Link: " + (trExp[2] ? "Yes" : "No") + "</div>";
+        }
+        if (q.causalLinkExplanation) {
+          html += '<div class="review-solution"><strong>Causal Link Explanation:</strong><br>' + renderRichText(q.causalLinkExplanation) + "</div>";
+        }
+      }
+      if (q.type === "matrix_match" && q.rowExplanations && typeof q.rowExplanations === "object") {
+        const rKeys = Object.keys(q.rowExplanations);
+        if (rKeys.length > 0) {
+          html += '<div class="review-solution"><strong>Row Explanations:</strong><ul>' +
+            rKeys.map(function (rk) {
+              return "<li><strong>" + escHtml(rk) + ":</strong> " + renderRichText(q.rowExplanations[rk]) + "</li>";
+            }).join("") +
+            "</ul></div>";
+        }
+      }
       if (q.solution) {
         html += '<div class="review-solution"><strong>Solution:</strong><br>' + renderRichText(q.solution) + "</div>";
       }
@@ -2785,13 +3530,20 @@ window.__EXAM_SPEC__ = __EXAM_SPEC_JSON__;
     const cleanResponses = {};
     QUESTIONS.forEach(function (q) {
       const r = state.responses[q.id];
-      cleanResponses[q.id] = {
+      const entry = {
         answer: cloneVal(r.answer),
         status: r.status,
         timeSpentSec: Math.round(Number(r.timeSpentSec || 0)),
         markedForReview: !!r.markedForReview,
         visited: !!r.visited
       };
+      if (typeof r.confidence === "number" && Number.isFinite(r.confidence)) {
+        entry.confidence = r.confidence;
+      }
+      if (Array.isArray(r.eliminated) && r.eliminated.length > 0) {
+        entry.eliminated = r.eliminated.slice();
+      }
+      cleanResponses[q.id] = entry;
     });
     return {
       schemaVersion: 1,
@@ -2806,10 +3558,38 @@ window.__EXAM_SPEC__ = __EXAM_SPEC_JSON__;
     };
   }
 
+  function buildSubmitSpecWithSealedAutopsy() {
+    const cloned = cloneVal(SPEC);
+    const sealed = decodeSealedPost();
+    const qSealedMap = (sealed && sealed._questions && typeof sealed._questions === "object") ? sealed._questions : {};
+    if (cloned && Array.isArray(cloned.questions) && sealed) {
+      cloned.questions.forEach(function (q) {
+        const sq = qSealedMap[q.id];
+        if (sq && typeof sq === "object") {
+          Object.keys(sq).forEach(function (k) { q[k] = cloneVal(sq[k]); });
+        }
+        const qMap = sealed[q.id];
+        if (!qMap || !Array.isArray(q.options)) return;
+        q.options.forEach(function (opt) {
+          const dm = qMap[opt.id];
+          if (!dm) return;
+          if (dm.whyWrong) opt.whyWrong = dm.whyWrong;
+          if (dm.trapCategory) opt.trapCategory = dm.trapCategory;
+          if (dm.confusedWith) opt.confusedWith = dm.confusedWith;
+        });
+      });
+    }
+    return cloned;
+  }
+
   function computeLocalSummary() {
     let score = 0, maxScore = 0, correct = 0, partial = 0, wrong = 0, unatt = 0, negLost = 0;
     const bySubj = {};
     const slow = [];
+    let hasConf = false, hasElim = false;
+    let negEvGambles = 0, marksLostNegEv = 0, underconfSkips = 0, marksLeft = 0;
+    const distractorItems = [];
+
     QUESTIONS.forEach(function (q) {
       const rec = state.responses[q.id];
       const sc = scoreQuestionLocal(q, rec.answer);
@@ -2828,7 +3608,66 @@ window.__EXAM_SPEC__ = __EXAM_SPEC_JSON__;
       else if (sc.status === "wrong") { wrong++; bySubj[subj].wrong++; }
       else { unatt++; bySubj[subj].unatt++; }
       if ((rec.timeSpentSec || 0) > 180) slow.push(q.id);
+
+      // Local EV skip calibration matching exam_runner.py
+      const B = Math.max(0, Number(q.marksCorrect != null ? q.marksCorrect : 4));
+      const P = Math.abs(Math.min(0, Number(q.marksWrong != null ? q.marksWrong : ((q.type === "single_correct" || q.type === "assertion_reason") ? -1 : q.type === "multi_correct" ? -2 : 0))));
+      const U = Number(q.marksUnattempted != null ? q.marksUnattempted : 0);
+      const pBe = (B + P) <= 0 ? 0 : Math.max(0, Math.min(1, (P + U) / (B + P)));
+      let pEst = null;
+      if (typeof rec.confidence === "number" && Number.isFinite(rec.confidence)) {
+        pEst = rec.confidence;
+        hasConf = true;
+      } else if (Array.isArray(rec.eliminated) && rec.eliminated.length > 0 && (q.type === "single_correct" || q.type === "assertion_reason") && Array.isArray(q.options)) {
+        const rem = q.options.length - rec.eliminated.length;
+        if (rem >= 1 && rem < q.options.length) {
+          pEst = 1 / rem;
+          hasElim = true;
+        }
+      }
+      if (pEst !== null) {
+        const evAtt = pEst * B - (1 - pEst) * P;
+        if (sc.status !== "unattempted") {
+          if (P >= 0 && pBe > 0 && pEst < pBe - 1e-9) {
+            negEvGambles++;
+            marksLostNegEv += Math.max(0, U - sc.marks);
+          }
+        } else if (pEst > pBe + 1e-9 && (evAtt - U) > 1e-9) {
+          underconfSkips++;
+          marksLeft += Math.max(0, evAtt - U);
+        }
+      }
+
+      // Collect triggered distractors post-submit
+      if (state.submitted && (sc.status === "wrong" || sc.status === "partial") && Array.isArray(q.options)) {
+        const trigIds = [];
+        if (q.type === "multi_correct") {
+          (sc.wrongSelected || []).forEach(function (id) { trigIds.push(id); });
+        } else if (rec.answer && typeof rec.answer === "string") {
+          trigIds.push(String(rec.answer).toUpperCase());
+        }
+        trigIds.forEach(function (oid) {
+          const dm = getOptionDistractorMeta(q, oid);
+          if (dm && (dm.whyWrong || dm.trapCategory || dm.confusedWith)) {
+            distractorItems.push({
+              questionId: q.id,
+              optionId: oid,
+              whyWrong: dm.whyWrong || "",
+              trapCategory: dm.trapCategory || q.trapCategory || "",
+              confusedWith: dm.confusedWith || ""
+            });
+          }
+        });
+      }
     });
+
+    const evBasis = hasConf ? "confidence_exact" : (hasElim ? "elimination_derived" : "negative_mark_proxy");
+    marksLostNegEv = Math.round(marksLostNegEv * 100) / 100;
+    marksLeft = Math.round(marksLeft * 100) / 100;
+    const evDisc = evBasis === "negative_mark_proxy"
+      ? Math.round(1000 * Math.max(0, Math.min(1, 1 - negLost / Math.max(1, 0.20 * maxScore)))) / 10
+      : Math.round(1000 * Math.max(0, Math.min(1, 1 - (marksLostNegEv + marksLeft) / Math.max(1, 0.25 * maxScore)))) / 10;
+
     const attempted = correct + partial + wrong;
     return {
       score: Math.round(score * 100) / 100,
@@ -2838,7 +3677,19 @@ window.__EXAM_SPEC__ = __EXAM_SPEC_JSON__;
       correct: correct, partial: partial, wrong: wrong, unatt: unatt, attempted: attempted,
       negLost: Math.round(negLost * 100) / 100,
       slow: slow,
-      bySubj: bySubj
+      bySubj: bySubj,
+      evCalibration: {
+        evBasis: evBasis,
+        negEvGamblesCount: negEvGambles,
+        marksLostToNegEv: marksLostNegEv,
+        underconfidentSkipsCount: underconfSkips,
+        marksLeftOnTable: marksLeft,
+        evDisciplineScore: evDisc
+      },
+      distractorSummary: {
+        triggeredCount: distractorItems.length,
+        items: distractorItems
+      }
     };
   }
 
@@ -2908,6 +3759,7 @@ window.__EXAM_SPEC__ = __EXAM_SPEC_JSON__;
     state.reviewMode = true;
     state.paused = false;
     state.submittedAt = new Date().toISOString();
+    hydrateSubmittedQuestions();
     document.getElementById("pauseOverlay").classList.remove("visible");
     closeModal("confirmModal");
     saveState();
@@ -2930,7 +3782,7 @@ window.__EXAM_SPEC__ = __EXAM_SPEC_JSON__;
         headers: headers,
         body: JSON.stringify({
           examSlug: SPEC.examSlug || "exam",
-          spec: SPEC,
+          spec: buildSubmitSpecWithSealedAutopsy(),
           attempt: buildAttemptPayload()
         })
       });
@@ -2965,7 +3817,7 @@ window.__EXAM_SPEC__ = __EXAM_SPEC_JSON__;
     }).join("");
 
     const slug = SPEC.examSlug || "exam";
-    const cliCmd = ".venv/bin/python scripts/exam_runner.py grade <spec.json> " + slug + "-attempt.json";
+    const cliCmd = "syntopik run exam_runner grade <spec.json> " + slug + "-attempt.json";
     document.getElementById("summaryModalBody").innerHTML =
       (autoReason ? '<p style="color:var(--red);font-weight:700;">' + escHtml(autoReason) + "</p>" : "") +
       '<div id="liveAutopsySlot"></div>' +
@@ -2979,9 +3831,22 @@ window.__EXAM_SPEC__ = __EXAM_SPEC_JSON__;
       "</div>" +
       '<table class="summary-table"><thead><tr><th>Subject</th><th>Score</th><th>Correct</th><th>Partial</th><th>Wrong</th><th>Skipped</th><th>Time</th></tr></thead><tbody>' +
       subjRows + "</tbody></table>" +
+      '<div id="localEvDistractorSlot">' +
+        (liveSubmissionState.status === "saved" ? "" : renderEvAndDistractorHtml(s.evCalibration, s.distractorSummary)) +
+      "</div>" +
       (s.slow.length ? '<p style="margin-top:12px;color:var(--amber);font-weight:650;">Slow Questions (&gt;3 min): ' + escHtml(s.slow.join(", ")) + "</p>" : "") +
       '<p style="margin-top:12px;font-size:12.5px;color:var(--muted);">Download <code>' + escHtml(slug) + '-attempt.json</code> anytime for offline backup, or grade offline via:<br><code>' + escHtml(cliCmd) + "</code></p>";
     refreshLiveAutopsySlot();
+    document.querySelectorAll("#localEvDistractorSlot [data-jump-qid]").forEach(function (btn) {
+      btn.addEventListener("click", function () {
+        const qid = btn.getAttribute("data-jump-qid");
+        const idx = QUESTIONS.findIndex(function (q) { return q.id === qid; });
+        if (idx >= 0) {
+          closeModal("summaryModal");
+          navigateTo(idx, null);
+        }
+      });
+    });
     openModal("summaryModal");
   }
 
@@ -3028,7 +3893,7 @@ window.__EXAM_SPEC__ = __EXAM_SPEC_JSON__;
     const html = QUESTIONS.map(function (q, idx) {
       return '<div class="qp-card">' +
         '<div class="qp-card-head">' +
-          "<strong>Q" + (idx + 1) + " (" + escHtml(q.id) + ") · " + escHtml(q.subject || "General") + " · " + escHtml(typeLabel(q.type)) + " [" + escHtml(markingLabel(q)) + "]</strong>" +
+          "<strong>Q" + (idx + 1) + " (" + escHtml(q.id) + ") · " + escHtml(q.subject || "General") + " · " + escHtml(typeLabel(q.type, q)) + " [" + escHtml(markingLabel(q)) + "]</strong>" +
           '<button type="button" class="act-btn qp-jump" data-idx="' + idx + '">Jump to Q' + (idx + 1) + "</button>" +
         "</div>" +
         "<div>" + renderRichText(q.stem || "") + "</div>" +
@@ -3192,6 +4057,7 @@ window.__EXAM_SPEC__ = __EXAM_SPEC_JSON__;
     if (!window.confirm("Reset this exam attempt and clear all saved responses and timers?")) return;
     try { localStorage.removeItem(STORAGE_KEY); } catch (_e) {}
     state = freshState();
+    unhydrateSubmittedQuestions();
     markVisited(0);
     syncDraftFromCurrent();
     saveState();
@@ -3228,6 +4094,9 @@ window.__EXAM_SPEC__ = __EXAM_SPEC_JSON__;
   }, 1000);
 
   // Initial load
+  if (state.submitted) {
+    hydrateSubmittedQuestions();
+  }
   if (QUESTIONS.length > 0) {
     markVisited(state.currentIndex);
     syncDraftFromCurrent();

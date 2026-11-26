@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import argparse
 import base64
+import copy
 import html as html_lib
 import json
 import math
@@ -21,6 +22,7 @@ import shutil
 import subprocess
 import sys
 import uuid
+from collections import Counter
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -51,7 +53,30 @@ TEMPLATE_PATH = PKG_ROOT / "demos" / "exam-cbt-template.html"
 SRS_SCRIPT = PKG_ROOT / "scripts" / "srs_engine.py"
 SYNC_SCRIPT = PKG_ROOT / "scripts" / "sync-graph.mjs"
 
-VALID_QUESTION_TYPES = ("single_correct", "multi_correct", "numerical", "matrix_match")
+VALID_QUESTION_TYPES = (
+    "single_correct",
+    "multi_correct",
+    "numerical",
+    "matrix_match",
+    "assertion_reason",
+    "vignette_stem",
+)
+VALID_MULTI_MARKING_PROFILES = (
+    "jee_adv_msq",
+    "gate_msq",
+    "strict_all_or_nothing",
+    "proportional",
+)
+VALID_MATRIX_MODES = ("grid", "code_options")
+VALID_AR_VARIANTS = ("4opt", "5opt")
+
+_AR_TRUTH_TABLE: dict[str, tuple[bool, bool, bool]] = {
+    "A": (True, True, True),
+    "B": (True, True, False),
+    "C": (True, False, False),
+    "D": (False, True, False),
+    "E": (False, False, False),
+}
 
 MIME_BY_EXT = {
     ".png": "image/png",
@@ -142,8 +167,206 @@ def inline_figure(figure_ref: str | None, spec_dir: Path, qid: str) -> tuple[str
     raise ValueError(f"Question '{qid}': unsupported figure extension '{ext}' (use .svg, .png, .jpg, .webp, .gif)")
 
 
+def _normalize_options(
+    raw_items: Any,
+    default_ids: list[str],
+    qid: str,
+    distractor_reasons: Any = None,
+) -> list[dict[str, Any]]:
+    """Normalize option objects while preserving optional `whyWrong`, `trapCategory`, and `confusedWith`."""
+    out: list[dict[str, Any]] = []
+    if isinstance(raw_items, dict):
+        for k, v in raw_items.items():
+            if isinstance(v, dict):
+                row: dict[str, Any] = {"id": str(k).strip().upper(), "text": str(v.get("text", ""))}
+                for extra_k in ("whyWrong", "trapCategory", "confusedWith"):
+                    if v.get(extra_k):
+                        row[extra_k] = str(v[extra_k]).strip()
+                out.append(row)
+            else:
+                out.append({"id": str(k).strip().upper(), "text": str(v)})
+    elif isinstance(raw_items, list):
+        for idx, item in enumerate(raw_items):
+            if isinstance(item, dict):
+                item_id = str(item.get("id") or (default_ids[idx] if idx < len(default_ids) else str(idx + 1))).strip().upper()
+                row = {"id": item_id, "text": str(item.get("text", ""))}
+                for extra_k in ("whyWrong", "trapCategory", "confusedWith"):
+                    if item.get(extra_k):
+                        row[extra_k] = str(item[extra_k]).strip()
+                out.append(row)
+            else:
+                item_id = default_ids[idx] if idx < len(default_ids) else str(idx + 1)
+                out.append({"id": item_id, "text": str(item)})
+    else:
+        raise ValueError(f"Question '{qid}': 'options' must be a list or dict")
+    if not out:
+        raise ValueError(f"Question '{qid}': 'options' cannot be empty")
+
+    # Merge optional flat `distractorReasons` mapping onto normalized options
+    if isinstance(distractor_reasons, dict):
+        by_id = {o["id"]: o for o in out}
+        for dk, dv in distractor_reasons.items():
+            dk_u = str(dk).strip().upper()
+            target_opt = by_id.get(dk_u)
+            if target_opt is None or dv is None:
+                continue
+            if isinstance(dv, dict):
+                if dv.get("whyWrong") and not target_opt.get("whyWrong"):
+                    target_opt["whyWrong"] = str(dv["whyWrong"]).strip()
+                if dv.get("trapCategory") and not target_opt.get("trapCategory"):
+                    target_opt["trapCategory"] = str(dv["trapCategory"]).strip()
+                if dv.get("confusedWith") and not target_opt.get("confusedWith"):
+                    target_opt["confusedWith"] = str(dv["confusedWith"]).strip()
+            else:
+                reason_txt = str(dv).strip()
+                if reason_txt and not target_opt.get("whyWrong"):
+                    target_opt["whyWrong"] = reason_txt
+
+    # Validate any option-level trapCategory
+    for opt in out:
+        tc_raw = str(opt.get("trapCategory") or "").strip()
+        if tc_raw:
+            try:
+                opt["trapCategory"] = normalize_mistake_category(tc_raw)
+            except ValueError as exc:
+                raise ValueError(
+                    f"Question '{qid}' option '{opt['id']}': invalid trapCategory '{tc_raw}' "
+                    f"(expected one of {VALID_MISTAKE_CATEGORIES})"
+                ) from exc
+        elif "trapCategory" in opt:
+            opt.pop("trapCategory", None)
+    return out
+
+
+_SEALED_QUESTION_FIELDS: tuple[str, ...] = (
+    "answer",
+    "range",
+    "tolerance",
+    "solution",
+    "trapCategory",
+    "trapNote",
+    "causalLinkExplanation",
+    "rowExplanations",
+    "rowAnswer",
+)
+_SEALED_BLIND_QUESTION_FIELDS: tuple[str, ...] = ("chapter", "propId")
+
+
+def strip_presubmit_bundle(spec: dict[str, Any]) -> tuple[dict[str, Any], dict[str, Any]]:
+    """Strip answer/solution/trap/distractor (and blind chapter/propId) fields from a pre-submit exam bundle.
+
+    Returns `(public_bundle, sealed_post_payload)` where:
+    - `sealed_post_payload[qid][opt_id]` stores option-level `whyWrong` / `trapCategory` / `confusedWith`
+    - `sealed_post_payload["_questions"][qid]` stores stripped question-level answer/solution/trap/blind fields
+      so post-submit review/grading unlocks them ONLY after `state.submitted === true`.
+    """
+    bundle = copy.deepcopy(spec)
+    blind_mode = bool(bundle.get("blindChapterLabels") is True)
+    sealed: dict[str, Any] = {}
+    sealed_questions: dict[str, dict[str, Any]] = {}
+    q_fields = _SEALED_QUESTION_FIELDS + (_SEALED_BLIND_QUESTION_FIELDS if blind_mode else ())
+    for q in bundle.get("questions") or []:
+        if not isinstance(q, dict):
+            continue
+        qid = str(q.get("id") or "")
+        q.pop("distractorReasons", None)
+        q_sealed: dict[str, Any] = {}
+        for qk in q_fields:
+            if qk in q:
+                val = q.pop(qk, None)
+                if val is not None:
+                    q_sealed[qk] = val
+        if q_sealed and qid:
+            sealed_questions[qid] = q_sealed
+        opts = q.get("options")
+        if not isinstance(opts, list):
+            continue
+        q_map: dict[str, dict[str, str]] = {}
+        for opt in opts:
+            if not isinstance(opt, dict):
+                continue
+            oid = str(opt.get("id") or "")
+            meta: dict[str, str] = {}
+            for k in ("whyWrong", "trapCategory", "confusedWith"):
+                val = opt.pop(k, None)
+                if val is not None and str(val).strip():
+                    meta[k] = str(val).strip()
+            if meta and oid:
+                q_map[oid] = meta
+        if q_map and qid:
+            sealed[qid] = q_map
+    if sealed_questions:
+        sealed["_questions"] = sealed_questions
+    return bundle, sealed
+
+
+def _default_ar_options(labels: list[str], ar_variant: str) -> list[dict[str, str]]:
+    l1, l2 = labels[0], labels[1]
+    opts = [
+        {"id": "A", "text": f"Both {l1} and {l2} are true, and {l2} is the correct explanation of {l1}."},
+        {"id": "B", "text": f"Both {l1} and {l2} are true, but {l2} is NOT the correct explanation of {l1}."},
+        {"id": "C", "text": f"{l1} is true, but {l2} is false."},
+        {"id": "D", "text": f"{l1} is false, but {l2} is true."},
+    ]
+    if ar_variant == "5opt":
+        opts.append({"id": "E", "text": f"Both {l1} and {l2} are false."})
+    return opts
+
+
+def _ar_error_kind(chosen: str, expected: str) -> str | None:
+    c = str(chosen or "").strip().upper()
+    e = str(expected or "").strip().upper()
+    if not c or not e or c == e:
+        return None
+    if {c, e} == {"A", "B"}:
+        return "causal_link_trap"
+    tc = _AR_TRUTH_TABLE.get(c)
+    te = _AR_TRUTH_TABLE.get(e)
+    if tc is not None and te is not None:
+        a_diff = tc[0] != te[0]
+        r_diff = tc[1] != te[1]
+        if a_diff and r_diff:
+            return "double_truth_flip"
+        if a_diff:
+            return "assertion_truth_error"
+        if r_diff:
+            return "reason_truth_error"
+    return "causal_link_trap"
+
+
+def _normalize_vignette_entry(
+    raw_v: dict[str, Any],
+    fallback_id: str,
+    spec_dir: Path,
+    inline_media: bool,
+) -> dict[str, Any]:
+    vid = str(raw_v.get("id") or fallback_id).strip()
+    if not vid:
+        raise ValueError("Vignette requires a non-empty 'id'")
+    body = str(raw_v.get("body") or raw_v.get("stem") or "").strip()
+    if not body:
+        raise ValueError(f"Vignette '{vid}' requires non-empty 'body' or 'stem'")
+    v_out: dict[str, Any] = {
+        "id": vid,
+        "title": str(raw_v.get("title") or vid).strip(),
+        "kind": str(raw_v.get("kind") or "passage").strip() or "passage",
+        "body": body,
+    }
+    if raw_v.get("figureCaption"):
+        v_out["figureCaption"] = str(raw_v["figureCaption"])
+    if raw_v.get("figure"):
+        v_out["figure"] = str(raw_v["figure"])
+        if inline_media:
+            svg_str, data_uri = inline_figure(str(raw_v["figure"]), spec_dir, vid)
+            if svg_str:
+                v_out["figureSvg"] = svg_str
+            if data_uri:
+                v_out["figureDataUri"] = data_uri
+    return v_out
+
+
 def normalize_spec(raw_spec: dict[str, Any], spec_dir: Path | None = None, inline_media: bool = False) -> dict[str, Any]:
-    """Validate and normalize an exam spec dictionary."""
+    """Validate and normalize an exam spec dictionary across all 6 universal question types."""
     if not isinstance(raw_spec, dict):
         raise ValueError("Exam spec must be a JSON object")
     title = str(raw_spec.get("title") or "").strip()
@@ -159,24 +382,98 @@ def normalize_spec(raw_spec: dict[str, Any], spec_dir: Path | None = None, inlin
     if duration_minutes <= 0:
         raise ValueError("'durationMinutes' must be > 0")
 
+    base_dir = spec_dir or ROOT
+
+    # 1. Normalize top-level `vignettes` (list or dict)
+    vignettes_map: dict[str, dict[str, Any]] = {}
+    raw_vignettes = raw_spec.get("vignettes")
+    if isinstance(raw_vignettes, list):
+        for v_idx, rv in enumerate(raw_vignettes, start=1):
+            if not isinstance(rv, dict):
+                raise ValueError(f"Vignette #{v_idx} must be an object")
+            nv = _normalize_vignette_entry(rv, f"V{v_idx}", base_dir, inline_media)
+            vignettes_map[nv["id"]] = nv
+    elif isinstance(raw_vignettes, dict):
+        for vk, rv in raw_vignettes.items():
+            if not isinstance(rv, dict):
+                raise ValueError(f"Vignette '{vk}' must be an object")
+            nv = _normalize_vignette_entry({**rv, "id": rv.get("id") or vk}, str(vk), base_dir, inline_media)
+            vignettes_map[nv["id"]] = nv
+
+    # 2. Flatten any inline `vignette_stem` questions into flat question sequence
+    flattened_in: list[dict[str, Any]] = []
+    for idx, q in enumerate(questions_in, start=1):
+        if not isinstance(q, dict):
+            raise ValueError(f"Question #{idx} must be an object")
+        qtype_raw = str(q.get("type") or "").strip()
+        if qtype_raw == "vignette_stem":
+            vid = str(q.get("id") or f"V{idx}").strip()
+            nv = _normalize_vignette_entry(q, vid, base_dir, inline_media)
+            vignettes_map[nv["id"]] = nv
+            sub_qs = q.get("subQuestions")
+            if not isinstance(sub_qs, list) or not sub_qs:
+                raise ValueError(f"Vignette question '{vid}': non-empty 'subQuestions' list is required")
+            parent_subj = str(q.get("subject") or "General").strip()
+            parent_chap = str(q.get("chapter") or "General").strip()
+            parent_prop = str(q.get("propId") or "").strip()
+            for sub_i, sq in enumerate(sub_qs, start=1):
+                if not isinstance(sq, dict):
+                    raise ValueError(f"Vignette '{vid}' sub-question #{sub_i} must be an object")
+                if str(sq.get("type") or "").strip() == "vignette_stem":
+                    raise ValueError(f"Vignette '{vid}': nested vignette_stem is not allowed")
+                merged = dict(sq)
+                merged["id"] = str(sq.get("id") or f"{nv['id']}.{sub_i}").strip()
+                if not merged.get("subject"):
+                    merged["subject"] = parent_subj
+                if not merged.get("chapter"):
+                    merged["chapter"] = parent_chap
+                if not merged.get("propId") and parent_prop:
+                    merged["propId"] = parent_prop
+                merged["vignetteId"] = nv["id"]
+                merged["vignetteOrder"] = sub_i
+                merged["vignetteCount"] = len(sub_qs)
+                flattened_in.append(merged)
+        else:
+            flattened_in.append(q)
+
+    # Pre-count top-level vignetteId group sizes
+    vig_group_counts: Counter[str] = Counter()
+    for q in flattened_in:
+        vid_ref = str(q.get("vignetteId") or "").strip()
+        if vid_ref:
+            if vid_ref not in vignettes_map:
+                raise ValueError(f"Question '{q.get('id') or '?'}': unknown vignetteId '{vid_ref}'")
+            vig_group_counts[vid_ref] += 1
+    vig_seen_order: Counter[str] = Counter()
+
     seen_ids: set[str] = set()
     norm_questions: list[dict[str, Any]] = []
     max_score = 0.0
 
-    for idx, q in enumerate(questions_in, start=1):
-        if not isinstance(q, dict):
-            raise ValueError(f"Question #{idx} must be an object")
+    for idx, q in enumerate(flattened_in, start=1):
         qid = str(q.get("id") or f"Q{idx}").strip()
         if qid in seen_ids:
             raise ValueError(f"Duplicate question id '{qid}'")
         seen_ids.add(qid)
 
         qtype = str(q.get("type") or "").strip()
-        if qtype not in VALID_QUESTION_TYPES:
+        if qtype not in VALID_QUESTION_TYPES or qtype == "vignette_stem":
             raise ValueError(f"Question '{qid}': invalid type '{qtype}' (expected one of {VALID_QUESTION_TYPES})")
 
         stem = str(q.get("stem") or "").strip()
-        if not stem:
+        if qtype == "assertion_reason":
+            assertion_txt = str(q.get("assertion") or "").strip()
+            reason_txt = str(q.get("reason") or "").strip()
+            if not assertion_txt or not reason_txt:
+                raise ValueError(f"Question '{qid}': assertion_reason requires non-empty 'assertion' and 'reason'")
+            raw_labels = q.get("statementLabels")
+            if isinstance(raw_labels, (list, tuple)) and len(raw_labels) == 2 and all(str(x).strip() for x in raw_labels):
+                stmt_labels = [str(raw_labels[0]).strip(), str(raw_labels[1]).strip()]
+            else:
+                stmt_labels = ["Assertion (A)", "Reason (R)"]
+            if not stem:
+                stem = f"Read {stmt_labels[0]} and {stmt_labels[1]} below and select the correct option."
+        elif not stem:
             raise ValueError(f"Question '{qid}': non-empty 'stem' is required")
 
         trap_cat_raw = str(q.get("trapCategory") or "").strip()
@@ -203,19 +500,26 @@ def normalize_spec(raw_spec: dict[str, Any], spec_dir: Path | None = None, inlin
             "marksUnattempted": float(q.get("marksUnattempted", 0)),
         }
 
+        vid_ref = str(q.get("vignetteId") or "").strip()
+        if vid_ref:
+            vig_seen_order[vid_ref] += 1
+            nq["vignetteId"] = vid_ref
+            nq["vignetteOrder"] = int(q.get("vignetteOrder") or vig_seen_order[vid_ref])
+            nq["vignetteCount"] = int(q.get("vignetteCount") or vig_group_counts[vid_ref])
+
         if q.get("figureCaption"):
             nq["figureCaption"] = str(q["figureCaption"])
         if q.get("figure"):
             nq["figure"] = str(q["figure"])
             if inline_media:
-                svg_str, data_uri = inline_figure(str(q["figure"]), spec_dir or ROOT, qid)
+                svg_str, data_uri = inline_figure(str(q["figure"]), base_dir, qid)
                 if svg_str:
                     nq["figureSvg"] = svg_str
                 if data_uri:
                     nq["figureDataUri"] = data_uri
 
         if qtype == "single_correct":
-            opts = _normalize_labeled_items(q.get("options"), ["A", "B", "C", "D", "E"], "options", qid)
+            opts = _normalize_options(q.get("options"), ["A", "B", "C", "D", "E"], qid, q.get("distractorReasons"))
             opt_ids = {o["id"] for o in opts}
             ans = str(q.get("answer") or "").strip().upper()
             if ans not in opt_ids:
@@ -225,8 +529,29 @@ def normalize_spec(raw_spec: dict[str, Any], spec_dir: Path | None = None, inlin
             nq["marksCorrect"] = float(q.get("marksCorrect", 4))
             nq["marksWrong"] = float(q.get("marksWrong", -1))
 
+        elif qtype == "assertion_reason":
+            ar_variant = str(q.get("arVariant") or "4opt").strip().lower()
+            if ar_variant not in VALID_AR_VARIANTS:
+                raise ValueError(f"Question '{qid}': invalid arVariant '{ar_variant}' (expected one of {VALID_AR_VARIANTS})")
+            raw_opts = q.get("options") if q.get("options") else _default_ar_options(stmt_labels, ar_variant)
+            opts = _normalize_options(raw_opts, ["A", "B", "C", "D", "E"], qid, q.get("distractorReasons"))
+            opt_ids = {o["id"] for o in opts}
+            ans = str(q.get("answer") or "").strip().upper()
+            if ans not in opt_ids:
+                raise ValueError(f"Question '{qid}': assertion_reason answer '{ans}' not in options {sorted(opt_ids)}")
+            nq["assertion"] = assertion_txt
+            nq["reason"] = reason_txt
+            nq["statementLabels"] = stmt_labels
+            nq["arVariant"] = ar_variant
+            nq["options"] = opts
+            nq["answer"] = ans
+            nq["marksCorrect"] = float(q.get("marksCorrect", 4))
+            nq["marksWrong"] = float(q.get("marksWrong", -1))
+            if q.get("causalLinkExplanation"):
+                nq["causalLinkExplanation"] = str(q["causalLinkExplanation"]).strip()
+
         elif qtype == "multi_correct":
-            opts = _normalize_labeled_items(q.get("options"), ["A", "B", "C", "D", "E"], "options", qid)
+            opts = _normalize_options(q.get("options"), ["A", "B", "C", "D", "E"], qid, q.get("distractorReasons"))
             opt_ids = {o["id"] for o in opts}
             raw_ans = q.get("answer")
             if isinstance(raw_ans, str):
@@ -237,11 +562,24 @@ def normalize_spec(raw_spec: dict[str, Any], spec_dir: Path | None = None, inlin
                 raise ValueError(f"Question '{qid}': multi_correct 'answer' must be a non-empty list of option IDs")
             if not ans_list or not set(ans_list).issubset(opt_ids):
                 raise ValueError(f"Question '{qid}': multi_correct answer {ans_list} not subset of {sorted(opt_ids)}")
+            m_profile = str(q.get("markingProfile") or "jee_adv_msq").strip().lower()
+            if m_profile not in VALID_MULTI_MARKING_PROFILES:
+                raise ValueError(
+                    f"Question '{qid}': invalid markingProfile '{m_profile}' (expected one of {VALID_MULTI_MARKING_PROFILES})"
+                )
+            profile_defaults = {
+                "jee_adv_msq": (4.0, -2.0, True),
+                "gate_msq": (2.0, 0.0, False),
+                "strict_all_or_nothing": (4.0, -2.0, False),
+                "proportional": (4.0, 0.0, True),
+            }
+            def_mc, def_mw, def_pm = profile_defaults[m_profile]
             nq["options"] = opts
             nq["answer"] = ans_list
-            nq["marksCorrect"] = float(q.get("marksCorrect", 4))
-            nq["marksWrong"] = float(q.get("marksWrong", -2))
-            nq["partialMarking"] = bool(q.get("partialMarking", True))
+            nq["markingProfile"] = m_profile
+            nq["marksCorrect"] = float(q["marksCorrect"]) if q.get("marksCorrect") is not None else def_mc
+            nq["marksWrong"] = float(q["marksWrong"]) if q.get("marksWrong") is not None else def_mw
+            nq["partialMarking"] = bool(q["partialMarking"]) if q.get("partialMarking") is not None else def_pm
             if isinstance(q.get("partialMarks"), dict):
                 nq["partialMarks"] = {str(k): float(v) for k, v in q["partialMarks"].items()}
 
@@ -269,44 +607,82 @@ def normalize_spec(raw_spec: dict[str, Any], spec_dir: Path | None = None, inlin
             cols = _normalize_labeled_items(q.get("cols"), ["1", "2", "3", "4", "5"], "cols", qid)
             row_ids = {r["id"] for r in rows}
             col_ids = {c["id"] for c in cols}
-            raw_ans = q.get("answer")
-            if not isinstance(raw_ans, dict) or not raw_ans:
-                raise ValueError(f"Question '{qid}': matrix_match requires non-empty 'answer' mapping")
-            norm_ans: dict[str, list[str]] = {}
-            for rk, rv in raw_ans.items():
-                rk_u = str(rk).strip().upper()
-                if rk_u not in row_ids:
-                    raise ValueError(f"Question '{qid}': matrix answer row '{rk_u}' not in rows {sorted(row_ids)}")
-                vals = [rv] if isinstance(rv, (str, int, float)) else list(rv)
-                vals_u = sorted({str(v).strip().upper() for v in vals if str(v).strip()})
-                if not vals_u or not set(vals_u).issubset(col_ids):
-                    raise ValueError(f"Question '{qid}': matrix answer for '{rk_u}' ({vals_u}) not subset of cols {sorted(col_ids)}")
-                norm_ans[rk_u] = vals_u
+            matrix_mode = str(q.get("matrixMode") or "grid").strip().lower()
+            if matrix_mode not in VALID_MATRIX_MODES:
+                raise ValueError(f"Question '{qid}': invalid matrixMode '{matrix_mode}' (expected one of {VALID_MATRIX_MODES})")
             nq["rows"] = rows
             nq["cols"] = cols
-            nq["answer"] = norm_ans
-            nq["matrixSinglePerRow"] = bool(q.get("matrixSinglePerRow", False))
-            nq["partialMarking"] = bool(q.get("partialMarking", True))
-            n_rows = len(norm_ans)
-            if q.get("marksPerRow") is not None:
-                per_row = float(q["marksPerRow"])
-                nq["marksPerRow"] = per_row
-                nq["marksCorrect"] = float(q["marksCorrect"]) if q.get("marksCorrect") is not None else round(per_row * n_rows, 4)
-            elif q.get("marksCorrect") is not None:
-                mc = float(q["marksCorrect"])
-                nq["marksCorrect"] = mc
-                nq["marksPerRow"] = round(mc / n_rows, 4) if n_rows else 0.0
+            nq["matrixMode"] = matrix_mode
+            if isinstance(q.get("rowExplanations"), dict) and q["rowExplanations"]:
+                nq["rowExplanations"] = {
+                    str(rk).strip().upper(): str(rv).strip()
+                    for rk, rv in q["rowExplanations"].items()
+                    if str(rv or "").strip()
+                }
+
+            raw_ans = q.get("answer")
+            if matrix_mode == "code_options" and q.get("options") and isinstance(raw_ans, str):
+                opts = _normalize_options(q.get("options"), ["A", "B", "C", "D", "E"], qid, q.get("distractorReasons"))
+                opt_ids = {o["id"] for o in opts}
+                ans_code = raw_ans.strip().upper()
+                if ans_code not in opt_ids:
+                    raise ValueError(f"Question '{qid}': matrix_match code_options answer '{ans_code}' not in {sorted(opt_ids)}")
+                nq["options"] = opts
+                nq["answer"] = ans_code
+                if isinstance(q.get("rowAnswer"), dict) and q["rowAnswer"]:
+                    nq["rowAnswer"] = {
+                        str(rk).strip().upper(): sorted({str(v).strip().upper() for v in ([rv] if isinstance(rv, (str, int, float)) else list(rv)) if str(v).strip()})
+                        for rk, rv in q["rowAnswer"].items()
+                    }
+                if isinstance(q.get("optionRowMap"), dict) and q["optionRowMap"]:
+                    nq["optionRowMap"] = {
+                        str(ok).strip().upper(): {
+                            str(rk).strip().upper(): sorted({str(v).strip().upper() for v in ([rv] if isinstance(rv, (str, int, float)) else list(rv)) if str(v).strip()})
+                            for rk, rv in ov.items()
+                        }
+                        for ok, ov in q["optionRowMap"].items()
+                        if isinstance(ov, dict)
+                    }
+                nq["matrixSinglePerRow"] = bool(q.get("matrixSinglePerRow", True))
+                nq["partialMarking"] = False
+                nq["marksCorrect"] = float(q.get("marksCorrect", 4))
+                nq["marksWrong"] = float(q.get("marksWrong", -1))
             else:
-                nq["marksPerRow"] = 1.0
-                nq["marksCorrect"] = float(n_rows)
-            nq["marksWrong"] = float(q.get("marksWrong", 0))
-            if q.get("marksWrongPerRow") is not None:
-                nq["marksWrongPerRow"] = float(q["marksWrongPerRow"])
+                if not isinstance(raw_ans, dict) or not raw_ans:
+                    raise ValueError(f"Question '{qid}': matrix_match requires non-empty 'answer' mapping")
+                norm_ans: dict[str, list[str]] = {}
+                for rk, rv in raw_ans.items():
+                    rk_u = str(rk).strip().upper()
+                    if rk_u not in row_ids:
+                        raise ValueError(f"Question '{qid}': matrix answer row '{rk_u}' not in rows {sorted(row_ids)}")
+                    vals = [rv] if isinstance(rv, (str, int, float)) else list(rv)
+                    vals_u = sorted({str(v).strip().upper() for v in vals if str(v).strip()})
+                    if not vals_u or not set(vals_u).issubset(col_ids):
+                        raise ValueError(f"Question '{qid}': matrix answer for '{rk_u}' ({vals_u}) not subset of cols {sorted(col_ids)}")
+                    norm_ans[rk_u] = vals_u
+                nq["answer"] = norm_ans
+                nq["matrixSinglePerRow"] = bool(q.get("matrixSinglePerRow", False))
+                nq["partialMarking"] = bool(q.get("partialMarking", True))
+                n_rows = len(norm_ans)
+                if q.get("marksPerRow") is not None:
+                    per_row = float(q["marksPerRow"])
+                    nq["marksPerRow"] = per_row
+                    nq["marksCorrect"] = float(q["marksCorrect"]) if q.get("marksCorrect") is not None else round(per_row * n_rows, 4)
+                elif q.get("marksCorrect") is not None:
+                    mc = float(q["marksCorrect"])
+                    nq["marksCorrect"] = mc
+                    nq["marksPerRow"] = round(mc / n_rows, 4) if n_rows else 0.0
+                else:
+                    nq["marksPerRow"] = 1.0
+                    nq["marksCorrect"] = float(n_rows)
+                nq["marksWrong"] = float(q.get("marksWrong", 0))
+                if q.get("marksWrongPerRow") is not None:
+                    nq["marksWrongPerRow"] = float(q["marksWrongPerRow"])
 
         max_score += float(nq["marksCorrect"])
         norm_questions.append(nq)
 
-    return {
+    out_spec: dict[str, Any] = {
         "schemaVersion": 1,
         "examSlug": exam_slug,
         "title": title,
@@ -314,14 +690,20 @@ def normalize_spec(raw_spec: dict[str, Any], spec_dir: Path | None = None, inlin
         "durationMinutes": int(duration_minutes) if duration_minutes.is_integer() else duration_minutes,
         "instructions": [str(x) for x in (raw_spec.get("instructions") or [])],
         "maxScore": round(max_score, 2),
+        "vignettes": vignettes_map,
         "questions": norm_questions,
     }
+    if raw_spec.get("blindChapterLabels"):
+        out_spec["blindChapterLabels"] = True
+    if raw_spec.get("preMortemShield"):
+        out_spec["preMortemShield"] = raw_spec["preMortemShield"]
+    return out_spec
 
 
 def _is_empty_answer(qtype: str, ans: Any) -> bool:
     if ans is None:
         return True
-    if qtype == "single_correct":
+    if qtype in ("single_correct", "assertion_reason"):
         return str(ans).strip() == ""
     if qtype == "multi_correct":
         if isinstance(ans, str):
@@ -336,6 +718,8 @@ def _is_empty_answer(qtype: str, ans: Any) -> bool:
         except (ValueError, TypeError):
             return True
     if qtype == "matrix_match":
+        if isinstance(ans, str):
+            return ans.strip() == ""
         if not isinstance(ans, dict):
             return True
         for v in ans.values():
@@ -350,34 +734,37 @@ def _is_empty_answer(qtype: str, ans: Any) -> bool:
 def _format_answer(qtype: str, ans: Any) -> str:
     if _is_empty_answer(qtype, ans):
         return "Unattempted"
-    if qtype == "single_correct":
+    if qtype in ("single_correct", "assertion_reason"):
         return str(ans).strip().upper()
     if qtype == "multi_correct":
         vals = [ans] if isinstance(ans, str) else list(ans)
         return ", ".join(sorted({str(v).strip().upper() for v in vals if str(v).strip()}))
     if qtype == "numerical":
         return str(ans).strip()
-    if qtype == "matrix_match" and isinstance(ans, dict):
-        parts = []
-        for k in sorted(ans.keys()):
-            v = ans[k]
-            vals = [v] if isinstance(v, (str, int, float)) else list(v or [])
-            clean = sorted({str(x).strip().upper() for x in vals if str(x).strip()})
-            if clean:
-                parts.append(f"{str(k).upper()}->{','.join(clean)}")
-        return "; ".join(parts) if parts else "Unattempted"
+    if qtype == "matrix_match":
+        if isinstance(ans, str):
+            return ans.strip().upper()
+        if isinstance(ans, dict):
+            parts = []
+            for k in sorted(ans.keys()):
+                v = ans[k]
+                vals = [v] if isinstance(v, (str, int, float)) else list(v or [])
+                clean = sorted({str(x).strip().upper() for x in vals if str(x).strip()})
+                if clean:
+                    parts.append(f"{str(k).upper()}->{','.join(clean)}")
+            return "; ".join(parts) if parts else "Unattempted"
     return str(ans)
 
 
 def score_question(q: dict[str, Any], raw_ans: Any) -> dict[str, Any]:
-    """Deterministically score a single normalized question."""
+    """Deterministically score a single normalized question across all question types."""
     qtype = q["type"]
     max_marks = float(q["marksCorrect"])
     m_wrong = float(q.get("marksWrong", 0))
     m_unatt = float(q.get("marksUnattempted", 0))
 
     if _is_empty_answer(qtype, raw_ans):
-        return {
+        base_unatt: dict[str, Any] = {
             "status": "unattempted",
             "marks": round(m_unatt, 2),
             "maxMarks": round(max_marks, 2),
@@ -386,6 +773,15 @@ def score_question(q: dict[str, Any], raw_ans: Any) -> dict[str, Any]:
             "correctAnswer": q["answer"],
             "detail": "unattempted",
         }
+        if qtype == "multi_correct":
+            base_unatt["wrongSelected"] = []
+            base_unatt["missedCorrect"] = sorted(q["answer"])
+        elif qtype == "assertion_reason":
+            base_unatt["arErrorKind"] = None
+        elif qtype == "matrix_match":
+            row_keys = list(q["answer"].keys()) if isinstance(q["answer"], dict) else [r["id"] for r in (q.get("rows") or [])]
+            base_unatt["rowResults"] = {rk: "blank" for rk in row_keys}
+        return base_unatt
 
     if qtype == "single_correct":
         chosen = str(raw_ans).strip().upper()
@@ -401,12 +797,30 @@ def score_question(q: dict[str, Any], raw_ans: Any) -> dict[str, Any]:
             "detail": "exact match" if ok else f"chose {chosen}, expected {q['answer']}",
         }
 
+    if qtype == "assertion_reason":
+        chosen = str(raw_ans).strip().upper()
+        expected = str(q["answer"]).strip().upper()
+        ok = chosen == expected
+        marks = max_marks if ok else m_wrong
+        err_kind = None if ok else _ar_error_kind(chosen, expected)
+        return {
+            "status": "correct" if ok else "wrong",
+            "marks": round(marks, 2),
+            "maxMarks": round(max_marks, 2),
+            "negativeLost": round(abs(marks), 2) if marks < 0 else 0.0,
+            "studentAnswer": chosen,
+            "correctAnswer": expected,
+            "arErrorKind": err_kind,
+            "detail": "exact match" if ok else f"chose {chosen}, expected {expected} ({err_kind})",
+        }
+
     if qtype == "multi_correct":
         vals = [raw_ans] if isinstance(raw_ans, str) else list(raw_ans)
         chosen_set = {str(v).strip().upper() for v in vals if str(v).strip()}
         chosen_sorted = sorted(chosen_set)
         correct_set = set(q["answer"])
         wrong_chosen = sorted(chosen_set - correct_set)
+        missed = sorted(correct_set - chosen_set)
 
         if wrong_chosen:
             return {
@@ -416,6 +830,8 @@ def score_question(q: dict[str, Any], raw_ans: Any) -> dict[str, Any]:
                 "negativeLost": round(abs(m_wrong), 2) if m_wrong < 0 else 0.0,
                 "studentAnswer": chosen_sorted,
                 "correctAnswer": q["answer"],
+                "wrongSelected": wrong_chosen,
+                "missedCorrect": missed,
                 "detail": f"selected wrong option(s): {','.join(wrong_chosen)}",
             }
 
@@ -427,6 +843,8 @@ def score_question(q: dict[str, Any], raw_ans: Any) -> dict[str, Any]:
                 "negativeLost": 0.0,
                 "studentAnswer": chosen_sorted,
                 "correctAnswer": q["answer"],
+                "wrongSelected": [],
+                "missedCorrect": [],
                 "detail": "all correct options selected",
             }
 
@@ -438,16 +856,19 @@ def score_question(q: dict[str, Any], raw_ans: Any) -> dict[str, Any]:
                 "negativeLost": round(abs(m_wrong), 2) if m_wrong < 0 else 0.0,
                 "studentAnswer": chosen_sorted,
                 "correctAnswer": q["answer"],
+                "wrongSelected": [],
+                "missedCorrect": missed,
                 "detail": "incomplete selection (partial marking disabled)",
             }
 
-        # Official JEE Advanced partial marking
+        # Official JEE Advanced partial marking or proportional profile
         n_total = len(correct_set)
         n_chosen = len(chosen_set)
+        m_profile = str(q.get("markingProfile") or "jee_adv_msq").strip().lower()
         custom_partial = q.get("partialMarks")
         if isinstance(custom_partial, dict) and str(n_chosen) in custom_partial:
             pts = float(custom_partial[str(n_chosen)])
-        elif max_marks != 4.0:
+        elif m_profile == "proportional" or max_marks != 4.0:
             pts = round(max_marks * (n_chosen / n_total), 2)
         elif n_total >= 4 and n_chosen == 3:
             pts = 3.0
@@ -458,7 +879,6 @@ def score_question(q: dict[str, Any], raw_ans: Any) -> dict[str, Any]:
         else:
             pts = min(float(n_chosen), max(0.0, max_marks - 1.0))
 
-        missed = sorted(correct_set - chosen_set)
         return {
             "status": "partial",
             "marks": round(pts, 2),
@@ -466,6 +886,8 @@ def score_question(q: dict[str, Any], raw_ans: Any) -> dict[str, Any]:
             "negativeLost": 0.0,
             "studentAnswer": chosen_sorted,
             "correctAnswer": q["answer"],
+            "wrongSelected": [],
+            "missedCorrect": missed,
             "detail": f"partial ({n_chosen}/{n_total} correct, missed {','.join(missed)})",
         }
 
@@ -504,18 +926,46 @@ def score_question(q: dict[str, Any], raw_ans: Any) -> dict[str, Any]:
         }
 
     if qtype == "matrix_match":
+        if str(q.get("matrixMode") or "grid") == "code_options" and isinstance(q.get("answer"), str):
+            chosen_code = str(raw_ans).strip().upper()
+            expected_code = str(q["answer"]).strip().upper()
+            ok = chosen_code == expected_code
+            marks = max_marks if ok else m_wrong
+            row_results: dict[str, str] = {}
+            opt_row_map = q.get("optionRowMap") if isinstance(q.get("optionRowMap"), dict) else {}
+            exp_rows = q.get("rowAnswer") if isinstance(q.get("rowAnswer"), dict) else opt_row_map.get(expected_code)
+            ch_rows = opt_row_map.get(chosen_code) if isinstance(opt_row_map, dict) else None
+            if isinstance(exp_rows, dict) and isinstance(ch_rows, dict):
+                for rk, ev in exp_rows.items():
+                    cv = ch_rows.get(rk, [])
+                    row_results[rk] = "correct" if cv == ev else ("blank" if not cv else "wrong")
+            else:
+                for r in q.get("rows") or []:
+                    row_results[r["id"]] = "correct" if ok else "wrong"
+            return {
+                "status": "correct" if ok else "wrong",
+                "marks": round(marks, 2),
+                "maxMarks": round(max_marks, 2),
+                "negativeLost": round(abs(marks), 2) if marks < 0 else 0.0,
+                "studentAnswer": chosen_code,
+                "correctAnswer": expected_code,
+                "rowResults": row_results,
+                "detail": "exact code match" if ok else f"chose {chosen_code}, expected {expected_code}",
+            }
+
         exp: dict[str, list[str]] = q["answer"]
         norm_student: dict[str, list[str]] = {}
-        for rk, rv in raw_ans.items():
-            rk_u = str(rk).strip().upper()
-            vals = [rv] if isinstance(rv, (str, int, float)) else list(rv or [])
-            clean = sorted({str(x).strip().upper() for x in vals if str(x).strip()})
-            if clean:
-                norm_student[rk_u] = clean
+        if isinstance(raw_ans, dict):
+            for rk, rv in raw_ans.items():
+                rk_u = str(rk).strip().upper()
+                vals = [rv] if isinstance(rv, (str, int, float)) else list(rv or [])
+                clean = sorted({str(x).strip().upper() for x in vals if str(x).strip()})
+                if clean:
+                    norm_student[rk_u] = clean
 
         matched_rows = 0
         wrong_rows = 0
-        row_results: dict[str, str] = {}
+        row_results = {}
         for rk, exp_cols in exp.items():
             ch_cols = norm_student.get(rk, [])
             if not ch_cols:
@@ -540,6 +990,7 @@ def score_question(q: dict[str, Any], raw_ans: Any) -> dict[str, Any]:
                 "negativeLost": 0.0,
                 "studentAnswer": norm_student,
                 "correctAnswer": exp,
+                "rowResults": row_results,
                 "detail": f"all {len(exp)} rows exact",
             }
 
@@ -551,6 +1002,7 @@ def score_question(q: dict[str, Any], raw_ans: Any) -> dict[str, Any]:
                 "negativeLost": round(abs(m_wrong), 2) if m_wrong < 0 else 0.0,
                 "studentAnswer": norm_student,
                 "correctAnswer": exp,
+                "rowResults": row_results,
                 "detail": f"{matched_rows}/{len(exp)} rows matched (partial marking disabled)",
             }
 
@@ -566,6 +1018,7 @@ def score_question(q: dict[str, Any], raw_ans: Any) -> dict[str, Any]:
             "negativeLost": round(abs(neg_deduction), 2),
             "studentAnswer": norm_student,
             "correctAnswer": exp,
+            "rowResults": row_results,
             "detail": f"{matched_rows}/{len(exp)} rows exact, {wrong_rows} wrong",
         }
 
@@ -593,23 +1046,41 @@ def _log_mistake_entry(kg_dir: Path, entry: dict[str, Any]) -> dict[str, Any]:
     return entry
 
 
-def _extract_attempt_entry(attempt: dict[str, Any], qid: str) -> tuple[Any, int, str]:
-    """Extract (answer, timeSpentSec, uiStatus) flexibly from standard or simplified attempt JSON."""
+def _extract_attempt_entry_full(attempt: dict[str, Any], qid: str) -> tuple[Any, int, str, float | None, list[str]]:
+    """Extract `(answer, timeSpentSec, uiStatus, confidence, eliminated)` flexibly."""
     responses = attempt.get("responses")
     if not isinstance(responses, dict):
         responses = {}
     time_map = attempt.get("timeSpentByQuestion") or attempt.get("timeByQuestion") or {}
 
     raw = responses.get(qid)
-    if isinstance(raw, dict) and ("answer" in raw or "status" in raw or "timeSpentSec" in raw):
+    if isinstance(raw, dict) and any(k in raw for k in ("answer", "status", "timeSpentSec", "confidence", "eliminated")):
         ans = raw.get("answer")
         t_sec = int(round(float(raw.get("timeSpentSec", time_map.get(qid, 0)) or 0)))
         ui_status = str(raw.get("status") or "")
-        # In NTA CBT, only answered / answered_marked (or raw answer present) count for evaluation;
-        # if explicitly marked without answer, ans is None.
-        return ans, t_sec, ui_status
+        conf_val: float | None = None
+        raw_conf = raw.get("confidence")
+        if isinstance(raw_conf, (int, float)) and not isinstance(raw_conf, bool):
+            cf = float(raw_conf)
+            if math.isfinite(cf):
+                if 1.0 < cf <= 100.0:
+                    cf = cf / 100.0
+                conf_val = round(max(0.0, min(1.0, cf)), 4)
+        raw_elim = raw.get("eliminated")
+        eliminated = (
+            sorted({str(x).strip().upper() for x in raw_elim if str(x).strip()})
+            if isinstance(raw_elim, list)
+            else []
+        )
+        return ans, t_sec, ui_status, conf_val, eliminated
     t_sec = int(round(float(time_map.get(qid, 0) or 0)))
-    return raw, t_sec, ""
+    return raw, t_sec, "", None, []
+
+
+def _extract_attempt_entry(attempt: dict[str, Any], qid: str) -> tuple[Any, int, str]:
+    """Extract (answer, timeSpentSec, uiStatus) flexibly from standard or simplified attempt JSON."""
+    ans, t_sec, ui_status, _conf, _elim = _extract_attempt_entry_full(attempt, qid)
+    return ans, t_sec, ui_status
 
 
 def _build_schema_example() -> dict[str, Any]:
@@ -749,8 +1220,15 @@ def cmd_build(args: argparse.Namespace) -> None:
     if "__EXAM_SPEC_JSON__" not in template:
         raise SystemExit(f"Template {TEMPLATE_PATH} missing __EXAM_SPEC_JSON__ placeholder")
 
-    compiled = template.replace("__EXAM_TITLE__", html_lib.escape(spec["title"]))
-    compiled = compiled.replace("__EXAM_SPEC_JSON__", safe_script_json(spec))
+    public_spec, sealed_autopsy = strip_presubmit_bundle(spec)
+    compiled = template.replace("__EXAM_TITLE__", html_lib.escape(public_spec["title"]))
+    compiled = compiled.replace("__EXAM_SPEC_JSON__", safe_script_json(public_spec))
+    sealed_b64 = (
+        base64.b64encode(json.dumps(sealed_autopsy, ensure_ascii=False).encode("utf-8")).decode("ascii")
+        if sealed_autopsy
+        else ""
+    )
+    compiled = compiled.replace("__EXAM_SEALED_POST_B64__", sealed_b64)
 
     out_path = (
         Path(args.out).expanduser().resolve()
@@ -817,6 +1295,146 @@ def _classify_autopsy_bucket(
     return "knowledge"
 
 
+def _extract_distractor_autopsy(q: dict[str, Any], sc: dict[str, Any]) -> list[dict[str, Any]]:
+    """Return triggered option-level distractor autopsy items on wrong/partial responses."""
+    st = sc["status"]
+    if st not in ("wrong", "partial"):
+        return []
+    opts = q.get("options")
+    if not isinstance(opts, list) or not opts:
+        return []
+    opts_by_id = {str(o.get("id") or "").upper(): o for o in opts if isinstance(o, dict)}
+
+    triggered_ids: list[str] = []
+    qtype = q["type"]
+    if qtype in ("single_correct", "assertion_reason") or (qtype == "matrix_match" and isinstance(sc.get("studentAnswer"), str)):
+        sa = str(sc.get("studentAnswer") or "").strip().upper()
+        if sa and sa != str(q.get("answer") or "").strip().upper():
+            triggered_ids.append(sa)
+    elif qtype == "multi_correct":
+        triggered_ids.extend(sc.get("wrongSelected") or [])
+
+    out: list[dict[str, Any]] = []
+    for oid in triggered_ids:
+        opt = opts_by_id.get(oid)
+        if not opt:
+            continue
+        why = str(opt.get("whyWrong") or "").strip()
+        tcat = str(opt.get("trapCategory") or "").strip()
+        conf_with = str(opt.get("confusedWith") or "").strip()
+        if why or tcat or conf_with:
+            entry: dict[str, Any] = {
+                "optionId": oid,
+                "text": str(opt.get("text") or ""),
+                "whyWrong": why,
+                "trapCategory": tcat or q.get("trapCategory") or "",
+                "confusedWith": conf_with,
+            }
+            out.append(entry)
+    return out
+
+
+def _compute_ev_calibration(
+    scored_rows: list[tuple[dict[str, Any], dict[str, Any], int, str, float | None, list[str]]],
+    total_score: float,
+    max_score: float,
+    negative_lost: float,
+) -> dict[str, Any]:
+    """Compute exact break-even Expected-Value (EV) skip calibration metrics."""
+    has_conf = False
+    has_elim = False
+    neg_ev_gambles = 0
+    marks_lost_neg_ev = 0.0
+    underconf_skips = 0
+    marks_left_on_table = 0.0
+    counterfactual_delta = 0.0
+    per_question: list[dict[str, Any]] = []
+
+    for q, sc, _q_time, _ui, q_conf, q_elim in scored_rows:
+        b = max(0.0, float(q["marksCorrect"]))
+        p_pen = abs(min(0.0, float(q.get("marksWrong", 0.0))))
+        u = float(q.get("marksUnattempted", 0.0))
+        p_be = 0.0 if (b + p_pen) <= 0.0 else max(0.0, min(1.0, (p_pen + u) / (b + p_pen)))
+
+        p_marginal: float | None = None
+        if q["type"] == "multi_correct" and q.get("partialMarking", True) and isinstance(sc.get("studentAnswer"), list):
+            k = len(sc["studentAnswer"])
+            if k >= 1:
+                p_marginal = round((k + p_pen) / (1.0 + k + p_pen), 4)
+
+        p_est: float | None = None
+        if q_conf is not None:
+            p_est = q_conf
+            has_conf = True
+        elif q_elim and q["type"] in ("single_correct", "assertion_reason") and isinstance(q.get("options"), list):
+            m_opts = len(q["options"])
+            rem = m_opts - len(set(q_elim) & {o["id"] for o in q["options"]})
+            if rem >= 1 and rem < m_opts:
+                p_est = round(1.0 / rem, 4)
+                has_elim = True
+
+        attempted = sc["status"] != "unattempted"
+        verdict = "uncalibrated"
+        ev_attempt: float | None = None
+        if p_est is not None:
+            ev_attempt = round(p_est * b - (1.0 - p_est) * p_pen, 4)
+            if attempted:
+                if p_pen >= 0.0 and p_be > 0.0 and p_est < p_be - 1e-9:
+                    verdict = "neg_ev_gamble"
+                    neg_ev_gambles += 1
+                    marks_lost_neg_ev += max(0.0, u - float(sc["marks"]))
+                    counterfactual_delta += u - float(sc["marks"])
+                else:
+                    verdict = "positive_ev"
+            else:
+                if p_est > p_be + 1e-9 and (ev_attempt - u) > 1e-9:
+                    verdict = "underconfident_skip"
+                    underconf_skips += 1
+                    marks_left_on_table += max(0.0, ev_attempt - u)
+                else:
+                    verdict = "rational_skip"
+
+        pq_item: dict[str, Any] = {
+            "id": q["id"],
+            "pBreakEven": round(p_be, 4),
+            "confidence": p_est,
+            "expectedValue": ev_attempt,
+            "verdict": verdict,
+        }
+        if p_marginal is not None:
+            pq_item["pMarginalNextOption"] = p_marginal
+        per_question.append(pq_item)
+
+    if has_conf:
+        ev_basis = "confidence_exact"
+    elif has_elim:
+        ev_basis = "elimination_derived"
+    else:
+        ev_basis = "negative_mark_proxy"
+
+    marks_lost_neg_ev = round(marks_lost_neg_ev, 2)
+    marks_left_on_table = round(marks_left_on_table, 2)
+    if ev_basis in ("confidence_exact", "elimination_derived"):
+        denom = max(1.0, 0.25 * max_score)
+        disc = 100.0 * max(0.0, min(1.0, 1.0 - (marks_lost_neg_ev + marks_left_on_table) / denom))
+        counterfactual = round(total_score + counterfactual_delta, 2)
+    else:
+        denom = max(1.0, 0.20 * max_score)
+        disc = 100.0 * max(0.0, min(1.0, 1.0 - negative_lost / denom))
+        counterfactual = round(total_score + negative_lost, 2)
+
+    return {
+        "evBasis": ev_basis,
+        "negEvGamblesCount": neg_ev_gambles,
+        "marksLostToNegEv": marks_lost_neg_ev,
+        "underconfidentSkipsCount": underconf_skips,
+        "marksLeftOnTable": marks_left_on_table,
+        "optimalSkipCounterfactualScore": counterfactual,
+        "evDisciplineScore": round(disc, 1),
+        "perQuestion": per_question,
+    }
+
+
 def grade_attempt(
     spec: dict[str, Any],
     attempt: dict[str, Any],
@@ -829,8 +1447,8 @@ def grade_attempt(
 ) -> dict[str, Any]:
     """Deterministically grade a normalized exam `spec` against `attempt`, update FSRS-6
     (crediting `good` on solved `propId`s and `again` on missed `propId`s in-process),
-    log mistakes, compute a 3-bucket `knowledge`/`execution`/`time_sink` autopsy, and flag
-    3-strike escalations.
+    log mistakes (with option-level distractor traps), compute 3-bucket autopsy,
+    vignetteBreakdown, and exact Expected-Value (EV) skip calibration.
     """
     resolved_kg, _is_default_kg = resolve_kg_dir(kg_dir)
     slow_threshold = int(slow_sec)
@@ -838,12 +1456,12 @@ def grade_attempt(
     attempt_id = f"ex-{uuid.uuid4().hex[:8]}"
 
     # First pass: score every question & compute median time spent across attempted questions.
-    scored_rows: list[tuple[dict[str, Any], dict[str, Any], int, str]] = []
+    scored_rows: list[tuple[dict[str, Any], dict[str, Any], int, str, float | None, list[str]]] = []
     attempted_times: list[int] = []
     for q in spec["questions"]:
-        raw_ans, q_time, ui_status = _extract_attempt_entry(attempt, q["id"])
+        raw_ans, q_time, ui_status, q_conf, q_elim = _extract_attempt_entry_full(attempt, q["id"])
         sc = score_question(q, raw_ans)
-        scored_rows.append((q, sc, q_time, ui_status))
+        scored_rows.append((q, sc, q_time, ui_status, q_conf, q_elim))
         if sc["status"] != "unattempted" and q_time > 0:
             attempted_times.append(q_time)
 
@@ -864,14 +1482,19 @@ def grade_attempt(
     negative_trap_questions: list[str] = []
     subject_bd: dict[str, dict[str, Any]] = {}
     chapter_bd: dict[str, dict[str, Any]] = {}
+    vignette_bd: dict[str, dict[str, Any]] = {}
     q_details: list[dict[str, Any]] = []
-    missed_items: list[tuple[dict[str, Any], dict[str, Any], int]] = []
-    correct_items: list[tuple[dict[str, Any], dict[str, Any], int]] = []
+    missed_items: list[tuple[dict[str, Any], dict[str, Any], int, float | None, list[dict[str, Any]]]] = []
+    correct_items: list[tuple[dict[str, Any], dict[str, Any], int, float | None]] = []
 
     autopsy_buckets: dict[str, list[str]] = {"knowledge": [], "execution": [], "time_sink": []}
     ego_traps: list[dict[str, Any]] = []
+    all_distractor_items: list[dict[str, Any]] = []
+    distractor_cat_counts: Counter[str] = Counter()
+    distractor_confused_counts: Counter[str] = Counter()
+    vignettes_meta = spec.get("vignettes") if isinstance(spec.get("vignettes"), dict) else {}
 
-    for q, sc, q_time, ui_status in scored_rows:
+    for q, sc, q_time, ui_status, q_conf, q_elim in scored_rows:
         qid = q["id"]
         total_score += sc["marks"]
         max_score += sc["maxMarks"]
@@ -893,8 +1516,18 @@ def grade_attempt(
         if sc["negativeLost"] > 0:
             negative_trap_questions.append(qid)
 
+        q_distractors = _extract_distractor_autopsy(q, sc)
+        for d_item in q_distractors:
+            all_distractor_items.append({"questionId": qid, **d_item})
+            if d_item.get("trapCategory"):
+                distractor_cat_counts[d_item["trapCategory"]] += 1
+            if d_item.get("confusedWith"):
+                distractor_confused_counts[d_item["confusedWith"]] += 1
+
         if q["trapCategory"]:
             inferred_cat = q["trapCategory"]
+        elif q_distractors and q_distractors[0].get("trapCategory"):
+            inferred_cat = q_distractors[0]["trapCategory"]
         elif st == "wrong" and q_time > slow_threshold:
             inferred_cat = "time_pressure"
         else:
@@ -957,39 +1590,87 @@ def grade_attempt(
         cb["negativeMarksLost"] = round(cb["negativeMarksLost"] + sc["negativeLost"], 2)
         cb["timeSpentSec"] += q_time
 
-        q_details.append(
-            {
-                "id": qid,
-                "type": q["type"],
-                "subject": subj,
-                "chapter": ch,
-                "propId": q["propId"],
-                "status": st,
-                "uiStatus": ui_status,
-                "marks": sc["marks"],
-                "maxMarks": sc["maxMarks"],
-                "negativeLost": sc["negativeLost"],
-                "timeSpentSec": q_time,
-                "timeRatio": time_ratio,
-                "isSlow": q_time > slow_threshold,
-                "autopsyBucket": bucket,
-                "studentAnswer": sc["studentAnswer"],
-                "correctAnswer": sc["correctAnswer"],
-                "detail": sc["detail"],
-                "trapCategory": q["trapCategory"],
-                "trapNote": q["trapNote"],
-            }
-        )
+        vid = str(q.get("vignetteId") or "").strip()
+        if vid:
+            vmeta = vignettes_meta.get(vid) or {}
+            vb = vignette_bd.setdefault(
+                vid,
+                {
+                    "id": vid,
+                    "title": str(vmeta.get("title") or vid),
+                    "kind": str(vmeta.get("kind") or "passage"),
+                    "questionIds": [],
+                    "score": 0.0,
+                    "maxScore": 0.0,
+                    "correct": 0,
+                    "partial": 0,
+                    "wrong": 0,
+                    "unattempted": 0,
+                },
+            )
+            vb["questionIds"].append(qid)
+            vb["score"] = round(vb["score"] + sc["marks"], 2)
+            vb["maxScore"] = round(vb["maxScore"] + sc["maxMarks"], 2)
+            vb[st] += 1
+
+        detail_row: dict[str, Any] = {
+            "id": qid,
+            "type": q["type"],
+            "subject": subj,
+            "chapter": ch,
+            "propId": q["propId"],
+            "status": st,
+            "uiStatus": ui_status,
+            "marks": sc["marks"],
+            "maxMarks": sc["maxMarks"],
+            "negativeLost": sc["negativeLost"],
+            "timeSpentSec": q_time,
+            "timeRatio": time_ratio,
+            "isSlow": q_time > slow_threshold,
+            "autopsyBucket": bucket,
+            "studentAnswer": sc["studentAnswer"],
+            "correctAnswer": sc["correctAnswer"],
+            "detail": sc["detail"],
+            "trapCategory": q["trapCategory"],
+            "trapNote": q["trapNote"],
+            "distractorAutopsy": q_distractors,
+        }
+        if q_conf is not None:
+            detail_row["confidence"] = q_conf
+        if q_elim:
+            detail_row["eliminated"] = q_elim
+        if vid:
+            detail_row["vignetteId"] = vid
+        if "arErrorKind" in sc:
+            detail_row["arErrorKind"] = sc["arErrorKind"]
+        if "wrongSelected" in sc:
+            detail_row["wrongSelected"] = sc["wrongSelected"]
+            detail_row["missedCorrect"] = sc["missedCorrect"]
+        if "rowResults" in sc:
+            detail_row["rowResults"] = sc["rowResults"]
+        q_details.append(detail_row)
 
         if st in ("wrong", "partial"):
-            missed_items.append((q, sc, q_time))
+            missed_items.append((q, sc, q_time, q_conf, q_distractors))
         elif st == "correct":
-            correct_items.append((q, sc, q_time))
+            correct_items.append((q, sc, q_time, q_conf))
 
     for bd in subject_bd.values():
         bd["percentage"] = round((bd["score"] / bd["maxScore"]) * 100.0, 2) if bd["maxScore"] > 0 else 0.0
     for bd in chapter_bd.values():
         bd["percentage"] = round((bd["score"] / bd["maxScore"]) * 100.0, 2) if bd["maxScore"] > 0 else 0.0
+    for vb in vignette_bd.values():
+        vb["percentage"] = round((vb["score"] / vb["maxScore"]) * 100.0, 2) if vb["maxScore"] > 0 else 0.0
+        n_sub = len(vb["questionIds"])
+        n_att = vb["correct"] + vb["partial"] + vb["wrong"]
+        if n_att == 0:
+            vb["pattern"] = "unattempted"
+        elif vb["correct"] == n_sub:
+            vb["pattern"] = "solid"
+        elif n_sub >= 2 and vb["correct"] == 0 and (vb["wrong"] + vb["partial"]) >= 2:
+            vb["pattern"] = "whole_vignette_failure"
+        else:
+            vb["pattern"] = "isolated_subitem_miss"
 
     total_score = round(total_score, 2)
     max_score = round(max_score, 2)
@@ -999,19 +1680,24 @@ def grade_attempt(
     accuracy_pct = round((correct_count / attempted_count) * 100.0, 2) if attempted_count > 0 else 0.0
     time_spent_sec = int(round(float(attempt.get("timeSpentSec") or sum_q_time)))
 
-    # Log mistakes
+    ev_calibration = _compute_ev_calibration(scored_rows, total_score, max_score, negative_lost)
+    distractor_summary = {
+        "triggeredCount": len(all_distractor_items),
+        "topTrapCategories": [
+            {"category": cat, "count": cnt} for cat, cnt in distractor_cat_counts.most_common(5)
+        ],
+        "topConfusedWith": [
+            {"confusedWith": cw, "count": cnt} for cw, cnt in distractor_confused_counts.most_common(5)
+        ],
+        "items": all_distractor_items,
+    }
+
+    # Log mistakes (rich option-level entries when distractor autopsy exists; 100% compatible otherwise)
     mistake_ids: list[str] = []
     touched_chapters: set[str] = set()
     touched_props: set[str] = set()
     if not no_log:
-        for q, sc, q_time in missed_items:
-            if q["trapCategory"]:
-                cat = q["trapCategory"]
-            elif sc["status"] == "wrong" and q_time > slow_threshold:
-                cat = "time_pressure"
-            else:
-                cat = "concept_gap"
-
+        for q, sc, q_time, _q_conf, q_distractors in missed_items:
             stem_snip = re.sub(r"\s+", " ", q["stem"]).strip()[:140]
             trigger_cue = q["trapNote"] or f"{q['chapter']} ({q['id']}): {stem_snip}"
             student_str = _format_answer(q["type"], sc["studentAnswer"])
@@ -1020,23 +1706,55 @@ def grade_attempt(
                 if q["type"] == "numerical" and "range" in q
                 else _format_answer(q["type"], q["answer"])
             )
-            wrong_move = f"Answered {student_str} ({sc['status']}, {sc['marks']:+g} marks, {q_time}s) — {sc['detail']}"
             correct_move = (q["trapNote"] or q["solution"] or f"Correct answer: {correct_str}")[:240]
 
-            entry = {
-                "id": f"m-{uuid.uuid4().hex[:8]}",
-                "date": today,
-                "subject": q["subject"],
-                "chapter": q["chapter"],
-                "propId": q["propId"],
-                "category": cat,
-                "triggerCue": trigger_cue,
-                "wrongMove": wrong_move,
-                "correctMove": correct_move,
-                "sourceRef": f"exam:{spec['examSlug']}:{q['id']}",
-            }
-            logged = _log_mistake_entry(resolved_kg, entry)
-            mistake_ids.append(str(logged.get("id") or entry["id"]))
+            if q_distractors:
+                for d_item in q_distractors:
+                    opt_id = d_item["optionId"]
+                    cat = d_item.get("trapCategory") or q["trapCategory"] or (
+                        "time_pressure" if sc["status"] == "wrong" and q_time > slow_threshold else "concept_gap"
+                    )
+                    why_txt = d_item.get("whyWrong") or sc["detail"]
+                    wrong_move = f"Picked {opt_id} ({sc['marks']:+g} marks, {q_time}s) — {why_txt}"[:240]
+                    entry: dict[str, Any] = {
+                        "id": f"m-{uuid.uuid4().hex[:8]}",
+                        "date": today,
+                        "subject": q["subject"],
+                        "chapter": q["chapter"],
+                        "propId": q["propId"],
+                        "category": cat,
+                        "triggerCue": trigger_cue,
+                        "wrongMove": wrong_move,
+                        "correctMove": correct_move,
+                        "sourceRef": f"exam:{spec['examSlug']}:{q['id']}:{opt_id}",
+                    }
+                    if d_item.get("confusedWith"):
+                        entry["confusedWith"] = d_item["confusedWith"]
+                    logged = _log_mistake_entry(resolved_kg, entry)
+                    mistake_ids.append(str(logged.get("id") or entry["id"]))
+            else:
+                if q["trapCategory"]:
+                    cat = q["trapCategory"]
+                elif sc["status"] == "wrong" and q_time > slow_threshold:
+                    cat = "time_pressure"
+                else:
+                    cat = "concept_gap"
+                wrong_move = f"Answered {student_str} ({sc['status']}, {sc['marks']:+g} marks, {q_time}s) — {sc['detail']}"
+                entry = {
+                    "id": f"m-{uuid.uuid4().hex[:8]}",
+                    "date": today,
+                    "subject": q["subject"],
+                    "chapter": q["chapter"],
+                    "propId": q["propId"],
+                    "category": cat,
+                    "triggerCue": trigger_cue,
+                    "wrongMove": wrong_move,
+                    "correctMove": correct_move,
+                    "sourceRef": f"exam:{spec['examSlug']}:{q['id']}",
+                }
+                logged = _log_mistake_entry(resolved_kg, entry)
+                mistake_ids.append(str(logged.get("id") or entry["id"]))
+
             touched_chapters.add(q["chapter"].lower())
             if q["propId"]:
                 touched_props.add(q["propId"].lower())
@@ -1060,7 +1778,7 @@ def grade_attempt(
 
         if srs_engine is not None:
             missed_props_seen: set[str] = set()
-            for q, sc, q_time in missed_items:
+            for q, sc, q_time, q_conf, _qd in missed_items:
                 pid = q["propId"]
                 if not pid or pid in missed_props_seen:
                     continue
@@ -1078,6 +1796,7 @@ def grade_attempt(
                         chapter=q["chapter"],
                         notes=note_txt,
                         misconception=(q["trapCategory"] == "misconception"),
+                        confidence=q_conf,
                         duration_ms=q_time * 1000 if q_time > 0 else None,
                         no_sync=True,
                     )
@@ -1087,7 +1806,7 @@ def grade_attempt(
                     srs_errors.append(f"{pid}: {exc}")
 
             credited_props_seen: set[str] = set()
-            for q, sc, q_time in correct_items:
+            for q, sc, q_time, q_conf in correct_items:
                 pid = q["propId"]
                 if not pid or pid in missed_props_seen or pid in credited_props_seen:
                     continue
@@ -1102,6 +1821,7 @@ def grade_attempt(
                         title=prop_title,
                         subject=q["subject"],
                         chapter=q["chapter"],
+                        confidence=q_conf,
                         duration_ms=q_time * 1000 if q_time > 0 else None,
                         no_sync=True,
                     )
@@ -1157,6 +1877,16 @@ def grade_attempt(
         "slowQuestions": slow_questions,
         "subjectBreakdown": subject_bd,
         "autopsyCounts": autopsy_summary["counts"],
+        "evDisciplineScore": ev_calibration["evDisciplineScore"],
+        "evCalibration": {
+            "evBasis": ev_calibration["evBasis"],
+            "negEvGamblesCount": ev_calibration["negEvGamblesCount"],
+            "marksLostToNegEv": ev_calibration["marksLostToNegEv"],
+            "underconfidentSkipsCount": ev_calibration["underconfidentSkipsCount"],
+            "marksLeftOnTable": ev_calibration["marksLeftOnTable"],
+            "evDisciplineScore": ev_calibration["evDisciplineScore"],
+        },
+        "distractorTriggeredCount": distractor_summary["triggeredCount"],
         "escalationsCount": len(three_strike_escalations),
         "mistakesLogged": len(mistake_ids),
         "srsUpdated": len(srs_updated_ids),
@@ -1167,7 +1897,7 @@ def grade_attempt(
         try:
             from syntopik.learner_model import record_telemetry_event
 
-            for q, sc, q_time, _ui in scored_rows:
+            for q, sc, q_time, _ui, q_conf, _q_elim in scored_rows:
                 st = sc["status"]
                 if q["trapCategory"]:
                     err_cat = q["trapCategory"]
@@ -1182,7 +1912,7 @@ def grade_attempt(
                     kind="exam",
                     correct=(st == "correct"),
                     difficulty=1560,
-                    confidence=None,
+                    confidence=q_conf,
                     duration_ms=int(q_time * 1000) if q_time > 0 else None,
                     hints_used=0,
                     mistake_category=err_cat if st in ("wrong", "partial") else None,
@@ -1197,6 +1927,9 @@ def grade_attempt(
 
     return {
         **attempt_summary_row,
+        "evCalibration": ev_calibration,
+        "distractorSummary": distractor_summary,
+        "vignetteBreakdown": vignette_bd,
         "negativeTrapQuestions": negative_trap_questions,
         "chapterBreakdown": chapter_bd,
         "autopsy": autopsy_summary,

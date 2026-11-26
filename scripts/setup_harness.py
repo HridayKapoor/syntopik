@@ -471,54 +471,84 @@ def ensure_learner_workspace(
 
 
 def detect_harnesses(workspace: Path) -> dict[str, Any]:
-    """Detect active harness from environment and all available local harnesses."""
+    """Detect active harness from environment and all 14 local coding-agent harnesses via `syntopik.agents_compat`."""
     env = os.environ
     home = Path.home()
 
-    explicit = (env.get("SYNT_HARNESS") or env.get("MLH_HARNESS") or "").strip().lower()
-    if explicit in ("antigravity", "claude", "codex", "cursor", "windsurf", "generic"):
-        active = explicit
-    elif env.get("ANTIGRAVITY_CLI_ALIAS") or env.get("AGY_ACCOUNT") or env.get("ANTIGRAVITY_AGENT"):
-        active = "antigravity"
-    elif env.get("CLAUDECODE") or env.get("CLAUDE_PROJECT_DIR") or env.get("CLAUDE_CODE_ENTRYPOINT"):
-        active = "claude"
-    elif env.get("CODEX_THREAD_ID") or env.get("CODEX_SANDBOX") or env.get("CODEX_CI") or env.get("CODEX_HOME"):
-        active = "codex"
-    elif env.get("CURSOR_TRACE_ID") or env.get("CURSOR_AGENT"):
-        active = "cursor"
-    elif env.get("WINDSURF_PID") or env.get("CODEIUM_EDITOR_APP_ROOT"):
-        active = "windsurf"
-    elif (home / ".gemini" / "antigravity").is_dir() and not env.get("TERM_PROGRAM") == "vscode":
-        active = "antigravity"
-    else:
-        active = "generic"
+    root_str = str(ROOT)
+    if root_str not in sys.path:
+        sys.path.insert(0, root_str)
 
-    available: dict[str, dict[str, Any]] = {
-        "antigravity": {
-            "installed": bool(find_binary("agy") or find_binary("antigravity") or (home / ".gemini" / "antigravity").is_dir()),
-            "configPresent": (workspace / "GEMINI.md").is_file() and (workspace / ".agents" / "hooks.json").is_file(),
-        },
-        "claude": {
-            "installed": bool(find_binary("claude") or (home / ".claude").is_dir()),
-            "configPresent": (workspace / "CLAUDE.md").is_file() or (workspace / ".claude" / "settings.json").is_file(),
-        },
-        "codex": {
-            "installed": bool(find_binary("codex") or (home / ".codex").is_dir()),
-            "configPresent": (workspace / "AGENTS.md").is_file() and ((workspace / ".codex" / "config.toml").is_file() or (workspace / ".agents" / "skills").is_dir()),
-        },
-        "cursor": {
-            "installed": bool(find_binary("cursor") or (home / ".cursor").is_dir()),
-            "configPresent": (workspace / "AGENTS.md").is_file(),
-        },
-        "windsurf": {
-            "installed": bool(find_binary("windsurf") or (home / ".codeium").is_dir()),
-            "configPresent": (workspace / "AGENTS.md").is_file(),
-        },
-        "generic": {
+    compat_matrix: dict[str, Any] | None = None
+    try:
+        from syntopik.agents_compat import get_compat_matrix
+
+        compat_matrix = get_compat_matrix(project_dir=workspace)
+    except Exception:
+        compat_matrix = None
+
+    if compat_matrix is not None:
+        active = str(compat_matrix.get("activeHarness") or "generic")
+        available: dict[str, dict[str, Any]] = {}
+        for item in compat_matrix.get("harnesses") or []:
+            hid = str(item["id"])
+            available[hid] = {
+                "installed": bool(item.get("detected")),
+                "configPresent": bool(item.get("configured")),
+                "configured": bool(item.get("configured")),
+                "signals": list(item.get("signals") or []),
+                "transportSupport": list(item.get("transportSupport") or []),
+                "httpMcpSupported": bool(item.get("httpMcpSupported")),
+            }
+        available["generic"] = {
             "installed": True,
             "configPresent": (workspace / "AGENTS.md").is_file() or (workspace / "BOOTSTRAP.md").is_file(),
-        },
-    }
+        }
+    else:
+        explicit = (env.get("SYNT_HARNESS") or env.get("MLH_HARNESS") or "").strip().lower()
+        if explicit in ("antigravity", "claude", "codex", "cursor", "windsurf", "generic"):
+            active = explicit
+        elif env.get("ANTIGRAVITY_CLI_ALIAS") or env.get("AGY_ACCOUNT") or env.get("ANTIGRAVITY_AGENT"):
+            active = "antigravity"
+        elif env.get("CLAUDECODE") or env.get("CLAUDE_PROJECT_DIR") or env.get("CLAUDE_CODE_ENTRYPOINT"):
+            active = "claude"
+        elif env.get("CODEX_THREAD_ID") or env.get("CODEX_SANDBOX") or env.get("CODEX_CI") or env.get("CODEX_HOME"):
+            active = "codex"
+        elif env.get("CURSOR_TRACE_ID") or env.get("CURSOR_AGENT"):
+            active = "cursor"
+        elif env.get("WINDSURF_PID") or env.get("CODEIUM_EDITOR_APP_ROOT"):
+            active = "windsurf"
+        elif (home / ".gemini" / "antigravity").is_dir() and not env.get("TERM_PROGRAM") == "vscode":
+            active = "antigravity"
+        else:
+            active = "generic"
+
+        available = {
+            "antigravity": {
+                "installed": bool(find_binary("agy") or find_binary("antigravity") or (home / ".gemini" / "antigravity").is_dir()),
+                "configPresent": (workspace / "GEMINI.md").is_file() and (workspace / ".agents" / "hooks.json").is_file(),
+            },
+            "claude": {
+                "installed": bool(find_binary("claude") or (home / ".claude").is_dir()),
+                "configPresent": (workspace / "CLAUDE.md").is_file() or (workspace / ".claude" / "settings.json").is_file(),
+            },
+            "codex": {
+                "installed": bool(find_binary("codex") or (home / ".codex").is_dir()),
+                "configPresent": (workspace / "AGENTS.md").is_file() and ((workspace / ".codex" / "config.toml").is_file() or (workspace / ".agents" / "skills").is_dir()),
+            },
+            "cursor": {
+                "installed": bool(find_binary("cursor") or (home / ".cursor").is_dir()),
+                "configPresent": (workspace / "AGENTS.md").is_file(),
+            },
+            "windsurf": {
+                "installed": bool(find_binary("windsurf") or (home / ".codeium").is_dir()),
+                "configPresent": (workspace / "AGENTS.md").is_file(),
+            },
+            "generic": {
+                "installed": True,
+                "configPresent": (workspace / "AGENTS.md").is_file() or (workspace / "BOOTSTRAP.md").is_file(),
+            },
+        }
 
     ux_recommendations_by_harness: dict[str, dict[str, str]] = {
         "antigravity": {
@@ -555,6 +585,7 @@ def detect_harnesses(workspace: Path) -> dict[str, Any]:
         "activeHarness": active,
         "availableHarnesses": [name for name, info in available.items() if info["installed"]],
         "harnesses": available,
+        "totalSupportedHarnesses": (compat_matrix.get("totalHarnesses", 14) if compat_matrix else len(available) - 1),
         "uxRecommendations": ux_recommendations_by_harness.get(active, default_ux),
     }
 
@@ -887,11 +918,30 @@ def build_parser() -> argparse.ArgumentParser:
     p_att.add_argument("target_dir", nargs="?", default=".", help="Target repository directory")
     p_att.add_argument(
         "--harness",
-        choices=["auto", "all", "claude", "cursor", "windsurf", "copilot", "codex", "antigravity", "opencode", "gemini"],
+        choices=[
+            "auto",
+            "all",
+            "antigravity",
+            "claude",
+            "codex",
+            "cursor",
+            "windsurf",
+            "copilot",
+            "gemini",
+            "opencode",
+            "cline",
+            "roo",
+            "zed",
+            "aider",
+            "continue",
+            "kiro",
+        ],
         default="auto",
-        help="Target harness adapter(s) to wire",
+        help="Target harness adapter(s) to wire (all 14 coding agents supported)",
     )
     p_att.add_argument("--vault", choices=["global", "local"], default="global", help="Study vault location")
+    p_att.add_argument("--transport", choices=["stdio", "http"], default="stdio", help="MCP transport mode (stdio or http)")
+    p_att.add_argument("--http-url", dest="http_url", default="http://127.0.0.1:4173/mcp", help="Loopback Streamable-HTTP MCP URL")
     p_att.add_argument("--copy-skills", action="store_true", help="Copy .agents/skills instead of symlinking")
 
     return parser
@@ -951,6 +1001,8 @@ def main(argv: list[str] | None = None) -> int:
             harness=args.harness,
             vault=args.vault,
             copy_skills=bool(getattr(args, "copy_skills", False)),
+            transport=getattr(args, "transport", "stdio"),
+            http_url=getattr(args, "http_url", "http://127.0.0.1:4173/mcp"),
         )
         report["attach"] = att_res
         report["ok"] = bool(att_res.get("ok", True))

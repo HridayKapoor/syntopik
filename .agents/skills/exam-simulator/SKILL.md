@@ -1,9 +1,9 @@
 ---
 name: exam-simulator
 description: >-
-  Build, grade, and debrief offline/live CBT exams, NTA JEE mocks, and
-  Adversarial Viva Defense chambers with 4-tier evidence gates, 3-bucket
-  Knowledge/Execution/Time-Sink autopsy, and micro-sprints.
+  Build, grade, and debrief 6-type offline/live CBT exams, EV-skip calibration,
+  distractor autopsies, exam readiness, Pre-Mortem Shields, and Adversarial
+  Viva Defense with 4-tier evidence and micro-sprints.
 ---
 
 # Exam Simulator — Timed Mastery Assessments, Offline/Live CBT & 3-Bucket Autopsy
@@ -31,37 +31,43 @@ syntopik run exam_runner schema
 - **Chemistry**: verify via `chem_physical.py`, `chem_3d.py`, and `organic_reagents.py`.
 - **Inline Figures**: render diagrams/circuits/plots/structures as local `.svg`/`.png` files (`physics_draw`, `circuit_draw`, `math_plot`, `chem_3d`) and pass in `question.figure` — `exam_runner.py build` embeds them inline so `exams/<slug>.html` works 100% offline.
 
-### Supported Question Types & Marking Profiles (Configurable Per Exam/Question)
+### Supported Question Types & Marking Profiles (6 Types, Configurable Per Exam/Question)
 
-| `type` | General Course / CS Profile | Official 2024–2026 JEE Main & Advanced Profile | Spec Fields |
+| `type` | General Course / CS / USMLE Profile | Official 2024–2026 JEE / GATE Profile | Spec Fields |
 | :--- | :--- | :--- | :--- |
-| `single_correct` | `+1 / 0` or `+4 / -1` | JEE Main `+4 / -1 / 0`; JEE Adv `+3 / -1 / 0` | `options: [{id:"A", text:"..."}]`, `answer: "B"` |
-| `multi_correct` | Exact or subset partial credit | **JEE Adv MSQ**: $\emptyset \Rightarrow 0$; any wrong $\Rightarrow -2$; all right $\Rightarrow +4$; strict subset $S \subset C \Rightarrow +\|S\|$ (`+4/+3/+2/+1/0/-2`) | `options: A..D`, `answer: ["A","C","D"]` |
-| `numerical` | Exact/tolerance `+4 / 0` | **JEE Main Sec B**: 5 compulsory Qs/subject, **`+4 / -1 / 0`**; **JEE Adv**: `+4 / 0` or `+3 / 0`, 2-decimal range/tolerance | `answer: 4.5`, `tolerance: 0.01`, `marksWrong: 0` or `-1` |
-| `matrix_match` | Per-row partial credit | Per-row partial (`+1`/`+2` per exact row) or List-Match combos | `rows`, `cols`, `answer: {"P":["1","3"]}` |
+| `single_correct` | `+1 / 0` or `+4 / -1` | JEE Main `+4 / -1 / 0`; JEE Adv `+3 / -1 / 0` | `options: [{id:"A", text:"...", whyWrong?, trapCategory?, confusedWith?}]`, `answer: "B"` |
+| `multi_correct` | `proportional` or `strict_all_or_nothing` | **JEE Adv MSQ** (`jee_adv_msq`: `+4/+3/+2/+1/0/-2`) or **GATE MSQ** (`gate_msq`: `+2/0`) | `markingProfile`, `options: A..D`, `answer: ["A","C","D"]` |
+| `numerical` | Exact/tolerance `+4 / 0` | **JEE Main Sec B** (`+4 / -1 / 0`); **JEE Adv / GATE NAT** (`+4/0` or `+3/0`) | `answer: 4.5`, `tolerance: 0.01`, `marksWrong: 0` or `-1` |
+| `matrix_match` | Per-row partial credit or NBME EMQ (`4–8` cols) | Per-row partial (`grid`) or List-Match 4-option codes (`code_options`) | `matrixMode`, `rows`, `cols`, `rowExplanations`, `answer: {"P":["1","3"]}` |
+| `assertion_reason` | Dual-statement causal-link traps (`4opt`/`5opt`) | Auto-populated canonical `A..D`/`E` + deterministic `arErrorKind` (`causal_link_trap`, truth flips) | `assertion`, `reason`, `arVariant`, `causalLinkExplanation`, `answer` |
+| `vignette_stem` | Shared clinical case, passage, data table, or system-design stem | Inline `subQuestions[]` or top-level `spec.vignettes[]` (`q.vignetteId`) + `vignetteBreakdown` | `vignettes[]` or inline `stem`/`figure`/`subQuestions[]` |
 
-Always populate `id`, `subject`, `chapter`, `propId` (enables automatic FSRS `good` credit on hits + `again` scheduling on misses!), `stem`, `solution`, `trapNote`, and `trapCategory` (`concept_gap`, `misconception`, `sign_error`, `unit_trap`, `condition_missed`, `algebra_slip`, `diagram_misread`, `careless`, `time_pressure`, `edge_case_missed`, `complexity_trap`, `off_by_one`, `state_mutation_bug`).
+Always populate `id`, `subject`, `chapter`, `propId` (enables automatic FSRS `good` credit on hits + `again` scheduling on misses!), `stem`, `solution`, `trapNote`, optional per-option `whyWrong`/`distractorReasons` (sealed pre-submit via `strip_presubmit_bundle()` and revealed post-submit as **Why-Wrong Distractor Autopsy**!), and `trapCategory` (`concept_gap`, `misconception`, `sign_error`, `unit_trap`, `condition_missed`, `algebra_slip`, `diagram_misread`, `careless`, `time_pressure`, `edge_case_missed`, `complexity_trap`, `off_by_one`, `state_mutation_bug`).
 
 ### Phase 2 — Compile & Launch (1-Click Live Auto-Save or Offline `file://`)
 ```bash
 syntopik run exam_runner build /tmp/<slug>-spec.json --out exams/<slug>.html
 ```
-- **5-State Palette**: Not Visited, Not Answered, Answered (evaluated), Marked for Review (not evaluated), **Answered & Marked for Review (EVALUATED at submit/timeout!)**.
+- **5-State Palette & Optional Calm Telemetry**: Not Visited, Not Answered, Answered, Marked for Review, **Answered & Marked for Review (EVALUATED!)**, plus optional 4-pill confidence bar (`25%..95%`), option strike-through (`eliminated[]`), `blindChapterLabels` masking, and a dismissible **Pre-Mortem Shield** pre-flight banner.
 - **Numeric Keypad & Timer**: on-screen keypad + keyboard input (no calculator in official JEE 2024–2026), `<15m` amber / `<5m` red alerts, per-question stopwatch, and `localStorage` auto-save.
-- **Live 1-Click Auto-Save (`syntopik serve --open`)**: when opened via `http://127.0.0.1:4173`, submitting `exams/<slug>.html` automatically POSTs to `/api/exam/submit`, runs deterministic grading, logs `exam-attempts.jsonl` + `mistakes.jsonl`, updates FSRS-6 + FIRe, and renders `"Graded & Saved to Knowledge Graph ✓"` immediately. On `file://`, `"Download Attempt JSON"` stays available for offline grading.
+- **Live 1-Click Auto-Save (`syntopik serve --open`)**: submitting `exams/<slug>.html` POSTs to `/api/exam/submit`, runs deterministic grading + EV-skip audit + distractor autopsy, logs `exam-attempts.jsonl` + `mistakes.jsonl`, updates FSRS-6 + FIRe + `learner_model`, and shows `"Graded & Saved to Knowledge Graph ✓"`. On `file://`, `"Download Attempt JSON"` + offline sealed distractor autopsy remain 100% functional.
 
-### Phase 3 — Deterministic Grading, `good` Credit & 3-Bucket Autopsy
+### Phase 3 — Deterministic Grading, EV-Skip Calibration & 3-Bucket Autopsy
 ```bash
 syntopik run exam_runner grade <spec.json> <attempt.json> --json
 ```
 *(Pass `--kg-dir /tmp/... --no-sync` in tests so real ledgers stay untouched!)*
 Automatically performs in-process:
-1. **Exact Scoring + Bidirectional FSRS Sync**: awards **`good` credit** on every correctly solved `propId` (propagating FIRe credit to prerequisites!) and schedules missed `propId`s with `--rating again`, appending `revlog.jsonl`, `mistakes.jsonl`, and `exam-attempts.jsonl`.
-2. **3-Bucket Exam Autopsy**: classifies every miss/drag into:
-   - **`knowledge`**: conceptual gaps, misconceptions, missed preconditions.
-   - **`execution`**: sign/unit/algebra/off-by-one/edge-case/careless slips on known concepts.
-   - **`time_sink`**: ego-trap questions flagged by elevated `timeSpent / medianTime` (or `> 180s`).
-3. **3-Strike Escalation**: whenever a `(micro-topic, root-cause)` pair reaches **3 strikes** in `mistakes.jsonl`, flags escalation to queue a targeted **Surgical Bug-Hunt** (`practice-drill`) + an unaided **Blank-Sheet Delayed Retest** in 4 days.
+1. **Exact Scoring + Bidirectional FSRS Sync**: awards **`good` credit** on every correctly solved `propId` (propagating FIRe credit + response `confidence` to `srs_engine` & `learner_model`) and schedules missed `propId`s with `--rating again`, logging option-level `distractorAutopsy` traps into `mistakes.jsonl`.
+2. **Expected-Value (EV) Skip Calibration (`evCalibration`)**: evaluates exact break-even threshold $p_{\text{be}} = (P + U)/(B + P)$ (e.g., `0.20` for `+4/-1`, `0.25` for `+3/-1`), reporting `negEvGamblesCount`, `marksLostToNegEv`, `underconfidentSkipsCount`, `marksLeftOnTable`, and `evDisciplineScore` (`0..100`).
+3. **3-Bucket Exam Autopsy & 3-Strike Escalation**: splits misses into **`knowledge`**, **`execution`**, and **`time_sink`** (`egoTraps`), plus `vignetteBreakdown` and **3-strike escalations** queuing a Surgical Bug-Hunt (`practice-drill`) + 4-day blank-sheet retest.
+
+### Mode D — Exam-Day Readiness Forecaster, `<= 72h` Taper & Pre-Mortem Shield (`v3.2`)
+Run whenever the learner asks *"Am I ready?"*, *"Predict my score"*, or *"Pre-Mortem Shield"* (prefers MCP **`synt_readiness`**; CLI fallback below):
+```bash
+syntopik readiness [--exam-date YYYY-MM-DD] [--subject <S>] [--max-marks N] [--premortem-only] --json
+```
+- Fuses FSRS-6 projected retention $R(t_{\text{exam}}, S)$, 4-tier Evidence depth, syllabus coverage, Blunder Fork clearance, and timed EV discipline into `readinessIndex` (`0..100`), Bayesian-shrunk `predictedScorePct`, top-3 ROI `topLevers` (`roiMarksPerHour`), `<= 72h` `taperMode` (`allowNewConcepts: false`, sleep floor), and a **non-fabricated 3-bullet Gollwitzer If-Then Pre-Mortem Shield** (returns `bullets: []` on empty cold-start logs — never invents filler traps!).
 
 ---
 

@@ -2978,6 +2978,596 @@ function readSyncStatusNode(kgDirPath) {
 	};
 }
 
+function computeInterleaveStatsNode(rawSessions) {
+	const rows = Array.isArray(rawSessions) ? rawSessions : [];
+	const totalSessions = rows.length;
+	const completedSessions = rows.filter((r) => String(r?.status || "").toLowerCase() === "completed").length;
+	let t1Total = 0;
+	let t1Correct = 0;
+	let s2Total = 0;
+	let s2Correct = 0;
+	const latenciesMs = [];
+	const confusionMatrix = {};
+	const chaptersSeen = new Set();
+	let latestMs = null;
+	let latestIso = null;
+
+	for (const r of rows) {
+		for (const k of ["completedAt", "createdAt"]) {
+			if (typeof r?.[k] === "string" && r[k].trim()) {
+				const parsed = Date.parse(r[k]);
+				if (Number.isFinite(parsed) && (latestMs === null || parsed > latestMs)) {
+					latestMs = parsed;
+					latestIso = r[k];
+				}
+			}
+		}
+		for (const it of Array.isArray(r?.items) ? r.items : []) {
+			if (!it || typeof it !== "object") continue;
+			const trueCh = String(it.sealedChapter || "").trim();
+			const s1 = it.step1Result && typeof it.step1Result === "object" ? it.step1Result : null;
+			const s2 = it.step2Result && typeof it.step2Result === "object" ? it.step2Result : null;
+			if (s1) {
+				t1Total += 1;
+				if (trueCh) chaptersSeen.add(trueCh);
+				const dur = Number(s1.durationMs);
+				if (Number.isFinite(dur) && dur > 0) latenciesMs.push(Math.round(dur));
+				if (s1.correct) {
+					t1Correct += 1;
+					if (trueCh) {
+						confusionMatrix[trueCh] = confusionMatrix[trueCh] || {};
+						confusionMatrix[trueCh][trueCh] = (confusionMatrix[trueCh][trueCh] || 0) + 1;
+					}
+				} else {
+					const gCh = String(s1.confusedChapter || (s1.dontKnow ? "I don't know" : "Other"));
+					if (trueCh) {
+						confusionMatrix[trueCh] = confusionMatrix[trueCh] || {};
+						confusionMatrix[trueCh][gCh] = (confusionMatrix[trueCh][gCh] || 0) + 1;
+					}
+				}
+			}
+			if (s2) {
+				s2Total += 1;
+				if (s2.correct) s2Correct += 1;
+			}
+		}
+	}
+
+	const t1Acc = t1Total > 0 ? Number(((t1Correct / t1Total) * 100).toFixed(1)) : null;
+	const s2Acc = s2Total > 0 ? Number(((s2Correct / s2Total) * 100).toFixed(1)) : null;
+	let medMs = null;
+	if (latenciesMs.length > 0) {
+		latenciesMs.sort((a, b) => a - b);
+		const mid = Math.floor(latenciesMs.length / 2);
+		medMs = latenciesMs.length % 2 === 1 ? latenciesMs[mid] : Math.round((latenciesMs[mid - 1] + latenciesMs[mid]) / 2);
+	}
+	const medSec = medMs !== null ? Number((medMs / 1000).toFixed(1)) : null;
+	const daysSince = latestMs !== null ? Math.max(0, Math.floor((Date.now() - latestMs) / 86400000)) : null;
+
+	const topConfusionPairs = [];
+	for (const [tc, guesses] of Object.entries(confusionMatrix)) {
+		for (const [gc, cnt] of Object.entries(guesses || {})) {
+			if (gc !== tc) {
+				topConfusionPairs.push({ trueChapter: tc, confusedWithChapter: gc, count: cnt });
+			}
+		}
+	}
+	topConfusionPairs.sort(
+		(a, b) => b.count - a.count || a.trueChapter.localeCompare(b.trueChapter) || a.confusedWithChapter.localeCompare(b.confusedWithChapter),
+	);
+
+	return {
+		ok: true,
+		totalSessions,
+		completedSessions,
+		totalItemsChecked: t1Total,
+		tier1Correct: t1Correct,
+		tier1AccuracyPct: t1Acc,
+		principleAccuracyPct: t1Acc,
+		step2Correct: s2Correct,
+		step2Total: s2Total,
+		step2AccuracyPct: s2Acc,
+		medianIdentifyMs: medMs,
+		medianIdentifySec: medSec,
+		lastSessionAt: latestIso,
+		daysSinceLastInterleave: daysSince,
+		distinctChaptersPracticed: chaptersSeen.size,
+		confusionMatrix,
+		topConfusionPairs: topConfusionPairs.slice(0, 5),
+	};
+}
+
+function computeReadinessSummaryNode(
+	propositions,
+	chainSummary,
+	chapterTrackers,
+	mistakes,
+	forksDue,
+	examAttempts,
+	calibration,
+	evidenceSummary,
+	interleaveStats,
+	learnerProfile,
+	kgDirPath,
+	todayStr,
+) {
+	const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
+	const clipStr = (s, max = 120) => {
+		const clean = String(s || "").replace(/\s+/gu, " ").trim();
+		return clean.length <= max ? clean : `${clean.slice(0, Math.max(8, max - 3)).trim()}...`;
+	};
+
+	const studyCfg = readJsonObject(path.join(kgDirPath, "study-config.json"))
+		|| readJsonObject(path.join(kgDirPath, "exam-config.json"))
+		|| {};
+	const cfgSrc = existsSync(path.join(kgDirPath, "study-config.json"))
+		? "study-config.json"
+		: existsSync(path.join(kgDirPath, "exam-config.json"))
+			? "exam-config.json"
+			: null;
+
+	const nowMs = Date.now();
+	const candidates = [];
+	if (Array.isArray(studyCfg.exams)) {
+		for (const ex of studyCfg.exams) {
+			if (!ex || typeof ex !== "object") continue;
+			const rawD = ex.examDate || ex.date || ex.targetDate;
+			if (rawD) {
+				candidates.push({
+					rawDate: String(rawD),
+					name: String(ex.name || ex.title || studyCfg.targetExam || "Exam"),
+					source: `${cfgSrc || "study-config.json"}:exams[]`,
+				});
+			}
+		}
+	}
+	for (const k of ["examDate", "exam_date", "targetExamDate", "nextExamDate"]) {
+		if (studyCfg[k]) {
+			candidates.push({
+				rawDate: String(studyCfg[k]),
+				name: String(studyCfg.targetExam || studyCfg.examName || "Target Exam"),
+				source: `${cfgSrc || "study-config.json"}:${k}`,
+			});
+			break;
+		}
+	}
+
+	let bestExam = null;
+	let bestHours = null;
+	let bestExamMs = null;
+	for (const c of candidates) {
+		const raw = c.rawDate.trim();
+		const isDateOnly = /^\d{4}-\d{2}-\d{2}$/u.test(raw);
+		const parsedMs = isDateOnly ? Date.parse(`${raw}T09:00:00Z`) : Date.parse(raw);
+		if (!Number.isFinite(parsedMs)) continue;
+		let hrs = (parsedMs - nowMs) / 3600000;
+		if (isDateOnly && raw === todayStr) {
+			const eodMs = Date.parse(`${raw}T23:59:00Z`);
+			hrs = clamp((eodMs - nowMs) / 3600000, 0, 24);
+		}
+		if (hrs < 0) continue;
+		if (bestHours === null || hrs < bestHours) {
+			bestHours = hrs;
+			bestExam = c;
+			bestExamMs = parsedMs;
+		}
+	}
+
+	const sleepFloor = Number.isFinite(Number(studyCfg.sleepHours)) ? Math.max(7.0, Number(studyCfg.sleepHours)) : 7.5;
+	const defaultMins = Number.isFinite(Number(studyCfg.dailyMinutes)) ? Math.max(30, Number(studyCfg.dailyMinutes)) : 120;
+	let taperMode = {
+		active: false,
+		hoursRemaining: bestHours !== null ? Number(bestHours.toFixed(1)) : null,
+		phase: "none",
+		window: "none",
+		allowNewConcepts: true,
+		sleepFloorHours: Number(sleepFloor.toFixed(1)),
+		maxSessionMinutes: defaultMins,
+		examDate: bestExamMs !== null ? new Date(bestExamMs).toISOString().slice(0, 10) : null,
+		examName: bestExam ? bestExam.name : null,
+		examDateSource: bestExam ? bestExam.source : null,
+	};
+	if (bestHours !== null && bestHours >= 0 && bestHours <= 72) {
+		const phase = bestHours <= 24 ? "final_24h" : "taper_72h";
+		const win = bestHours <= 24 ? "final_24h" : bestHours <= 48 ? "48h_to_24h" : "72h_to_48h";
+		const maxMins = bestHours <= 24 ? 60 : bestHours <= 48 ? 150 : 240;
+		taperMode = {
+			...taperMode,
+			active: true,
+			phase,
+			window: win,
+			allowNewConcepts: false,
+			maxSessionMinutes: maxMins,
+		};
+	}
+
+	const uncertaintyReasons = [];
+	let examMs = bestExamMs;
+	let examDateStr = taperMode.examDate;
+	let examDateSource = taperMode.examDateSource || "default_14d";
+	if (!examMs) {
+		examMs = nowMs + 14 * 86400000;
+		examDateStr = new Date(examMs).toISOString().slice(0, 10);
+		examDateSource = "default_14d";
+		uncertaintyReasons.push("No examDate configured; defaulted projection horizon to +14 days.");
+	}
+	const daysToExam = Number(Math.max(0, (examMs - nowMs) / 86400000).toFixed(1));
+
+	const activeProps = propositions.filter((p) => p && p.id && !p.archived);
+	const evProps = evidenceSummary?.propositions || {};
+	const antiAlerts = Array.isArray(evidenceSummary?.antiInflationAlerts) ? evidenceSummary.antiInflationAlerts : [];
+	const tierWeight = { 1: 0.25, 2: 0.6, 3: 0.88, 4: 1.0 };
+
+	let totalWeight = 0;
+	let weightedRExam = 0;
+	let weightedEvid = 0;
+	let plannedCount = 0;
+	let mActive = 0;
+	const decayCandidates = [];
+	const chaptersSet = new Set();
+
+	const factor = Math.pow(0.9, -1 / 0.2) - 1; // FSRS-6 default decay w20=0.2
+	for (const p of activeProps) {
+		const pid = String(p.id);
+		const st = String(p.status || "planned").toLowerCase();
+		const ch = String(p.chapter || "General").trim() || "General";
+		chaptersSet.add(ch);
+		const descN = Number(evProps[pid]?.descendantsCount || 0);
+		const wi = 1.0 + 0.35 * Math.log1p(descN);
+
+		let rEx = 0;
+		if (st !== "planned") {
+			const stab = Number(p?.fsrs?.stability || 0);
+			const lastRev = p?.fsrs?.last_review || p?.fsrs?.lastReview || p.lastTested || p.updatedAt;
+			const lastMs = lastRev ? Date.parse(String(lastRev)) : NaN;
+			if (Number.isFinite(stab) && stab > 0 && Number.isFinite(lastMs)) {
+				const dtDays = Math.max(0, (examMs - lastMs) / 86400000);
+				rEx = clamp(Math.pow(1 + factor * (dtDays / stab), -0.2), 0, 1);
+			} else if (st === "misconception") {
+				rEx = 0.12;
+			} else if (st === "shaky") {
+				rEx = 0.35;
+			} else {
+				const refMs = Number.isFinite(lastMs) ? lastMs : nowMs;
+				const dtDays = Math.max(0, (examMs - refMs) / 86400000);
+				rEx = clamp(Math.pow(1 + factor * (dtDays / 7.0), -0.2), 0, 1);
+			}
+		}
+
+		let tau = 0;
+		if (st === "planned") {
+			plannedCount += 1;
+		} else {
+			if (st === "misconception") mActive += 1;
+			if (rEx < 0.7 && (st === "solid" || st === "shaky")) {
+				decayCandidates.push({ propId: pid, weight: wi, rExam: rEx });
+			}
+			const tier = Number(evProps[pid]?.tier || 1);
+			tau = tierWeight[tier] ?? 0.25;
+		}
+
+		totalWeight += wi;
+		weightedRExam += wi * rEx;
+		weightedEvid += wi * tau;
+	}
+
+	const cRet = totalWeight > 0 ? clamp(weightedRExam / totalWeight, 0, 1) : 0;
+	const antiPen = Math.max(0.75, 1.0 - 0.04 * Math.min(6, antiAlerts.length));
+	const cEvid = totalWeight > 0 ? clamp((weightedEvid / totalWeight) * antiPen, 0, 1) : 0;
+	if (totalWeight === 0) uncertaintyReasons.push("Knowledge graph has 0 propositions in scope.");
+
+	let tTot = 0;
+	let tDone = 0;
+	let qTot = 0;
+	let qDone = 0;
+	for (const tr of chapterTrackers) {
+		tTot += Number(tr.topicsTotal || 0);
+		tDone += Number(tr.topicsMastered || 0);
+		qTot += Number(tr.questionsTotal || 0);
+		qDone += Number(tr.questionsSolved || 0);
+	}
+	let cSyl = 0;
+	if (tTot > 0) {
+		cSyl = qTot > 0 ? clamp(0.6 * (tDone / tTot) + 0.4 * (qDone / qTot), 0, 1) : clamp(tDone / tTot, 0, 1);
+	} else if (activeProps.length > 0) {
+		cSyl = clamp((activeProps.length - plannedCount) / activeProps.length, 0, 1);
+	}
+
+	const clusterCounts = new Map();
+	for (const m of mistakes) {
+		const k = `${String(m.category || "concept_gap")}::${String(m.chapter || "General")}`;
+		clusterCounts.set(k, (clusterCounts.get(k) || 0) + 1);
+	}
+	let e3Strike = 0;
+	for (const c of clusterCounts.values()) if (c >= 3) e3Strike += 1;
+	const fDue = forksDue.length;
+	const cTrap =
+		activeProps.length === 0 && mActive === 0 && fDue === 0 && e3Strike === 0
+			? 0
+			: clamp(Math.exp(-(1.5 * mActive + 1.0 * fDue + 1.2 * e3Strike) / Math.max(5.0, 0.35 * activeProps.length)), 0, 1);
+
+	const execSignals = [];
+	const mockPcts = [];
+	const evScores = [];
+	let totalNegLost = 0;
+	let totalMockMax = 0;
+	for (const a of examAttempts) {
+		const pct = Number(a.percentage);
+		if (Number.isFinite(pct)) mockPcts.push(clamp(pct, 0, 100));
+		const negL = Math.max(0, Number(a.negativeMarksLost || 0));
+		const mx = Math.max(0, Number(a.maxScore || 0));
+		totalNegLost += negL;
+		totalMockMax += mx;
+		const evSc = Number(a?.evCalibration?.evDisciplineScore ?? a.evDisciplineScore);
+		if (Number.isFinite(evSc)) evScores.push(clamp(evSc / 100, 0, 1));
+		else if (mx > 0) evScores.push(clamp(1 - negL / Math.max(1, 0.2 * mx), 0, 1));
+	}
+	if (evScores.length > 0) {
+		let wSum = 0;
+		let vSum = 0;
+		for (let i = 0; i < evScores.length; i += 1) {
+			const w = Math.pow(0.65, evScores.length - 1 - i);
+			wSum += w;
+			vSum += w * evScores[i];
+		}
+		execSignals.push(vSum / wSum);
+	}
+	const overconfBias = Number(calibration?.sampleCount || 0) >= 3 && Number.isFinite(Number(calibration?.overconfidenceBias))
+		? Number(calibration.overconfidenceBias)
+		: 0;
+	if (Number(calibration?.sampleCount || 0) >= 5 && Number.isFinite(Number(calibration?.brierScore))) {
+		execSignals.push(clamp(1 - Math.min(1, 2 * Number(calibration.brierScore)), 0, 1));
+	}
+	if (Number(interleaveStats?.totalItemsChecked || 0) >= 5 && Number.isFinite(Number(interleaveStats?.tier1AccuracyPct))) {
+		execSignals.push(clamp(Number(interleaveStats.tier1AccuracyPct) / 100, 0, 1));
+	}
+	let cExec = 0;
+	let execConf = "untested";
+	if (execSignals.length > 0) {
+		cExec = clamp(execSignals.reduce((s, x) => s + x, 0) / execSignals.length, 0, 1);
+		execConf = "observed";
+	} else if (activeProps.length > 0) {
+		cExec = 0.55;
+		uncertaintyReasons.push("No graded timed mock exams yet; execution pillar uses conservative 55% prior.");
+	}
+
+	const readinessIndex = Number((100 * (0.32 * cRet + 0.22 * cEvid + 0.2 * cSyl + 0.14 * cTrap + 0.12 * cExec)).toFixed(1));
+	const band = readinessIndex < 40 ? "needs_foundation" : readinessIndex < 65 ? "building" : readinessIndex < 85 ? "exam_ready" : "peak";
+
+	let expectedPct = readinessIndex;
+	const mMocks = mockPcts.length;
+	if (mMocks > 0) {
+		let wSum = 0;
+		let vSum = 0;
+		for (let i = 0; i < mMocks; i += 1) {
+			const w = Math.pow(0.7, mMocks - 1 - i);
+			wSum += w;
+			vSum += w * mockPcts[i];
+		}
+		const sMock = vSum / wSum;
+		const wMock = mMocks / (mMocks + 2.5);
+		expectedPct = wMock * sMock + (1 - wMock) * readinessIndex;
+	}
+	const sigma = clamp(6.0 + 9.0 / Math.sqrt(1 + mMocks) + 8.0 * Math.max(0, overconfBias) + 5.0 * (1 - cEvid), 4.5, 18.0);
+	const lowPct = Number(clamp(expectedPct - sigma, 0, 100).toFixed(1));
+	const expPct = Number(clamp(expectedPct, 0, 100).toFixed(1));
+	const highPct = Number(clamp(expectedPct + sigma, 0, 100).toFixed(1));
+
+	const rawMaxMarks = Number(studyCfg.maxMarks);
+	const effMaxMarks = Number.isFinite(rawMaxMarks) && rawMaxMarks > 0 ? rawMaxMarks : null;
+	const predictedMarks = effMaxMarks !== null
+		? {
+			maxMarks: Number(effMaxMarks.toFixed(1)),
+			low: Number(((effMaxMarks * lowPct) / 100).toFixed(1)),
+			expected: Number(((effMaxMarks * expPct) / 100).toFixed(1)),
+			high: Number(((effMaxMarks * highPct) / 100).toFixed(1)),
+		}
+		: null;
+
+	// Non-fabricated Pre-Mortem Shield (strictly 0 bullets on empty logs; NEVER leaks sealed fork answers!)
+	const bullets = [];
+	const seenB = new Set();
+	const addBullet = (sourceKind, key, badge, ifCue, thenAction, extra = {}) => {
+		if (bullets.length >= 3) return;
+		const k = `${sourceKind}::${String(key).toLowerCase()}`;
+		if (seenB.has(k)) return;
+		seenB.add(k);
+		bullets.push({
+			rank: bullets.length + 1,
+			sourceKind,
+			evidenceBadge: clipStr(badge, 72),
+			ifCue: clipStr(ifCue, 150),
+			thenAction: clipStr(thenAction, 160),
+			...extra,
+		});
+	};
+	if (forksDue.length > 0) {
+		const f0 = forksDue[0];
+		const ch = String(f0.chapter || f0.subject || "active chapter");
+		const cue = String(f0.forkPrompt || (Array.isArray(f0.prefixSteps) && f0.prefixSteps[f0.prefixSteps.length - 1]) || ch);
+		addBullet(
+			"blunder_fork",
+			f0.propId || f0.id || "fork",
+			`Unresolved Fork ${f0.id || ""} · ${ch}`,
+			`IF you hit the fork setup (${clipStr(cue, 85)}) in ${ch}`,
+			`THEN verify boundary conditions & invariant before executing your first move in ${ch}.`,
+			{ ...(f0.propId ? { propId: String(f0.propId) } : {}), ...(f0.id ? { forkId: String(f0.id) } : {}) },
+		);
+	}
+	if (mistakes.length > 0) {
+		const grouped = new Map();
+		for (const m of mistakes) {
+			const key = `${String(m.category || "concept_gap")}::${String(m.chapter || "General")}`;
+			if (!grouped.has(key)) grouped.set(key, []);
+			grouped.get(key).push(m);
+		}
+		const ranked = [...grouped.entries()].sort((a, b) => b[1].length - a[1].length || a[0].localeCompare(b[0]));
+		const [k0, rows0] = ranked[0];
+		const [cat0, ch0] = k0.split("::");
+		const sample = rows0[rows0.length - 1];
+		addBullet(
+			"recurring_mistake",
+			`${cat0}:${sample.propId || ch0}`,
+			`${rows0.length >= 3 ? "3-Strike Escalation · " : ""}${rows0.length}x ${cat0} in ${ch0}`,
+			`IF you see ${clipStr(sample.triggerCue || `${cat0.replace(/_/gu, " ")} setup in ${ch0}`, 95)}`,
+			`THEN ${clipStr(sample.correctMove || "Verify the governing condition, sign, and unit before locking your answer.", 120)}`,
+			sample.propId ? { propId: String(sample.propId) } : {},
+		);
+	} else if (Number(learnerProfile?.failureDna?.windowCount || 0) > 0) {
+		const dna = learnerProfile.failureDna;
+		const dom = String(dna.dominantTier || "comprehension_model");
+		const pct = Math.round(Number(dna?.tierShares?.[dom] || 0) * 100);
+		addBullet(
+			"failure_dna",
+			dom,
+			`Failure DNA: ${dom} (${pct}%, n=${dna.windowCount})`,
+			dom === "executive_pacing"
+				? "IF a single question stalls beyond 180 seconds on Pass 1"
+				: "IF a problem looks familiar on the surface",
+			dom === "executive_pacing"
+				? "THEN mark for review and move on to harvest high-confidence marks first."
+				: "THEN name the governing law and check its validity assumptions before computing.",
+		);
+	}
+	if (examAttempts.length > 0 && bullets.length < 3) {
+		const negGambles = examAttempts.reduce((s, a) => s + Number(a?.evCalibration?.negEvGamblesCount || 0), 0);
+		if (negGambles > 0 || totalNegLost > 0) {
+			addBullet(
+				"exam_trap",
+				"neg_ev_gambling",
+				negGambles > 0
+					? `Exam EV Leak · ${negGambles} -EV gamble(s), -${Number(totalNegLost.toFixed(1))}m`
+					: `Exam Negative Marks · -${Number(totalNegLost.toFixed(1))}m across ${examAttempts.length} mock(s)`,
+				"IF your confidence on a negative-marked question is below break-even p* = (P + U) / (B + P)",
+				"THEN skip it cleanly on Pass 1 instead of taking a negative-EV guess.",
+			);
+		}
+	}
+	const preMortemShield = bullets.length === 0
+		? {
+			ok: true,
+			sourceBasis: "cold_start_minimal",
+			count: 0,
+			bullets: [],
+			note: "Zero mistake, fork, failure-DNA, or exam-trap logs in scope; Pre-Mortem Shield stays empty (no generic filler).",
+		}
+		: { ok: true, sourceBasis: "observed_logs", count: bullets.length, bullets };
+
+	// Top-3 ROI study levers (pure syntopik CLI commands)
+	const marksScale = effMaxMarks !== null ? effMaxMarks : 100;
+	const levers = [];
+	const addLever = (kind, title, why, hoursEffort, gainPct, exactCmd, skillHint) => {
+		if (gainPct <= 0.1 || hoursEffort <= 0) return;
+		const marksGain = Number((marksScale * (gainPct / 100)).toFixed(2));
+		levers.push({
+			kind,
+			title,
+			why,
+			effortMinutes: Math.round(hoursEffort * 60),
+			hoursEffort: Number(hoursEffort.toFixed(2)),
+			expectedReadinessGainPct: Number(gainPct.toFixed(2)),
+			expectedMarksGain: marksGain,
+			roiMarksPerHour: Number((marksGain / hoursEffort).toFixed(2)),
+			exactCmd,
+			skillHint,
+		});
+	};
+	const firstMisc = activeProps.find((p) => String(p.status || "").toLowerCase() === "misconception");
+	if (firstMisc) {
+		addLever(
+			"repair_misconception",
+			`Repair misconception: ${clipStr(firstMisc.title || firstMisc.id, 52)}`,
+			`Active misconception on '${firstMisc.id}' drags both retention and trap clearance.`,
+			0.35,
+			2.5,
+			"syntopik review --json",
+			"teach-chapter",
+		);
+	}
+	if (fDue > 0 || e3Strike > 0) {
+		addLever(
+			"clear_forks",
+			fDue > 0 ? `Clear ${fDue} due Blunder Fork(s)` : `Drill ${e3Strike} 3-strike trap cluster(s)`,
+			`Eliminates recurring exam blunders (${fDue} due forks, ${e3Strike} 3-strike clusters).`,
+			0.25,
+			2.0,
+			"syntopik next --json",
+			"practice-drill",
+		);
+	}
+	if (antiAlerts.length > 0) {
+		const a0 = antiAlerts[0];
+		addLever(
+			"upgrade_evidence",
+			`Verify bottleneck '${a0.propId}' to T3 transfer`,
+			`High-leverage node (${a0.descendantsCount || 0} downstream) stuck at ${a0.currentTierLabel || "T1/T2"}.`,
+			0.3,
+			1.8,
+			"syntopik next --json",
+			"practice-drill",
+		);
+	}
+	if (decayCandidates.length > 0) {
+		addLever(
+			"refresh_decay",
+			`Refresh ${Math.min(5, decayCandidates.length)} decaying card(s) before exam`,
+			`Projected exam-day retention drops below 70% on ${decayCandidates.length} learned proposition(s).`,
+			0.25,
+			1.6,
+			"syntopik review --json",
+			"knowledge-graph",
+		);
+	}
+	if (chaptersSet.size >= 2 && taperMode.phase !== "final_24h" && (interleaveStats.tier1AccuracyPct === null || interleaveStats.tier1AccuracyPct < 80)) {
+		addLever(
+			"interleave_drill",
+			`Run blind-chapter interleave across ${chaptersSet.size} chapters`,
+			"Mixed-chapter principle discrimination prevents surface-feature confusion on unseen exam problems.",
+			0.3,
+			1.8,
+			"syntopik interleave build --n 6 --json",
+			"practice-drill",
+		);
+	}
+	if (mMocks === 0 && activeProps.length > plannedCount && taperMode.phase !== "final_24h") {
+		addLever(
+			"timed_baseline",
+			"Take 1 calibrated timed CBT baseline mock",
+			"Replaces the unverified 55% execution prior with real pacing, EV-skip, and autopsy telemetry.",
+			0.75,
+			2.2,
+			"syntopik readiness --json",
+			"exam-simulator",
+		);
+	}
+	levers.sort((a, b) => b.roiMarksPerHour - a.roiMarksPerHour || b.expectedMarksGain - a.expectedMarksGain || a.effortMinutes - b.effortMinutes);
+	const topLevers = levers.slice(0, 3).map((lv, i) => ({ rank: i + 1, ...lv }));
+
+	return {
+		ok: true,
+		readinessIndex,
+		band,
+		predictedScorePct: { low: lowPct, expected: expPct, high: highPct },
+		predictedMarks,
+		examDate: examDateStr,
+		examDateSource,
+		daysToExam,
+		hasExamConfig: examDateSource !== "default_14d",
+		taperMode,
+		preMortemShield,
+		topLevers,
+		pillars: {
+			projectedRetention: Number((cRet * 100).toFixed(1)),
+			evidenceDepth: Number((cEvid * 100).toFixed(1)),
+			forkClearance: Number((cTrap * 100).toFixed(1)),
+			evDiscipline: Number((cExec * 100).toFixed(1)),
+			syllabusCoverage: Number((cSyl * 100).toFixed(1)),
+		},
+		executionConfidence: execConf,
+		uncertaintyReasons,
+	};
+}
+
 function computeOfflineNextMove(learnerProfile, whiteboard, forksDue, dueItems, activeTracker, evidenceSummary) {
 	const pol = learnerProfile?.compiledPolicy || defaultLearnerProfile().compiledPolicy;
 	const pendingPins = whiteboard?.pendingPins || [];
@@ -3031,6 +3621,7 @@ const rawArenas = readJsonl(path.join(kgDir, "arenas.jsonl"));
 const rawDecisions = readJsonl(path.join(kgDir, "decisions.jsonl"));
 const rawDerivations = readJsonl(path.join(kgDir, "derivations.jsonl"));
 const rawVivaSessions = readJsonl(path.join(kgDir, "viva-sessions.jsonl"));
+const rawInterleaveSessions = readJsonl(path.join(kgDir, "interleave-sessions.jsonl"));
 const evidenceLedger = readJsonl(path.join(kgDir, "evidence-ledger.jsonl"));
 const rawLearnerProfile = readJsonObject(path.join(kgDir, "learner-profile.json"));
 const rawWhiteboard = readJsonObject(path.join(kgDir, "whiteboard-session.json"));
@@ -3094,6 +3685,21 @@ const explorables = scanExplorables(chapters);
 const starterPacks = scanStarterPacks();
 const rosetta = computeRosettaHubData(propositions, rawChains);
 const syncStatus = readSyncStatusNode(kgDir);
+const interleaveStats = computeInterleaveStatsNode(rawInterleaveSessions);
+const readinessSummary = computeReadinessSummaryNode(
+	propositions,
+	chainSummary,
+	chapterTrackers,
+	mistakes,
+	forksDue,
+	examAttempts,
+	calibration,
+	evidenceSummary,
+	interleaveStats,
+	learnerProfile,
+	kgDir,
+	today,
+);
 const nextMove = computeOfflineNextMove(
 	learnerProfile,
 	whiteboard,
@@ -3117,6 +3723,8 @@ stats.explorablesCount = Object.values(explorables).reduce((acc, arr) => acc + a
 stats.starterPacksCount = starterPacks.length;
 stats.verifiedTransferPct = evidenceSummary.verifiedTransferPct;
 stats.rosettaChordsCount = rosetta.chordCount;
+stats.interleaveSessionsCount = interleaveStats.totalSessions;
+stats.readinessIndex = readinessSummary.readinessIndex;
 
 const studyGraph = {
 	propositions,
@@ -3166,10 +3774,12 @@ const studyHub = {
 	starterPacks,
 	rosetta,
 	syncStatus,
+	readinessSummary,
+	interleaveStats,
 };
 
 const bundle = [
-	"// Auto-generated by scripts/sync-graph.mjs — do not edit by hand.",
+	"// Auto-generated by Syntopik sync — do not edit by hand.",
 	`window.__STUDY_GRAPH__ = ${safeScriptJson(studyGraph)};`,
 	`window.__STUDY_HUB__ = ${safeScriptJson(studyHub)};`,
 	"",

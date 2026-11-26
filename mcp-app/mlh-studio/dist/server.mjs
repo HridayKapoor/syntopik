@@ -40,7 +40,7 @@ var __toESM = (mod, isNodeMode, target) => (target = mod != null ? __create(__ge
   mod
 ));
 
-// mcp-app/mlh-studio/node_modules/zod/v4/core/core.js
+// node_modules/zod/v4/core/core.js
 // @__NO_SIDE_EFFECTS__
 function $constructor(name, initializer3, params) {
   function init(inst, def) {
@@ -91,7 +91,7 @@ function config(newConfig) {
 }
 var NEVER, $brand, $ZodAsyncError, globalConfig;
 var init_core = __esm({
-  "mcp-app/mlh-studio/node_modules/zod/v4/core/core.js"() {
+  "node_modules/zod/v4/core/core.js"() {
     NEVER = Object.freeze({
       status: "aborted"
     });
@@ -105,7 +105,7 @@ var init_core = __esm({
   }
 });
 
-// mcp-app/mlh-studio/node_modules/zod/v4/core/util.js
+// node_modules/zod/v4/core/util.js
 var util_exports = {};
 __export(util_exports, {
   BIGINT_FORMAT_RANGES: () => BIGINT_FORMAT_RANGES,
@@ -552,7 +552,7 @@ function cleanEnum(obj) {
 }
 var captureStackTrace, allowsEval, getParsedType, propertyKeyTypes, primitiveTypes, NUMBER_FORMAT_RANGES, BIGINT_FORMAT_RANGES, Class;
 var init_util = __esm({
-  "mcp-app/mlh-studio/node_modules/zod/v4/core/util.js"() {
+  "node_modules/zod/v4/core/util.js"() {
     captureStackTrace = Error.captureStackTrace ? Error.captureStackTrace : (..._args) => {
     };
     allowsEval = cached(() => {
@@ -631,7 +631,7 @@ var init_util = __esm({
   }
 });
 
-// mcp-app/mlh-studio/node_modules/zod/v4/core/errors.js
+// node_modules/zod/v4/core/errors.js
 function flattenError(error40, mapper = (issue2) => issue2.message) {
   const fieldErrors = {};
   const formErrors = [];
@@ -755,7 +755,7 @@ function prettifyError(error40) {
 }
 var initializer, $ZodError, $ZodRealError;
 var init_errors = __esm({
-  "mcp-app/mlh-studio/node_modules/zod/v4/core/errors.js"() {
+  "node_modules/zod/v4/core/errors.js"() {
     init_core();
     init_util();
     initializer = (inst, def) => {
@@ -785,10 +785,10 @@ var init_errors = __esm({
   }
 });
 
-// mcp-app/mlh-studio/node_modules/zod/v4/core/parse.js
+// node_modules/zod/v4/core/parse.js
 var _parse, parse, _parseAsync, parseAsync, _safeParse, safeParse, _safeParseAsync, safeParseAsync;
 var init_parse = __esm({
-  "mcp-app/mlh-studio/node_modules/zod/v4/core/parse.js"() {
+  "node_modules/zod/v4/core/parse.js"() {
     init_core();
     init_errors();
     init_util();
@@ -845,7 +845,7 @@ var init_parse = __esm({
   }
 });
 
-// mcp-app/mlh-studio/node_modules/zod/v4/core/regexes.js
+// node_modules/zod/v4/core/regexes.js
 var regexes_exports = {};
 __export(regexes_exports, {
   _emoji: () => _emoji,
@@ -913,7 +913,7 @@ function datetime(args) {
 }
 var cuid, cuid2, ulid, xid, ksuid, nanoid, duration, extendedDuration, guid, uuid, uuid4, uuid6, uuid7, email, html5Email, rfc5322Email, unicodeEmail, browserEmail, _emoji, ipv4, ipv6, cidrv4, cidrv6, base64, base64url, hostname, domain, e164, dateSource, date, string, bigint, integer, number, boolean, _null, _undefined, lowercase, uppercase;
 var init_regexes = __esm({
-  "mcp-app/mlh-studio/node_modules/zod/v4/core/regexes.js"() {
+  "node_modules/zod/v4/core/regexes.js"() {
     cuid = /^[cC][^\s-]{8,}$/;
     cuid2 = /^[0-9a-z]+$/;
     ulid = /^[0-9A-HJKMNP-TV-Za-hjkmnp-tv-z]{26}$/;
@@ -963,7 +963,7 @@ var init_regexes = __esm({
   }
 });
 
-// mcp-app/mlh-studio/node_modules/zod/v4/core/checks.js
+// node_modules/zod/v4/core/checks.js
 function handleCheckPropertyResult(result, payload, property) {
   if (result.issues.length) {
     payload.issues.push(...prefixIssues(property, result.issues));
@@ -971,7 +971,7 @@ function handleCheckPropertyResult(result, payload, property) {
 }
 var $ZodCheck, numericOriginMap, $ZodCheckLessThan, $ZodCheckGreaterThan, $ZodCheckMultipleOf, $ZodCheckNumberFormat, $ZodCheckBigIntFormat, $ZodCheckMaxSize, $ZodCheckMinSize, $ZodCheckSizeEquals, $ZodCheckMaxLength, $ZodCheckMinLength, $ZodCheckLengthEquals, $ZodCheckStringFormat, $ZodCheckRegex, $ZodCheckLowerCase, $ZodCheckUpperCase, $ZodCheckIncludes, $ZodCheckStartsWith, $ZodCheckEndsWith, $ZodCheckProperty, $ZodCheckMimeType, $ZodCheckOverwrite;
 var init_checks = __esm({
-  "mcp-app/mlh-studio/node_modules/zod/v4/core/checks.js"() {
+  "node_modules/zod/v4/core/checks.js"() {
     init_core();
     init_regexes();
     init_util();
@@ -1509,10 +1509,10 @@ var init_checks = __esm({
   }
 });
 
-// mcp-app/mlh-studio/node_modules/zod/v4/core/doc.js
+// node_modules/zod/v4/core/doc.js
 var Doc;
 var init_doc = __esm({
-  "mcp-app/mlh-studio/node_modules/zod/v4/core/doc.js"() {
+  "node_modules/zod/v4/core/doc.js"() {
     Doc = class {
       constructor(args = []) {
         this.content = [];
@@ -1550,10 +1550,10 @@ var init_doc = __esm({
   }
 });
 
-// mcp-app/mlh-studio/node_modules/zod/v4/core/versions.js
+// node_modules/zod/v4/core/versions.js
 var version;
 var init_versions = __esm({
-  "mcp-app/mlh-studio/node_modules/zod/v4/core/versions.js"() {
+  "node_modules/zod/v4/core/versions.js"() {
     version = {
       major: 4,
       minor: 0,
@@ -1562,7 +1562,7 @@ var init_versions = __esm({
   }
 });
 
-// mcp-app/mlh-studio/node_modules/zod/v4/core/schemas.js
+// node_modules/zod/v4/core/schemas.js
 function isValidBase64(data) {
   if (data === "")
     return true;
@@ -1795,7 +1795,7 @@ function handleRefineResult(result, payload, input, inst) {
 }
 var $ZodType, $ZodString, $ZodStringFormat, $ZodGUID, $ZodUUID, $ZodEmail, $ZodURL, $ZodEmoji, $ZodNanoID, $ZodCUID, $ZodCUID2, $ZodULID, $ZodXID, $ZodKSUID, $ZodISODateTime, $ZodISODate, $ZodISOTime, $ZodISODuration, $ZodIPv4, $ZodIPv6, $ZodCIDRv4, $ZodCIDRv6, $ZodBase64, $ZodBase64URL, $ZodE164, $ZodJWT, $ZodCustomStringFormat, $ZodNumber, $ZodNumberFormat, $ZodBoolean, $ZodBigInt, $ZodBigIntFormat, $ZodSymbol, $ZodUndefined, $ZodNull, $ZodAny, $ZodUnknown, $ZodNever, $ZodVoid, $ZodDate, $ZodArray, $ZodObject, $ZodUnion, $ZodDiscriminatedUnion, $ZodIntersection, $ZodTuple, $ZodRecord, $ZodMap, $ZodSet, $ZodEnum, $ZodLiteral, $ZodFile, $ZodTransform, $ZodOptional, $ZodNullable, $ZodDefault, $ZodPrefault, $ZodNonOptional, $ZodSuccess, $ZodCatch, $ZodNaN, $ZodPipe, $ZodReadonly, $ZodTemplateLiteral, $ZodPromise, $ZodLazy, $ZodCustom;
 var init_schemas = __esm({
-  "mcp-app/mlh-studio/node_modules/zod/v4/core/schemas.js"() {
+  "node_modules/zod/v4/core/schemas.js"() {
     init_checks();
     init_core();
     init_doc();
@@ -3202,7 +3202,7 @@ var init_schemas = __esm({
   }
 });
 
-// mcp-app/mlh-studio/node_modules/zod/v4/locales/ar.js
+// node_modules/zod/v4/locales/ar.js
 function ar_default() {
   return {
     localeError: error()
@@ -3210,7 +3210,7 @@ function ar_default() {
 }
 var error;
 var init_ar = __esm({
-  "mcp-app/mlh-studio/node_modules/zod/v4/locales/ar.js"() {
+  "node_modules/zod/v4/locales/ar.js"() {
     init_util();
     error = () => {
       const Sizable = {
@@ -3325,7 +3325,7 @@ var init_ar = __esm({
   }
 });
 
-// mcp-app/mlh-studio/node_modules/zod/v4/locales/az.js
+// node_modules/zod/v4/locales/az.js
 function az_default() {
   return {
     localeError: error2()
@@ -3333,7 +3333,7 @@ function az_default() {
 }
 var error2;
 var init_az = __esm({
-  "mcp-app/mlh-studio/node_modules/zod/v4/locales/az.js"() {
+  "node_modules/zod/v4/locales/az.js"() {
     init_util();
     error2 = () => {
       const Sizable = {
@@ -3447,7 +3447,7 @@ var init_az = __esm({
   }
 });
 
-// mcp-app/mlh-studio/node_modules/zod/v4/locales/be.js
+// node_modules/zod/v4/locales/be.js
 function getBelarusianPlural(count, one, few, many) {
   const absCount = Math.abs(count);
   const lastDigit = absCount % 10;
@@ -3470,7 +3470,7 @@ function be_default() {
 }
 var error3;
 var init_be = __esm({
-  "mcp-app/mlh-studio/node_modules/zod/v4/locales/be.js"() {
+  "node_modules/zod/v4/locales/be.js"() {
     init_util();
     error3 = () => {
       const Sizable = {
@@ -3618,7 +3618,7 @@ var init_be = __esm({
   }
 });
 
-// mcp-app/mlh-studio/node_modules/zod/v4/locales/ca.js
+// node_modules/zod/v4/locales/ca.js
 function ca_default() {
   return {
     localeError: error4()
@@ -3626,7 +3626,7 @@ function ca_default() {
 }
 var error4;
 var init_ca = __esm({
-  "mcp-app/mlh-studio/node_modules/zod/v4/locales/ca.js"() {
+  "node_modules/zod/v4/locales/ca.js"() {
     init_util();
     error4 = () => {
       const Sizable = {
@@ -3744,7 +3744,7 @@ var init_ca = __esm({
   }
 });
 
-// mcp-app/mlh-studio/node_modules/zod/v4/locales/cs.js
+// node_modules/zod/v4/locales/cs.js
 function cs_default() {
   return {
     localeError: error5()
@@ -3752,7 +3752,7 @@ function cs_default() {
 }
 var error5;
 var init_cs = __esm({
-  "mcp-app/mlh-studio/node_modules/zod/v4/locales/cs.js"() {
+  "node_modules/zod/v4/locales/cs.js"() {
     init_util();
     error5 = () => {
       const Sizable = {
@@ -3886,7 +3886,7 @@ var init_cs = __esm({
   }
 });
 
-// mcp-app/mlh-studio/node_modules/zod/v4/locales/de.js
+// node_modules/zod/v4/locales/de.js
 function de_default() {
   return {
     localeError: error6()
@@ -3894,7 +3894,7 @@ function de_default() {
 }
 var error6;
 var init_de = __esm({
-  "mcp-app/mlh-studio/node_modules/zod/v4/locales/de.js"() {
+  "node_modules/zod/v4/locales/de.js"() {
     init_util();
     error6 = () => {
       const Sizable = {
@@ -4009,7 +4009,7 @@ var init_de = __esm({
   }
 });
 
-// mcp-app/mlh-studio/node_modules/zod/v4/locales/en.js
+// node_modules/zod/v4/locales/en.js
 function en_default() {
   return {
     localeError: error7()
@@ -4017,7 +4017,7 @@ function en_default() {
 }
 var parsedType, error7;
 var init_en = __esm({
-  "mcp-app/mlh-studio/node_modules/zod/v4/locales/en.js"() {
+  "node_modules/zod/v4/locales/en.js"() {
     init_util();
     parsedType = (data) => {
       const t = typeof data;
@@ -4133,7 +4133,7 @@ var init_en = __esm({
   }
 });
 
-// mcp-app/mlh-studio/node_modules/zod/v4/locales/eo.js
+// node_modules/zod/v4/locales/eo.js
 function eo_default() {
   return {
     localeError: error8()
@@ -4141,7 +4141,7 @@ function eo_default() {
 }
 var parsedType2, error8;
 var init_eo = __esm({
-  "mcp-app/mlh-studio/node_modules/zod/v4/locales/eo.js"() {
+  "node_modules/zod/v4/locales/eo.js"() {
     init_util();
     parsedType2 = (data) => {
       const t = typeof data;
@@ -4256,7 +4256,7 @@ var init_eo = __esm({
   }
 });
 
-// mcp-app/mlh-studio/node_modules/zod/v4/locales/es.js
+// node_modules/zod/v4/locales/es.js
 function es_default() {
   return {
     localeError: error9()
@@ -4264,7 +4264,7 @@ function es_default() {
 }
 var error9;
 var init_es = __esm({
-  "mcp-app/mlh-studio/node_modules/zod/v4/locales/es.js"() {
+  "node_modules/zod/v4/locales/es.js"() {
     init_util();
     error9 = () => {
       const Sizable = {
@@ -4380,7 +4380,7 @@ var init_es = __esm({
   }
 });
 
-// mcp-app/mlh-studio/node_modules/zod/v4/locales/fa.js
+// node_modules/zod/v4/locales/fa.js
 function fa_default() {
   return {
     localeError: error10()
@@ -4388,7 +4388,7 @@ function fa_default() {
 }
 var error10;
 var init_fa = __esm({
-  "mcp-app/mlh-studio/node_modules/zod/v4/locales/fa.js"() {
+  "node_modules/zod/v4/locales/fa.js"() {
     init_util();
     error10 = () => {
       const Sizable = {
@@ -4509,7 +4509,7 @@ var init_fa = __esm({
   }
 });
 
-// mcp-app/mlh-studio/node_modules/zod/v4/locales/fi.js
+// node_modules/zod/v4/locales/fi.js
 function fi_default() {
   return {
     localeError: error11()
@@ -4517,7 +4517,7 @@ function fi_default() {
 }
 var error11;
 var init_fi = __esm({
-  "mcp-app/mlh-studio/node_modules/zod/v4/locales/fi.js"() {
+  "node_modules/zod/v4/locales/fi.js"() {
     init_util();
     error11 = () => {
       const Sizable = {
@@ -4638,7 +4638,7 @@ var init_fi = __esm({
   }
 });
 
-// mcp-app/mlh-studio/node_modules/zod/v4/locales/fr.js
+// node_modules/zod/v4/locales/fr.js
 function fr_default() {
   return {
     localeError: error12()
@@ -4646,7 +4646,7 @@ function fr_default() {
 }
 var error12;
 var init_fr = __esm({
-  "mcp-app/mlh-studio/node_modules/zod/v4/locales/fr.js"() {
+  "node_modules/zod/v4/locales/fr.js"() {
     init_util();
     error12 = () => {
       const Sizable = {
@@ -4761,7 +4761,7 @@ var init_fr = __esm({
   }
 });
 
-// mcp-app/mlh-studio/node_modules/zod/v4/locales/fr-CA.js
+// node_modules/zod/v4/locales/fr-CA.js
 function fr_CA_default() {
   return {
     localeError: error13()
@@ -4769,7 +4769,7 @@ function fr_CA_default() {
 }
 var error13;
 var init_fr_CA = __esm({
-  "mcp-app/mlh-studio/node_modules/zod/v4/locales/fr-CA.js"() {
+  "node_modules/zod/v4/locales/fr-CA.js"() {
     init_util();
     error13 = () => {
       const Sizable = {
@@ -4885,7 +4885,7 @@ var init_fr_CA = __esm({
   }
 });
 
-// mcp-app/mlh-studio/node_modules/zod/v4/locales/he.js
+// node_modules/zod/v4/locales/he.js
 function he_default() {
   return {
     localeError: error14()
@@ -4893,7 +4893,7 @@ function he_default() {
 }
 var error14;
 var init_he = __esm({
-  "mcp-app/mlh-studio/node_modules/zod/v4/locales/he.js"() {
+  "node_modules/zod/v4/locales/he.js"() {
     init_util();
     error14 = () => {
       const Sizable = {
@@ -5009,7 +5009,7 @@ var init_he = __esm({
   }
 });
 
-// mcp-app/mlh-studio/node_modules/zod/v4/locales/hu.js
+// node_modules/zod/v4/locales/hu.js
 function hu_default() {
   return {
     localeError: error15()
@@ -5017,7 +5017,7 @@ function hu_default() {
 }
 var error15;
 var init_hu = __esm({
-  "mcp-app/mlh-studio/node_modules/zod/v4/locales/hu.js"() {
+  "node_modules/zod/v4/locales/hu.js"() {
     init_util();
     error15 = () => {
       const Sizable = {
@@ -5133,7 +5133,7 @@ var init_hu = __esm({
   }
 });
 
-// mcp-app/mlh-studio/node_modules/zod/v4/locales/id.js
+// node_modules/zod/v4/locales/id.js
 function id_default() {
   return {
     localeError: error16()
@@ -5141,7 +5141,7 @@ function id_default() {
 }
 var error16;
 var init_id = __esm({
-  "mcp-app/mlh-studio/node_modules/zod/v4/locales/id.js"() {
+  "node_modules/zod/v4/locales/id.js"() {
     init_util();
     error16 = () => {
       const Sizable = {
@@ -5256,7 +5256,7 @@ var init_id = __esm({
   }
 });
 
-// mcp-app/mlh-studio/node_modules/zod/v4/locales/it.js
+// node_modules/zod/v4/locales/it.js
 function it_default() {
   return {
     localeError: error17()
@@ -5264,7 +5264,7 @@ function it_default() {
 }
 var error17;
 var init_it = __esm({
-  "mcp-app/mlh-studio/node_modules/zod/v4/locales/it.js"() {
+  "node_modules/zod/v4/locales/it.js"() {
     init_util();
     error17 = () => {
       const Sizable = {
@@ -5380,7 +5380,7 @@ var init_it = __esm({
   }
 });
 
-// mcp-app/mlh-studio/node_modules/zod/v4/locales/ja.js
+// node_modules/zod/v4/locales/ja.js
 function ja_default() {
   return {
     localeError: error18()
@@ -5388,7 +5388,7 @@ function ja_default() {
 }
 var error18;
 var init_ja = __esm({
-  "mcp-app/mlh-studio/node_modules/zod/v4/locales/ja.js"() {
+  "node_modules/zod/v4/locales/ja.js"() {
     init_util();
     error18 = () => {
       const Sizable = {
@@ -5502,7 +5502,7 @@ var init_ja = __esm({
   }
 });
 
-// mcp-app/mlh-studio/node_modules/zod/v4/locales/kh.js
+// node_modules/zod/v4/locales/kh.js
 function kh_default() {
   return {
     localeError: error19()
@@ -5510,7 +5510,7 @@ function kh_default() {
 }
 var error19;
 var init_kh = __esm({
-  "mcp-app/mlh-studio/node_modules/zod/v4/locales/kh.js"() {
+  "node_modules/zod/v4/locales/kh.js"() {
     init_util();
     error19 = () => {
       const Sizable = {
@@ -5626,7 +5626,7 @@ var init_kh = __esm({
   }
 });
 
-// mcp-app/mlh-studio/node_modules/zod/v4/locales/ko.js
+// node_modules/zod/v4/locales/ko.js
 function ko_default() {
   return {
     localeError: error20()
@@ -5634,7 +5634,7 @@ function ko_default() {
 }
 var error20;
 var init_ko = __esm({
-  "mcp-app/mlh-studio/node_modules/zod/v4/locales/ko.js"() {
+  "node_modules/zod/v4/locales/ko.js"() {
     init_util();
     error20 = () => {
       const Sizable = {
@@ -5754,7 +5754,7 @@ var init_ko = __esm({
   }
 });
 
-// mcp-app/mlh-studio/node_modules/zod/v4/locales/mk.js
+// node_modules/zod/v4/locales/mk.js
 function mk_default() {
   return {
     localeError: error21()
@@ -5762,7 +5762,7 @@ function mk_default() {
 }
 var error21;
 var init_mk = __esm({
-  "mcp-app/mlh-studio/node_modules/zod/v4/locales/mk.js"() {
+  "node_modules/zod/v4/locales/mk.js"() {
     init_util();
     error21 = () => {
       const Sizable = {
@@ -5879,7 +5879,7 @@ var init_mk = __esm({
   }
 });
 
-// mcp-app/mlh-studio/node_modules/zod/v4/locales/ms.js
+// node_modules/zod/v4/locales/ms.js
 function ms_default() {
   return {
     localeError: error22()
@@ -5887,7 +5887,7 @@ function ms_default() {
 }
 var error22;
 var init_ms = __esm({
-  "mcp-app/mlh-studio/node_modules/zod/v4/locales/ms.js"() {
+  "node_modules/zod/v4/locales/ms.js"() {
     init_util();
     error22 = () => {
       const Sizable = {
@@ -6002,7 +6002,7 @@ var init_ms = __esm({
   }
 });
 
-// mcp-app/mlh-studio/node_modules/zod/v4/locales/nl.js
+// node_modules/zod/v4/locales/nl.js
 function nl_default() {
   return {
     localeError: error23()
@@ -6010,7 +6010,7 @@ function nl_default() {
 }
 var error23;
 var init_nl = __esm({
-  "mcp-app/mlh-studio/node_modules/zod/v4/locales/nl.js"() {
+  "node_modules/zod/v4/locales/nl.js"() {
     init_util();
     error23 = () => {
       const Sizable = {
@@ -6126,7 +6126,7 @@ var init_nl = __esm({
   }
 });
 
-// mcp-app/mlh-studio/node_modules/zod/v4/locales/no.js
+// node_modules/zod/v4/locales/no.js
 function no_default() {
   return {
     localeError: error24()
@@ -6134,7 +6134,7 @@ function no_default() {
 }
 var error24;
 var init_no = __esm({
-  "mcp-app/mlh-studio/node_modules/zod/v4/locales/no.js"() {
+  "node_modules/zod/v4/locales/no.js"() {
     init_util();
     error24 = () => {
       const Sizable = {
@@ -6249,7 +6249,7 @@ var init_no = __esm({
   }
 });
 
-// mcp-app/mlh-studio/node_modules/zod/v4/locales/ota.js
+// node_modules/zod/v4/locales/ota.js
 function ota_default() {
   return {
     localeError: error25()
@@ -6257,7 +6257,7 @@ function ota_default() {
 }
 var error25;
 var init_ota = __esm({
-  "mcp-app/mlh-studio/node_modules/zod/v4/locales/ota.js"() {
+  "node_modules/zod/v4/locales/ota.js"() {
     init_util();
     error25 = () => {
       const Sizable = {
@@ -6373,7 +6373,7 @@ var init_ota = __esm({
   }
 });
 
-// mcp-app/mlh-studio/node_modules/zod/v4/locales/ps.js
+// node_modules/zod/v4/locales/ps.js
 function ps_default() {
   return {
     localeError: error26()
@@ -6381,7 +6381,7 @@ function ps_default() {
 }
 var error26;
 var init_ps = __esm({
-  "mcp-app/mlh-studio/node_modules/zod/v4/locales/ps.js"() {
+  "node_modules/zod/v4/locales/ps.js"() {
     init_util();
     error26 = () => {
       const Sizable = {
@@ -6502,7 +6502,7 @@ var init_ps = __esm({
   }
 });
 
-// mcp-app/mlh-studio/node_modules/zod/v4/locales/pl.js
+// node_modules/zod/v4/locales/pl.js
 function pl_default() {
   return {
     localeError: error27()
@@ -6510,7 +6510,7 @@ function pl_default() {
 }
 var error27;
 var init_pl = __esm({
-  "mcp-app/mlh-studio/node_modules/zod/v4/locales/pl.js"() {
+  "node_modules/zod/v4/locales/pl.js"() {
     init_util();
     error27 = () => {
       const Sizable = {
@@ -6626,7 +6626,7 @@ var init_pl = __esm({
   }
 });
 
-// mcp-app/mlh-studio/node_modules/zod/v4/locales/pt.js
+// node_modules/zod/v4/locales/pt.js
 function pt_default() {
   return {
     localeError: error28()
@@ -6634,7 +6634,7 @@ function pt_default() {
 }
 var error28;
 var init_pt = __esm({
-  "mcp-app/mlh-studio/node_modules/zod/v4/locales/pt.js"() {
+  "node_modules/zod/v4/locales/pt.js"() {
     init_util();
     error28 = () => {
       const Sizable = {
@@ -6749,7 +6749,7 @@ var init_pt = __esm({
   }
 });
 
-// mcp-app/mlh-studio/node_modules/zod/v4/locales/ru.js
+// node_modules/zod/v4/locales/ru.js
 function getRussianPlural(count, one, few, many) {
   const absCount = Math.abs(count);
   const lastDigit = absCount % 10;
@@ -6772,7 +6772,7 @@ function ru_default() {
 }
 var error29;
 var init_ru = __esm({
-  "mcp-app/mlh-studio/node_modules/zod/v4/locales/ru.js"() {
+  "node_modules/zod/v4/locales/ru.js"() {
     init_util();
     error29 = () => {
       const Sizable = {
@@ -6920,7 +6920,7 @@ var init_ru = __esm({
   }
 });
 
-// mcp-app/mlh-studio/node_modules/zod/v4/locales/sl.js
+// node_modules/zod/v4/locales/sl.js
 function sl_default() {
   return {
     localeError: error30()
@@ -6928,7 +6928,7 @@ function sl_default() {
 }
 var error30;
 var init_sl = __esm({
-  "mcp-app/mlh-studio/node_modules/zod/v4/locales/sl.js"() {
+  "node_modules/zod/v4/locales/sl.js"() {
     init_util();
     error30 = () => {
       const Sizable = {
@@ -7044,7 +7044,7 @@ var init_sl = __esm({
   }
 });
 
-// mcp-app/mlh-studio/node_modules/zod/v4/locales/sv.js
+// node_modules/zod/v4/locales/sv.js
 function sv_default() {
   return {
     localeError: error31()
@@ -7052,7 +7052,7 @@ function sv_default() {
 }
 var error31;
 var init_sv = __esm({
-  "mcp-app/mlh-studio/node_modules/zod/v4/locales/sv.js"() {
+  "node_modules/zod/v4/locales/sv.js"() {
     init_util();
     error31 = () => {
       const Sizable = {
@@ -7169,7 +7169,7 @@ var init_sv = __esm({
   }
 });
 
-// mcp-app/mlh-studio/node_modules/zod/v4/locales/ta.js
+// node_modules/zod/v4/locales/ta.js
 function ta_default() {
   return {
     localeError: error32()
@@ -7177,7 +7177,7 @@ function ta_default() {
 }
 var error32;
 var init_ta = __esm({
-  "mcp-app/mlh-studio/node_modules/zod/v4/locales/ta.js"() {
+  "node_modules/zod/v4/locales/ta.js"() {
     init_util();
     error32 = () => {
       const Sizable = {
@@ -7293,7 +7293,7 @@ var init_ta = __esm({
   }
 });
 
-// mcp-app/mlh-studio/node_modules/zod/v4/locales/th.js
+// node_modules/zod/v4/locales/th.js
 function th_default() {
   return {
     localeError: error33()
@@ -7301,7 +7301,7 @@ function th_default() {
 }
 var error33;
 var init_th = __esm({
-  "mcp-app/mlh-studio/node_modules/zod/v4/locales/th.js"() {
+  "node_modules/zod/v4/locales/th.js"() {
     init_util();
     error33 = () => {
       const Sizable = {
@@ -7417,7 +7417,7 @@ var init_th = __esm({
   }
 });
 
-// mcp-app/mlh-studio/node_modules/zod/v4/locales/tr.js
+// node_modules/zod/v4/locales/tr.js
 function tr_default() {
   return {
     localeError: error34()
@@ -7425,7 +7425,7 @@ function tr_default() {
 }
 var parsedType3, error34;
 var init_tr = __esm({
-  "mcp-app/mlh-studio/node_modules/zod/v4/locales/tr.js"() {
+  "node_modules/zod/v4/locales/tr.js"() {
     init_util();
     parsedType3 = (data) => {
       const t = typeof data;
@@ -7539,7 +7539,7 @@ var init_tr = __esm({
   }
 });
 
-// mcp-app/mlh-studio/node_modules/zod/v4/locales/ua.js
+// node_modules/zod/v4/locales/ua.js
 function ua_default() {
   return {
     localeError: error35()
@@ -7547,7 +7547,7 @@ function ua_default() {
 }
 var error35;
 var init_ua = __esm({
-  "mcp-app/mlh-studio/node_modules/zod/v4/locales/ua.js"() {
+  "node_modules/zod/v4/locales/ua.js"() {
     init_util();
     error35 = () => {
       const Sizable = {
@@ -7663,7 +7663,7 @@ var init_ua = __esm({
   }
 });
 
-// mcp-app/mlh-studio/node_modules/zod/v4/locales/ur.js
+// node_modules/zod/v4/locales/ur.js
 function ur_default() {
   return {
     localeError: error36()
@@ -7671,7 +7671,7 @@ function ur_default() {
 }
 var error36;
 var init_ur = __esm({
-  "mcp-app/mlh-studio/node_modules/zod/v4/locales/ur.js"() {
+  "node_modules/zod/v4/locales/ur.js"() {
     init_util();
     error36 = () => {
       const Sizable = {
@@ -7787,7 +7787,7 @@ var init_ur = __esm({
   }
 });
 
-// mcp-app/mlh-studio/node_modules/zod/v4/locales/vi.js
+// node_modules/zod/v4/locales/vi.js
 function vi_default() {
   return {
     localeError: error37()
@@ -7795,7 +7795,7 @@ function vi_default() {
 }
 var error37;
 var init_vi = __esm({
-  "mcp-app/mlh-studio/node_modules/zod/v4/locales/vi.js"() {
+  "node_modules/zod/v4/locales/vi.js"() {
     init_util();
     error37 = () => {
       const Sizable = {
@@ -7910,7 +7910,7 @@ var init_vi = __esm({
   }
 });
 
-// mcp-app/mlh-studio/node_modules/zod/v4/locales/zh-CN.js
+// node_modules/zod/v4/locales/zh-CN.js
 function zh_CN_default() {
   return {
     localeError: error38()
@@ -7918,7 +7918,7 @@ function zh_CN_default() {
 }
 var error38;
 var init_zh_CN = __esm({
-  "mcp-app/mlh-studio/node_modules/zod/v4/locales/zh-CN.js"() {
+  "node_modules/zod/v4/locales/zh-CN.js"() {
     init_util();
     error38 = () => {
       const Sizable = {
@@ -8033,7 +8033,7 @@ var init_zh_CN = __esm({
   }
 });
 
-// mcp-app/mlh-studio/node_modules/zod/v4/locales/zh-TW.js
+// node_modules/zod/v4/locales/zh-TW.js
 function zh_TW_default() {
   return {
     localeError: error39()
@@ -8041,7 +8041,7 @@ function zh_TW_default() {
 }
 var error39;
 var init_zh_TW = __esm({
-  "mcp-app/mlh-studio/node_modules/zod/v4/locales/zh-TW.js"() {
+  "node_modules/zod/v4/locales/zh-TW.js"() {
     init_util();
     error39 = () => {
       const Sizable = {
@@ -8157,7 +8157,7 @@ var init_zh_TW = __esm({
   }
 });
 
-// mcp-app/mlh-studio/node_modules/zod/v4/locales/index.js
+// node_modules/zod/v4/locales/index.js
 var locales_exports = {};
 __export(locales_exports, {
   ar: () => ar_default,
@@ -8201,7 +8201,7 @@ __export(locales_exports, {
   zhTW: () => zh_TW_default
 });
 var init_locales = __esm({
-  "mcp-app/mlh-studio/node_modules/zod/v4/locales/index.js"() {
+  "node_modules/zod/v4/locales/index.js"() {
     init_ar();
     init_az();
     init_be();
@@ -8244,13 +8244,13 @@ var init_locales = __esm({
   }
 });
 
-// mcp-app/mlh-studio/node_modules/zod/v4/core/registries.js
+// node_modules/zod/v4/core/registries.js
 function registry() {
   return new $ZodRegistry();
 }
 var $output, $input, $ZodRegistry, globalRegistry;
 var init_registries = __esm({
-  "mcp-app/mlh-studio/node_modules/zod/v4/core/registries.js"() {
+  "node_modules/zod/v4/core/registries.js"() {
     $output = Symbol("ZodOutput");
     $input = Symbol("ZodInput");
     $ZodRegistry = class {
@@ -8299,7 +8299,7 @@ var init_registries = __esm({
   }
 });
 
-// mcp-app/mlh-studio/node_modules/zod/v4/core/api.js
+// node_modules/zod/v4/core/api.js
 function _string(Class2, params) {
   return new Class2({
     type: "string",
@@ -9151,7 +9151,7 @@ function _stringFormat(Class2, format, fnOrRegex, _params = {}) {
 }
 var TimePrecision;
 var init_api = __esm({
-  "mcp-app/mlh-studio/node_modules/zod/v4/core/api.js"() {
+  "node_modules/zod/v4/core/api.js"() {
     init_checks();
     init_schemas();
     init_util();
@@ -9165,7 +9165,7 @@ var init_api = __esm({
   }
 });
 
-// mcp-app/mlh-studio/node_modules/zod/v4/core/function.js
+// node_modules/zod/v4/core/function.js
 function _function(params) {
   return new $ZodFunction({
     type: "function",
@@ -9175,7 +9175,7 @@ function _function(params) {
 }
 var $ZodFunction;
 var init_function = __esm({
-  "mcp-app/mlh-studio/node_modules/zod/v4/core/function.js"() {
+  "node_modules/zod/v4/core/function.js"() {
     init_api();
     init_parse();
     init_schemas();
@@ -9244,7 +9244,7 @@ var init_function = __esm({
   }
 });
 
-// mcp-app/mlh-studio/node_modules/zod/v4/core/to-json-schema.js
+// node_modules/zod/v4/core/to-json-schema.js
 function toJSONSchema(input, _params) {
   if (input instanceof $ZodRegistry) {
     const gen2 = new JSONSchemaGenerator(_params);
@@ -9379,7 +9379,7 @@ function isTransforming(_schema, _ctx) {
 }
 var JSONSchemaGenerator;
 var init_to_json_schema = __esm({
-  "mcp-app/mlh-studio/node_modules/zod/v4/core/to-json-schema.js"() {
+  "node_modules/zod/v4/core/to-json-schema.js"() {
     init_registries();
     init_util();
     JSONSchemaGenerator = class {
@@ -10018,14 +10018,14 @@ Set the \`cycles\` parameter to \`"ref"\` to resolve cyclical schemas with defs.
   }
 });
 
-// mcp-app/mlh-studio/node_modules/zod/v4/core/json-schema.js
+// node_modules/zod/v4/core/json-schema.js
 var json_schema_exports = {};
 var init_json_schema = __esm({
-  "mcp-app/mlh-studio/node_modules/zod/v4/core/json-schema.js"() {
+  "node_modules/zod/v4/core/json-schema.js"() {
   }
 });
 
-// mcp-app/mlh-studio/node_modules/zod/v4/core/index.js
+// node_modules/zod/v4/core/index.js
 var core_exports2 = {};
 __export(core_exports2, {
   $ZodAny: () => $ZodAny,
@@ -10269,7 +10269,7 @@ __export(core_exports2, {
   version: () => version
 });
 var init_core2 = __esm({
-  "mcp-app/mlh-studio/node_modules/zod/v4/core/index.js"() {
+  "node_modules/zod/v4/core/index.js"() {
     init_core();
     init_parse();
     init_errors();
@@ -10288,14 +10288,14 @@ var init_core2 = __esm({
   }
 });
 
-// mcp-app/mlh-studio/node_modules/zod/v4/classic/checks.js
+// node_modules/zod/v4/classic/checks.js
 var init_checks2 = __esm({
-  "mcp-app/mlh-studio/node_modules/zod/v4/classic/checks.js"() {
+  "node_modules/zod/v4/classic/checks.js"() {
     init_core2();
   }
 });
 
-// mcp-app/mlh-studio/node_modules/zod/v4/classic/iso.js
+// node_modules/zod/v4/classic/iso.js
 var iso_exports = {};
 __export(iso_exports, {
   ZodISODate: () => ZodISODate,
@@ -10321,7 +10321,7 @@ function duration2(params) {
 }
 var ZodISODateTime, ZodISODate, ZodISOTime, ZodISODuration;
 var init_iso = __esm({
-  "mcp-app/mlh-studio/node_modules/zod/v4/classic/iso.js"() {
+  "node_modules/zod/v4/classic/iso.js"() {
     init_core2();
     init_schemas2();
     ZodISODateTime = /* @__PURE__ */ $constructor("ZodISODateTime", (inst, def) => {
@@ -10343,10 +10343,10 @@ var init_iso = __esm({
   }
 });
 
-// mcp-app/mlh-studio/node_modules/zod/v4/classic/errors.js
+// node_modules/zod/v4/classic/errors.js
 var initializer2, ZodError, ZodRealError;
 var init_errors2 = __esm({
-  "mcp-app/mlh-studio/node_modules/zod/v4/classic/errors.js"() {
+  "node_modules/zod/v4/classic/errors.js"() {
     init_core2();
     init_core2();
     initializer2 = (inst, issues) => {
@@ -10384,10 +10384,10 @@ var init_errors2 = __esm({
   }
 });
 
-// mcp-app/mlh-studio/node_modules/zod/v4/classic/parse.js
+// node_modules/zod/v4/classic/parse.js
 var parse2, parseAsync2, safeParse3, safeParseAsync2;
 var init_parse2 = __esm({
-  "mcp-app/mlh-studio/node_modules/zod/v4/classic/parse.js"() {
+  "node_modules/zod/v4/classic/parse.js"() {
     init_core2();
     init_errors2();
     parse2 = /* @__PURE__ */ _parse(ZodRealError);
@@ -10397,7 +10397,7 @@ var init_parse2 = __esm({
   }
 });
 
-// mcp-app/mlh-studio/node_modules/zod/v4/classic/schemas.js
+// node_modules/zod/v4/classic/schemas.js
 function string2(params) {
   return _string(ZodString, params);
 }
@@ -10806,7 +10806,7 @@ function preprocess(fn, schema) {
 }
 var ZodType, _ZodString, ZodString, ZodStringFormat, ZodEmail, ZodGUID, ZodUUID, ZodURL, ZodEmoji, ZodNanoID, ZodCUID, ZodCUID2, ZodULID, ZodXID, ZodKSUID, ZodIPv4, ZodIPv6, ZodCIDRv4, ZodCIDRv6, ZodBase64, ZodBase64URL, ZodE164, ZodJWT, ZodCustomStringFormat, ZodNumber, ZodNumberFormat, ZodBoolean, ZodBigInt, ZodBigIntFormat, ZodSymbol, ZodUndefined, ZodNull, ZodAny, ZodUnknown, ZodNever, ZodVoid, ZodDate, ZodArray, ZodObject, ZodUnion, ZodDiscriminatedUnion, ZodIntersection, ZodTuple, ZodRecord, ZodMap, ZodSet, ZodEnum, ZodLiteral, ZodFile, ZodTransform, ZodOptional, ZodNullable, ZodDefault, ZodPrefault, ZodNonOptional, ZodSuccess, ZodCatch, ZodNaN, ZodPipe, ZodReadonly, ZodTemplateLiteral, ZodLazy, ZodPromise, ZodCustom, stringbool;
 var init_schemas2 = __esm({
-  "mcp-app/mlh-studio/node_modules/zod/v4/classic/schemas.js"() {
+  "node_modules/zod/v4/classic/schemas.js"() {
     init_core2();
     init_core2();
     init_checks2();
@@ -11344,7 +11344,7 @@ var init_schemas2 = __esm({
   }
 });
 
-// mcp-app/mlh-studio/node_modules/zod/v4/classic/compat.js
+// node_modules/zod/v4/classic/compat.js
 function setErrorMap(map2) {
   config({
     customError: map2
@@ -11355,7 +11355,7 @@ function getErrorMap() {
 }
 var ZodIssueCode;
 var init_compat = __esm({
-  "mcp-app/mlh-studio/node_modules/zod/v4/classic/compat.js"() {
+  "node_modules/zod/v4/classic/compat.js"() {
     init_core2();
     ZodIssueCode = {
       invalid_type: "invalid_type",
@@ -11373,7 +11373,7 @@ var init_compat = __esm({
   }
 });
 
-// mcp-app/mlh-studio/node_modules/zod/v4/classic/coerce.js
+// node_modules/zod/v4/classic/coerce.js
 var coerce_exports = {};
 __export(coerce_exports, {
   bigint: () => bigint3,
@@ -11398,13 +11398,13 @@ function date4(params) {
   return _coercedDate(ZodDate, params);
 }
 var init_coerce = __esm({
-  "mcp-app/mlh-studio/node_modules/zod/v4/classic/coerce.js"() {
+  "node_modules/zod/v4/classic/coerce.js"() {
     init_core2();
     init_schemas2();
   }
 });
 
-// mcp-app/mlh-studio/node_modules/zod/v4/classic/external.js
+// node_modules/zod/v4/classic/external.js
 var external_exports = {};
 __export(external_exports, {
   $brand: () => $brand,
@@ -11616,7 +11616,7 @@ __export(external_exports, {
   xid: () => xid2
 });
 var init_external = __esm({
-  "mcp-app/mlh-studio/node_modules/zod/v4/classic/external.js"() {
+  "node_modules/zod/v4/classic/external.js"() {
     init_core2();
     init_schemas2();
     init_checks2();
@@ -11634,24 +11634,24 @@ var init_external = __esm({
   }
 });
 
-// mcp-app/mlh-studio/node_modules/zod/v4/classic/index.js
+// node_modules/zod/v4/classic/index.js
 var init_classic = __esm({
-  "mcp-app/mlh-studio/node_modules/zod/v4/classic/index.js"() {
+  "node_modules/zod/v4/classic/index.js"() {
     init_external();
     init_external();
   }
 });
 
-// mcp-app/mlh-studio/node_modules/zod/v4/index.js
+// node_modules/zod/v4/index.js
 var init_v4 = __esm({
-  "mcp-app/mlh-studio/node_modules/zod/v4/index.js"() {
+  "node_modules/zod/v4/index.js"() {
     init_classic();
   }
 });
 
-// mcp-app/mlh-studio/node_modules/ajv/dist/compile/codegen/code.js
+// node_modules/ajv/dist/compile/codegen/code.js
 var require_code = __commonJS({
-  "mcp-app/mlh-studio/node_modules/ajv/dist/compile/codegen/code.js"(exports) {
+  "node_modules/ajv/dist/compile/codegen/code.js"(exports) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     exports.regexpCode = exports.getEsmExportName = exports.getProperty = exports.safeStringify = exports.stringify = exports.strConcat = exports.addCodeArg = exports.str = exports._ = exports.nil = exports._Code = exports.Name = exports.IDENTIFIER = exports._CodeOrName = void 0;
@@ -11803,9 +11803,9 @@ var require_code = __commonJS({
   }
 });
 
-// mcp-app/mlh-studio/node_modules/ajv/dist/compile/codegen/scope.js
+// node_modules/ajv/dist/compile/codegen/scope.js
 var require_scope = __commonJS({
-  "mcp-app/mlh-studio/node_modules/ajv/dist/compile/codegen/scope.js"(exports) {
+  "node_modules/ajv/dist/compile/codegen/scope.js"(exports) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     exports.ValueScope = exports.ValueScopeName = exports.Scope = exports.varKinds = exports.UsedValueState = void 0;
@@ -11948,9 +11948,9 @@ var require_scope = __commonJS({
   }
 });
 
-// mcp-app/mlh-studio/node_modules/ajv/dist/compile/codegen/index.js
+// node_modules/ajv/dist/compile/codegen/index.js
 var require_codegen = __commonJS({
-  "mcp-app/mlh-studio/node_modules/ajv/dist/compile/codegen/index.js"(exports) {
+  "node_modules/ajv/dist/compile/codegen/index.js"(exports) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     exports.or = exports.and = exports.not = exports.CodeGen = exports.operators = exports.varKinds = exports.ValueScopeName = exports.ValueScope = exports.Scope = exports.Name = exports.regexpCode = exports.stringify = exports.getProperty = exports.nil = exports.strConcat = exports.str = exports._ = void 0;
@@ -12668,9 +12668,9 @@ var require_codegen = __commonJS({
   }
 });
 
-// mcp-app/mlh-studio/node_modules/ajv/dist/compile/util.js
+// node_modules/ajv/dist/compile/util.js
 var require_util = __commonJS({
-  "mcp-app/mlh-studio/node_modules/ajv/dist/compile/util.js"(exports) {
+  "node_modules/ajv/dist/compile/util.js"(exports) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     exports.checkStrictMode = exports.getErrorPath = exports.Type = exports.useFunc = exports.setEvaluated = exports.evaluatedPropsToName = exports.mergeEvaluated = exports.eachItem = exports.unescapeJsonPointer = exports.escapeJsonPointer = exports.escapeFragment = exports.unescapeFragment = exports.schemaRefOrVal = exports.schemaHasRulesButRef = exports.schemaHasRules = exports.checkUnknownRules = exports.alwaysValidSchema = exports.toHash = void 0;
@@ -12835,9 +12835,9 @@ var require_util = __commonJS({
   }
 });
 
-// mcp-app/mlh-studio/node_modules/ajv/dist/compile/names.js
+// node_modules/ajv/dist/compile/names.js
 var require_names = __commonJS({
-  "mcp-app/mlh-studio/node_modules/ajv/dist/compile/names.js"(exports) {
+  "node_modules/ajv/dist/compile/names.js"(exports) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     var codegen_1 = require_codegen();
@@ -12874,9 +12874,9 @@ var require_names = __commonJS({
   }
 });
 
-// mcp-app/mlh-studio/node_modules/ajv/dist/compile/errors.js
+// node_modules/ajv/dist/compile/errors.js
 var require_errors = __commonJS({
-  "mcp-app/mlh-studio/node_modules/ajv/dist/compile/errors.js"(exports) {
+  "node_modules/ajv/dist/compile/errors.js"(exports) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     exports.extendErrors = exports.resetErrorsCount = exports.reportExtraError = exports.reportError = exports.keyword$DataError = exports.keywordError = void 0;
@@ -12996,9 +12996,9 @@ var require_errors = __commonJS({
   }
 });
 
-// mcp-app/mlh-studio/node_modules/ajv/dist/compile/validate/boolSchema.js
+// node_modules/ajv/dist/compile/validate/boolSchema.js
 var require_boolSchema = __commonJS({
-  "mcp-app/mlh-studio/node_modules/ajv/dist/compile/validate/boolSchema.js"(exports) {
+  "node_modules/ajv/dist/compile/validate/boolSchema.js"(exports) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     exports.boolOrEmptySchema = exports.topBoolOrEmptySchema = void 0;
@@ -13047,9 +13047,9 @@ var require_boolSchema = __commonJS({
   }
 });
 
-// mcp-app/mlh-studio/node_modules/ajv/dist/compile/rules.js
+// node_modules/ajv/dist/compile/rules.js
 var require_rules = __commonJS({
-  "mcp-app/mlh-studio/node_modules/ajv/dist/compile/rules.js"(exports) {
+  "node_modules/ajv/dist/compile/rules.js"(exports) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     exports.getRules = exports.isJSONType = void 0;
@@ -13078,9 +13078,9 @@ var require_rules = __commonJS({
   }
 });
 
-// mcp-app/mlh-studio/node_modules/ajv/dist/compile/validate/applicability.js
+// node_modules/ajv/dist/compile/validate/applicability.js
 var require_applicability = __commonJS({
-  "mcp-app/mlh-studio/node_modules/ajv/dist/compile/validate/applicability.js"(exports) {
+  "node_modules/ajv/dist/compile/validate/applicability.js"(exports) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     exports.shouldUseRule = exports.shouldUseGroup = exports.schemaHasRulesForType = void 0;
@@ -13101,9 +13101,9 @@ var require_applicability = __commonJS({
   }
 });
 
-// mcp-app/mlh-studio/node_modules/ajv/dist/compile/validate/dataType.js
+// node_modules/ajv/dist/compile/validate/dataType.js
 var require_dataType = __commonJS({
-  "mcp-app/mlh-studio/node_modules/ajv/dist/compile/validate/dataType.js"(exports) {
+  "node_modules/ajv/dist/compile/validate/dataType.js"(exports) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     exports.reportTypeError = exports.checkDataTypes = exports.checkDataType = exports.coerceAndCheckDataType = exports.getJSONTypes = exports.getSchemaTypes = exports.DataType = void 0;
@@ -13285,9 +13285,9 @@ var require_dataType = __commonJS({
   }
 });
 
-// mcp-app/mlh-studio/node_modules/ajv/dist/compile/validate/defaults.js
+// node_modules/ajv/dist/compile/validate/defaults.js
 var require_defaults = __commonJS({
-  "mcp-app/mlh-studio/node_modules/ajv/dist/compile/validate/defaults.js"(exports) {
+  "node_modules/ajv/dist/compile/validate/defaults.js"(exports) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     exports.assignDefaults = void 0;
@@ -13322,9 +13322,9 @@ var require_defaults = __commonJS({
   }
 });
 
-// mcp-app/mlh-studio/node_modules/ajv/dist/vocabularies/code.js
+// node_modules/ajv/dist/vocabularies/code.js
 var require_code2 = __commonJS({
-  "mcp-app/mlh-studio/node_modules/ajv/dist/vocabularies/code.js"(exports) {
+  "node_modules/ajv/dist/vocabularies/code.js"(exports) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     exports.validateUnion = exports.validateArray = exports.usePattern = exports.callValidateCode = exports.schemaProperties = exports.allSchemaProperties = exports.noPropertyInData = exports.propertyInData = exports.isOwnProperty = exports.hasPropFunc = exports.reportMissingProp = exports.checkMissingProp = exports.checkReportMissingProp = void 0;
@@ -13455,9 +13455,9 @@ var require_code2 = __commonJS({
   }
 });
 
-// mcp-app/mlh-studio/node_modules/ajv/dist/compile/validate/keyword.js
+// node_modules/ajv/dist/compile/validate/keyword.js
 var require_keyword = __commonJS({
-  "mcp-app/mlh-studio/node_modules/ajv/dist/compile/validate/keyword.js"(exports) {
+  "node_modules/ajv/dist/compile/validate/keyword.js"(exports) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     exports.validateKeywordUsage = exports.validSchemaType = exports.funcKeywordCode = exports.macroKeywordCode = void 0;
@@ -13573,9 +13573,9 @@ var require_keyword = __commonJS({
   }
 });
 
-// mcp-app/mlh-studio/node_modules/ajv/dist/compile/validate/subschema.js
+// node_modules/ajv/dist/compile/validate/subschema.js
 var require_subschema = __commonJS({
-  "mcp-app/mlh-studio/node_modules/ajv/dist/compile/validate/subschema.js"(exports) {
+  "node_modules/ajv/dist/compile/validate/subschema.js"(exports) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     exports.extendSubschemaMode = exports.extendSubschemaData = exports.getSubschema = void 0;
@@ -13656,9 +13656,9 @@ var require_subschema = __commonJS({
   }
 });
 
-// mcp-app/mlh-studio/node_modules/fast-deep-equal/index.js
+// node_modules/fast-deep-equal/index.js
 var require_fast_deep_equal = __commonJS({
-  "mcp-app/mlh-studio/node_modules/fast-deep-equal/index.js"(exports, module) {
+  "node_modules/fast-deep-equal/index.js"(exports, module) {
     "use strict";
     module.exports = function equal(a, b) {
       if (a === b) return true;
@@ -13691,9 +13691,9 @@ var require_fast_deep_equal = __commonJS({
   }
 });
 
-// mcp-app/mlh-studio/node_modules/json-schema-traverse/index.js
+// node_modules/json-schema-traverse/index.js
 var require_json_schema_traverse = __commonJS({
-  "mcp-app/mlh-studio/node_modules/json-schema-traverse/index.js"(exports, module) {
+  "node_modules/json-schema-traverse/index.js"(exports, module) {
     "use strict";
     var traverse = module.exports = function(schema, opts, cb) {
       if (typeof opts == "function") {
@@ -13779,9 +13779,9 @@ var require_json_schema_traverse = __commonJS({
   }
 });
 
-// mcp-app/mlh-studio/node_modules/ajv/dist/compile/resolve.js
+// node_modules/ajv/dist/compile/resolve.js
 var require_resolve = __commonJS({
-  "mcp-app/mlh-studio/node_modules/ajv/dist/compile/resolve.js"(exports) {
+  "node_modules/ajv/dist/compile/resolve.js"(exports) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     exports.getSchemaRefs = exports.resolveUrl = exports.normalizeId = exports._getFullPath = exports.getFullPath = exports.inlineRef = void 0;
@@ -13935,9 +13935,9 @@ var require_resolve = __commonJS({
   }
 });
 
-// mcp-app/mlh-studio/node_modules/ajv/dist/compile/validate/index.js
+// node_modules/ajv/dist/compile/validate/index.js
 var require_validate = __commonJS({
-  "mcp-app/mlh-studio/node_modules/ajv/dist/compile/validate/index.js"(exports) {
+  "node_modules/ajv/dist/compile/validate/index.js"(exports) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     exports.getData = exports.KeywordCxt = exports.validateFunctionCode = void 0;
@@ -14443,9 +14443,9 @@ var require_validate = __commonJS({
   }
 });
 
-// mcp-app/mlh-studio/node_modules/ajv/dist/runtime/validation_error.js
+// node_modules/ajv/dist/runtime/validation_error.js
 var require_validation_error = __commonJS({
-  "mcp-app/mlh-studio/node_modules/ajv/dist/runtime/validation_error.js"(exports) {
+  "node_modules/ajv/dist/runtime/validation_error.js"(exports) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     var ValidationError = class extends Error {
@@ -14459,9 +14459,9 @@ var require_validation_error = __commonJS({
   }
 });
 
-// mcp-app/mlh-studio/node_modules/ajv/dist/compile/ref_error.js
+// node_modules/ajv/dist/compile/ref_error.js
 var require_ref_error = __commonJS({
-  "mcp-app/mlh-studio/node_modules/ajv/dist/compile/ref_error.js"(exports) {
+  "node_modules/ajv/dist/compile/ref_error.js"(exports) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     var resolve_1 = require_resolve();
@@ -14476,9 +14476,9 @@ var require_ref_error = __commonJS({
   }
 });
 
-// mcp-app/mlh-studio/node_modules/ajv/dist/compile/index.js
+// node_modules/ajv/dist/compile/index.js
 var require_compile = __commonJS({
-  "mcp-app/mlh-studio/node_modules/ajv/dist/compile/index.js"(exports) {
+  "node_modules/ajv/dist/compile/index.js"(exports) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     exports.resolveSchema = exports.getCompilingSchema = exports.resolveRef = exports.compileSchema = exports.SchemaEnv = void 0;
@@ -14700,9 +14700,9 @@ var require_compile = __commonJS({
   }
 });
 
-// mcp-app/mlh-studio/node_modules/ajv/dist/refs/data.json
+// node_modules/ajv/dist/refs/data.json
 var require_data = __commonJS({
-  "mcp-app/mlh-studio/node_modules/ajv/dist/refs/data.json"(exports, module) {
+  "node_modules/ajv/dist/refs/data.json"(exports, module) {
     module.exports = {
       $id: "https://raw.githubusercontent.com/ajv-validator/ajv/master/lib/refs/data.json#",
       description: "Meta-schema for $data reference (JSON AnySchema extension proposal)",
@@ -14719,9 +14719,9 @@ var require_data = __commonJS({
   }
 });
 
-// mcp-app/mlh-studio/node_modules/fast-uri/lib/utils.js
+// node_modules/fast-uri/lib/utils.js
 var require_utils = __commonJS({
-  "mcp-app/mlh-studio/node_modules/fast-uri/lib/utils.js"(exports, module) {
+  "node_modules/fast-uri/lib/utils.js"(exports, module) {
     "use strict";
     var isUUID = RegExp.prototype.test.bind(/^[\da-f]{8}-[\da-f]{4}-[\da-f]{4}-[\da-f]{4}-[\da-f]{12}$/iu);
     var isIPv4 = RegExp.prototype.test.bind(/^(?:(?:25[0-5]|2[0-4]\d|1\d{2}|[1-9]\d|\d)\.){3}(?:25[0-5]|2[0-4]\d|1\d{2}|[1-9]\d|\d)$/u);
@@ -15253,9 +15253,9 @@ var require_utils = __commonJS({
   }
 });
 
-// mcp-app/mlh-studio/node_modules/fast-uri/lib/schemes.js
+// node_modules/fast-uri/lib/schemes.js
 var require_schemes = __commonJS({
-  "mcp-app/mlh-studio/node_modules/fast-uri/lib/schemes.js"(exports, module) {
+  "node_modules/fast-uri/lib/schemes.js"(exports, module) {
     "use strict";
     var { isUUID } = require_utils();
     var URN_REG = /^([\da-z][\d\-a-z]{0,31}):((?:[\w!$'()*+,\-./:;=@]|%[\da-f]{2})+)$/iu;
@@ -15464,9 +15464,9 @@ var require_schemes = __commonJS({
   }
 });
 
-// mcp-app/mlh-studio/node_modules/fast-uri/index.js
+// node_modules/fast-uri/index.js
 var require_fast_uri = __commonJS({
-  "mcp-app/mlh-studio/node_modules/fast-uri/index.js"(exports, module) {
+  "node_modules/fast-uri/index.js"(exports, module) {
     "use strict";
     var { normalizeIPv6, removeDotSegments, removeDotSegmentsRelative, recomposeAuthority, normalizePercentEncoding, normalizePathEncoding, serializePathEncoding, normalizeQueryFragmentEncoding, encodeQuery, encodeFragment, reescapeHostDelimiters, isIPv4, nonSimpleDomain } = require_utils();
     var { SCHEMES, getSchemeHandler } = require_schemes();
@@ -15894,9 +15894,9 @@ var require_fast_uri = __commonJS({
   }
 });
 
-// mcp-app/mlh-studio/node_modules/ajv/dist/runtime/uri.js
+// node_modules/ajv/dist/runtime/uri.js
 var require_uri = __commonJS({
-  "mcp-app/mlh-studio/node_modules/ajv/dist/runtime/uri.js"(exports) {
+  "node_modules/ajv/dist/runtime/uri.js"(exports) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     var uri = require_fast_uri();
@@ -15905,9 +15905,9 @@ var require_uri = __commonJS({
   }
 });
 
-// mcp-app/mlh-studio/node_modules/ajv/dist/core.js
+// node_modules/ajv/dist/core.js
 var require_core = __commonJS({
-  "mcp-app/mlh-studio/node_modules/ajv/dist/core.js"(exports) {
+  "node_modules/ajv/dist/core.js"(exports) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     exports.CodeGen = exports.Name = exports.nil = exports.stringify = exports.str = exports._ = exports.KeywordCxt = void 0;
@@ -16516,9 +16516,9 @@ var require_core = __commonJS({
   }
 });
 
-// mcp-app/mlh-studio/node_modules/ajv/dist/vocabularies/core/id.js
+// node_modules/ajv/dist/vocabularies/core/id.js
 var require_id = __commonJS({
-  "mcp-app/mlh-studio/node_modules/ajv/dist/vocabularies/core/id.js"(exports) {
+  "node_modules/ajv/dist/vocabularies/core/id.js"(exports) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     var def = {
@@ -16531,9 +16531,9 @@ var require_id = __commonJS({
   }
 });
 
-// mcp-app/mlh-studio/node_modules/ajv/dist/vocabularies/core/ref.js
+// node_modules/ajv/dist/vocabularies/core/ref.js
 var require_ref = __commonJS({
-  "mcp-app/mlh-studio/node_modules/ajv/dist/vocabularies/core/ref.js"(exports) {
+  "node_modules/ajv/dist/vocabularies/core/ref.js"(exports) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     exports.callRef = exports.getValidate = void 0;
@@ -16653,9 +16653,9 @@ var require_ref = __commonJS({
   }
 });
 
-// mcp-app/mlh-studio/node_modules/ajv/dist/vocabularies/core/index.js
+// node_modules/ajv/dist/vocabularies/core/index.js
 var require_core2 = __commonJS({
-  "mcp-app/mlh-studio/node_modules/ajv/dist/vocabularies/core/index.js"(exports) {
+  "node_modules/ajv/dist/vocabularies/core/index.js"(exports) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     var id_1 = require_id();
@@ -16674,9 +16674,9 @@ var require_core2 = __commonJS({
   }
 });
 
-// mcp-app/mlh-studio/node_modules/ajv/dist/vocabularies/validation/limitNumber.js
+// node_modules/ajv/dist/vocabularies/validation/limitNumber.js
 var require_limitNumber = __commonJS({
-  "mcp-app/mlh-studio/node_modules/ajv/dist/vocabularies/validation/limitNumber.js"(exports) {
+  "node_modules/ajv/dist/vocabularies/validation/limitNumber.js"(exports) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     var codegen_1 = require_codegen();
@@ -16706,9 +16706,9 @@ var require_limitNumber = __commonJS({
   }
 });
 
-// mcp-app/mlh-studio/node_modules/ajv/dist/vocabularies/validation/multipleOf.js
+// node_modules/ajv/dist/vocabularies/validation/multipleOf.js
 var require_multipleOf = __commonJS({
-  "mcp-app/mlh-studio/node_modules/ajv/dist/vocabularies/validation/multipleOf.js"(exports) {
+  "node_modules/ajv/dist/vocabularies/validation/multipleOf.js"(exports) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     var codegen_1 = require_codegen();
@@ -16734,9 +16734,9 @@ var require_multipleOf = __commonJS({
   }
 });
 
-// mcp-app/mlh-studio/node_modules/ajv/dist/runtime/ucs2length.js
+// node_modules/ajv/dist/runtime/ucs2length.js
 var require_ucs2length = __commonJS({
-  "mcp-app/mlh-studio/node_modules/ajv/dist/runtime/ucs2length.js"(exports) {
+  "node_modules/ajv/dist/runtime/ucs2length.js"(exports) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     function ucs2length(str) {
@@ -16760,9 +16760,9 @@ var require_ucs2length = __commonJS({
   }
 });
 
-// mcp-app/mlh-studio/node_modules/ajv/dist/vocabularies/validation/limitLength.js
+// node_modules/ajv/dist/vocabularies/validation/limitLength.js
 var require_limitLength = __commonJS({
-  "mcp-app/mlh-studio/node_modules/ajv/dist/vocabularies/validation/limitLength.js"(exports) {
+  "node_modules/ajv/dist/vocabularies/validation/limitLength.js"(exports) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     var codegen_1 = require_codegen();
@@ -16792,9 +16792,9 @@ var require_limitLength = __commonJS({
   }
 });
 
-// mcp-app/mlh-studio/node_modules/ajv/dist/vocabularies/validation/pattern.js
+// node_modules/ajv/dist/vocabularies/validation/pattern.js
 var require_pattern = __commonJS({
-  "mcp-app/mlh-studio/node_modules/ajv/dist/vocabularies/validation/pattern.js"(exports) {
+  "node_modules/ajv/dist/vocabularies/validation/pattern.js"(exports) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     var code_1 = require_code2();
@@ -16829,9 +16829,9 @@ var require_pattern = __commonJS({
   }
 });
 
-// mcp-app/mlh-studio/node_modules/ajv/dist/vocabularies/validation/limitProperties.js
+// node_modules/ajv/dist/vocabularies/validation/limitProperties.js
 var require_limitProperties = __commonJS({
-  "mcp-app/mlh-studio/node_modules/ajv/dist/vocabularies/validation/limitProperties.js"(exports) {
+  "node_modules/ajv/dist/vocabularies/validation/limitProperties.js"(exports) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     var codegen_1 = require_codegen();
@@ -16858,9 +16858,9 @@ var require_limitProperties = __commonJS({
   }
 });
 
-// mcp-app/mlh-studio/node_modules/ajv/dist/vocabularies/validation/required.js
+// node_modules/ajv/dist/vocabularies/validation/required.js
 var require_required = __commonJS({
-  "mcp-app/mlh-studio/node_modules/ajv/dist/vocabularies/validation/required.js"(exports) {
+  "node_modules/ajv/dist/vocabularies/validation/required.js"(exports) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     var code_1 = require_code2();
@@ -16940,9 +16940,9 @@ var require_required = __commonJS({
   }
 });
 
-// mcp-app/mlh-studio/node_modules/ajv/dist/vocabularies/validation/limitItems.js
+// node_modules/ajv/dist/vocabularies/validation/limitItems.js
 var require_limitItems = __commonJS({
-  "mcp-app/mlh-studio/node_modules/ajv/dist/vocabularies/validation/limitItems.js"(exports) {
+  "node_modules/ajv/dist/vocabularies/validation/limitItems.js"(exports) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     var codegen_1 = require_codegen();
@@ -16969,9 +16969,9 @@ var require_limitItems = __commonJS({
   }
 });
 
-// mcp-app/mlh-studio/node_modules/ajv/dist/runtime/equal.js
+// node_modules/ajv/dist/runtime/equal.js
 var require_equal = __commonJS({
-  "mcp-app/mlh-studio/node_modules/ajv/dist/runtime/equal.js"(exports) {
+  "node_modules/ajv/dist/runtime/equal.js"(exports) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     var equal = require_fast_deep_equal();
@@ -16980,9 +16980,9 @@ var require_equal = __commonJS({
   }
 });
 
-// mcp-app/mlh-studio/node_modules/ajv/dist/vocabularies/validation/uniqueItems.js
+// node_modules/ajv/dist/vocabularies/validation/uniqueItems.js
 var require_uniqueItems = __commonJS({
-  "mcp-app/mlh-studio/node_modules/ajv/dist/vocabularies/validation/uniqueItems.js"(exports) {
+  "node_modules/ajv/dist/vocabularies/validation/uniqueItems.js"(exports) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     var dataType_1 = require_dataType();
@@ -17047,9 +17047,9 @@ var require_uniqueItems = __commonJS({
   }
 });
 
-// mcp-app/mlh-studio/node_modules/ajv/dist/vocabularies/validation/const.js
+// node_modules/ajv/dist/vocabularies/validation/const.js
 var require_const = __commonJS({
-  "mcp-app/mlh-studio/node_modules/ajv/dist/vocabularies/validation/const.js"(exports) {
+  "node_modules/ajv/dist/vocabularies/validation/const.js"(exports) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     var codegen_1 = require_codegen();
@@ -17076,9 +17076,9 @@ var require_const = __commonJS({
   }
 });
 
-// mcp-app/mlh-studio/node_modules/ajv/dist/vocabularies/validation/enum.js
+// node_modules/ajv/dist/vocabularies/validation/enum.js
 var require_enum = __commonJS({
-  "mcp-app/mlh-studio/node_modules/ajv/dist/vocabularies/validation/enum.js"(exports) {
+  "node_modules/ajv/dist/vocabularies/validation/enum.js"(exports) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     var codegen_1 = require_codegen();
@@ -17125,9 +17125,9 @@ var require_enum = __commonJS({
   }
 });
 
-// mcp-app/mlh-studio/node_modules/ajv/dist/vocabularies/validation/index.js
+// node_modules/ajv/dist/vocabularies/validation/index.js
 var require_validation = __commonJS({
-  "mcp-app/mlh-studio/node_modules/ajv/dist/vocabularies/validation/index.js"(exports) {
+  "node_modules/ajv/dist/vocabularies/validation/index.js"(exports) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     var limitNumber_1 = require_limitNumber();
@@ -17163,9 +17163,9 @@ var require_validation = __commonJS({
   }
 });
 
-// mcp-app/mlh-studio/node_modules/ajv/dist/vocabularies/applicator/additionalItems.js
+// node_modules/ajv/dist/vocabularies/applicator/additionalItems.js
 var require_additionalItems = __commonJS({
-  "mcp-app/mlh-studio/node_modules/ajv/dist/vocabularies/applicator/additionalItems.js"(exports) {
+  "node_modules/ajv/dist/vocabularies/applicator/additionalItems.js"(exports) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     exports.validateAdditionalItems = void 0;
@@ -17216,9 +17216,9 @@ var require_additionalItems = __commonJS({
   }
 });
 
-// mcp-app/mlh-studio/node_modules/ajv/dist/vocabularies/applicator/items.js
+// node_modules/ajv/dist/vocabularies/applicator/items.js
 var require_items = __commonJS({
-  "mcp-app/mlh-studio/node_modules/ajv/dist/vocabularies/applicator/items.js"(exports) {
+  "node_modules/ajv/dist/vocabularies/applicator/items.js"(exports) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     exports.validateTuple = void 0;
@@ -17273,9 +17273,9 @@ var require_items = __commonJS({
   }
 });
 
-// mcp-app/mlh-studio/node_modules/ajv/dist/vocabularies/applicator/prefixItems.js
+// node_modules/ajv/dist/vocabularies/applicator/prefixItems.js
 var require_prefixItems = __commonJS({
-  "mcp-app/mlh-studio/node_modules/ajv/dist/vocabularies/applicator/prefixItems.js"(exports) {
+  "node_modules/ajv/dist/vocabularies/applicator/prefixItems.js"(exports) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     var items_1 = require_items();
@@ -17290,9 +17290,9 @@ var require_prefixItems = __commonJS({
   }
 });
 
-// mcp-app/mlh-studio/node_modules/ajv/dist/vocabularies/applicator/items2020.js
+// node_modules/ajv/dist/vocabularies/applicator/items2020.js
 var require_items2020 = __commonJS({
-  "mcp-app/mlh-studio/node_modules/ajv/dist/vocabularies/applicator/items2020.js"(exports) {
+  "node_modules/ajv/dist/vocabularies/applicator/items2020.js"(exports) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     var codegen_1 = require_codegen();
@@ -17325,9 +17325,9 @@ var require_items2020 = __commonJS({
   }
 });
 
-// mcp-app/mlh-studio/node_modules/ajv/dist/vocabularies/applicator/contains.js
+// node_modules/ajv/dist/vocabularies/applicator/contains.js
 var require_contains = __commonJS({
-  "mcp-app/mlh-studio/node_modules/ajv/dist/vocabularies/applicator/contains.js"(exports) {
+  "node_modules/ajv/dist/vocabularies/applicator/contains.js"(exports) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     var codegen_1 = require_codegen();
@@ -17419,9 +17419,9 @@ var require_contains = __commonJS({
   }
 });
 
-// mcp-app/mlh-studio/node_modules/ajv/dist/vocabularies/applicator/dependencies.js
+// node_modules/ajv/dist/vocabularies/applicator/dependencies.js
 var require_dependencies = __commonJS({
-  "mcp-app/mlh-studio/node_modules/ajv/dist/vocabularies/applicator/dependencies.js"(exports) {
+  "node_modules/ajv/dist/vocabularies/applicator/dependencies.js"(exports) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     exports.validateSchemaDeps = exports.validatePropertyDeps = exports.error = void 0;
@@ -17513,9 +17513,9 @@ var require_dependencies = __commonJS({
   }
 });
 
-// mcp-app/mlh-studio/node_modules/ajv/dist/vocabularies/applicator/propertyNames.js
+// node_modules/ajv/dist/vocabularies/applicator/propertyNames.js
 var require_propertyNames = __commonJS({
-  "mcp-app/mlh-studio/node_modules/ajv/dist/vocabularies/applicator/propertyNames.js"(exports) {
+  "node_modules/ajv/dist/vocabularies/applicator/propertyNames.js"(exports) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     var codegen_1 = require_codegen();
@@ -17556,9 +17556,9 @@ var require_propertyNames = __commonJS({
   }
 });
 
-// mcp-app/mlh-studio/node_modules/ajv/dist/vocabularies/applicator/additionalProperties.js
+// node_modules/ajv/dist/vocabularies/applicator/additionalProperties.js
 var require_additionalProperties = __commonJS({
-  "mcp-app/mlh-studio/node_modules/ajv/dist/vocabularies/applicator/additionalProperties.js"(exports) {
+  "node_modules/ajv/dist/vocabularies/applicator/additionalProperties.js"(exports) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     var code_1 = require_code2();
@@ -17662,9 +17662,9 @@ var require_additionalProperties = __commonJS({
   }
 });
 
-// mcp-app/mlh-studio/node_modules/ajv/dist/vocabularies/applicator/properties.js
+// node_modules/ajv/dist/vocabularies/applicator/properties.js
 var require_properties = __commonJS({
-  "mcp-app/mlh-studio/node_modules/ajv/dist/vocabularies/applicator/properties.js"(exports) {
+  "node_modules/ajv/dist/vocabularies/applicator/properties.js"(exports) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     var validate_1 = require_validate();
@@ -17720,9 +17720,9 @@ var require_properties = __commonJS({
   }
 });
 
-// mcp-app/mlh-studio/node_modules/ajv/dist/vocabularies/applicator/patternProperties.js
+// node_modules/ajv/dist/vocabularies/applicator/patternProperties.js
 var require_patternProperties = __commonJS({
-  "mcp-app/mlh-studio/node_modules/ajv/dist/vocabularies/applicator/patternProperties.js"(exports) {
+  "node_modules/ajv/dist/vocabularies/applicator/patternProperties.js"(exports) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     var code_1 = require_code2();
@@ -17794,9 +17794,9 @@ var require_patternProperties = __commonJS({
   }
 });
 
-// mcp-app/mlh-studio/node_modules/ajv/dist/vocabularies/applicator/not.js
+// node_modules/ajv/dist/vocabularies/applicator/not.js
 var require_not = __commonJS({
-  "mcp-app/mlh-studio/node_modules/ajv/dist/vocabularies/applicator/not.js"(exports) {
+  "node_modules/ajv/dist/vocabularies/applicator/not.js"(exports) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     var util_1 = require_util();
@@ -17825,9 +17825,9 @@ var require_not = __commonJS({
   }
 });
 
-// mcp-app/mlh-studio/node_modules/ajv/dist/vocabularies/applicator/anyOf.js
+// node_modules/ajv/dist/vocabularies/applicator/anyOf.js
 var require_anyOf = __commonJS({
-  "mcp-app/mlh-studio/node_modules/ajv/dist/vocabularies/applicator/anyOf.js"(exports) {
+  "node_modules/ajv/dist/vocabularies/applicator/anyOf.js"(exports) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     var code_1 = require_code2();
@@ -17842,9 +17842,9 @@ var require_anyOf = __commonJS({
   }
 });
 
-// mcp-app/mlh-studio/node_modules/ajv/dist/vocabularies/applicator/oneOf.js
+// node_modules/ajv/dist/vocabularies/applicator/oneOf.js
 var require_oneOf = __commonJS({
-  "mcp-app/mlh-studio/node_modules/ajv/dist/vocabularies/applicator/oneOf.js"(exports) {
+  "node_modules/ajv/dist/vocabularies/applicator/oneOf.js"(exports) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     var codegen_1 = require_codegen();
@@ -17900,9 +17900,9 @@ var require_oneOf = __commonJS({
   }
 });
 
-// mcp-app/mlh-studio/node_modules/ajv/dist/vocabularies/applicator/allOf.js
+// node_modules/ajv/dist/vocabularies/applicator/allOf.js
 var require_allOf = __commonJS({
-  "mcp-app/mlh-studio/node_modules/ajv/dist/vocabularies/applicator/allOf.js"(exports) {
+  "node_modules/ajv/dist/vocabularies/applicator/allOf.js"(exports) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     var util_1 = require_util();
@@ -17927,9 +17927,9 @@ var require_allOf = __commonJS({
   }
 });
 
-// mcp-app/mlh-studio/node_modules/ajv/dist/vocabularies/applicator/if.js
+// node_modules/ajv/dist/vocabularies/applicator/if.js
 var require_if = __commonJS({
-  "mcp-app/mlh-studio/node_modules/ajv/dist/vocabularies/applicator/if.js"(exports) {
+  "node_modules/ajv/dist/vocabularies/applicator/if.js"(exports) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     var codegen_1 = require_codegen();
@@ -17996,9 +17996,9 @@ var require_if = __commonJS({
   }
 });
 
-// mcp-app/mlh-studio/node_modules/ajv/dist/vocabularies/applicator/thenElse.js
+// node_modules/ajv/dist/vocabularies/applicator/thenElse.js
 var require_thenElse = __commonJS({
-  "mcp-app/mlh-studio/node_modules/ajv/dist/vocabularies/applicator/thenElse.js"(exports) {
+  "node_modules/ajv/dist/vocabularies/applicator/thenElse.js"(exports) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     var util_1 = require_util();
@@ -18014,9 +18014,9 @@ var require_thenElse = __commonJS({
   }
 });
 
-// mcp-app/mlh-studio/node_modules/ajv/dist/vocabularies/applicator/index.js
+// node_modules/ajv/dist/vocabularies/applicator/index.js
 var require_applicator = __commonJS({
-  "mcp-app/mlh-studio/node_modules/ajv/dist/vocabularies/applicator/index.js"(exports) {
+  "node_modules/ajv/dist/vocabularies/applicator/index.js"(exports) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     var additionalItems_1 = require_additionalItems();
@@ -18062,9 +18062,9 @@ var require_applicator = __commonJS({
   }
 });
 
-// mcp-app/mlh-studio/node_modules/ajv/dist/vocabularies/format/format.js
+// node_modules/ajv/dist/vocabularies/format/format.js
 var require_format = __commonJS({
-  "mcp-app/mlh-studio/node_modules/ajv/dist/vocabularies/format/format.js"(exports) {
+  "node_modules/ajv/dist/vocabularies/format/format.js"(exports) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     var codegen_1 = require_codegen();
@@ -18152,9 +18152,9 @@ var require_format = __commonJS({
   }
 });
 
-// mcp-app/mlh-studio/node_modules/ajv/dist/vocabularies/format/index.js
+// node_modules/ajv/dist/vocabularies/format/index.js
 var require_format2 = __commonJS({
-  "mcp-app/mlh-studio/node_modules/ajv/dist/vocabularies/format/index.js"(exports) {
+  "node_modules/ajv/dist/vocabularies/format/index.js"(exports) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     var format_1 = require_format();
@@ -18163,9 +18163,9 @@ var require_format2 = __commonJS({
   }
 });
 
-// mcp-app/mlh-studio/node_modules/ajv/dist/vocabularies/metadata.js
+// node_modules/ajv/dist/vocabularies/metadata.js
 var require_metadata = __commonJS({
-  "mcp-app/mlh-studio/node_modules/ajv/dist/vocabularies/metadata.js"(exports) {
+  "node_modules/ajv/dist/vocabularies/metadata.js"(exports) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     exports.contentVocabulary = exports.metadataVocabulary = void 0;
@@ -18186,9 +18186,9 @@ var require_metadata = __commonJS({
   }
 });
 
-// mcp-app/mlh-studio/node_modules/ajv/dist/vocabularies/draft7.js
+// node_modules/ajv/dist/vocabularies/draft7.js
 var require_draft7 = __commonJS({
-  "mcp-app/mlh-studio/node_modules/ajv/dist/vocabularies/draft7.js"(exports) {
+  "node_modules/ajv/dist/vocabularies/draft7.js"(exports) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     var core_1 = require_core2();
@@ -18208,9 +18208,9 @@ var require_draft7 = __commonJS({
   }
 });
 
-// mcp-app/mlh-studio/node_modules/ajv/dist/vocabularies/discriminator/types.js
+// node_modules/ajv/dist/vocabularies/discriminator/types.js
 var require_types = __commonJS({
-  "mcp-app/mlh-studio/node_modules/ajv/dist/vocabularies/discriminator/types.js"(exports) {
+  "node_modules/ajv/dist/vocabularies/discriminator/types.js"(exports) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     exports.DiscrError = void 0;
@@ -18222,9 +18222,9 @@ var require_types = __commonJS({
   }
 });
 
-// mcp-app/mlh-studio/node_modules/ajv/dist/vocabularies/discriminator/index.js
+// node_modules/ajv/dist/vocabularies/discriminator/index.js
 var require_discriminator = __commonJS({
-  "mcp-app/mlh-studio/node_modules/ajv/dist/vocabularies/discriminator/index.js"(exports) {
+  "node_modules/ajv/dist/vocabularies/discriminator/index.js"(exports) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     var codegen_1 = require_codegen();
@@ -18327,9 +18327,9 @@ var require_discriminator = __commonJS({
   }
 });
 
-// mcp-app/mlh-studio/node_modules/ajv/dist/refs/json-schema-draft-07.json
+// node_modules/ajv/dist/refs/json-schema-draft-07.json
 var require_json_schema_draft_07 = __commonJS({
-  "mcp-app/mlh-studio/node_modules/ajv/dist/refs/json-schema-draft-07.json"(exports, module) {
+  "node_modules/ajv/dist/refs/json-schema-draft-07.json"(exports, module) {
     module.exports = {
       $schema: "http://json-schema.org/draft-07/schema#",
       $id: "http://json-schema.org/draft-07/schema#",
@@ -18484,9 +18484,9 @@ var require_json_schema_draft_07 = __commonJS({
   }
 });
 
-// mcp-app/mlh-studio/node_modules/ajv/dist/ajv.js
+// node_modules/ajv/dist/ajv.js
 var require_ajv = __commonJS({
-  "mcp-app/mlh-studio/node_modules/ajv/dist/ajv.js"(exports, module) {
+  "node_modules/ajv/dist/ajv.js"(exports, module) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     exports.MissingRefError = exports.ValidationError = exports.CodeGen = exports.Name = exports.nil = exports.stringify = exports.str = exports._ = exports.KeywordCxt = exports.Ajv = void 0;
@@ -18554,9 +18554,9 @@ var require_ajv = __commonJS({
   }
 });
 
-// mcp-app/mlh-studio/node_modules/ajv-formats/dist/formats.js
+// node_modules/ajv-formats/dist/formats.js
 var require_formats = __commonJS({
-  "mcp-app/mlh-studio/node_modules/ajv-formats/dist/formats.js"(exports) {
+  "node_modules/ajv-formats/dist/formats.js"(exports) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     exports.formatNames = exports.fastFormats = exports.fullFormats = void 0;
@@ -18757,9 +18757,9 @@ var require_formats = __commonJS({
   }
 });
 
-// mcp-app/mlh-studio/node_modules/ajv-formats/dist/limit.js
+// node_modules/ajv-formats/dist/limit.js
 var require_limit = __commonJS({
-  "mcp-app/mlh-studio/node_modules/ajv-formats/dist/limit.js"(exports) {
+  "node_modules/ajv-formats/dist/limit.js"(exports) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     exports.formatLimitDefinition = void 0;
@@ -18829,9 +18829,9 @@ var require_limit = __commonJS({
   }
 });
 
-// mcp-app/mlh-studio/node_modules/ajv-formats/dist/index.js
+// node_modules/ajv-formats/dist/index.js
 var require_dist = __commonJS({
-  "mcp-app/mlh-studio/node_modules/ajv-formats/dist/index.js"(exports, module) {
+  "node_modules/ajv-formats/dist/index.js"(exports, module) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     var formats_1 = require_formats();
@@ -18871,16 +18871,16 @@ var require_dist = __commonJS({
   }
 });
 
-// mcp-app/mlh-studio/src/server.mjs
+// src/server.mjs
 import fs3 from "node:fs";
 import os2 from "node:os";
 import path3 from "node:path";
 import { fileURLToPath as fileURLToPath2 } from "node:url";
 
-// mcp-app/mlh-studio/node_modules/zod/v4/mini/parse.js
+// node_modules/zod/v4/mini/parse.js
 init_core2();
 
-// mcp-app/mlh-studio/node_modules/@modelcontextprotocol/sdk/dist/esm/server/zod-compat.js
+// node_modules/@modelcontextprotocol/sdk/dist/esm/server/zod-compat.js
 function isZ4Schema(s) {
   const schema = s;
   return !!schema._zod;
@@ -18943,7 +18943,7 @@ function getLiteralValue(schema) {
   return void 0;
 }
 
-// mcp-app/mlh-studio/node_modules/@modelcontextprotocol/sdk/dist/esm/types.js
+// node_modules/@modelcontextprotocol/sdk/dist/esm/types.js
 init_v4();
 var LATEST_PROTOCOL_VERSION = "2025-11-25";
 var SUPPORTED_PROTOCOL_VERSIONS = [LATEST_PROTOCOL_VERSION, "2025-06-18", "2025-03-26", "2024-11-05", "2024-10-07"];
@@ -20463,18 +20463,18 @@ var UrlElicitationRequiredError = class extends McpError {
   }
 };
 
-// mcp-app/mlh-studio/node_modules/@modelcontextprotocol/sdk/dist/esm/experimental/tasks/interfaces.js
+// node_modules/@modelcontextprotocol/sdk/dist/esm/experimental/tasks/interfaces.js
 function isTerminal(status) {
   return status === "completed" || status === "failed" || status === "cancelled";
 }
 
-// mcp-app/mlh-studio/node_modules/zod-to-json-schema/dist/esm/Options.js
+// node_modules/zod-to-json-schema/dist/esm/Options.js
 var ignoreOverride = Symbol("Let zodToJsonSchema decide on which parser to use");
 
-// mcp-app/mlh-studio/node_modules/zod-to-json-schema/dist/esm/parsers/string.js
+// node_modules/zod-to-json-schema/dist/esm/parsers/string.js
 var ALPHA_NUMERIC = new Set("ABCDEFGHIJKLMNOPQRSTUVXYZabcdefghijklmnopqrstuvxyz0123456789");
 
-// mcp-app/mlh-studio/node_modules/@modelcontextprotocol/sdk/dist/esm/server/zod-json-schema-compat.js
+// node_modules/@modelcontextprotocol/sdk/dist/esm/server/zod-json-schema-compat.js
 function getMethodLiteral(schema) {
   const shape = getObjectShape(schema);
   const methodSchema = shape?.method;
@@ -20495,7 +20495,7 @@ function parseWithCompat(schema, data) {
   return result.data;
 }
 
-// mcp-app/mlh-studio/node_modules/@modelcontextprotocol/sdk/dist/esm/shared/protocol.js
+// node_modules/@modelcontextprotocol/sdk/dist/esm/shared/protocol.js
 var DEFAULT_REQUEST_TIMEOUT_MSEC = 6e4;
 var Protocol = class {
   constructor(_options) {
@@ -21472,7 +21472,7 @@ function mergeCapabilities(base, additional) {
   return result;
 }
 
-// mcp-app/mlh-studio/node_modules/@modelcontextprotocol/sdk/dist/esm/validation/ajv-provider.js
+// node_modules/@modelcontextprotocol/sdk/dist/esm/validation/ajv-provider.js
 var import_ajv = __toESM(require_ajv(), 1);
 var import_ajv_formats = __toESM(require_dist(), 1);
 function createDefaultAjvInstance() {
@@ -21540,7 +21540,7 @@ var AjvJsonSchemaValidator = class {
   }
 };
 
-// mcp-app/mlh-studio/node_modules/@modelcontextprotocol/sdk/dist/esm/experimental/tasks/server.js
+// node_modules/@modelcontextprotocol/sdk/dist/esm/experimental/tasks/server.js
 var ExperimentalServerTasks = class {
   constructor(_server) {
     this._server = _server;
@@ -21753,7 +21753,7 @@ var ExperimentalServerTasks = class {
   }
 };
 
-// mcp-app/mlh-studio/node_modules/@modelcontextprotocol/sdk/dist/esm/experimental/tasks/helpers.js
+// node_modules/@modelcontextprotocol/sdk/dist/esm/experimental/tasks/helpers.js
 function assertToolsCallTaskCapability(requests, method, entityName) {
   if (!requests) {
     throw new Error(`${entityName} does not support task creation (required for ${method})`);
@@ -21788,7 +21788,7 @@ function assertClientRequestTaskCapability(requests, method, entityName) {
   }
 }
 
-// mcp-app/mlh-studio/node_modules/@modelcontextprotocol/sdk/dist/esm/server/index.js
+// node_modules/@modelcontextprotocol/sdk/dist/esm/server/index.js
 var Server = class extends Protocol {
   /**
    * Initializes this server with the given name and version information.
@@ -22159,10 +22159,10 @@ var Server = class extends Protocol {
   }
 };
 
-// mcp-app/mlh-studio/node_modules/@modelcontextprotocol/sdk/dist/esm/server/stdio.js
+// node_modules/@modelcontextprotocol/sdk/dist/esm/server/stdio.js
 import process2 from "node:process";
 
-// mcp-app/mlh-studio/node_modules/@modelcontextprotocol/sdk/dist/esm/shared/stdio.js
+// node_modules/@modelcontextprotocol/sdk/dist/esm/shared/stdio.js
 var STDIO_DEFAULT_MAX_BUFFER_SIZE = 10 * 1024 * 1024;
 var ReadBuffer = class {
   constructor(options) {
@@ -22199,7 +22199,7 @@ function serializeMessage(message) {
   return JSON.stringify(message) + "\n";
 }
 
-// mcp-app/mlh-studio/node_modules/@modelcontextprotocol/sdk/dist/esm/server/stdio.js
+// node_modules/@modelcontextprotocol/sdk/dist/esm/server/stdio.js
 var StdioServerTransport = class {
   constructor(_stdin = process2.stdin, _stdout = process2.stdout, options) {
     this._stdin = _stdin;
@@ -22266,7 +22266,7 @@ var StdioServerTransport = class {
   }
 };
 
-// mcp-app/mlh-studio/node_modules/@modelcontextprotocol/ext-apps/dist/src/app.js
+// node_modules/@modelcontextprotocol/ext-apps/dist/src/app.js
 init_v4();
 var p = ((X) => typeof __require < "u" ? __require : typeof Proxy < "u" ? new Proxy(X, { get: (Y, Z) => (typeof __require < "u" ? __require : Y)[Z] }) : X)(function(X) {
   if (typeof __require < "u") return __require.apply(this, arguments);
@@ -22351,7 +22351,7 @@ var TQ = external_exports.object({ method: external_exports.literal("ui/initiali
 var C = external_exports.object({ protocolVersion: external_exports.string().describe('Negotiated protocol version string (e.g., "2025-11-21").'), hostInfo: ImplementationSchema.describe("Host application identification and version."), hostCapabilities: u.describe("Features and capabilities provided by the host."), hostContext: T.describe("Rich context about the host environment.") }).passthrough();
 var QY = "text/html;profile=mcp-app";
 
-// mcp-app/mlh-studio/src/validation.mjs
+// src/validation.mjs
 var VALID_ROLES = /* @__PURE__ */ new Set(["probe", "predict", "check"]);
 var VALID_PRACTICE_ACTIONS = /* @__PURE__ */ new Set(["pose", "conclude"]);
 var VALID_PRACTICE_MODES = /* @__PURE__ */ new Set([
@@ -22947,8 +22947,138 @@ function validateProfileUpdateArgs(rawArgs) {
   if (errors.length > 0) return { ok: false, error: errors.join(" ") };
   return { ok: true, value: { op, overrides, calibration } };
 }
+function validateReadinessArgs(rawArgs) {
+  const args = healRecord(rawArgs);
+  const errors = [];
+  let examDate;
+  if (args.examDate !== void 0 && args.examDate !== null && args.examDate !== "") {
+    if (typeof args.examDate !== "string") {
+      errors.push("examDate must be a string (YYYY-MM-DD).");
+    } else {
+      examDate = args.examDate.trim() || void 0;
+    }
+  }
+  let subject;
+  if (args.subject !== void 0 && args.subject !== null && args.subject !== "") {
+    if (typeof args.subject !== "string") {
+      errors.push("subject must be a string.");
+    } else {
+      subject = args.subject.trim() || void 0;
+    }
+  }
+  let chapter;
+  if (args.chapter !== void 0 && args.chapter !== null && args.chapter !== "") {
+    if (typeof args.chapter !== "string") {
+      errors.push("chapter must be a string.");
+    } else {
+      chapter = args.chapter.trim() || void 0;
+    }
+  }
+  let maxMarks;
+  if (args.maxMarks !== void 0 && args.maxMarks !== null && args.maxMarks !== "") {
+    const n = Number(args.maxMarks);
+    if (typeof args.maxMarks === "boolean" || !Number.isFinite(n) || n <= 0) {
+      errors.push("maxMarks must be a finite number > 0.");
+    } else {
+      maxMarks = n;
+    }
+  }
+  let premortemOnly = false;
+  if (args.premortemOnly !== void 0 && args.premortemOnly !== null) {
+    if (typeof args.premortemOnly !== "boolean") {
+      errors.push("premortemOnly must be a boolean.");
+    } else {
+      premortemOnly = args.premortemOnly;
+    }
+  }
+  if (errors.length > 0) return { ok: false, error: errors.join(" ") };
+  return { ok: true, value: { examDate, subject, chapter, maxMarks, premortemOnly } };
+}
+var VALID_INTERLEAVE_ACTIONS = /* @__PURE__ */ new Set(["build", "check", "stats"]);
+function validateInterleaveArgs(rawArgs) {
+  const args = healRecord(rawArgs);
+  const errors = [];
+  const action = typeof args.action === "string" && args.action.trim() ? args.action.trim().toLowerCase() : "build";
+  if (!VALID_INTERLEAVE_ACTIONS.has(action)) {
+    errors.push(`action must be one of build, check, or stats (got ${JSON.stringify(args.action)}).`);
+  }
+  if (action === "stats") {
+    if (errors.length > 0) return { ok: false, error: errors.join(" ") };
+    return { ok: true, value: { action } };
+  }
+  if (action === "check") {
+    const sessionId = typeof args.sessionId === "string" ? args.sessionId.trim() : "";
+    const itemId = typeof args.itemId === "string" ? args.itemId.trim() : "";
+    const selectedPrinciple = typeof args.selectedPrinciple === "string" ? args.selectedPrinciple.trim() : "";
+    if (!sessionId) errors.push("sessionId must be a non-empty string when action is 'check'.");
+    if (!itemId) errors.push("itemId must be a non-empty string when action is 'check'.");
+    if (!selectedPrinciple) {
+      errors.push("selectedPrinciple must be a non-empty string when action is 'check'.");
+    }
+    let confidence = 0.5;
+    if (args.confidence !== void 0 && args.confidence !== null && args.confidence !== "") {
+      const c = Number(args.confidence);
+      if (typeof args.confidence === "boolean" || !Number.isFinite(c)) {
+        errors.push("confidence must be a finite number.");
+      } else {
+        confidence = c;
+      }
+    }
+    let durationMs;
+    if (args.durationMs !== void 0 && args.durationMs !== null && args.durationMs !== "") {
+      const d2 = Number(args.durationMs);
+      if (typeof args.durationMs === "boolean" || !Number.isFinite(d2) || d2 < 0) {
+        errors.push("durationMs must be a finite number >= 0.");
+      } else {
+        durationMs = Math.round(d2);
+      }
+    }
+    if (errors.length > 0) return { ok: false, error: errors.join(" ") };
+    return {
+      ok: true,
+      value: { action, sessionId, itemId, selectedPrinciple, confidence, durationMs }
+    };
+  }
+  const rawN = args.n !== void 0 && args.n !== null ? args.n : args.count;
+  let n = 6;
+  if (rawN !== void 0 && rawN !== null && rawN !== "") {
+    const parsedN = Number(rawN);
+    if (typeof rawN === "boolean" || !Number.isFinite(parsedN) || !Number.isInteger(parsedN)) {
+      errors.push("n (or count) must be an integer.");
+    } else {
+      n = Math.max(1, Math.min(20, parsedN));
+    }
+  }
+  let subjects;
+  if (args.subjects !== void 0 && args.subjects !== null) {
+    if (!Array.isArray(args.subjects) || !args.subjects.every((x) => typeof x === "string")) {
+      errors.push("subjects must be an array of strings.");
+    } else {
+      const cleaned = args.subjects.map((x) => x.trim()).filter(Boolean);
+      subjects = cleaned.length > 0 ? cleaned : void 0;
+    }
+  } else if (args.subject !== void 0 && args.subject !== null && args.subject !== "") {
+    if (typeof args.subject !== "string") {
+      errors.push("subject must be a string.");
+    } else if (args.subject.trim()) {
+      subjects = [args.subject.trim()];
+    }
+  }
+  const mode = typeof args.mode === "string" && args.mode.trim() ? args.mode.trim() : "principle_first";
+  let seed;
+  if (args.seed !== void 0 && args.seed !== null && args.seed !== "") {
+    const parsedSeed = Number(args.seed);
+    if (typeof args.seed === "boolean" || !Number.isFinite(parsedSeed) || !Number.isInteger(parsedSeed)) {
+      errors.push("seed must be an integer.");
+    } else {
+      seed = parsedSeed;
+    }
+  }
+  if (errors.length > 0) return { ok: false, error: errors.join(" ") };
+  return { ok: true, value: { action, n, subjects, mode, seed } };
+}
 
-// mcp-app/mlh-studio/src/workspace.mjs
+// src/workspace.mjs
 import fs from "node:fs";
 import path from "node:path";
 import crypto from "node:crypto";
@@ -23141,6 +23271,141 @@ function loadSyncDeviceId(kgDir) {
   const state = readJsonSafe(path.join(kgDir, "sync-state.json"), null);
   const devId = typeof state?.deviceId === "string" ? state.deviceId.trim() : "";
   return devId || null;
+}
+var SEALED_INTERLEAVE_FIELDS = /* @__PURE__ */ new Set([
+  "sealedChapter",
+  "sealedPrinciple",
+  "sealedAnswer",
+  "canonicalAnswer",
+  "correctPrinciple",
+  "trueChapter",
+  "expectedAnswer",
+  "modelSolution",
+  "solution",
+  "answer",
+  "chapter",
+  "chapterSlug"
+]);
+function sanitizeInterleaveItemJs(item) {
+  if (!item || typeof item !== "object") return item;
+  if (Array.isArray(item)) return item.map((el) => sanitizeInterleaveItemJs(el));
+  const clean = {};
+  for (const [k, v2] of Object.entries(item)) {
+    if (SEALED_INTERLEAVE_FIELDS.has(k) || String(k).toLowerCase().startsWith("sealed")) {
+      continue;
+    }
+    clean[k] = sanitizeInterleaveItemJs(v2);
+  }
+  return clean;
+}
+function sanitizeInterleaveBuildJs(res) {
+  if (!res || typeof res !== "object") return res;
+  const out = {};
+  for (const [k, v2] of Object.entries(res)) {
+    if (SEALED_INTERLEAVE_FIELDS.has(k) || String(k).toLowerCase().startsWith("sealed")) {
+      continue;
+    }
+    if (k === "items" && Array.isArray(v2)) {
+      out.items = v2.map((it) => sanitizeInterleaveItemJs(it));
+    } else {
+      out[k] = v2;
+    }
+  }
+  return out;
+}
+function computeHoursUntilJs(rawDate, nowMs) {
+  if (typeof rawDate !== "string" || !rawDate.trim()) return null;
+  const s = rawDate.trim();
+  const isDateOnly = /^\d{4}-\d{2}-\d{2}$/.test(s);
+  if (isDateOnly) {
+    const todayIso = new Date(nowMs).toISOString().slice(0, 10);
+    if (s < todayIso) return -1;
+    if (s === todayIso) {
+      const eodMs = Date.parse(`${s}T23:59:00Z`);
+      return Number.isFinite(eodMs) ? Math.max(0, Math.min(24, (eodMs - nowMs) / 36e5)) : null;
+    }
+    const targetMs = Date.parse(`${s}T09:00:00Z`);
+    return Number.isFinite(targetMs) ? (targetMs - nowMs) / 36e5 : null;
+  }
+  const parsed = Date.parse(s);
+  if (!Number.isFinite(parsed)) return null;
+  return (parsed - nowMs) / 36e5;
+}
+function detectTaperModeFastJs(kgDir, explicitExamDate = null) {
+  const nowMs = Date.now();
+  const candidates = [];
+  if (typeof explicitExamDate === "string" && explicitExamDate.trim()) {
+    candidates.push(explicitExamDate.trim());
+  } else {
+    const cfg = readJsonSafe(path.join(kgDir, "study-config.json"), null) || readJsonSafe(path.join(kgDir, "exam-config.json"), null) || {};
+    if (Array.isArray(cfg.exams)) {
+      for (const ex of cfg.exams) {
+        const d2 = ex?.examDate || ex?.date || ex?.targetDate;
+        if (typeof d2 === "string" && d2.trim()) candidates.push(d2.trim());
+      }
+    }
+    for (const key of ["examDate", "exam_date", "targetExamDate", "nextExamDate"]) {
+      if (typeof cfg[key] === "string" && cfg[key].trim()) {
+        candidates.push(cfg[key].trim());
+        break;
+      }
+    }
+  }
+  let bestHours = null;
+  let bestDate = null;
+  for (const rawD of candidates) {
+    const hrs = computeHoursUntilJs(rawD, nowMs);
+    if (hrs === null || hrs < 0) continue;
+    if (bestHours === null || hrs < bestHours) {
+      bestHours = hrs;
+      bestDate = rawD;
+    }
+  }
+  const active = bestHours !== null && bestHours <= 72;
+  const phase = !active ? "none" : bestHours <= 24 ? "final_24h" : "taper_72h";
+  return {
+    active,
+    phase,
+    examDate: bestDate,
+    hoursRemaining: bestHours !== null ? Math.round(bestHours * 10) / 10 : null,
+    allowNewConcepts: !active
+  };
+}
+function computeReadinessSummaryFastJs(kgDir, propositions, dueForksCount) {
+  const taper = detectTaperModeFastJs(kgDir);
+  const activeProps = (Array.isArray(propositions) ? propositions : []).filter(
+    (p2) => p2 && !p2.archived && !p2.suspended
+  );
+  if (activeProps.length === 0) {
+    return {
+      readinessIndex: 0,
+      band: "Early",
+      taperActive: taper.active,
+      phase: taper.phase,
+      hoursRemaining: taper.hoursRemaining
+    };
+  }
+  const statusScore = { solid: 0.9, shaky: 0.35, misconception: 0.12, planned: 0 };
+  let sum = 0;
+  let miscCount = 0;
+  for (const p2 of activeProps) {
+    const st = String(p2.status || "planned").toLowerCase();
+    if (st === "misconception") miscCount += 1;
+    sum += statusScore[st] ?? 0.25;
+  }
+  const baseRatio = sum / activeProps.length;
+  const trapFactor = Math.exp(
+    -(1.5 * miscCount + 1 * Number(dueForksCount || 0)) / Math.max(5, 0.35 * activeProps.length)
+  );
+  const readinessIndex = Math.max(0, Math.min(100, Math.round((0.82 * baseRatio + 0.18 * trapFactor) * 100)));
+  const band = readinessIndex >= 88 ? "Mastery Lock" : readinessIndex >= 75 ? "Exam-Ready" : readinessIndex >= 60 ? "Contender" : readinessIndex >= 40 ? "Building" : "Early";
+  return {
+    readinessIndex,
+    band,
+    taperActive: taper.active,
+    phase: taper.phase,
+    hoursRemaining: taper.hoursRemaining
+  };
 }
 function findPersistedIsomorphicBridgeJs(propositions, chains, targetNodeId) {
   const tid = String(targetNodeId || "").trim();
@@ -24251,6 +24516,8 @@ function getFrontier(workspaceRoot, { limit = 10, compress = true } = {}) {
   const pendingPins = loadWhiteboardPendingPins(kgDir);
   const rosettaBridgesCount = countRosettaBridges(chains);
   const syncDeviceId = loadSyncDeviceId(kgDir);
+  const readinessSummary = computeReadinessSummaryFastJs(kgDir, propositions, dueForksCount);
+  const taperActive = Boolean(readinessSummary.taperActive);
   return {
     ok: true,
     today,
@@ -24274,6 +24541,8 @@ function getFrontier(workspaceRoot, { limit = 10, compress = true } = {}) {
     coldStartDays,
     pendingPins,
     rosettaBridgesCount,
+    readinessSummary,
+    taperActive,
     ...syncDeviceId ? { syncDeviceId } : {},
     stats: {
       totalPropositions: propositions.length,
@@ -24781,8 +25050,137 @@ function saveSketchPng(workspaceRoot, { dataUrl, label }) {
     bytes: buf.length
   };
 }
+function getReadiness(workspaceRoot, { examDate, subject, chapter, maxMarks, premortemOnly = false } = {}) {
+  const kgDir = resolveKgDir(workspaceRoot);
+  const customCh = process.env.SYNT_CHAPTERS_DIR || process.env.MLH_CHAPTERS_DIR || "";
+  const chaptersDir = customCh.trim() ? path.resolve(customCh.trim()) : path.join(workspaceRoot, "chapters");
+  const pyBin = resolvePythonBin(workspaceRoot);
+  const pyCode = [
+    "import json, sys",
+    "from pathlib import Path",
+    "from syntopik import readiness as readiness_mod",
+    "req = json.loads(sys.stdin.read() or '{}')",
+    "ws = Path(req['workspace'])",
+    "kg = Path(req['kgDir'])",
+    "ch = Path(req['chaptersDir'])",
+    "if req.get('premortemOnly'):",
+    "    chap = req.get('chapter')",
+    "    res = readiness_mod.build_premortem_shield(ws, subject=req.get('subject'), chapters=[chap] if chap else None, kg_dir=kg)",
+    "else:",
+    "    mm = req.get('maxMarks')",
+    "    res = readiness_mod.compute_readiness(ws, exam_date=req.get('examDate'), subject=req.get('subject'), max_marks=int(round(mm)) if mm is not None else None, kg_dir=kg, chapters_dir=ch)",
+    "print(json.dumps(res, ensure_ascii=False, allow_nan=False))"
+  ].join("\n");
+  try {
+    const out = execFileSync(pyBin, ["-B", "-c", pyCode], {
+      cwd: fs.existsSync(workspaceRoot) ? workspaceRoot : process.cwd(),
+      env: buildPythonEnv(workspaceRoot),
+      input: JSON.stringify({
+        workspace: workspaceRoot,
+        kgDir,
+        chaptersDir,
+        examDate: examDate ?? null,
+        subject: subject ?? null,
+        chapter: chapter ?? null,
+        maxMarks: maxMarks ?? null,
+        premortemOnly: Boolean(premortemOnly)
+      }),
+      encoding: "utf8",
+      timeout: 12e3
+    });
+    const parsed = JSON.parse(out);
+    if (parsed && typeof parsed === "object") {
+      return { ok: Boolean(parsed.ok ?? true), ...parsed };
+    }
+  } catch {
+  }
+  const today = (/* @__PURE__ */ new Date()).toISOString().slice(0, 10);
+  const propositions = readJsonl(path.join(kgDir, "propositions.jsonl"));
+  const { dueForksCount } = loadDueForksSummary(kgDir, today);
+  const taperMode = detectTaperModeFastJs(kgDir, examDate || null);
+  const summary = computeReadinessSummaryFastJs(kgDir, propositions, dueForksCount);
+  if (premortemOnly) {
+    return {
+      ok: true,
+      bullets: [],
+      sourceBasis: "cold_start_minimal",
+      taperMode
+    };
+  }
+  return {
+    ok: true,
+    readinessIndex: summary.readinessIndex,
+    band: summary.band,
+    taperMode,
+    topLevers: [],
+    preMortemShield: { bullets: [], sourceBasis: "cold_start_minimal" },
+    uncertaintyReasons: ["python_fallback_minimal"]
+  };
+}
+function runInterleave(workspaceRoot, { action = "build", n = 6, subjects, mode = "principle_first", seed, sessionId, itemId, selectedPrinciple, confidence = 0.5, durationMs } = {}) {
+  const kgDir = resolveKgDir(workspaceRoot);
+  const pyBin = resolvePythonBin(workspaceRoot);
+  const pyCode = [
+    "import json, sys",
+    "from pathlib import Path",
+    "from syntopik import interleave as interleave_mod",
+    "req = json.loads(sys.stdin.read() or '{}')",
+    "ws = Path(req['workspace'])",
+    "kg = Path(req['kgDir'])",
+    "act = str(req.get('action') or 'build').lower()",
+    "try:",
+    "    if act == 'stats':",
+    "        res = interleave_mod.get_interleave_stats(ws, kg_dir=kg)",
+    "    elif act == 'check':",
+    "        res = interleave_mod.check_principle_step(ws, session_id=req['sessionId'], item_id=req['itemId'], selected_principle=req['selectedPrinciple'], confidence=req.get('confidence', 0.5), duration_ms=req.get('durationMs'), kg_dir=kg)",
+    "    else:",
+    "        res = interleave_mod.build_interleave_set(ws, n=int(req.get('n') or 6), subjects=req.get('subjects'), mode=str(req.get('mode') or 'principle_first'), seed=req.get('seed'), kg_dir=kg)",
+    "    print(json.dumps(res, ensure_ascii=False, allow_nan=False))",
+    "except (KeyError, ValueError) as exc:",
+    "    print(json.dumps({'ok': False, 'error': str(exc)}, ensure_ascii=False))"
+  ].join("\n");
+  try {
+    const out = execFileSync(pyBin, ["-B", "-c", pyCode], {
+      cwd: fs.existsSync(workspaceRoot) ? workspaceRoot : process.cwd(),
+      env: buildPythonEnv(workspaceRoot),
+      input: JSON.stringify({
+        workspace: workspaceRoot,
+        kgDir,
+        action,
+        n,
+        subjects: subjects ?? null,
+        mode,
+        seed: seed ?? null,
+        sessionId: sessionId ?? null,
+        itemId: itemId ?? null,
+        selectedPrinciple: selectedPrinciple ?? null,
+        confidence: confidence ?? 0.5,
+        durationMs: durationMs ?? null
+      }),
+      encoding: "utf8",
+      timeout: 12e3
+    });
+    const parsed = JSON.parse(out);
+    if (!parsed || typeof parsed !== "object") {
+      return { ok: false, error: "Unexpected interleave response." };
+    }
+    if (parsed.ok === false) {
+      return { ok: false, error: String(parsed.error || "Interleave operation failed.") };
+    }
+    if (action === "build") {
+      const safe = sanitizeInterleaveBuildJs(parsed);
+      return { ok: Boolean(safe.ok ?? true), ...safe };
+    }
+    return { ok: Boolean(parsed.ok ?? true), ...parsed };
+  } catch (err) {
+    return {
+      ok: false,
+      error: `Blind-chapter interleave engine failed: ${err?.message || String(err)}`
+    };
+  }
+}
 
-// mcp-app/mlh-studio/src/state-store.mjs
+// src/state-store.mjs
 import fs2 from "node:fs";
 import os from "node:os";
 import path2 from "node:path";
@@ -25104,7 +25502,7 @@ function createStateStore(workspaceRoot, explicitDataDir) {
   };
 }
 
-// mcp-app/mlh-studio/src/server.mjs
+// src/server.mjs
 var HERE = path3.dirname(fileURLToPath2(import.meta.url));
 function parseCliFlag(argv, flagName) {
   const eqPrefix = `${flagName}=`;
@@ -25465,6 +25863,44 @@ var WHITEBOARD_STEP_SCHEMA = {
     resolution: { type: "string", description: "Optional short resolution note for resolvePinId." }
   }
 };
+var READINESS_SCHEMA = {
+  type: "object",
+  properties: {
+    examDate: { type: "string", description: "Optional target exam date (YYYY-MM-DD)." },
+    subject: { type: "string", description: "Optional subject filter." },
+    chapter: { type: "string", description: "Optional chapter filter." },
+    maxMarks: { type: "number", description: "Optional maximum exam marks for score projection." },
+    premortemOnly: { type: "boolean", description: "Return only the 3-bullet Pre-Mortem Shield." }
+  }
+};
+var INTERLEAVE_SCHEMA = {
+  type: "object",
+  properties: {
+    action: {
+      type: "string",
+      enum: ["build", "check", "stats"],
+      description: "Operation to run (default: build)."
+    },
+    n: { type: "integer", description: "Number of interleaved items to generate (default: 6)." },
+    count: { type: "integer", description: "Alias for n." },
+    subjects: {
+      type: "array",
+      items: { type: "string" },
+      description: "Optional list of subjects to interleave."
+    },
+    subject: { type: "string", description: "Optional single subject filter." },
+    mode: { type: "string", description: "Drill mode (default: principle_first)." },
+    seed: { type: "integer", description: "Optional deterministic RNG seed." },
+    sessionId: { type: "string", description: "Session ID (required for action='check')." },
+    itemId: { type: "string", description: "Item ID (required for action='check')." },
+    selectedPrinciple: {
+      type: "string",
+      description: "Learner's selected principle (required for action='check')."
+    },
+    confidence: { type: "number", description: "Learner confidence (0..1 or 0..100)." },
+    durationMs: { type: "number", description: "Response duration in milliseconds." }
+  }
+};
 var UPDATE_PROFILE_SCHEMA = {
   type: "object",
   properties: {
@@ -25538,11 +25974,11 @@ var TOOLS = [
       }
     }
   },
-  // --- Ambient Cross-Session Headless Knowledge & Teacher Tools (5, zero UI spawned) ---
+  // --- Ambient Cross-Session Headless Knowledge & Teacher Tools (7, zero UI spawned) ---
   {
     name: "synt_next_move",
     title: "Syntopik Pedagogical Brainstem (Next Optimal Move)",
-    description: "Return the compact <=180-token Action Envelope fusing FSRS-6/FIRe, Learner Psychology TeachingPolicy, causal root-cause probes, Blunder Forks, Rosetta isomorphicBridge openers, and live whiteboard learner pins.",
+    description: "Return the compact <=180-token Action Envelope fusing FSRS-6/FIRe, Learner Psychology TeachingPolicy, causal root-cause probes, Blunder Forks, Rosetta isomorphicBridge openers, taper mode, and live whiteboard learner pins.",
     inputSchema: NEXT_MOVE_SCHEMA
   },
   {
@@ -25560,7 +25996,7 @@ var TOOLS = [
   {
     name: "synt_get_frontier",
     title: "Get Syntopik Study Frontier & Learner Policy",
-    description: "Ambient headless query: return FIRe-compressed due items, active Autopilot, learnerProfile, Active TeachingPolicy, dueForks, arenasCount, coldStartDays, pendingPins, rosettaBridgesCount, syncDeviceId, traps, and Brier calibration.",
+    description: "Ambient headless query: return FIRe-compressed due items, active Autopilot, learnerProfile, Active TeachingPolicy, dueForks, arenasCount, coldStartDays, pendingPins, rosettaBridgesCount, syncDeviceId, readinessSummary, taperActive, traps, and Brier calibration.",
     inputSchema: GET_FRONTIER_SCHEMA
   },
   {
@@ -25568,6 +26004,18 @@ var TOOLS = [
     title: "Log FSRS-6 + FIRe Concept Review",
     description: "Ambient headless review: run srs_engine.py review with FIRe propagation, optional hintsUsed (0..5) & durationMs for Tier-3 learner psychology updates, and revlog.jsonl persistence.",
     inputSchema: LOG_REVIEW_SCHEMA
+  },
+  {
+    name: "synt_readiness",
+    title: "Exam-Day Readiness Forecaster & Pre-Mortem Shield",
+    description: "Project deterministic FSRS-6 retention at exam date, fuse 4-tier Evidence coverage, unresolved Blunder Forks, EV-skip discipline, top-3 ROI levers, <=72h taper mode, and non-fabricated 3-bullet Pre-Mortem Shield.",
+    inputSchema: READINESS_SCHEMA
+  },
+  {
+    name: "synt_interleave",
+    title: "Blind-Chapter Interleaved Drill Generator & Step-1 Grader",
+    description: "Generate Rohrer blind-chapter interleaved drills (chapter labels & canonical answers sealed!) or grade Step-1 governing-principle identification cleanly without leaking sealed answers.",
+    inputSchema: INTERLEAVE_SCHEMA
   },
   // Backwards-compatible mlh_* aliases
   {
@@ -25988,7 +26436,7 @@ function handleLessonStudio(rawArgs, toolName) {
 }
 function createServer() {
   const server = new Server(
-    { name: "syntopik-studio", version: "3.1.0" },
+    { name: "syntopik-studio", version: "3.2.0" },
     { capabilities: { tools: {}, resources: {} } }
   );
   server.setRequestHandler(ListToolsRequestSchema, async () => ({
@@ -26110,6 +26558,35 @@ function createServer() {
           if (!res.ok) return toolError(res.error);
           const structuredContent = {
             kind: "synt_log_review_result",
+            ...res
+          };
+          return {
+            content: [{ type: "text", text: JSON.stringify(structuredContent) }],
+            structuredContent
+          };
+        }
+        case "synt_readiness": {
+          const checked = validateReadinessArgs(args);
+          if (!checked.ok) return toolError(`Invalid synt_readiness arguments: ${checked.error}`);
+          const res = getReadiness(WORKSPACE_ROOT, checked.value);
+          if (!res.ok) return toolError(res.error || "synt_readiness failed.");
+          const structuredContent = {
+            kind: "synt_readiness",
+            ...res
+          };
+          return {
+            content: [{ type: "text", text: JSON.stringify(structuredContent) }],
+            structuredContent
+          };
+        }
+        case "synt_interleave": {
+          const checked = validateInterleaveArgs(args);
+          if (!checked.ok) return toolError(`Invalid synt_interleave arguments: ${checked.error}`);
+          const res = runInterleave(WORKSPACE_ROOT, checked.value);
+          if (!res.ok) return toolError(res.error || "synt_interleave failed.");
+          const kind = checked.value.action === "stats" ? "synt_interleave_stats" : checked.value.action === "check" ? "synt_interleave_check" : "synt_interleave";
+          const structuredContent = {
+            kind,
             ...res
           };
           return {

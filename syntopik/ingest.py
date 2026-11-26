@@ -570,7 +570,7 @@ YOUTUBE_ID_RE = re.compile(r"^[A-Za-z0-9_-]{11}$")
 
 
 def detect_source_type(target: str) -> str:
-    """Detect source kind (`youtube`, `arxiv`, `repo`, `url`, `notes`) from a target string."""
+    """Detect source kind (`youtube`, `arxiv`, `repo`, `url`, `notes`, `anki`, `cards`, `notebook`, `notes_batch`)."""
     raw = str(target or "").strip()
     if not raw:
         raise ValueError("Target cannot be empty.")
@@ -607,23 +607,46 @@ def detect_source_type(target: str) -> str:
     p = Path(raw).expanduser()
     if p.exists():
         if p.is_file():
+            ext = p.suffix.lower()
+            if ext == ".apkg":
+                return "anki"
+            if ext in (".csv", ".tsv"):
+                return "cards"
+            if ext == ".ipynb":
+                return "notebook"
+            if ext == ".zip" and not p.name.lower().endswith(".syntopik-pack.zip"):
+                return "notes_batch"
             return "notes"
         if p.is_dir():
             if (p / ".obsidian").is_dir():
-                return "notes"
+                return "notes_batch"
             repo_markers = (".git", "pyproject.toml", "package.json", "Cargo.toml", "go.mod", "Makefile", "src")
             if any((p / marker).exists() for marker in repo_markers):
                 return "repo"
             code_count = 0
             note_count = 0
+            md_count = 0
             for child in list(p.iterdir())[:40]:
                 if child.is_file():
                     ext = child.suffix.lower()
-                    if ext in NOTE_FILE_EXTS:
+                    if ext in (".md", ".markdown"):
+                        md_count += 1
+                        note_count += 1
+                    elif ext in NOTE_FILE_EXTS:
                         note_count += 1
                     elif ext in EXT_TO_LANG:
                         code_count += 1
-            return "repo" if code_count > note_count else "notes"
+                elif child.is_dir() and not child.name.startswith(".") and child.name not in REPO_IGNORED_DIRS:
+                    try:
+                        for sub in list(child.iterdir())[:10]:
+                            if sub.is_file() and sub.suffix.lower() in (".md", ".markdown"):
+                                md_count += 1
+                                note_count += 1
+                    except OSError:
+                        pass
+            if code_count > note_count:
+                return "repo"
+            return "notes_batch" if md_count > 0 else "notes"
 
     raise ValueError(
         f"Could not detect source type for {target!r}: not an existing local path, arXiv ID, or http(s) URL."
@@ -2419,6 +2442,34 @@ def ingest_notes(
     }
 
 
+def ingest_anki(apkg_path: str | Path, **kwargs: Any) -> dict[str, Any]:
+    """Convenience wrapper routing `.apkg` ingestion to `syntopik.importers.import_anki_apkg`."""
+    from syntopik.importers import import_anki_apkg
+
+    return import_anki_apkg(apkg_path, **{k: v for k, v in kwargs.items() if k in _ANKI_KWARGS})
+
+
+def ingest_cards(path: str | Path, **kwargs: Any) -> dict[str, Any]:
+    """Convenience wrapper routing CSV/TSV flashcard decks to `syntopik.importers.import_delimited_cards`."""
+    from syntopik.importers import import_delimited_cards
+
+    return import_delimited_cards(path, **{k: v for k, v in kwargs.items() if k in _CARDS_KWARGS})
+
+
+def ingest_notebook(ipynb_path: str | Path, **kwargs: Any) -> dict[str, Any]:
+    """Convenience wrapper routing `.ipynb` notebooks to `syntopik.importers.import_jupyter_notebook`."""
+    from syntopik.importers import import_jupyter_notebook
+
+    return import_jupyter_notebook(ipynb_path, **{k: v for k, v in kwargs.items() if k in _NOTEBOOK_KWARGS})
+
+
+def ingest_notes_batch(path_or_zip: str | Path, **kwargs: Any) -> dict[str, Any]:
+    """Convenience wrapper routing Markdown folders / Notion `.zip` exports to `syntopik.importers.import_markdown_folder`."""
+    from syntopik.importers import import_markdown_folder
+
+    return import_markdown_folder(path_or_zip, **{k: v for k, v in kwargs.items() if k in _NOTES_BATCH_KWARGS})
+
+
 def ingest_auto(target: str, **kwargs: Any) -> dict[str, Any]:
     """Auto-detect source type for `target` and dispatch to the matching importer."""
     detected = detect_source_type(target)
@@ -2432,6 +2483,14 @@ def ingest_auto(target: str, **kwargs: Any) -> dict[str, Any]:
         res = ingest_url(target, **{k: v for k, v in kwargs.items() if k in _URL_KWARGS})
     elif detected == "notes":
         res = ingest_notes(target, **{k: v for k, v in kwargs.items() if k in _NOTES_KWARGS})
+    elif detected == "anki":
+        res = ingest_anki(target, **kwargs)
+    elif detected == "cards":
+        res = ingest_cards(target, **kwargs)
+    elif detected == "notebook":
+        res = ingest_notebook(target, **kwargs)
+    elif detected == "notes_batch":
+        res = ingest_notes_batch(target, **kwargs)
     else:
         raise ValueError(f"Unsupported detected source type: {detected!r}")
     res["detectedKind"] = detected
@@ -2443,6 +2502,10 @@ _ARXIV_KWARGS = frozenset({"workspace", "slug", "download_pdf", "atom_xml", "ato
 _REPO_KWARGS = frozenset({"workspace", "slug", "clone", "token_budget", "register_tracker", "enqueue", "subject", "priority", "timeout"})
 _URL_KWARGS = frozenset({"workspace", "slug", "html_text", "html_file", "priority", "register_tracker", "enqueue", "subject", "timeout"})
 _NOTES_KWARGS = frozenset({"workspace", "slug", "priority", "register_tracker", "enqueue", "subject"})
+_ANKI_KWARGS = frozenset({"workspace", "kg_dir", "subject", "chapter", "limit", "dry_run"})
+_CARDS_KWARGS = frozenset({"workspace", "kg_dir", "delimiter", "subject", "chapter", "limit", "dry_run"})
+_NOTEBOOK_KWARGS = frozenset({"workspace", "kg_dir", "slug", "subject", "chapter", "create_chapter", "enqueue", "dry_run"})
+_NOTES_BATCH_KWARGS = frozenset({"workspace", "kg_dir", "slug", "subject", "extract_props", "enqueue", "limit", "dry_run"})
 
 
 # ---------------------------------------------------------------------------
@@ -2723,6 +2786,39 @@ def build_parser() -> argparse.ArgumentParser:
     p_notes.add_argument("--priority", type=int, default=60, help="Initial reading queue priority (0-100)")
     _add_common_flags(p_notes)
 
+    # anki
+    p_anki = sub.add_parser("anki", help="Import Anki .apkg deck as unseen planned propositions")
+    p_anki.add_argument("path", help="Path to .apkg file")
+    p_anki.add_argument("--chapter", default=None, help="Chapter label override")
+    p_anki.add_argument("--limit", type=int, default=500, help="Max cards to import (default: 500)")
+    p_anki.add_argument("--dry-run", action="store_true", help="Parse and preview without writing")
+    _add_common_flags(p_anki)
+
+    # cards
+    p_cards = sub.add_parser("cards", help="Import CSV/TSV flashcard deck (Anki/Quizlet) as planned propositions")
+    p_cards.add_argument("path", help="Path to .csv or .tsv file")
+    p_cards.add_argument("--delimiter", default=None, help="Explicit delimiter override")
+    p_cards.add_argument("--chapter", default=None, help="Chapter label override")
+    p_cards.add_argument("--limit", type=int, default=500, help="Max cards to import (default: 500)")
+    p_cards.add_argument("--dry-run", action="store_true", help="Parse and preview without writing")
+    _add_common_flags(p_cards)
+
+    # notebook
+    p_nb = sub.add_parser("notebook", help="Statically import Jupyter .ipynb notebook (zero code execution)")
+    p_nb.add_argument("path", help="Path to .ipynb file")
+    p_nb.add_argument("--chapter", default=None, help="Chapter label override")
+    p_nb.add_argument("--create-chapter", action="store_true", help="Also emit chapters/<slug>.md")
+    p_nb.add_argument("--dry-run", action="store_true", help="Parse and preview without writing")
+    _add_common_flags(p_nb)
+
+    # notes_batch
+    p_nbatch = sub.add_parser("notes_batch", help="Import Markdown/Obsidian folder or Notion .zip export")
+    p_nbatch.add_argument("path", help="Path to Markdown folder or Notion .zip archive")
+    p_nbatch.add_argument("--limit", type=int, default=500, help="Max propositions to extract (default: 500)")
+    p_nbatch.add_argument("--no-extract-props", action="store_true", help="Skip proposition extraction")
+    p_nbatch.add_argument("--dry-run", action="store_true", help="Parse and preview without writing")
+    _add_common_flags(p_nbatch)
+
     # queue
     p_q = sub.add_parser("queue", help="Manage Incremental Reading Queue (knowledge-graph/reading-queue.jsonl)")
     p_q.add_argument("--workspace", default=argparse.SUPPRESS, help="Workspace root override")
@@ -2789,7 +2885,53 @@ def main(argv: list[str] | None = None) -> None:
                 enqueue=not args.no_enqueue,
                 subject=args.subject,
             )
-            _emit(res, as_json, [f"Ingested ({res['detectedKind']}) -> {res['outputDir']} [slug={res['slug']}]"])
+            dest_label = res.get("outputDir") or res.get("propsFile") or ws
+            _emit(res, as_json, [f"Ingested ({res['detectedKind']}) -> {dest_label} [slug={res.get('slug', '')}]"])
+        elif args.cmd == "anki":
+            res = ingest_anki(
+                args.path,
+                workspace=ws,
+                subject=args.subject,
+                chapter=args.chapter,
+                limit=args.limit,
+                dry_run=args.dry_run,
+            )
+            _emit(res, as_json, [f"Anki imported ({res.get('importedCount', 0)} planned, {res.get('deduplicatedCount', 0)} dupes)"])
+        elif args.cmd == "cards":
+            res = ingest_cards(
+                args.path,
+                workspace=ws,
+                delimiter=args.delimiter,
+                subject=args.subject,
+                chapter=args.chapter,
+                limit=args.limit,
+                dry_run=args.dry_run,
+            )
+            _emit(res, as_json, [f"Cards imported ({res.get('importedCount', 0)} planned, {res.get('deduplicatedCount', 0)} dupes)"])
+        elif args.cmd == "notebook":
+            res = ingest_notebook(
+                args.path,
+                workspace=ws,
+                slug=args.slug,
+                subject=args.subject if args.subject != "General" else "Computer Science",
+                chapter=args.chapter,
+                create_chapter=args.create_chapter,
+                enqueue=not args.no_enqueue,
+                dry_run=args.dry_run,
+            )
+            _emit(res, as_json, [f"Notebook imported ({res.get('importedCount', 0)} props, {res.get('extractedCasesCount', 0)} test cases) -> {res.get('notebookPath')}"])
+        elif args.cmd == "notes_batch":
+            res = ingest_notes_batch(
+                args.path,
+                workspace=ws,
+                slug=args.slug,
+                subject=args.subject,
+                extract_props=not args.no_extract_props,
+                enqueue=not args.no_enqueue,
+                limit=args.limit,
+                dry_run=args.dry_run,
+            )
+            _emit(res, as_json, [f"Notes batch imported ({res.get('fileCount', 0)} files, {res.get('importedCount', 0)} props) -> {res.get('indexPath')}"])
         elif args.cmd == "youtube":
             res = ingest_youtube(
                 args.url,

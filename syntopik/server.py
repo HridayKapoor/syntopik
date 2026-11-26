@@ -12,11 +12,14 @@ Pure Python 3.12+ standard library (`http.server.ThreadingHTTPServer`).
 
 from __future__ import annotations
 
+import base64
+import contextlib
 import errno
 import hmac
 import importlib
 import ipaddress
 import json
+import math
 import mimetypes
 import os
 import re
@@ -30,7 +33,7 @@ import time
 import urllib.parse
 import webbrowser
 import zipfile
-from datetime import date, datetime, timezone
+from datetime import date, datetime, timedelta, timezone
 from http import HTTPStatus
 from http.cookies import SimpleCookie
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -68,10 +71,37 @@ __all__ = [
 POCKET_COOKIE_NAME = "syntopik_pocket_session"
 POCKET_LAN_PATHS: frozenset[str] = frozenset({"/pocket", "/api/pocket/state", "/api/review/batch"})
 MAX_JSON_BODY_BYTES = 8 * 1024 * 1024  # 8 MiB ceiling for exam payloads / batch sync
+MAX_MCP_HTTP_BODY_BYTES = 1 * 1024 * 1024  # 1 MiB ceiling for loopback POST /mcp (aligned with mcp_http.MAX_MCP_BODY_BYTES)
 MAX_SYNC_DELTA_BODY_BYTES = 10 * 1024 * 1024  # 10 MiB hard cap for CRDT delta merge
 MAX_UPLOAD_BODY_BYTES = 32 * 1024 * 1024  # 32 MiB ceiling for PDF upload
+MAX_IMPORT_UPLOAD_DECODED_BYTES = 15 * 1024 * 1024  # 15 MiB decoded upload ceiling
+MAX_IMPORT_JSON_BODY_BYTES = 22 * 1024 * 1024  # ~15 MiB base64 + JSON envelope
 MAX_DIFF_STEPS = 40
 MAX_DIFF_EXPR_LEN = 512
+
+_ALLOWED_UPLOAD_EXTS: frozenset[str] = frozenset({
+    ".apkg", ".csv", ".tsv", ".ipynb", ".zip", ".md", ".markdown", ".txt", ".pdf",
+})
+_SEALED_INTERLEAVE_FIELDS: frozenset[str] = frozenset({
+    "sealedChapter",
+    "sealedPrinciple",
+    "sealedAnswer",
+    "sealedTopic",
+    "sealedSubject",
+    "sealedPropId",
+    "sealedPrincipleId",
+    "sealedOptionChapters",
+    "sealedStep2Prompt",
+    "canonicalAnswer",
+    "correctPrinciple",
+    "trueChapter",
+    "expectedAnswer",
+    "modelSolution",
+    "solution",
+    "answer",
+    "chapter",
+    "chapterSlug",
+})
 
 
 def _reject_non_finite(token: str) -> Any:
@@ -255,6 +285,7 @@ def _compute_workspace_signature(ws: Path, kg_dir: Path, chapters_dir: Path) -> 
         kg_dir / "sync-state.json",
         kg_dir / "mentor-config.json",
         kg_dir / "blitz-sessions.json",
+        kg_dir / "interleave-sessions.jsonl",
         kg_dir / "review-queue.md",
     ]
     for d in (chapters_dir, ws / "exams", ws / "sources"):
@@ -473,6 +504,8 @@ def _build_python_fallback_state(ws: Path, kg_dir: Path, chapters_dir: Path) -> 
         "readingQueue": reading_queue,
         "rosetta": _build_rosetta_payload(kg_dir),
         "syncStatus": _build_sync_status_payload(ws),
+        "readinessSummary": _build_readiness_summary(ws, kg_dir, chapters_dir),
+        "interleaveStats": _build_interleave_stats_payload(ws, kg_dir),
     }
     return graph, hub
 
@@ -978,6 +1011,262 @@ def _build_sync_status_payload(workspace: Path) -> dict[str, Any]:
         }
 
 
+def _sanitize_interleave_item(obj: Any) -> Any:
+    """Defense-in-depth sanitizer removing ALL sealed chapter/principle/answer keys from blind items."""
+    if not isinstance(obj, dict):
+        return obj
+    clean: dict[str, Any] = {}
+    for k, v in obj.items():
+        if k in _SEALED_INTERLEAVE_FIELDS or str(k).lower().startswith("sealed"):
+            continue
+        if isinstance(v, dict):
+            clean[k] = _sanitize_interleave_item(v)
+        elif isinstance(v, list):
+            clean[k] = [_sanitize_interleave_item(elem) for elem in v]
+        else:
+            clean[k] = v
+    return clean
+
+
+def _sanitize_interleave_payload(res: dict[str, Any]) -> dict[str, Any]:
+    out = dict(res)
+    for k in list(out.keys()):
+        if k in _SEALED_INTERLEAVE_FIELDS or str(k).lower().startswith("sealed"):
+            out.pop(k, None)
+    if isinstance(out.get("items"), list):
+        out["items"] = [_sanitize_interleave_item(it) for it in out["items"]]
+    return out
+
+
+def _normalize_shield_text(raw: Any) -> str:
+    return re.sub(r"\s+", " ", str(raw or "")).strip().lower()
+
+
+def _text_leaks_sealed_secret(raw_text: str, sealed_norms: list[str]) -> bool:
+    """Return True if raw_text echoes any full, whitespace-collapsed, or clipped sealed secret."""
+    norm_txt = _normalize_shield_text(raw_text)
+    if not norm_txt or not sealed_norms:
+        return False
+    # Strip leading generic prefixes & trailing ellipsis so arbitrary word-boundary clips still match
+    stripped = re.sub(r"^(?:if|then)\s+", "", norm_txt)
+    stripped = re.sub(r"^stop and verify before committing:\s*", "", stripped)
+    stripped_no_dots = re.sub(r"(?:\.\.\.|…)+$", "", stripped).strip()
+    for sn in sealed_norms:
+        if not sn:
+            continue
+        if sn in norm_txt:
+            return True
+        if len(sn) >= 16:
+            for plen in (24, 48, 80, 100):
+                if len(sn) >= plen and sn[:plen] in norm_txt:
+                    return True
+            if len(sn) >= 16 and sn[:16] in norm_txt:
+                return True
+        if len(stripped_no_dots) >= 12 and sn.startswith(stripped_no_dots):
+            return True
+        # Also catch suffix after ": " inside thenAction when clipped before 16 chars
+        if ":" in norm_txt:
+            tail = re.sub(r"(?:\.\.\.|…)+$", "", norm_txt.rsplit(":", 1)[1]).strip()
+            if len(tail) >= 12 and sn.startswith(tail):
+                return True
+    return False
+
+
+def _sanitize_premortem_shield(shield: Any, kg_dir: Path) -> dict[str, Any]:
+    """Ensure Pre-Mortem Shield bullets never echo sealed Blunder Fork secrets."""
+    if not isinstance(shield, dict):
+        return {"ok": True, "sourceBasis": "cold_start_minimal", "count": 0, "bullets": []}
+    bullets = shield.get("bullets")
+    if not isinstance(bullets, list) or not bullets:
+        return dict(shield)
+    sealed_by_fork: dict[str, list[str]] = {}
+    all_sealed_norms: list[str] = []
+    unresolved_fork_ids: set[str] = set()
+    try:
+        for fk in load_jsonl(kg_dir / "forks.jsonl"):
+            if not isinstance(fk, dict):
+                continue
+            if str(fk.get("status") or "").lower() in ("mastered", "cleared", "archived"):
+                continue
+            fid = str(fk.get("id") or "").strip()
+            if fid:
+                unresolved_fork_ids.add(fid)
+            fk_norms: list[str] = []
+            for sk in _SEALED_FORK_FIELDS:
+                norm_val = _normalize_shield_text(fk.get(sk))
+                if norm_val:
+                    fk_norms.append(norm_val)
+                    all_sealed_norms.append(norm_val)
+            if fid and fk_norms:
+                sealed_by_fork[fid] = fk_norms
+    except Exception:
+        all_sealed_norms = []
+        sealed_by_fork = {}
+        unresolved_fork_ids = set()
+    if not all_sealed_norms and not unresolved_fork_ids:
+        return dict(shield)
+    clean_bullets: list[dict[str, Any]] = []
+    for b in bullets:
+        if not isinstance(b, dict):
+            continue
+        nb = dict(b)
+        b_fid = str(nb.get("forkId") or "").strip()
+        is_unresolved_fork_bullet = (b_fid and b_fid in unresolved_fork_ids) or (
+            str(nb.get("sourceKind") or "").lower() == "blunder_fork" and bool(unresolved_fork_ids)
+        )
+        fork_specific = sealed_by_fork.get(b_fid, []) if b_fid else []
+        check_pool = fork_specific + [s for s in all_sealed_norms if s not in fork_specific]
+        then_txt = str(nb.get("thenAction") or "")
+        if _text_leaks_sealed_secret(then_txt, check_pool) or (
+            is_unresolved_fork_bullet
+            and not _normalize_shield_text(then_txt).startswith(
+                "then verify boundary conditions & invariant before executing your first move"
+            )
+        ):
+            nb["thenAction"] = "THEN verify boundary conditions & invariant before executing your first move."
+        if_txt = str(nb.get("ifCue") or "")
+        if _text_leaks_sealed_secret(if_txt, check_pool):
+            nb["ifCue"] = "IF you encounter this unresolved Blunder Fork setup"
+        clean_bullets.append(nb)
+    out = dict(shield)
+    out["bullets"] = clean_bullets
+    out["count"] = len(clean_bullets)
+    return out
+
+
+def _build_readiness_summary(
+    workspace: Path,
+    kg_dir: Path,
+    chapters_dir: Path,
+) -> dict[str, Any]:
+    """Compute compact Exam-Day Readiness summary safely for `/api/state`."""
+    try:
+        from syntopik.readiness import compute_readiness
+
+        rd = compute_readiness(workspace, kg_dir=kg_dir, chapters_dir=chapters_dir)
+        if not isinstance(rd, dict):
+            raise ValueError("Invalid readiness result")
+        src = str(rd.get("examDateSource") or "default_14d")
+        return {
+            "ok": bool(rd.get("ok", True)),
+            "readinessIndex": rd.get("readinessIndex", 0.0),
+            "band": rd.get("band", "needs_foundation"),
+            "predictedScorePct": rd.get("predictedScorePct") or {"low": 0.0, "expected": 0.0, "high": 0.0},
+            "predictedMarks": rd.get("predictedMarks"),
+            "examDate": rd.get("examDate"),
+            "examDateSource": src,
+            "daysToExam": rd.get("daysToExam"),
+            "hasExamConfig": src != "default_14d",
+            "taperMode": rd.get("taperMode") or {"active": False, "phase": "none", "allowNewConcepts": True},
+            "preMortemShield": _sanitize_premortem_shield(rd.get("preMortemShield"), kg_dir),
+            "topLevers": list(rd.get("topLevers") or [])[:3],
+            "pillars": rd.get("pillars") or {},
+            "executionConfidence": rd.get("executionConfidence", "untested"),
+            "uncertaintyReasons": list(rd.get("uncertaintyReasons") or []),
+        }
+    except Exception:
+        return {
+            "ok": True,
+            "readinessIndex": 0.0,
+            "band": "needs_foundation",
+            "predictedScorePct": {"low": 0.0, "expected": 0.0, "high": 0.0},
+            "predictedMarks": None,
+            "examDate": None,
+            "examDateSource": "default_14d",
+            "daysToExam": None,
+            "hasExamConfig": False,
+            "taperMode": {"active": False, "phase": "none", "allowNewConcepts": True},
+            "preMortemShield": {"ok": True, "sourceBasis": "cold_start_minimal", "count": 0, "bullets": []},
+            "topLevers": [],
+            "pillars": {},
+            "executionConfidence": "untested",
+            "uncertaintyReasons": [],
+        }
+
+
+def _build_interleave_stats_payload(workspace: Path, kg_dir: Path) -> dict[str, Any]:
+    """Compute sanitized blind-chapter interleave stats safely."""
+    try:
+        from syntopik.interleave import get_interleave_stats
+
+        st = get_interleave_stats(workspace, kg_dir=kg_dir)
+        return _sanitize_interleave_payload(st) if isinstance(st, dict) else {"ok": True, "totalSessions": 0, "totalItemsChecked": 0}
+    except Exception:
+        return {
+            "ok": True,
+            "totalSessions": 0,
+            "completedSessions": 0,
+            "totalItemsChecked": 0,
+            "tier1Correct": 0,
+            "tier1AccuracyPct": None,
+            "principleAccuracyPct": None,
+            "step2Correct": 0,
+            "step2Total": 0,
+            "step2AccuracyPct": None,
+            "medianIdentifyMs": None,
+            "medianIdentifySec": None,
+            "lastSessionAt": None,
+            "daysSinceLastInterleave": None,
+            "distinctChaptersPracticed": 0,
+            "confusionMatrix": {},
+            "topConfusionPairs": [],
+        }
+
+
+def _build_agents_compat_payload(workspace: Path) -> dict[str, Any]:
+    """Build 14-coding-agent compatibility matrix safely."""
+    try:
+        from syntopik.agents_compat import get_compat_matrix
+
+        return get_compat_matrix(workspace)
+    except Exception:
+        return {
+            "ok": True,
+            "totalHarnesses": 0,
+            "detectedCount": 0,
+            "configuredCount": 0,
+            "attachedCount": 0,
+            "httpSupportedCount": 0,
+            "activeHarness": "generic",
+            "harnesses": [],
+        }
+
+
+def _build_compat_summary(workspace: Path, mcp_http_endpoint: str, *, mcp_enabled: bool) -> dict[str, Any]:
+    mat = _build_agents_compat_payload(workspace)
+    return {
+        "totalHarnesses": int(mat.get("totalHarnesses") or 0),
+        "detectedCount": int(mat.get("detectedCount") or 0),
+        "configuredCount": int(mat.get("configuredCount") or 0),
+        "attachedCount": int(mat.get("attachedCount") or 0),
+        "httpSupportedCount": int(mat.get("httpSupportedCount") or 0),
+        "activeHarness": str(mat.get("activeHarness") or "generic"),
+        "mcpHttpEndpoint": mcp_http_endpoint,
+        "mcpHttpEnabled": bool(mcp_enabled),
+    }
+
+
+def _sanitize_upload_filename(raw_name: Any) -> tuple[str, str]:
+    """Validate strictly single-segment upload filename and return `(safe_filename, ext_lower)`."""
+    if not isinstance(raw_name, str) or not raw_name.strip():
+        raise ValueError("'filename' is required for file upload.")
+    name = raw_name.strip()
+    if "\x00" in name or "/" in name or "\\" in name or ".." in name or ":" in name:
+        raise PermissionError("Invalid upload filename: path separators and traversal sequences are forbidden.")
+    if name.startswith("."):
+        raise PermissionError("Invalid upload filename: hidden dotfiles are forbidden.")
+    if Path(name).name != name:
+        raise PermissionError("Invalid upload filename: must be a single filename segment.")
+    stem = Path(name).stem
+    ext = Path(name).suffix.lower()
+    if ext not in _ALLOWED_UPLOAD_EXTS:
+        raise ValueError(
+            f"Unsupported upload extension {ext!r}; allowed: {', '.join(sorted(_ALLOWED_UPLOAD_EXTS))}."
+        )
+    safe_stem = slugify(stem, default="upload", max_len=64)
+    return f"{safe_stem}{ext}", ext
+
+
 class SyntopikStudioServer(ThreadingHTTPServer):
     """Multi-threaded local Studio HTTP server with CSRF token, SSE notifications & LAN pairing."""
 
@@ -1007,6 +1296,7 @@ class SyntopikStudioServer(ThreadingHTTPServer):
         self._pair_token: str | None = secrets.token_urlsafe(18) if self.lan else None
         self._pair_consumed = False
         self._pocket_sessions: set[str] = set()
+        self._mcp_sessions: set[str] = set()
 
         self._change_cond = threading.Condition()
         self._change_seq = 0
@@ -1024,6 +1314,7 @@ class SyntopikStudioServer(ThreadingHTTPServer):
             self.local_url = f"http://[::1]:{self.bound_port}"
         else:
             self.local_url = f"http://127.0.0.1:{self.bound_port}"
+        self.mcp_http_endpoint = f"{self.local_url}/mcp"
         self.lan_ip = _detect_lan_ip() if self.lan else None
         self.lan_url = (
             f"http://{self.lan_ip}:{self.bound_port}/pocket?pair={self._pair_token}"
@@ -1071,6 +1362,23 @@ class SyntopikStudioServer(ThreadingHTTPServer):
             for valid in self._pocket_sessions:
                 if hmac.compare_digest(cookie_val, valid):
                     return True
+        return False
+
+    def create_mcp_session(self) -> str:
+        sid = secrets.token_urlsafe(18)
+        with self._auth_lock:
+            if len(self._mcp_sessions) >= 64:
+                self._mcp_sessions.pop()
+            self._mcp_sessions.add(sid)
+        return sid
+
+    def delete_mcp_session(self, sid: str | None) -> bool:
+        if not sid:
+            return False
+        with self._auth_lock:
+            if sid in self._mcp_sessions:
+                self._mcp_sessions.discard(sid)
+                return True
         return False
 
     def notify_change(
@@ -1361,10 +1669,151 @@ class SyntopikRequestHandler(BaseHTTPRequestHandler):
     def do_OPTIONS(self) -> None:
         self._send_error_json(HTTPStatus.METHOD_NOT_ALLOWED, "CORS preflight disabled on local Studio")
 
+    def _extract_mcp_token(self) -> str:
+        tok = (self.headers.get("X-Syntopik-Token") or "").strip()
+        if tok:
+            return tok
+        auth_hdr = (self.headers.get("Authorization") or "").strip()
+        if auth_hdr:
+            parts = auth_hdr.split(None, 1)
+            if len(parts) == 2 and parts[0].lower() == "bearer":
+                return parts[1].strip()
+        return ""
+
+    def _check_mcp_access(self, *, require_token: bool = True) -> bool:
+        """Strict loopback + non-LAN + DNS-rebinding + timing-safe token gate for `/mcp`."""
+        if self.server.lan:
+            self._send_error_json(HTTPStatus.FORBIDDEN, "Loopback /mcp endpoint is disabled in --lan mode")
+            return False
+        client_ip = self.client_address[0] if self.client_address else ""
+        host_hdr = self.headers.get("Host")
+        origin_hdr = self.headers.get("Origin")
+        if not _is_loopback_ip(client_ip):
+            self._send_error_json(HTTPStatus.FORBIDDEN, "Loopback access only")
+            return False
+        if _extract_host_only(host_hdr) is None or not _is_loopback_host(host_hdr):
+            self._send_error_json(HTTPStatus.FORBIDDEN, "Forbidden Host header")
+            return False
+        if origin_hdr is not None and not _is_loopback_origin(origin_hdr):
+            self._send_error_json(HTTPStatus.FORBIDDEN, "Forbidden Origin header")
+            return False
+        if require_token:
+            tok = self._extract_mcp_token()
+            if not tok or not hmac.compare_digest(tok, self.server.csrf_token):
+                self._send_error_json(
+                    HTTPStatus.FORBIDDEN,
+                    "Missing or invalid X-Syntopik-Token / Authorization Bearer token",
+                )
+                return False
+        return True
+
+    def _handle_mcp_get(self) -> None:
+        if not self._check_mcp_access(require_token=False):
+            return
+        self._send_json(
+            {"ok": False, "error": "Method Not Allowed: use POST /mcp for JSON-RPC 2.0 requests"},
+            status=HTTPStatus.METHOD_NOT_ALLOWED,
+            extra_headers={"Allow": "POST"},
+        )
+
+    def _handle_mcp_delete(self) -> None:
+        if not self._check_mcp_access(require_token=True):
+            return
+        sid = (self.headers.get("Mcp-Session-Id") or "").strip()
+        removed = self.server.delete_mcp_session(sid) if sid else False
+        self._send_json({"ok": True, "sessionClosed": removed})
+
+    def _handle_mcp_post(self) -> None:
+        if not self._check_mcp_access(require_token=True):
+            return
+
+        ctype_hdr = (self.headers.get("Content-Type") or "").strip()
+        if ctype_hdr and "json" not in ctype_hdr.split(";", 1)[0].strip().lower():
+            self._send_error_json(
+                HTTPStatus.UNSUPPORTED_MEDIA_TYPE,
+                "Content-Type must be application/json",
+            )
+            return
+
+        try:
+            length = int(self.headers.get("Content-Length") or "0")
+        except ValueError:
+            self._send_error_json(HTTPStatus.BAD_REQUEST, "Invalid Content-Length header")
+            return
+        if length < 0 or length > MAX_MCP_HTTP_BODY_BYTES:
+            self.close_connection = True
+            self._send_error_json(
+                HTTPStatus.REQUEST_ENTITY_TOO_LARGE,
+                f"MCP request body exceeds {MAX_MCP_HTTP_BODY_BYTES} byte limit",
+            )
+            return
+
+        raw = self.rfile.read(length) if length > 0 else b""
+        try:
+            parsed = json.loads(raw.decode("utf-8"), parse_constant=_reject_non_finite)
+        except Exception as exc:
+            self._send_json(
+                {
+                    "jsonrpc": "2.0",
+                    "id": None,
+                    "error": {"code": -32700, "message": f"Parse error: {exc}"},
+                },
+                status=HTTPStatus.BAD_REQUEST,
+            )
+            return
+
+        from syntopik.mcp_http import MCP_PROTOCOL_VERSION, handle_mcp_http_request
+
+        def _on_change(reason: str) -> None:
+            self.server.ensure_synced_graph(force=True)
+            self.server.notify_change(reason)
+
+        def _on_wb_frame(safe_frame: dict[str, Any]) -> None:
+            self.server.ensure_synced_graph(force=True)
+            self.server.notify_change(
+                "mcp:whiteboard_step",
+                event_type="whiteboard_frame",
+                payload={"action": "push", "frame": safe_frame},
+            )
+
+        http_status, resp_body = handle_mcp_http_request(
+            self.server.workspace,
+            parsed,
+            version=__version__,
+            on_change=_on_change,
+            on_whiteboard_frame=_on_wb_frame,
+        )
+
+        extra_headers: dict[str, str] = {"MCP-Protocol-Version": MCP_PROTOCOL_VERSION}
+        if isinstance(resp_body, dict) and isinstance(resp_body.get("result"), dict):
+            pv = resp_body["result"].get("protocolVersion")
+            if isinstance(pv, str) and pv.strip():
+                extra_headers["MCP-Protocol-Version"] = pv.strip()
+        if isinstance(parsed, dict) and str(parsed.get("method") or "").strip() == "initialize" and isinstance(resp_body, dict) and "result" in resp_body:
+            extra_headers["Mcp-Session-Id"] = self.server.create_mcp_session()
+
+        if resp_body is None:
+            self._send_bytes(b"", "application/json; charset=utf-8", status=HTTPStatus.ACCEPTED, extra_headers=extra_headers)
+            return
+
+        self._send_json(resp_body, status=http_status, extra_headers=extra_headers)
+
+    def do_DELETE(self) -> None:
+        parsed = urllib.parse.urlsplit(self.path)
+        path = parsed.path or "/"
+        if path == "/mcp":
+            self._handle_mcp_delete()
+            return
+        self._send_error_json(HTTPStatus.METHOD_NOT_ALLOWED, f"DELETE not supported for {path}")
+
     def do_GET(self) -> None:
         parsed = urllib.parse.urlsplit(self.path)
         path = parsed.path or "/"
         query = urllib.parse.parse_qs(parsed.query)
+
+        if path == "/mcp":
+            self._handle_mcp_get()
+            return
 
         allowed, _is_lan_client = self._check_access("GET", path, query)
         if not allowed:
@@ -1397,6 +1846,8 @@ class SyntopikRequestHandler(BaseHTTPRequestHandler):
             "/api/whiteboard": lambda: self._handle_whiteboard_get(),
             "/api/rosetta": lambda: self._handle_rosetta_get(query),
             "/api/sync/status": lambda: self._handle_sync_status(),
+            "/api/readiness": lambda: self._handle_readiness_get(query),
+            "/api/interleave": lambda: self._handle_interleave_get(),
         }
         get_handler = get_api_routes.get(path)
         if get_handler is not None:
@@ -1418,6 +1869,10 @@ class SyntopikRequestHandler(BaseHTTPRequestHandler):
         parsed = urllib.parse.urlsplit(self.path)
         path = parsed.path or "/"
         query = urllib.parse.parse_qs(parsed.query)
+
+        if path == "/mcp":
+            self._handle_mcp_post()
+            return
 
         allowed, _is_lan = self._check_access("POST", path, query)
         if not allowed:
@@ -1444,6 +1899,9 @@ class SyntopikRequestHandler(BaseHTTPRequestHandler):
             "/api/arena/repair": self._handle_arena_repair,
             "/api/blitz/build": self._handle_blitz_build,
             "/api/blitz/grade": self._handle_blitz_grade,
+            "/api/interleave/build": self._handle_interleave_build,
+            "/api/interleave/check": self._handle_interleave_check,
+            "/api/interleave/complete": self._handle_interleave_complete,
             "/api/profile/calibrate": self._handle_profile_calibrate,
             "/api/profile/override": self._handle_profile_override,
             "/api/profile/replay": self._handle_profile_replay,
@@ -1476,6 +1934,10 @@ class SyntopikRequestHandler(BaseHTTPRequestHandler):
             self._send_error_json(HTTPStatus.INTERNAL_SERVER_ERROR, f"{type(exc).__name__}: {exc}")
 
     def do_PATCH(self) -> None:
+        path = urllib.parse.urlsplit(self.path).path or "/"
+        if path == "/mcp":
+            self._handle_mcp_get()
+            return
         self.do_POST()
 
     # ------------------------------------------------------------------
@@ -1597,12 +2059,24 @@ class SyntopikRequestHandler(BaseHTTPRequestHandler):
     # ------------------------------------------------------------------
 
     def _handle_capabilities(self) -> None:
+        mcp_tools: list[str] = []
+        try:
+            from syntopik.mcp_http import list_http_mcp_tools
+
+            mcp_tools = [str(t["name"]) for t in list_http_mcp_tools() if isinstance(t, dict) and t.get("name")]
+        except Exception:
+            mcp_tools = []
+        agents_compat = _build_agents_compat_payload(self.server.workspace)
         self._send_json({
             "live": True,
             "token": self.server.csrf_token,
             "version": __version__,
             "workspaceName": self.server.workspace.name,
             "lan": self.server.lan,
+            "mcpHttpEndpoint": self.server.mcp_http_endpoint,
+            "mcpHttpEnabled": not self.server.lan,
+            "mcpHttpTools": mcp_tools,
+            "agentsCompat": agents_compat,
         })
 
     def _handle_pocket_html(self, query: dict[str, list[str]]) -> None:
@@ -1810,8 +2284,19 @@ class SyntopikRequestHandler(BaseHTTPRequestHandler):
         triage_recommended = _compute_triage_recommended(self.server.kg_dir, hub)
         rosetta_data = _build_rosetta_payload(self.server.kg_dir)
         sync_status = _build_sync_status_payload(self.server.workspace)
+        readiness_summary = _build_readiness_summary(
+            self.server.workspace,
+            self.server.kg_dir,
+            self.server.chapters_dir,
+        )
+        interleave_stats = _build_interleave_stats_payload(self.server.workspace, self.server.kg_dir)
+        compat_summary = _build_compat_summary(
+            self.server.workspace,
+            self.server.mcp_http_endpoint,
+            mcp_enabled=not self.server.lan,
+        )
 
-        # Mirror enriched v2 & v3 fields inside hub as well as top-level for universal consumer compatibility
+        # Mirror enriched v2, v3 & v3.2 fields inside hub as well as top-level for universal consumer compatibility
         hub_out = dict(hub)
         hub_out["schemaVersion"] = 5
         hub_out.setdefault("retentionHeatmap", {"windowDays": 365, "totalEvents": 0, "activeDays": 0, "byDate": {}, "days": []})
@@ -1837,6 +2322,9 @@ class SyntopikRequestHandler(BaseHTTPRequestHandler):
         hub_out["starterPacks"] = starter_packs
         hub_out["rosetta"] = rosetta_data
         hub_out["syncStatus"] = sync_status
+        hub_out["readinessSummary"] = readiness_summary
+        hub_out["interleaveStats"] = interleave_stats
+        hub_out["compatSummary"] = compat_summary
 
         self._send_json({
             "ok": True,
@@ -1863,6 +2351,9 @@ class SyntopikRequestHandler(BaseHTTPRequestHandler):
             "starterPacks": starter_packs,
             "rosetta": rosetta_data,
             "syncStatus": sync_status,
+            "readinessSummary": readiness_summary,
+            "interleaveStats": interleave_stats,
+            "compatSummary": compat_summary,
         })
 
     def _handle_sse(self) -> None:
@@ -2274,6 +2765,15 @@ class SyntopikRequestHandler(BaseHTTPRequestHandler):
 
         raw_autopsy = graded.get("autopsy") or {}
         buckets = raw_autopsy.get("buckets") or {}
+        ev_calibration = graded.get("evCalibration")
+        distractor_summary = graded.get("distractorSummary") or {
+            "triggeredCount": 0,
+            "topTrapCategories": [],
+            "topConfusedWith": [],
+            "items": [],
+        }
+        distractor_autopsy = list(distractor_summary.get("items") or [])
+        vignette_breakdown = graded.get("vignetteBreakdown") or {}
         autopsy_out = {
             "knowledge": buckets.get("knowledge", []),
             "execution": buckets.get("execution", []),
@@ -2284,6 +2784,10 @@ class SyntopikRequestHandler(BaseHTTPRequestHandler):
             "buckets": buckets,
             "egoTraps": raw_autopsy.get("egoTraps", []),
             "escalations": graded.get("threeStrikeEscalations", []),
+            "evCalibration": ev_calibration,
+            "distractorSummary": distractor_summary,
+            "distractorAutopsy": distractor_autopsy,
+            "vignetteBreakdown": vignette_breakdown,
         }
         rel_attempt = (
             str(attempt_file.relative_to(self.server.workspace))
@@ -2296,6 +2800,10 @@ class SyntopikRequestHandler(BaseHTTPRequestHandler):
             "attemptPath": rel_attempt,
             "scored": graded,
             "autopsy": autopsy_out,
+            "evCalibration": ev_calibration,
+            "distractorSummary": distractor_summary,
+            "distractorAutopsy": distractor_autopsy,
+            "vignetteBreakdown": vignette_breakdown,
         })
 
     def _handle_tracker_topic(self) -> None:
@@ -2378,66 +2886,202 @@ class SyntopikRequestHandler(BaseHTTPRequestHandler):
         })
 
     def _handle_import(self) -> None:
-        body = self._read_json_body()
+        body = self._read_json_body(max_bytes=MAX_IMPORT_JSON_BODY_BYTES)
         if body is None:
             return
-        target = str(body.get("target") or body.get("url") or "").strip()
-        if not target:
-            raise ValueError("'target' is required.")
 
         from syntopik import ingest
 
         kind = str(body.get("kind") or "auto").strip().lower()
         slug = body.get("slug")
         subject = str(body.get("subject") or "General")
+        chapter = body.get("chapter")
+        delimiter = body.get("delimiter")
         register_tracker = bool(body.get("registerTracker", False))
+        dry_run = bool(body.get("dryRun", body.get("dry_run", False)))
+        raw_limit = body.get("limit")
+        limit_val: int | None = None
+        if raw_limit is not None:
+            try:
+                limit_val = max(1, min(2000, int(raw_limit)))
+            except (TypeError, ValueError) as exc:
+                raise ValueError("'limit' must be an integer.") from exc
 
-        # Check remote scheme / arXiv ID purely syntactically BEFORE touching disk (prevents existence oracle)
-        is_remote = (
-            kind in ("youtube", "arxiv", "url")
-            or target.lower().startswith(("http://", "https://"))
-            or bool(_ARXIV_ID_RE.match(target))
-        )
-        if not is_remote:
-            jailed = self._resolve_user_path_jailed(target, allow_temp=False)
-            if jailed is None:
-                raise PermissionError("Local import path must stay within workspace")
-            target = str(jailed)
+        uploaded_rel_path: str | None = None
+        with contextlib.ExitStack() as stack:
+            if body.get("contentBase64") is not None:
+                raw_b64 = body.get("contentBase64")
+                if not isinstance(raw_b64, str) or not raw_b64.strip():
+                    raise ValueError("'contentBase64' must be a non-empty base64 string.")
+                safe_name, _ext = _sanitize_upload_filename(body.get("filename"))
+                b64_payload = raw_b64.strip()
+                if b64_payload.lower().startswith("data:") and ";base64," in b64_payload:
+                    b64_payload = b64_payload.split(";base64,", 1)[1]
+                # Fast upper-bound precheck before decoding
+                if len(b64_payload) > ((MAX_IMPORT_UPLOAD_DECODED_BYTES * 4) // 3) + 128:
+                    self._send_error_json(
+                        HTTPStatus.REQUEST_ENTITY_TOO_LARGE,
+                        f"Uploaded file exceeds {MAX_IMPORT_UPLOAD_DECODED_BYTES // (1024 * 1024)} MiB ceiling.",
+                    )
+                    return
+                try:
+                    decoded = base64.b64decode(b64_payload, validate=True)
+                except Exception as exc:
+                    raise ValueError(f"Invalid base64 upload payload: {exc}") from exc
+                if len(decoded) > MAX_IMPORT_UPLOAD_DECODED_BYTES:
+                    self._send_error_json(
+                        HTTPStatus.REQUEST_ENTITY_TOO_LARGE,
+                        f"Decoded file ({len(decoded)} bytes) exceeds {MAX_IMPORT_UPLOAD_DECODED_BYTES} byte limit.",
+                    )
+                    return
 
-        common_kwargs: dict[str, Any] = {
-            "workspace": self.server.workspace,
-            "slug": slug,
-            "subject": subject,
-            "register_tracker": register_tracker,
-        }
-        if kind == "youtube":
-            if body.get("vttText") is not None:
-                common_kwargs["vtt_text"] = body["vttText"]
-            res = ingest.ingest_youtube(target, **common_kwargs)
-        elif kind == "arxiv":
-            if body.get("atomXml") is not None:
-                common_kwargs["atom_xml"] = body["atomXml"]
-            res = ingest.ingest_arxiv(target, **common_kwargs)
-        elif kind == "repo":
-            res = ingest.ingest_repo(target, **common_kwargs)
-        elif kind == "url":
-            if body.get("htmlText") is not None:
-                common_kwargs["html_text"] = body["htmlText"]
-            res = ingest.ingest_url(target, **common_kwargs)
-        elif kind == "notes":
-            res = ingest.ingest_notes(target, **common_kwargs)
-        else:
-            if body.get("htmlText") is not None:
-                common_kwargs["html_text"] = body["htmlText"]
-            if body.get("vttText") is not None:
-                common_kwargs["vtt_text"] = body["vttText"]
-            if body.get("atomXml") is not None:
-                common_kwargs["atom_xml"] = body["atomXml"]
-            res = ingest.ingest_auto(target, **common_kwargs)
+                if dry_run:
+                    tmp_dir = Path(stack.enter_context(tempfile.TemporaryDirectory(prefix="synt-import-dryrun-"))).resolve()
+                    dest_path = (tmp_dir / safe_name).resolve()
+                    if not dest_path.is_relative_to(tmp_dir) or dest_path.parent != tmp_dir:
+                        raise PermissionError("Dry-run upload destination escaped temp directory")
+                    dest_path.write_bytes(decoded)
+                    target = str(dest_path)
+                    uploaded_rel_path = None
+                else:
+                    uploads_root = (self.server.workspace / "sources" / "_uploads").resolve()
+                    if not uploads_root.is_relative_to(self.server.workspace):
+                        raise PermissionError("Upload root escaped workspace")
+                    uploads_root.mkdir(parents=True, exist_ok=True)
+                    ts_tag = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+                    dest_name = f"{ts_tag}-{secrets.token_hex(3)}-{safe_name}"
+                    dest_path = (uploads_root / dest_name).resolve()
+                    if not dest_path.is_relative_to(uploads_root) or dest_path.parent != uploads_root:
+                        raise PermissionError("Upload destination escaped sources/_uploads/")
+                    dest_path.write_bytes(decoded)
+                    target = str(dest_path)
+                    uploaded_rel_path = dest_path.relative_to(self.server.workspace).as_posix()
+            else:
+                target = str(body.get("target") or body.get("url") or "").strip()
+                if not target:
+                    raise ValueError("'target' or ('filename' + 'contentBase64') is required.")
+                # Check remote scheme / arXiv ID purely syntactically BEFORE touching disk (prevents existence oracle)
+                is_remote = (
+                    kind in ("youtube", "arxiv", "url")
+                    or target.lower().startswith(("http://", "https://"))
+                    or bool(_ARXIV_ID_RE.match(target))
+                )
+                if not is_remote:
+                    jailed = self._resolve_user_path_jailed(target, allow_temp=False)
+                    if jailed is None:
+                        raise PermissionError("Local import path must stay within workspace")
+                    target = str(jailed)
 
-        self.server.ensure_synced_graph(force=True)
-        self.server.notify_change("import")
-        self._send_json({"ok": True, **res})
+            common_kwargs: dict[str, Any] = {
+                "workspace": self.server.workspace,
+                "slug": slug,
+                "subject": subject,
+                "register_tracker": register_tracker,
+            }
+            if kind == "youtube":
+                if body.get("vttText") is not None:
+                    common_kwargs["vtt_text"] = body["vttText"]
+                res = ingest.ingest_youtube(target, **common_kwargs)
+            elif kind == "arxiv":
+                if body.get("atomXml") is not None:
+                    common_kwargs["atom_xml"] = body["atomXml"]
+                res = ingest.ingest_arxiv(target, **common_kwargs)
+            elif kind == "repo":
+                res = ingest.ingest_repo(target, **common_kwargs)
+            elif kind == "url":
+                if body.get("htmlText") is not None:
+                    common_kwargs["html_text"] = body["htmlText"]
+                res = ingest.ingest_url(target, **common_kwargs)
+            elif kind == "notes":
+                res = ingest.ingest_notes(target, **common_kwargs)
+            elif kind == "anki":
+                anki_kw: dict[str, Any] = {
+                    "workspace": self.server.workspace,
+                    "kg_dir": self.server.kg_dir,
+                    "subject": subject,
+                    "chapter": chapter,
+                    "dry_run": dry_run,
+                }
+                if limit_val is not None:
+                    anki_kw["limit"] = limit_val
+                res = ingest.ingest_anki(target, **anki_kw)
+            elif kind == "cards":
+                cards_kw: dict[str, Any] = {
+                    "workspace": self.server.workspace,
+                    "kg_dir": self.server.kg_dir,
+                    "delimiter": delimiter,
+                    "subject": subject,
+                    "chapter": chapter,
+                    "dry_run": dry_run,
+                }
+                if limit_val is not None:
+                    cards_kw["limit"] = limit_val
+                res = ingest.ingest_cards(target, **cards_kw)
+            elif kind == "notebook":
+                nb_subj = subject if subject != "General" else "Computer Science"
+                res = ingest.ingest_notebook(
+                    target,
+                    workspace=self.server.workspace,
+                    kg_dir=self.server.kg_dir,
+                    slug=slug,
+                    subject=nb_subj,
+                    chapter=chapter,
+                    create_chapter=bool(body.get("createChapter", False)),
+                    dry_run=dry_run,
+                )
+            elif kind == "notes_batch":
+                nb_kw: dict[str, Any] = {
+                    "workspace": self.server.workspace,
+                    "kg_dir": self.server.kg_dir,
+                    "slug": slug,
+                    "subject": subject,
+                    "extract_props": bool(body.get("extractProps", True)),
+                    "dry_run": dry_run,
+                }
+                if limit_val is not None:
+                    nb_kw["limit"] = limit_val
+                res = ingest.ingest_notes_batch(target, **nb_kw)
+            else:
+                auto_kw: dict[str, Any] = {
+                    **common_kwargs,
+                    "kg_dir": self.server.kg_dir,
+                    "dry_run": dry_run,
+                }
+                if chapter is not None:
+                    auto_kw["chapter"] = chapter
+                if delimiter is not None:
+                    auto_kw["delimiter"] = delimiter
+                if limit_val is not None:
+                    auto_kw["limit"] = limit_val
+                if body.get("createChapter") is not None:
+                    auto_kw["create_chapter"] = bool(body["createChapter"])
+                if body.get("htmlText") is not None:
+                    auto_kw["html_text"] = body["htmlText"]
+                if body.get("vttText") is not None:
+                    auto_kw["vtt_text"] = body["vttText"]
+                if body.get("atomXml") is not None:
+                    auto_kw["atom_xml"] = body["atomXml"]
+                res = ingest.ingest_auto(target, **auto_kw)
+
+        if isinstance(res, dict) and res.get("ok") is False:
+            self._send_json(res, status=HTTPStatus.BAD_REQUEST)
+            return
+
+        if not dry_run:
+            self.server.ensure_synced_graph(force=True)
+            self.server.notify_change("import")
+
+        out = {"ok": True, **res}
+        if uploaded_rel_path:
+            out["uploadedPath"] = uploaded_rel_path
+        if "summary" not in out:
+            res_kind = str(out.get("kind") or out.get("detectedKind") or kind)
+            if res_kind in ("anki", "cards", "notebook", "notes_batch"):
+                imp_n = int(out.get("importedCount") or 0)
+                dup_n = int(out.get("deduplicatedCount") or 0)
+                dup_txt = f" ({dup_n} deduped)" if dup_n else ""
+                out["summary"] = f"{imp_n} unseen cue{'s' if imp_n != 1 else ''} imported (0 fake mastery){dup_txt}"
+        self._send_json(out)
 
     def _handle_export_obsidian(self) -> None:
         body = self._read_json_body()
@@ -3320,6 +3964,173 @@ class SyntopikRequestHandler(BaseHTTPRequestHandler):
         self.server.notify_change("derivation_diff")
         self._send_json(res)
 
+    # ------------------------------------------------------------------
+    # v3.2 GET / POST API handlers (Exam Readiness & Blind Interleave)
+    # ------------------------------------------------------------------
+
+    def _handle_readiness_get(self, query: dict[str, list[str]]) -> None:
+        from syntopik.readiness import build_premortem_shield, compute_readiness
+
+        exam_date = ((query.get("exam_date") or query.get("examDate") or [""])[0]).strip() or None
+        raw_days = ((query.get("days") or [""])[0]).strip()
+        if exam_date is None and raw_days:
+            try:
+                days_f = float(raw_days)
+                if not math.isfinite(days_f) or days_f < 0 or days_f > 3650:
+                    raise ValueError("'days' must be between 0 and 3650.")
+            except ValueError as exc:
+                raise ValueError("'days' must be a valid non-negative number.") from exc
+            target_dt = (datetime.now(timezone.utc) + timedelta(days=days_f)).replace(microsecond=0)
+            exam_date = target_dt.isoformat()
+
+        subject = ((query.get("subject") or [""])[0]).strip() or None
+        raw_max = ((query.get("max_marks") or query.get("maxMarks") or [""])[0]).strip()
+        max_marks: float | None = None
+        if raw_max:
+            try:
+                mm = float(raw_max)
+                if not math.isfinite(mm) or mm <= 0:
+                    raise ValueError("'max_marks' must be > 0.")
+                max_marks = mm
+            except ValueError as exc:
+                raise ValueError("'max_marks' must be a positive number.") from exc
+
+        premortem_only = ((query.get("premortem_only") or query.get("premortemOnly") or ["0"])[0]).strip().lower() in (
+            "1", "true", "yes",
+        )
+        if premortem_only:
+            chapter = ((query.get("chapter") or [""])[0]).strip() or None
+            shield = build_premortem_shield(
+                self.server.workspace,
+                subject=subject,
+                chapters=[chapter] if chapter else None,
+                kg_dir=self.server.kg_dir,
+            )
+            self._send_json(_sanitize_premortem_shield(shield, self.server.kg_dir))
+            return
+
+        res = compute_readiness(
+            self.server.workspace,
+            exam_date=exam_date,
+            subject=subject,
+            max_marks=max_marks,
+            kg_dir=self.server.kg_dir,
+            chapters_dir=self.server.chapters_dir,
+        )
+        if isinstance(res, dict) and "preMortemShield" in res:
+            res = dict(res)
+            res["preMortemShield"] = _sanitize_premortem_shield(res.get("preMortemShield"), self.server.kg_dir)
+        src = str(res.get("examDateSource") or "default_14d")
+        res["hasExamConfig"] = src != "default_14d"
+        self._send_json(res)
+
+    def _handle_interleave_get(self) -> None:
+        st = _build_interleave_stats_payload(self.server.workspace, self.server.kg_dir)
+        self._send_json(st)
+
+    def _handle_interleave_build(self) -> None:
+        body = self._read_json_body()
+        if body is None:
+            return
+        from syntopik.interleave import build_interleave_set
+
+        raw_n = body.get("n") if body.get("n") is not None else body.get("count")
+        try:
+            n = max(1, min(20, int(raw_n or 6)))
+        except (TypeError, ValueError) as exc:
+            raise ValueError("'n' must be an integer between 1 and 20.") from exc
+
+        seed_raw = body.get("seed")
+        seed = int(seed_raw) if isinstance(seed_raw, int) and not isinstance(seed_raw, bool) else None
+        subjects = body.get("subjects") if "subjects" in body else body.get("subject")
+        chapters = body.get("chapters") if "chapters" in body else body.get("chapter")
+        mode = str(body.get("mode") or "principle_first").strip() or "principle_first"
+
+        res = build_interleave_set(
+            self.server.workspace,
+            n=n,
+            subjects=subjects,
+            chapters=chapters,
+            mode=mode,
+            seed=seed,
+            kg_dir=self.server.kg_dir,
+        )
+        safe_res = _sanitize_interleave_payload(res)
+        self.server.notify_change("interleave_build")
+        self._send_json({"ok": bool(safe_res.get("ok", True)), **safe_res})
+
+    def _handle_interleave_check(self) -> None:
+        body = self._read_json_body()
+        if body is None:
+            return
+        session_id = str(body.get("sessionId") or body.get("session_id") or "").strip()
+        item_id = str(body.get("itemId") or body.get("item_id") or "").strip()
+        selected = str(
+            body.get("selectedPrinciple")
+            or body.get("selected_principle")
+            or body.get("chosenOptionId")
+            or body.get("optionId")
+            or ""
+        ).strip()
+        if not session_id or not item_id or not selected:
+            raise ValueError("'sessionId', 'itemId', and 'selectedPrinciple' are required.")
+
+        conf_raw = body.get("confidence", 0.5)
+        try:
+            conf_f = float(conf_raw) if conf_raw is not None else 0.5
+        except (TypeError, ValueError):
+            conf_f = 0.5
+        dur_raw = body.get("durationMs") if body.get("durationMs") is not None else body.get("latencyMs")
+        dur_ms = int(dur_raw) if isinstance(dur_raw, (int, float)) and not isinstance(dur_raw, bool) and dur_raw > 0 else None
+
+        from syntopik.interleave import check_principle_step
+
+        res = check_principle_step(
+            self.server.workspace,
+            session_id=session_id,
+            item_id=item_id,
+            selected_principle=selected,
+            confidence=conf_f,
+            duration_ms=dur_ms,
+            kg_dir=self.server.kg_dir,
+        )
+        if not res.get("ok"):
+            err_msg = str(res.get("error") or "Interleave check failed.")
+            if "not found" in err_msg.lower():
+                raise FileNotFoundError(err_msg)
+            raise ValueError(err_msg)
+        # Keep sealedAnswer hidden on Step-1 check
+        res.pop("sealedAnswer", None)
+        self.server.ensure_synced_graph(force=True)
+        self.server.notify_change("interleave_check")
+        self._send_json(res)
+
+    def _handle_interleave_complete(self) -> None:
+        body = self._read_json_body()
+        if body is None:
+            return
+        session_id = str(body.get("sessionId") or body.get("session_id") or "").strip()
+        if not session_id:
+            raise ValueError("'sessionId' is required.")
+        results = body.get("results")
+
+        from syntopik.interleave import complete_interleave_session
+
+        res = complete_interleave_session(
+            self.server.workspace,
+            session_id=session_id,
+            results=results,
+            kg_dir=self.server.kg_dir,
+        )
+        if not res.get("ok"):
+            err_msg = str(res.get("error") or "Interleave completion failed.")
+            if "not found" in err_msg.lower():
+                raise FileNotFoundError(err_msg)
+            raise ValueError(err_msg)
+        self.server.ensure_synced_graph(force=True)
+        self.server.notify_change("interleave_complete")
+        self._send_json(res)
+
 
 class _SyntopikStudioServerIPv6(SyntopikStudioServer):
     address_family = socket.AF_INET6
@@ -3391,6 +4202,8 @@ def serve_forever(
     print(f"Syntopik Studio v{__version__} listening on {server.local_url}")
     print(f"  Workspace : {server.workspace}")
     print(f"  Pocket    : {server.local_url}/pocket")
+    if not server.lan:
+        print(f"  MCP HTTP  : {server.mcp_http_endpoint}  (loopback + token)")
     if server.lan and server.lan_url:
         print(f"  LAN Pair  : {server.lan_url}  (one-time token, scoped ONLY to Pocket)")
         try:

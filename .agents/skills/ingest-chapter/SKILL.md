@@ -1,9 +1,9 @@
 ---
 name: ingest-chapter
 description: >-
-  Co-pilot live interactive study (Mode A) or map full chapters, arXiv papers,
-  YouTube lectures, GitHub repos, and web docs into dependency DAGs, Keshav
-  3-Pass guides, and incremental reading slices.
+  Co-pilot live study or import chapters, Anki decks, Jupyter notebooks,
+  CSV/TSV cards, Notion/Obsidian folders, arXiv papers, YouTube, repos, and web
+  docs into DAGs and reading slices.
 ---
 
 # Ingest Chapter — Live Co-Piloted Study & Universal Source Mapper
@@ -14,19 +14,27 @@ Support both **instant live co-piloted learning straight from any document, pape
 
 ---
 
-## Universal 1-Command Pre-Ingestion (`syntopik import` / `scripts/ingest_source.py`)
+## Universal 1-Command Pre-Ingestion & Ecosystem Importers (`syntopik import` / `syntopik/importers.py`)
 
-When the source is a YouTube URL, arXiv paper, GitHub/local codebase, web article, or Obsidian/Markdown folder, normalize it first into `sources/_ingested/<slug>/`:
+When the source is an **Anki `.apkg`**, **Quizlet/Anki CSV or TSV**, **Jupyter `.ipynb` notebook**, **Notion `.zip` / Obsidian Markdown folder**, YouTube URL, arXiv paper, GitHub/local codebase, or web article, normalize it first into `sources/_ingested/<slug>/` (every imported concept starts `status: "planned"` — **zero fake mastery**, existing `solid` mastery is never overwritten!):
 
 ```bash
 syntopik import "<target>" --slug <slug> --register-tracker --json
-# Or target-specific subcommands:
+# Ecosystem importers (auto-detected by extension or explicit --kind):
+syntopik import "<deck.apkg>" --kind anki --subject "<S>" --json           # Read-only SQLite, Basic+Cloze, HTML/MathJax clean, zero fake mastery
+syntopik import "<cards.csv|tsv>" --kind cards --subject "<S>" --json      # UTF-8 BOM-safe, Anki #separator:/#deck: + Quizlet headerless TSV/CSV
+syntopik import "<lab.ipynb>" --kind notebook --slug <slug> --json         # ZERO execution: AST literal_eval -> notebook.md + code-tests.json
+syntopik import "<notion.zip|folder>" --kind notes_batch --slug <slug> --json # UUID stripping + link rewrite + frontmatter/:::cue/Cloze/Q::A::
+# Web & media subcommands:
 python3 -B scripts/ingest_source.py youtube "<url>" --slug <slug> --json       # caption-only 5-8 min chunks + [mm:ss] pause-points
 python3 -B scripts/ingest_source.py arxiv "<id_or_url>" --download-pdf --json  # Atom metadata + Keshav 3-Pass guide + PDF
 python3 -B scripts/ingest_source.py repo "<path_or_url>" --slug <slug> --json  # Golden-Path Architecture Manifest
 python3 -B scripts/ingest_source.py url "<https_url>" --slug <slug> --json     # HTML->MD + Incremental Reading slices
 python3 -B scripts/ingest_source.py queue due --json                           # SuperMemo-style priority * urgency queue
 ```
+- **Anki `.apkg` & Quizlet CSV/TSV**: sanitizes HTML/scripts, preserves Cloze `{{cN::...}}` (`kind: "cloze"`), converts MathJax `\\(...\\)` → `$...$`, and rejects zip-slip/symlinks/zip-bombs. If an `.apkg` only has zstd `collection.anki21b` on Python `<3.14`, returns crisp guidance to re-export with *"Support older Anki versions"* checked.
+- **Jupyter `.ipynb`**: pure `json.loads` + `ast.parse` + `ast.literal_eval` ONLY (**never executes notebook cells!**); exports `code-tests.json` directly runnable in `code_verify.py test-cases`.
+- **Notion `.zip` / Obsidian MD Folders**: skips symlinks/hidden dirs, strips 32-hex & 36-char UUID suffixes from folders/files/URL-encoded Markdown links, and extracts `:::cue`, `{{cN::...}}`, and `Q:: / A::` cues into `reading-queue.jsonl`.
 - **YouTube**: study strictly from timestamped captions (`lecture.md`), pausing every 6–10 min for an Active Pause-Point prediction/check so video study never turns passive.
 - **arXiv**: walk **Keshav 3-Pass** (`Pass 1`: 5 Cs triage → `Pass 2`: key figures/equations via `pdf_studio.py annotate` → `Pass 3`: re-derive/stress-test core assumptions).
 - **GitHub / Codebase**: trace **1 real request or forward pass** along the Golden-Path Manifest (`repo-map.md`) rather than reading files linearly.

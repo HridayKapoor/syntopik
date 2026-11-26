@@ -1,4 +1,4 @@
-name: Syntopik v3.1 Core CI
+name: Syntopik v3.2 Core CI
 
 on:
   push:
@@ -234,7 +234,7 @@ jobs:
                   return p.stdout
 
               ver = run_cli("--version").strip()
-              assert "3.1.0" in ver, f"Unexpected wheel version output: {ver!r}"
+              assert "3.2.0" in ver, f"Unexpected wheel version output: {ver!r}"
 
               ros_out = json.loads(run_cli("rosetta", "archetypes", "--json"))
               assert ros_out.get("ok") is True and len(ros_out.get("archetypes") or []) >= 10, f"wheel rosetta archetypes failed: {ros_out}"
@@ -300,7 +300,7 @@ jobs:
 
               cli_mjs = unpack_dir / "package" / "bin" / "syntopik.mjs"
               ver_proc = subprocess.run([node_bin, str(cli_mjs), "--version"], capture_output=True, text=True, check=True)
-              assert "3.1.0" in ver_proc.stdout, f"Unexpected npm CLI version: {ver_proc.stdout!r}"
+              assert "3.2.0" in ver_proc.stdout, f"Unexpected npm CLI version: {ver_proc.stdout!r}"
 
               host_repo = tmp_dir / "host-repo"
               host_repo.mkdir(parents=True, exist_ok=True)
@@ -357,6 +357,7 @@ jobs:
               "test_harness.TestV3ServerHooksMcpAndWindowsPortability",
               "test_harness.TestSyntopikEvalAndStarterPacks",
               "test_harness.TestV31RosettaSyncReplayAndProofDiff",
+              "test_harness.TestV32UniversalCompatImportersAndExamReadiness",
           ]
 
           loader = unittest.TestLoader()

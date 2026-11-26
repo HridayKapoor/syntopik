@@ -1,9 +1,10 @@
-"""Unified pure-stdlib CLI for Syntopik v3.1 (`syntopik`).
+"""Unified pure-stdlib CLI for Syntopik v3.2 (`syntopik`).
 
 Verbs:
   init | attach | connect | serve | import | review | triage | pack | doctor | export | sync | run
   next | profile | drop | demo | debrief | mode | sunset | pace | board | bench
   rosetta | sync-delta | calibrate-policy | proof-diff
+  readiness | interleave
 """
 
 from __future__ import annotations
@@ -14,7 +15,6 @@ import inspect
 import json
 import os
 import re
-import shutil
 import subprocess
 import sys
 from datetime import datetime, timezone
@@ -22,6 +22,18 @@ from pathlib import Path
 from typing import Any
 
 from syntopik import __version__
+from syntopik.agents_compat import (
+    ALL_HARNESSES,
+    DEFAULT_FALLBACK_HARNESSES,
+    DEFAULT_HTTP_MCP_URL,
+    attach_harness_config,
+    detect_installed_agents,
+    format_compat_table,
+    get_compat_matrix,
+    inspect_antigravity_plugin,
+    is_ephemeral_install_root,
+    link_or_copy_dir,
+)
 from syntopik.paths import (
     find_node,
     resolve_chapters_dir,
@@ -40,24 +52,13 @@ from syntopik.storage import (
 
 __all__ = ["ALL_HARNESSES", "attach_workspace", "build_parser", "main"]
 
-ALL_HARNESSES: tuple[str, ...] = (
-    "cursor",
-    "windsurf",
-    "copilot",
-    "opencode",
-    "codex",
-    "claude",
-    "antigravity",
-    "gemini",
-)
-
-DEFAULT_FALLBACK_HARNESSES: tuple[str, ...] = ("claude", "codex", "cursor")
-
 STARTER_PACK_SLUGS: tuple[str, ...] = (
     "raft-consensus",
     "shm-physics",
     "transformers-attention",
 )
+
+_is_ephemeral_install_root = is_ephemeral_install_root
 
 
 def _ensure_script_import(module_name: str, workspace: Path | None = None) -> Any:
@@ -140,11 +141,16 @@ def _update_git_exclude(repo_dir: Path, entries: list[str]) -> dict[str, Any]:
     existing = exclude_path.read_text(encoding="utf-8") if exclude_path.is_file() else ""
     begin_marker = "# >>> syntopik >>>"
     end_marker = "# <<< syntopik <<<"
-    unique_entries = list(dict.fromkeys(e for e in entries if e))
-    block = "\n".join([begin_marker, *unique_entries, end_marker])
-
     start_idx = existing.find(begin_marker)
     end_idx = existing.find(end_marker)
+    prior_block_entries: list[str] = []
+    if start_idx != -1 and end_idx != -1 and end_idx >= start_idx:
+        inner_raw = existing[start_idx + len(begin_marker) : end_idx]
+        prior_block_entries = [ln.strip() for ln in inner_raw.splitlines() if ln.strip()]
+
+    unique_entries = list(dict.fromkeys([*prior_block_entries, *(e for e in entries if e)]))
+    block = "\n".join([begin_marker, *unique_entries, end_marker])
+
     if start_idx != -1 and end_idx != -1 and end_idx >= start_idx:
         before = existing[:start_idx].rstrip()
         after = existing[end_idx + len(end_marker) :].lstrip()
@@ -178,115 +184,18 @@ def _resolve_bundled_path(pkg_root: Path, repo_rel: str, bundle_rel: str) -> Pat
 
 def _link_or_copy_dir(src: Path, dest: Path, *, force_copy: bool = False) -> tuple[str, bool]:
     """Create a cross-platform directory link (absolute symlink / Windows junction) or copy fallback."""
-    if dest.exists() or dest.is_symlink():
-        return "preserved", False
-    abs_src = src.resolve()
-    dest.parent.mkdir(parents=True, exist_ok=True)
-    if not force_copy:
-        try:
-            os.symlink(str(abs_src), str(dest), target_is_directory=True)
-            if dest.is_dir():
-                return "symlinked", True
-        except OSError:
-            pass
-        if os.name == "nt":
-            try:
-                proc = subprocess.run(
-                    ["cmd", "/c", "mklink", "/J", str(dest), str(abs_src)],
-                    capture_output=True,
-                    text=True,
-                    check=False,
-                )
-                if proc.returncode == 0 and dest.is_dir():
-                    return "junction", True
-            except OSError:
-                pass
-    shutil.copytree(abs_src, dest, dirs_exist_ok=True)
-    return "copied", True
+    return link_or_copy_dir(src, dest, force_copy=force_copy)
 
 
 def _detect_installed_harnesses(target: Path, *, home: Path | None = None) -> list[str]:
-    """Detect harnesses installed globally or present in `target` without dumping all 8 blindly."""
-    home_dir = Path(home).expanduser().resolve() if home is not None else Path.home()
-    detected: list[str] = []
-
-    has_agy_home = (home_dir / ".gemini" / "antigravity").is_dir()
-    checks: list[tuple[str, bool]] = [
-        ("claude", (target / ".claude").exists() or (home_dir / ".claude").is_dir()),
-        ("codex", (target / ".codex").exists() or (home_dir / ".codex").is_dir()),
-        ("cursor", (target / ".cursor").exists() or (home_dir / ".cursor").is_dir()),
-        (
-            "windsurf",
-            (target / ".windsurf").exists()
-            or (home_dir / ".windsurf").is_dir()
-            or (home_dir / ".codeium" / "windsurf").is_dir(),
-        ),
-        (
-            "antigravity",
-            (target / ".agents" / "hooks.json").is_file()
-            or (target / "GEMINI.md").is_file()
-            or has_agy_home,
-        ),
-        (
-            "gemini",
-            (target / ".gemini").exists()
-            or (home_dir / ".gemini" / "settings.json").is_file()
-            or (home_dir / ".gemini" / "extensions").is_dir()
-            or ((home_dir / ".gemini").is_dir() and not has_agy_home),
-        ),
-        (
-            "copilot",
-            (target / ".vscode").exists() or (target / ".github" / "instructions").exists(),
-        ),
-        (
-            "opencode",
-            (target / "opencode.json").is_file() or (home_dir / ".config" / "opencode").is_dir(),
-        ),
-    ]
-    for name, present in checks:
-        if present:
-            detected.append(name)
-
+    """Detect harnesses installed globally or present in `target` across all 14 coding agents."""
+    agents = detect_installed_agents(target, home=home)
+    detected = [a["id"] for a in agents if a.get("detected")]
     return detected if detected else list(DEFAULT_FALLBACK_HARNESSES)
 
 
-def _hook_list_has_command(hook_list: list[Any], command_str: str) -> bool:
-    for item in hook_list:
-        if not isinstance(item, dict):
-            continue
-        if item.get("command") == command_str:
-            return True
-        inner = item.get("hooks")
-        if isinstance(inner, list):
-            for h in inner:
-                if isinstance(h, dict) and h.get("command") == command_str:
-                    return True
-    return False
-
-
-def _append_dedup_hook(hook_list: list[Any], entry: dict[str, Any], command_str: str) -> None:
-    if not _hook_list_has_command(hook_list, command_str):
-        hook_list.append(entry)
-
-
 def _inspect_antigravity_plugin(home: Path | None = None) -> dict[str, Any]:
-    home_dir = Path(home).expanduser().resolve() if home is not None else Path.home()
-    plugins_root = home_dir / ".gemini" / "config" / "plugins"
-    for name in ("syntopik", "syntopik-studio", "mlh-studio"):
-        pdir = plugins_root / name
-        if (pdir / "plugin.json").is_file():
-            return {
-                "installed": True,
-                "pluginName": name,
-                "pluginDir": str(pdir),
-                "hasDistServer": (pdir / "dist" / "server.mjs").is_file(),
-            }
-    return {
-        "installed": False,
-        "pluginName": None,
-        "pluginDir": str(plugins_root / "syntopik"),
-        "hasDistServer": False,
-    }
+    return inspect_antigravity_plugin(home=home)
 
 
 def attach_workspace(
@@ -295,17 +204,25 @@ def attach_workspace(
     harness: str = "auto",
     vault: str = "global",
     copy_skills: bool = False,
+    transport: str = "stdio",
+    http_url: str = DEFAULT_HTTP_MCP_URL,
+    home: str | Path | None = None,
+    pkg_root: str | Path | None = None,
+    dry_run: bool = False,
 ) -> dict[str, Any]:
     """Non-destructively wire Syntopik into any existing repository without touching git status.
 
     Contract:
-      - NEVER overwrites an existing host `AGENTS.md` or `CLAUDE.md`.
+      - Supports all 14 coding-agent harnesses in both `stdio` and loopback Streamable-HTTP (`http`) modes.
+      - NEVER overwrites an existing host `AGENTS.md`, `CLAUDE.md`, `GEMINI.md`, or regular-file `.clinerules`.
+      - NEVER bakes ephemeral `_npx`, `uv/archive-v0`, `uv-cache`, `pipx`, or temp install paths into configs.
       - Writes local exclusions strictly to `.git/info/exclude` (zero diff to host `.gitignore`).
       - Initializes `~/.syntopik` (`vault="global"`) or `<dir>/.syntopik` (`vault="local"`).
       - Uses 100% cross-platform Windows-safe commands (zero inline POSIX `VAR=... cmd`).
     """
     target = Path(target_dir).expanduser().resolve()
-    target.mkdir(parents=True, exist_ok=True)
+    if not dry_run:
+        target.mkdir(parents=True, exist_ok=True)
 
     harness_low = str(harness or "auto").strip().lower()
     if harness_low not in ("auto", "all", *ALL_HARNESSES):
@@ -313,313 +230,104 @@ def attach_workspace(
     vault_low = str(vault or "global").strip().lower()
     if vault_low not in ("global", "local"):
         raise ValueError(f"Unsupported vault {vault!r}; expected 'global' or 'local'.")
+    transport_low = str(transport or "stdio").strip().lower()
+    if transport_low not in ("stdio", "http"):
+        raise ValueError(f"Unsupported transport {transport!r}; expected 'stdio' or 'http'.")
 
-    pkg_root = resolve_package_root()
-    vault_path = (target / ".syntopik").resolve() if vault_low == "local" else (Path.home() / ".syntopik").resolve()
-    vault_display = ".syntopik/" if vault_low == "local" else "~/.syntopik/"
+    resolved_pkg_root = Path(pkg_root).expanduser().resolve() if pkg_root is not None else resolve_package_root()
+    home_dir = Path(home).expanduser().resolve() if home is not None else Path.home().resolve()
+    vault_path = (target / ".syntopik").resolve() if vault_low == "local" else (home_dir / ".syntopik").resolve()
 
-    setup = _ensure_script_import("setup_harness", pkg_root)
-    vault_init = setup.ensure_learner_workspace(vault_path, run_sync=True, repair_skills=False)
+    vault_init: dict[str, Any] = {"skipped": True, "dryRun": True}
+    if not dry_run:
+        setup = _ensure_script_import("setup_harness", resolve_package_root())
+        vault_init = setup.ensure_learner_workspace(vault_path, run_sync=True, repair_skills=False)
 
     if harness_low == "all":
         selected = list(ALL_HARNESSES)
     elif harness_low == "auto":
-        selected = _detect_installed_harnesses(target)
+        selected = _detect_installed_harnesses(target, home=home_dir)
     else:
         selected = [harness_low]
 
-    server_mjs = _resolve_bundled_path(pkg_root, "mcp-app/mlh-studio/dist/server.mjs", "mcp-dist/server.mjs").resolve()
-    skills_src = _resolve_bundled_path(pkg_root, ".agents/skills", "skills").resolve()
-    hooks_src = _resolve_bundled_path(pkg_root, ".agents/hooks", "hooks").resolve()
-
-    session_hook_cmd = f'node "{(hooks_src / "session-start.mjs").resolve()}" --workspace "{vault_path}"'
-    post_hook_cmd = f'node "{(hooks_src / "post-graph-sync.mjs").resolve()}" --workspace "{vault_path}"'
+    ephemeral = is_ephemeral_install_root(resolved_pkg_root)
+    effective_copy_skills = bool(copy_skills or ephemeral)
+    skills_src = _resolve_bundled_path(resolved_pkg_root, ".agents/skills", "skills").resolve()
 
     exclude_entries: list[str] = [".syntopik/"]
     written: list[str] = []
     preserved: list[str] = []
     notes: list[str] = []
 
-    # Strictly preserve any host AGENTS.md / CLAUDE.md
-    for host_doc in ("AGENTS.md", "CLAUDE.md"):
+    # Strictly preserve any host AGENTS.md / CLAUDE.md / GEMINI.md
+    for host_doc in ("AGENTS.md", "CLAUDE.md", "GEMINI.md"):
         if (target / host_doc).exists():
             preserved.append(host_doc)
 
-    # Link or copy canonical `.agents/skills`
+    # Link or copy canonical `.agents/skills` (always copy when running from ephemeral cache!)
     if skills_src.is_dir():
         dest_skills = target / ".agents" / "skills"
-        action, created = _link_or_copy_dir(skills_src, dest_skills, force_copy=copy_skills)
-        if created:
-            written.append(f".agents/skills ({action})")
-            exclude_entries.extend([".agents/skills", ".agents/skills/"])
-        else:
-            preserved.append(".agents/skills")
-
-    if "cursor" in selected:
-        rule_path = target / ".cursor" / "rules" / "syntopik.mdc"
-        existed_rule = rule_path.is_file()
-        write_text_atomic(
-            rule_path,
-            (
-                "---\n"
-                "description: Syntopik universal deep-mastery co-pilot rules and study vault pointer\n"
-                "alwaysApply: false\n"
-                "---\n\n"
-                f"For learning, deep-understanding, review, or exam-prep tasks, activate Syntopik skills in `.agents/skills/` "
-                f"and persist study state to `{vault_display}`. Keep turns <= 160w prose, 1 active demand/turn, zero sycophancy, "
-                "and verify math/code deterministically via `syntopik run <engine>`.\n"
-            ),
-        )
-        written.append(".cursor/rules/syntopik.mdc")
-        if not existed_rule:
-            exclude_entries.append(".cursor/rules/syntopik.mdc")
-
-        cursor_mcp = target / ".cursor" / "mcp.json"
-        existed_mcp = _merge_json_file(
-            cursor_mcp,
-            lambda doc: doc.setdefault("mcpServers", {}).update({
-                "syntopik-studio": {
-                    "command": "node",
-                    "args": [str(server_mjs), f"--workspace={vault_path}"],
-                }
-            }),
-        )
-        written.append(".cursor/mcp.json")
-        if not existed_mcp:
-            exclude_entries.append(".cursor/mcp.json")
-
-    if "windsurf" in selected:
-        ws_rule = target / ".windsurf" / "rules" / "syntopik.md"
-        existed_ws = ws_rule.is_file()
-        write_text_atomic(
-            ws_rule,
-            (
-                "---\n"
-                "trigger: model_decision\n"
-                "description: Syntopik universal deep-mastery co-pilot rules and study vault pointer\n"
-                "---\n\n"
-                f"For learning, study, revision, or concept-mastery requests, follow Syntopik skills in `.agents/skills/` "
-                f"and persist study state in `{vault_display}`. Keep turns <= 160w prose, 1 demand/turn, zero sycophancy, "
-                "and run deterministic verifiers via `syntopik run <engine>`.\n"
-            ),
-        )
-        written.append(".windsurf/rules/syntopik.md")
-        if not existed_ws:
-            exclude_entries.append(".windsurf/rules/syntopik.md")
-
-    if "copilot" in selected:
-        gh_inst = target / ".github" / "instructions" / "syntopik.instructions.md"
-        existed_gh = gh_inst.is_file()
-        write_text_atomic(
-            gh_inst,
-            (
-                "---\n"
-                'applyTo: "**"\n'
-                "---\n\n"
-                f"When asked to teach, probe, review, or verify STEM/CS concepts, follow Syntopik skills in `.agents/skills/` "
-                f"(vault: `{vault_display}`): <= 160w calm turns, 1 active demand/turn, zero sycophancy, and deterministic verification "
-                "via `syntopik run <engine>`.\n"
-            ),
-        )
-        written.append(".github/instructions/syntopik.instructions.md")
-        if not existed_gh:
-            exclude_entries.append(".github/instructions/syntopik.instructions.md")
-
-        vscode_mcp = target / ".vscode" / "mcp.json"
-        existed_vs = _merge_json_file(
-            vscode_mcp,
-            lambda doc: doc.setdefault("servers", {}).update({
-                "syntopik-studio": {
-                    "type": "stdio",
-                    "command": "node",
-                    "args": [str(server_mjs), f"--workspace={vault_path}"],
-                    "cwd": "${workspaceFolder}",
-                }
-            }),
-        )
-        written.append(".vscode/mcp.json")
-        if not existed_vs:
-            exclude_entries.append(".vscode/mcp.json")
-
-    if "opencode" in selected:
-        oc_json = target / "opencode.json"
-        existed_oc = _merge_json_file(
-            oc_json,
-            lambda doc: doc.setdefault("mcp", {}).update({
-                "syntopik-studio": {
-                    "type": "local",
-                    "command": ["node", str(server_mjs), f"--workspace={vault_path}"],
-                    "environment": {"SYNT_WORKSPACE": str(vault_path)},
-                    "enabled": True,
-                }
-            }),
-        )
-        written.append("opencode.json")
-        if not existed_oc:
-            exclude_entries.append("opencode.json")
-
-    if "codex" in selected:
-        codex_toml = target / ".codex" / "config.toml"
-        existed_codex = codex_toml.is_file()
-        prev_toml = codex_toml.read_text(encoding="utf-8") if existed_codex else ""
-        if "[mcp_servers.syntopik-studio]" not in prev_toml:
-            esc_server = str(server_mjs).replace("\\", "\\\\").replace('"', '\\"')
-            esc_vault = str(vault_path).replace("\\", "\\\\").replace('"', '\\"')
-            snippet = (
-                "[mcp_servers.syntopik-studio]\n"
-                'command = "node"\n'
-                f'args = ["{esc_server}", "--workspace={esc_vault}"]\n'
-                "startup_timeout_sec = 10\n"
-                "tool_timeout_sec = 60\n"
-            )
-            next_toml = (prev_toml.rstrip() + "\n\n" + snippet) if prev_toml.strip() else snippet
-            write_text_atomic(codex_toml, next_toml)
-        written.append(".codex/config.toml")
-        if not existed_codex:
-            exclude_entries.append(".codex/config.toml")
-
-    if "claude" in selected:
-        root_mcp = target / ".mcp.json"
-        existed_root_mcp = _merge_json_file(
-            root_mcp,
-            lambda doc: doc.setdefault("mcpServers", {}).update({
-                "syntopik-studio": {
-                    "type": "stdio",
-                    "command": "node",
-                    "args": [str(server_mjs), f"--workspace={vault_path}"],
-                }
-            }),
-        )
-        written.append(".mcp.json")
-        if not existed_root_mcp:
-            exclude_entries.append(".mcp.json")
-
-        claude_settings = target / ".claude" / "settings.json"
-
-        def _wire_claude_hooks(doc: dict[str, Any]) -> None:
-            hooks = doc.setdefault("hooks", {})
-            if not isinstance(hooks, dict):
-                hooks = {}
-                doc["hooks"] = hooks
-            if not isinstance(hooks.get("SessionStart"), list):
-                hooks["SessionStart"] = []
-            if not isinstance(hooks.get("PostToolUse"), list):
-                hooks["PostToolUse"] = []
-
-            _append_dedup_hook(
-                hooks["SessionStart"],
-                {
-                    "hooks": [
-                        {
-                            "type": "command",
-                            "command": session_hook_cmd,
-                            "timeout": 10,
-                        }
-                    ]
-                },
-                session_hook_cmd,
-            )
-            _append_dedup_hook(
-                hooks["PostToolUse"],
-                {
-                    "matcher": "Write|Edit|MultiEdit|NotebookEdit|Bash",
-                    "hooks": [
-                        {
-                            "type": "command",
-                            "command": post_hook_cmd,
-                            "timeout": 10,
-                        }
-                    ],
-                },
-                post_hook_cmd,
-            )
-
-        existed_cs = _merge_json_file(claude_settings, _wire_claude_hooks)
-        written.append(".claude/settings.json")
-        if not existed_cs:
-            exclude_entries.append(".claude/settings.json")
-
-        claude_skills = target / ".claude" / "skills"
-        dest_skills = target / ".agents" / "skills"
-        if dest_skills.exists():
-            sk_action, sk_created = _link_or_copy_dir(dest_skills.resolve(), claude_skills, force_copy=copy_skills)
-            if sk_created:
-                written.append(f".claude/skills ({sk_action})")
-                exclude_entries.extend([".claude/skills", ".claude/skills/"])
+        if dry_run:
+            if dest_skills.exists() or dest_skills.is_symlink():
+                preserved.append(".agents/skills")
             else:
-                preserved.append(".claude/skills")
+                written.append(".agents/skills (dry-run)")
+                exclude_entries.extend([".agents/skills", ".agents/skills/"])
+        else:
+            action, created = _link_or_copy_dir(skills_src, dest_skills, force_copy=effective_copy_skills)
+            if created:
+                written.append(f".agents/skills ({action})")
+                exclude_entries.extend([".agents/skills", ".agents/skills/"])
+            else:
+                preserved.append(".agents/skills")
+
+    # Avoid mutating real host global configs when auto-attaching a `/tmp` local-vault sandbox.
+    write_global = (harness_low != "auto") or not (
+        vault_low == "local" and is_ephemeral_install_root(target) and not is_ephemeral_install_root(home_dir)
+    )
 
     antigravity_info: dict[str, Any] | None = None
-    if "antigravity" in selected:
-        agy_hooks = target / ".agents" / "hooks.json"
-
-        def _wire_agy_hooks(doc: dict[str, Any]) -> None:
-            ss_group = doc.setdefault("study-session-context", {})
-            if not isinstance(ss_group, dict):
-                ss_group = {}
-                doc["study-session-context"] = ss_group
-            if not isinstance(ss_group.get("SessionStart"), list):
-                ss_group["SessionStart"] = []
-            _append_dedup_hook(
-                ss_group["SessionStart"],
-                {"type": "command", "command": session_hook_cmd, "timeout": 10},
-                session_hook_cmd,
-            )
-
-            pt_group = doc.setdefault("knowledge-graph-autosync", {})
-            if not isinstance(pt_group, dict):
-                pt_group = {}
-                doc["knowledge-graph-autosync"] = pt_group
-            if not isinstance(pt_group.get("PostToolUse"), list):
-                pt_group["PostToolUse"] = []
-            _append_dedup_hook(
-                pt_group["PostToolUse"],
-                {
-                    "matcher": "write_file|edit_file|replace_file_content|multi_replace_file_content|write_to_file|run_command",
-                    "type": "command",
-                    "command": post_hook_cmd,
-                    "timeout": 10,
-                },
-                post_hook_cmd,
-            )
-
-        existed_agy_hooks = _merge_json_file(agy_hooks, _wire_agy_hooks)
-        written.append(".agents/hooks.json")
-        if not existed_agy_hooks:
-            exclude_entries.append(".agents/hooks.json")
-
-        antigravity_info = _inspect_antigravity_plugin()
-        antigravity_info["workspaceHooks"] = ".agents/hooks.json"
-        if antigravity_info["installed"]:
-            notes.append(
-                f"Antigravity plugin detected ({antigravity_info['pluginName']} at {antigravity_info['pluginDir']}); workspace hooks wired in .agents/hooks.json."
-            )
-        else:
-            notes.append(
-                "Antigravity workspace hooks wired in .agents/hooks.json (host AGENTS.md preserved). Run `syntopik connect antigravity` to install the global Studio MCP plugin."
-            )
-
-    if "gemini" in selected:
-        gem_settings = target / ".gemini" / "settings.json"
-        existed_gem = _merge_json_file(
-            gem_settings,
-            lambda doc: doc.setdefault("mcpServers", {}).update({
-                "syntopik-studio": {
-                    "command": "node",
-                    "args": [str(server_mjs), f"--workspace={vault_path}"],
-                }
-            }),
+    for hid in selected:
+        h_res = attach_harness_config(
+            hid,
+            target,
+            vault_dir=vault_path,
+            pkg_root=resolved_pkg_root,
+            transport=transport_low,
+            http_url=http_url,
+            dry_run=dry_run,
+            home=home_dir,
+            write_global=write_global,
+            copy_skills=effective_copy_skills,
         )
-        written.append(".gemini/settings.json")
-        if not existed_gem:
-            exclude_entries.append(".gemini/settings.json")
+        for item in h_res.get("written") or []:
+            if item not in written:
+                written.append(item)
+        for item in h_res.get("preserved") or []:
+            if item not in preserved:
+                preserved.append(item)
+        for item in h_res.get("excludeEntries") or []:
+            if item not in exclude_entries:
+                exclude_entries.append(item)
+        for note in h_res.get("notes") or []:
+            if note not in notes:
+                notes.append(note)
+        if hid == "antigravity" and isinstance(h_res.get("antigravity"), dict):
+            antigravity_info = h_res["antigravity"]
 
-    git_exclude = _update_git_exclude(target, exclude_entries)
+    git_exclude = (
+        {"updated": False, "path": None, "entries": exclude_entries}
+        if dry_run
+        else _update_git_exclude(target, exclude_entries)
+    )
     res: dict[str, Any] = {
         "ok": True,
         "targetDir": str(target),
         "vaultMode": vault_low,
         "vaultPath": str(vault_path),
+        "transport": transport_low,
+        "httpUrl": http_url if transport_low == "http" else None,
+        "ephemeralInstallRoot": ephemeral,
         "harnesses": selected,
         "written": written,
         "preserved": preserved,
@@ -679,10 +387,13 @@ def _cmd_attach(args: argparse.Namespace) -> int:
         harness=args.harness,
         vault=args.vault,
         copy_skills=bool(args.copy_skills),
+        transport=getattr(args, "transport", "stdio"),
+        http_url=getattr(args, "http_url", DEFAULT_HTTP_MCP_URL),
     )
     lines = [
         f"Syntopik attached to {res['targetDir']}",
         f"  Vault      : {res['vaultPath']} ({res['vaultMode']})",
+        f"  Transport  : {res['transport']}" + (f" ({res['httpUrl']})" if res.get("httpUrl") else ""),
         f"  Harnesses  : {', '.join(res['harnesses'])}",
         f"  Written    : {len(res['written'])} adapter(s)",
     ]
@@ -741,7 +452,7 @@ def _cmd_connect(args: argparse.Namespace) -> int:
         "windsurf": {
             "harness": "windsurf",
             "command": "npx skills add HridayKapoor/syntopik && syntopik attach . --harness windsurf",
-            "note": "Installs 17 skills + .windsurf/rules/syntopik.md.",
+            "note": "Installs 17 skills + .windsurf/rules/syntopik.md + global ~/.codeium/windsurf/mcp_config.json (HTTP uses serverUrl).",
         },
         "copilot": {
             "harness": "copilot",
@@ -756,7 +467,37 @@ def _cmd_connect(args: argparse.Namespace) -> int:
         "opencode": {
             "harness": "opencode",
             "command": "npx skills add HridayKapoor/syntopik && syntopik attach . --harness opencode",
-            "note": "Installs 17 skills + opencode.json (mcp local).",
+            "note": "Installs 17 skills + opencode.json (mcp local/remote).",
+        },
+        "cline": {
+            "harness": "cline",
+            "command": "syntopik attach . --harness cline",
+            "note": "Writes .clinerules/syntopik.md (preserves regular .clinerules file) + Cline MCP settings (HTTP uses type: streamableHttp).",
+        },
+        "roo": {
+            "harness": "roo",
+            "command": "syntopik attach . --harness roo",
+            "note": "Writes .roo/rules/syntopik.md + .roo/mcp.json (HTTP uses type: streamable-http).",
+        },
+        "zed": {
+            "harness": "zed",
+            "command": "syntopik attach . --harness zed",
+            "note": "Writes .zed/settings.json (context_servers) + .rules only when safe (never shadows existing host rules).",
+        },
+        "aider": {
+            "harness": "aider",
+            "command": "syntopik attach . --harness aider",
+            "note": "Writes .agents/syntopik-rules.md and safely merges read: list in .aider.conf.yml.",
+        },
+        "continue": {
+            "harness": "continue",
+            "command": "syntopik attach . --harness continue",
+            "note": "Writes .continue/rules/syntopik.md + .continue/mcpServers/syntopik.yaml.",
+        },
+        "kiro": {
+            "harness": "kiro",
+            "command": "syntopik attach . --harness kiro",
+            "note": "Writes .kiro/steering/syntopik.md + .kiro/settings/mcp.json.",
         },
     }
     info = guides.get(harness)
@@ -806,9 +547,58 @@ def _cmd_import(args: argparse.Namespace) -> int:
     if not args.target:
         raise SystemExit("Provide a source target OR pass --pocket-sync <pocket-sync.json>.")
 
+    kind = str(args.kind or "auto").strip().lower()
+    dry_run = bool(getattr(args, "dry_run", False))
+    kg_dir = resolve_kg_dir(ws)
+
+    if kind in ("anki", "cards", "notebook", "notes_batch"):
+        importers = _lazy_import("syntopik.importers")
+        imp_dispatch = {
+            "anki": importers.import_anki_apkg,
+            "cards": importers.import_delimited_cards,
+            "notebook": importers.import_jupyter_notebook,
+            "notes_batch": importers.import_markdown_folder,
+        }
+        imp_fn = imp_dispatch[kind]
+        sig = inspect.signature(imp_fn)
+        imp_kwargs: dict[str, Any] = {}
+        candidate_kwargs: dict[str, Any] = {
+            "workspace": ws,
+            "kg_dir": kg_dir,
+            "subject": args.subject,
+            "chapter": args.slug,
+            "slug": args.slug,
+            "dry_run": dry_run,
+        }
+        for k, v in candidate_kwargs.items():
+            if k in sig.parameters:
+                imp_kwargs[k] = v
+        res = imp_fn(args.target, **imp_kwargs)
+        if not dry_run and (not isinstance(res, dict) or res.get("ok", True)):
+            sync_hub(workspace=ws, quiet=True)
+        ok_flag = bool(res.get("ok", True)) if isinstance(res, dict) else True
+        out_ref = (
+            res.get("outputDir")
+            or res.get("propsFile")
+            or res.get("notebookPath")
+            or res.get("indexPath")
+            or res.get("outputPath")
+            or res.get("outDir")
+            or res.get("error")
+            or ws
+        ) if isinstance(res, dict) else ws
+        _emit(
+            res if isinstance(res, dict) else {"ok": ok_flag, "kind": kind, "result": res},
+            bool(args.json),
+            [
+                f"Imported ({(res.get('kind') if isinstance(res, dict) else None) or kind}): {(res.get('title') if isinstance(res, dict) else None) or args.target}",
+                f"  Output : {out_ref}",
+            ],
+        )
+        return 0 if ok_flag else 1
+
     from syntopik import ingest
 
-    kind = str(args.kind or "auto").strip().lower()
     kwargs: dict[str, Any] = {
         "workspace": ws,
         "slug": args.slug,
@@ -824,17 +614,22 @@ def _cmd_import(args: argparse.Namespace) -> int:
         "notes": ingest.ingest_notes,
     }
     fn = dispatch[kind]
+    sig = inspect.signature(fn)
+    if "dry_run" in sig.parameters:
+        kwargs["dry_run"] = dry_run
     res = fn(args.target, **kwargs)
-    sync_hub(workspace=ws, quiet=True)
+    if not dry_run and (not isinstance(res, dict) or res.get("ok", True)):
+        sync_hub(workspace=ws, quiet=True)
+    ok_flag = bool(res.get("ok", True)) if isinstance(res, dict) else True
     _emit(
-        res,
+        res if isinstance(res, dict) else {"ok": ok_flag, "kind": kind, "result": res},
         bool(args.json),
         [
-            f"Imported ({res.get('kind', kind)}): {res.get('title') or args.target}",
-            f"  Output : {res.get('outputPath') or res.get('outDir') or ws}",
+            f"Imported ({(res.get('kind') if isinstance(res, dict) else None) or kind}): {(res.get('title') if isinstance(res, dict) else None) or args.target}",
+            f"  Output : {(res.get('outputPath') or res.get('outDir') or ws) if isinstance(res, dict) else ws}",
         ],
     )
-    return 0
+    return 0 if ok_flag else 1
 
 
 def _run_srs_json(ws: Path, pkg_root: Path, srs_args: list[str]) -> tuple[int, dict[str, Any] | None, str]:
@@ -1098,6 +893,16 @@ def _cmd_pack(args: argparse.Namespace) -> int:
 
 def _cmd_doctor(args: argparse.Namespace) -> int:
     ws = resolve_workspace(getattr(args, "workspace", None)) if getattr(args, "workspace", None) else None
+
+    if getattr(args, "compat", False):
+        proj_dir = ws if ws is not None else Path.cwd()
+        matrix = get_compat_matrix(project_dir=proj_dir)
+        if args.json:
+            print(json.dumps(matrix, indent=2, ensure_ascii=False))
+        else:
+            print(format_compat_table(matrix))
+        return 0
+
     fix_actions: list[str] = []
 
     if getattr(args, "fix", False):
@@ -2018,6 +1823,189 @@ def _cmd_proof_diff(args: argparse.Namespace) -> int:
     return 0 if res.get("ok") else 1
 
 
+# ---------------------------------------------------------------------------
+# v3.2 First-Class Verbs (lazy imports for Readiness & Blind-Chapter Interleave)
+# ---------------------------------------------------------------------------
+
+
+def _call_with_supported_kwargs(fn: Any, *pos_args: Any, **kwargs: Any) -> Any:
+    sig = inspect.signature(fn)
+    accepts_var_kw = any(p.kind == inspect.Parameter.VAR_KEYWORD for p in sig.parameters.values())
+    filtered = kwargs if accepts_var_kw else {k: v for k, v in kwargs.items() if k in sig.parameters}
+    return fn(*pos_args, **filtered)
+
+
+def _cmd_readiness(args: argparse.Namespace) -> int:
+    ws = resolve_workspace(getattr(args, "workspace", None))
+    kg_dir = resolve_kg_dir(ws)
+    chapters_dir = resolve_chapters_dir(ws)
+    rd = _lazy_import("syntopik.readiness")
+
+    if bool(getattr(args, "premortem_only", False)):
+        res = _call_with_supported_kwargs(
+            rd.build_premortem_shield,
+            workspace=ws,
+            subject=getattr(args, "subject", None),
+            limit=3,
+            kg_dir=kg_dir,
+        )
+        bullets = list((res or {}).get("bullets") or [])
+        payload = {"ok": True, "mode": "premortem_only", "workspace": str(ws), **(res if isinstance(res, dict) else {"result": res})}
+        lines = [
+            f"Pre-Mortem Shield ({ws}) — {len(bullets)} evidence-backed bullet(s) [{payload.get('sourceBasis', 'logs')}]",
+            *[
+                f"  {b.get('rank', idx)}. IF {b.get('ifCue', '')} -> THEN {b.get('thenAction', '')} [{b.get('evidenceBadge', '')}]"
+                for idx, b in enumerate(bullets, 1)
+            ],
+        ]
+        if not bullets:
+            lines.append("  No logged forks/mistakes/exam errors yet (zero generic filler).")
+        _emit(payload, bool(args.json), lines)
+        return 0
+
+    res = _call_with_supported_kwargs(
+        rd.compute_readiness,
+        workspace=ws,
+        exam_date=getattr(args, "exam_date", None),
+        subject=getattr(args, "subject", None),
+        max_marks=getattr(args, "max_marks", None),
+        kg_dir=kg_dir,
+        chapters_dir=chapters_dir,
+    )
+    payload = {"ok": bool((res or {}).get("ok", True)), "workspace": str(ws), **(res if isinstance(res, dict) else {"result": res})}
+    pred = payload.get("predictedScorePct") or {}
+    taper = payload.get("taperMode") or {}
+    lines = [
+        f"Exam Readiness ({ws}) — Index {payload.get('readinessIndex', 0)}/100 ({payload.get('band', 'unknown')})",
+    ]
+    if isinstance(pred, dict) and pred:
+        lines.append(
+            f"  Predicted Score : {pred.get('expected', '?')}% (range {pred.get('low', '?')}%–{pred.get('high', '?')}%)"
+        )
+    if taper.get("active"):
+        lines.append(f"  Taper Mode      : ACTIVE ({taper.get('phase')} · {taper.get('hoursRemaining')}h remaining)")
+    for idx, lv in enumerate(list(payload.get("topLevers") or [])[:3], 1):
+        if isinstance(lv, dict):
+            title = lv.get("title") or lv.get("label") or lv.get("chapter") or lv.get("propId") or str(lv)
+            lines.append(f"  Lever #{idx}        : {title}")
+    _emit(payload, bool(args.json), lines)
+    return 0 if payload.get("ok", True) else 1
+
+
+def _flatten_subjects(raw_subjects: Any) -> list[str] | None:
+    if not raw_subjects:
+        return None
+    out: list[str] = []
+    for entry in raw_subjects:
+        chunks = entry if isinstance(entry, list) else [entry]
+        for ch in chunks:
+            for tok in str(ch).split(","):
+                cleaned = tok.strip()
+                if cleaned and cleaned not in out:
+                    out.append(cleaned)
+    return out or None
+
+
+def _cmd_interleave(args: argparse.Namespace) -> int:
+    ws = resolve_workspace(getattr(args, "workspace", None))
+    kg_dir = resolve_kg_dir(ws)
+    il = _lazy_import("syntopik.interleave")
+    action = str(getattr(args, "action", None) or "build").strip().lower()
+    subjects = _flatten_subjects(getattr(args, "subjects", None))
+
+    if action == "build":
+        res = _call_with_supported_kwargs(
+            il.build_interleave_set,
+            workspace=ws,
+            n=int(args.n),
+            subjects=subjects,
+            mode=str(args.mode or "principle_first"),
+            seed=args.seed,
+            kg_dir=kg_dir,
+        )
+        payload = {"ok": bool((res or {}).get("ok", True)), "action": "build", "workspace": str(ws), **(res if isinstance(res, dict) else {"result": res})}
+        items = list(payload.get("items") or [])
+        lines = [
+            f"Blind-Chapter Interleave Set ({payload.get('sessionId', 'session')}) — {len(items)} item(s) [mode={payload.get('mode', args.mode)}]",
+            *[f"  - {it.get('itemId') or it.get('id')}: {str(it.get('prompt') or '')[:96]}" for it in items[:10]],
+        ]
+        _emit(payload, bool(args.json), lines)
+        return 0 if payload.get("ok", True) else 1
+
+    if action == "check":
+        if not (args.session_id and args.item_id and args.principle):
+            raise SystemExit("Provide --session-id, --item-id, and --principle for 'syntopik interleave check'.")
+        res = _call_with_supported_kwargs(
+            il.check_principle_step,
+            workspace=ws,
+            session_id=str(args.session_id),
+            item_id=str(args.item_id),
+            selected_principle=str(args.principle),
+            confidence=float(args.confidence),
+            duration_ms=args.duration_ms,
+            kg_dir=kg_dir,
+        )
+        payload = {"ok": bool((res or {}).get("ok", True)), "action": "check", "workspace": str(ws), **(res if isinstance(res, dict) else {"result": res})}
+        lines = [
+            f"Principle Check ({args.session_id} / {args.item_id}): {'CORRECT' if payload.get('correct') else 'MISS'}",
+        ]
+        _emit(payload, bool(args.json), lines)
+        return 0 if payload.get("ok", True) else 1
+
+    if action == "complete":
+        if not args.session_id:
+            raise SystemExit("Provide --session-id for 'syntopik interleave complete'.")
+        results_data: Any = None
+        if getattr(args, "results_json", None):
+            raw = str(args.results_json).strip()
+            results_data = json.loads(Path(raw[1:]).expanduser().read_text(encoding="utf-8")) if raw.startswith("@") else json.loads(raw)
+        res = _call_with_supported_kwargs(
+            il.complete_interleave_session,
+            workspace=ws,
+            session_id=str(args.session_id),
+            results=results_data,
+            kg_dir=kg_dir,
+        )
+        sync_hub(workspace=ws, quiet=True)
+        payload = {"ok": bool((res or {}).get("ok", True)), "action": "complete", "workspace": str(ws), **(res if isinstance(res, dict) else {"result": res})}
+        _emit(payload, bool(args.json), [f"Completed interleave session {args.session_id}."])
+        return 0 if payload.get("ok", True) else 1
+
+    if action == "stats":
+        res = _call_with_supported_kwargs(il.get_interleave_stats, workspace=ws, kg_dir=kg_dir)
+        payload = {"ok": bool((res or {}).get("ok", True)), "action": "stats", "workspace": str(ws), **(res if isinstance(res, dict) else {"result": res})}
+        acc = payload.get("tier1AccuracyPct")
+        if acc is None:
+            acc = payload.get("tier1Accuracy")
+        if acc is None:
+            acc = payload.get("principleAccuracy")
+        acc_str = f"{acc}%" if isinstance(acc, (int, float)) and not isinstance(acc, bool) else ("n/a" if acc is None else str(acc))
+        lines = [
+            f"Blind-Chapter Interleave Stats ({ws}): {payload.get('totalSessions', 0)} session(s), "
+            f"Tier-1 accuracy={acc_str}",
+        ]
+        _emit(payload, bool(args.json), lines)
+        return 0 if payload.get("ok", True) else 1
+
+    if action == "export-cbt":
+        res = _call_with_supported_kwargs(
+            il.export_interleave_cbt_spec,
+            workspace=ws,
+            n=int(args.n),
+            subjects=subjects,
+            kg_dir=kg_dir,
+        )
+        if getattr(args, "out", None) and isinstance(res, dict):
+            out_path = Path(args.out).expanduser().resolve()
+            save_json_atomic(out_path, res)
+            res = {**res, "outPath": str(out_path)}
+        payload = {"ok": bool((res or {}).get("ok", True)), "action": "export-cbt", "workspace": str(ws), **(res if isinstance(res, dict) else {"spec": res})}
+        _emit(payload, bool(args.json), [f"Exported interleave CBT spec ({len((payload.get('questions') or []))} question(s))."])
+        return 0 if payload.get("ok", True) else 1
+
+    raise SystemExit(f"Unknown interleave action: {action}")
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="syntopik",
@@ -2041,9 +2029,21 @@ def build_parser() -> argparse.ArgumentParser:
         "--harness",
         choices=["auto", "all", *ALL_HARNESSES],
         default="auto",
-        help="Target AI harness adapter(s) to wire (auto detects installed harnesses)",
+        help="Target AI harness adapter(s) to wire (auto detects installed harnesses across 14 coding agents)",
     )
     p_att.add_argument("--vault", choices=["global", "local"], default="global", help="Study vault location")
+    p_att.add_argument(
+        "--transport",
+        choices=["stdio", "http"],
+        default="stdio",
+        help="MCP transport mode: stdio (default) or loopback Streamable HTTP (http://127.0.0.1:4173/mcp)",
+    )
+    p_att.add_argument(
+        "--http-url",
+        dest="http_url",
+        default=DEFAULT_HTTP_MCP_URL,
+        help="Loopback Streamable-HTTP MCP URL when --transport http is selected",
+    )
     p_att.add_argument("--copy-skills", action="store_true", help="Copy .agents/skills instead of symlinking")
     p_att.add_argument("--json", action="store_true", help="Emit JSON output")
     p_att.set_defaults(func=_cmd_attach)
@@ -2064,12 +2064,19 @@ def build_parser() -> argparse.ArgumentParser:
     p_srv.add_argument("--open", action="store_true", help="Open local Studio in default web browser")
     p_srv.set_defaults(func=_cmd_serve)
 
-    p_imp = sub.add_parser("import", help="Universal source importer (YouTube, arXiv, GitHub repo, URL, PDF/notes, Pocket sync)")
+    p_imp = sub.add_parser(
+        "import",
+        help="Universal source importer (Anki .apkg, CSV/TSV cards, Jupyter .ipynb, Notion/MD folders, YouTube, arXiv, repo, URL, notes, Pocket sync)",
+    )
     p_imp.add_argument("target", nargs="?", default=None, help="URL, arXiv ID, repository URL/path, or local file/directory")
     p_imp.add_argument("--pocket-sync", dest="pocket_sync", default=None, help="Replay an offline pocket-sync.json file through FSRS-6 + FIRe")
     p_imp.add_argument("--no-fire", action="store_true", help="Disable FIRe ancestor credit when replaying --pocket-sync")
-    p_imp.add_argument("--dry-run", action="store_true", help="Preview --pocket-sync without mutating ledgers")
-    p_imp.add_argument("--kind", choices=["auto", "youtube", "arxiv", "repo", "url", "notes"], default="auto")
+    p_imp.add_argument("--dry-run", action="store_true", help="Preview import without mutating ledgers")
+    p_imp.add_argument(
+        "--kind",
+        choices=["auto", "youtube", "arxiv", "repo", "url", "notes", "anki", "cards", "notebook", "notes_batch"],
+        default="auto",
+    )
     p_imp.add_argument("--workspace", default=None, help="Syntopik workspace directory")
     p_imp.add_argument("--slug", "--chapter", dest="slug", default=None, help="Chapter/source slug override (alias: --chapter)")
     p_imp.add_argument("--subject", default="General", help="Subject tag")
@@ -2112,6 +2119,7 @@ def build_parser() -> argparse.ArgumentParser:
     p_doc = sub.add_parser("doctor", help="Run workspace, runtime, and packaging health diagnostics")
     p_doc.add_argument("--workspace", default=None, help="Workspace directory override")
     p_doc.add_argument("--core-only", action="store_true", help="Check pure-stdlib core without optional STEM .venv")
+    p_doc.add_argument("--compat", action="store_true", help="Show cross-OS 14-coding-agent compatibility matrix")
     p_doc.add_argument("--fix", action="store_true", help="Non-destructively initialize missing ledgers, repair .claude/skills, and sync graph-data.js before checking")
     p_doc.add_argument("--json", action="store_true", help="Emit JSON output")
     p_doc.set_defaults(func=_cmd_doctor)
@@ -2274,6 +2282,34 @@ def build_parser() -> argparse.ArgumentParser:
     p_pdiff.add_argument("--kg-dir", dest="kg_dir", default=None, help="Explicit knowledge-graph directory override")
     p_pdiff.add_argument("--json", action="store_true", help="Emit JSON output")
     p_pdiff.set_defaults(func=_cmd_proof_diff)
+
+    # --- v3.2 First-Class Verbs ---
+
+    p_rdy = sub.add_parser("readiness", help="Exam-Day Readiness Forecaster, <=72h Pre-Exam Taper Mode & Pre-Mortem Shield")
+    p_rdy.add_argument("--exam-date", dest="exam_date", default=None, help="Target exam date (YYYY-MM-DD)")
+    p_rdy.add_argument("--subject", default=None, help="Optional subject filter")
+    p_rdy.add_argument("--max-marks", dest="max_marks", type=float, default=None, help="Optional exam maximum marks")
+    p_rdy.add_argument("--premortem-only", dest="premortem_only", action="store_true", help="Emit only the evidence-backed Pre-Mortem Shield bullets")
+    p_rdy.add_argument("--workspace", default=None, help="Syntopik workspace directory")
+    p_rdy.add_argument("--json", action="store_true", help="Emit JSON output")
+    p_rdy.set_defaults(func=_cmd_readiness)
+
+    p_ilv = sub.add_parser("interleave", help="Blind-Chapter Interleaved Drill Generator (Rohrer interleaving + Newman Tier-1)")
+    p_ilv.add_argument("action", nargs="?", choices=["build", "check", "complete", "stats", "export-cbt"], default="build")
+    p_ilv.add_argument("--n", type=int, default=6, help="Number of interleaved problems (default: 6)")
+    p_ilv.add_argument("--subjects", nargs="+", action="append", default=None, help="Subject filter(s) (space or comma separated)")
+    p_ilv.add_argument("--mode", default="principle_first", help="Interleave mode (default: principle_first)")
+    p_ilv.add_argument("--seed", type=int, default=None, help="Deterministic RNG seed")
+    p_ilv.add_argument("--session-id", dest="session_id", default=None, help="Interleave session ID (for check/complete)")
+    p_ilv.add_argument("--item-id", dest="item_id", default=None, help="Item ID within session (for check)")
+    p_ilv.add_argument("--principle", default=None, help="Selected governing principle (for check)")
+    p_ilv.add_argument("--confidence", type=float, default=0.5, help="Confidence 0..1 (for check, default: 0.5)")
+    p_ilv.add_argument("--duration-ms", dest="duration_ms", type=int, default=None, help="Optional response duration in ms (for check)")
+    p_ilv.add_argument("--results-json", dest="results_json", default=None, help="Optional JSON or @path of step results (for complete)")
+    p_ilv.add_argument("--out", default=None, help="Optional output file path (for export-cbt)")
+    p_ilv.add_argument("--workspace", default=None, help="Syntopik workspace directory")
+    p_ilv.add_argument("--json", action="store_true", help="Emit JSON output")
+    p_ilv.set_defaults(func=_cmd_interleave)
 
     return parser
 

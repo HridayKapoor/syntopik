@@ -820,7 +820,7 @@
     <button id="layoutToggleBtn" title="Switch between Layered DAG and Subject Clusters">Layout: Layered DAG</button>
     <button id="fitBtn" title="Fit entire graph to viewport">Fit View</button>
     <span class="spacer"></span>
-    <span class="pill live-pill" id="liveStatusPill" title="Studio connection mode"><span class="live-dot"></span>Offline</span>
+    <button type="button" class="pill live-pill" id="liveStatusPill" title="Studio connection mode &amp; Loopback POST /mcp" style="cursor:pointer;font-family:inherit;"><span class="live-dot"></span>Offline</button>
     <span class="pill" id="countPill">0 nodes · 0 edges</span>
     <span class="pill accent" id="bktAvgPill" title="Average Bayesian Knowledge Tracing mastery">BKT —</span>
     <button id="themeToggleBtn" title="Toggle Dark / Light theme">☀ Light</button>
@@ -871,8 +871,8 @@
     <div class="empty" id="emptyState" hidden>
       <div class="empty-card">
         <h2 id="emptyTitle">Your Knowledge Graph is Ready</h2>
-        <p id="emptyDesc">Start any topic, course, paper, or chapter in <strong>Syntopik</strong> (Antigravity 2.0, Claude Code, or Codex / T3 Code). Every mastered proposition, BKT mastery probability, FSRS-6 review schedule, and reasoning chain is persisted into <code>knowledge-graph/propositions.jsonl</code> and <code>chains.jsonl</code>.</p>
-        <p>Run <code>node scripts/sync-graph.mjs --open</code> anytime to open the Syntopik Hub, or <code>--graph</code> for this viewer.</p>
+        <p id="emptyDesc">Start any topic, course, paper, or chapter in <strong>Syntopik</strong> across any of its 14 supported coding agents (Antigravity, Claude Code, Codex, Cursor, Windsurf, Copilot, Gemini CLI, OpenCode, Cline, Roo, Zed, Aider, Continue, Kiro). Every mastered proposition, BKT mastery probability, FSRS-6 review schedule, and reasoning chain is persisted into <code>knowledge-graph/propositions.jsonl</code> and <code>chains.jsonl</code>.</p>
+        <p>Run <code>syntopik serve --open</code> for Live Studio (or <code>syntopik sync</code> to refresh offline bundles).</p>
       </div>
     </div>
   </div>
@@ -1274,6 +1274,9 @@
           version: String(caps.version || ""),
           workspaceName: String(caps.workspaceName || ""),
           lan: caps.lan || null,
+          mcpHttpEndpoint: String(caps.mcpHttpEndpoint || `${window.location.origin}/mcp`),
+          mcpHttpEnabled: caps.mcpHttpEnabled !== undefined ? Boolean(caps.mcpHttpEnabled) : !caps.lan,
+          agentsCompat: caps.agentsCompat || null,
         };
         updateLiveStatusUI();
         return true;
@@ -1281,7 +1284,7 @@
     } catch {
       // Quietly remain in read-only mode with zero console noise.
     }
-    liveCaps = { live: false, token: "", version: "", workspaceName: "", lan: null };
+    liveCaps = { live: false, token: "", version: "", workspaceName: "", lan: null, mcpHttpEndpoint: "http://127.0.0.1:4173/mcp", mcpHttpEnabled: false, agentsCompat: null };
     updateLiveStatusUI();
     return false;
   }
@@ -1911,7 +1914,7 @@
       document.getElementById("emptyDesc").textContent = "Clear your subject, chapter, status, or search filter to reveal the rest of your Knowledge Graph.";
     } else if (data.propositions.length === 0) {
       document.getElementById("emptyTitle").textContent = "Your Knowledge Graph is Ready";
-      document.getElementById("emptyDesc").innerHTML = "Start any topic, course, paper, or chapter in <strong>Syntopik</strong> (Antigravity 2.0, Claude Code, or Codex / T3 Code). Every mastered proposition, BKT probability, FSRS-6 schedule, and reasoning edge is saved into <code>knowledge-graph/propositions.jsonl</code> and <code>chains.jsonl</code>.";
+      document.getElementById("emptyDesc").innerHTML = "Start any topic, course, paper, or chapter in <strong>Syntopik</strong> across any of its 14 supported coding agents (Antigravity, Claude Code, Codex, Cursor, Windsurf, Copilot, Gemini CLI, OpenCode, Cline, Roo, Zed, Aider, Continue, Kiro). Every mastered proposition, BKT probability, FSRS-6 schedule, and reasoning edge is saved into <code>knowledge-graph/propositions.jsonl</code> and <code>chains.jsonl</code>.";
     }
 
     const { pos, clusters, bounds } =
@@ -2647,7 +2650,7 @@
       render(false);
     });
     document.getElementById("copyNodePromptBtn").addEventListener("click", () => {
-      const prompt = `Drill me on ${n.id} ("${n.title || n.id}") without spoilers using fresh scenarios, verify my reasoning, and update my FSRS + BKT rating with scripts/srs_engine.py.`;
+      const prompt = `Drill me on ${n.id} ("${n.title || n.id}") without spoilers using fresh scenarios, verify my reasoning, and update my FSRS + BKT rating with syntopik review.`;
       copyText(prompt, "Copied concept drill prompt ✓");
     });
     const causalProbeBtn = document.getElementById("runCausalProbeBtn");
@@ -2835,6 +2838,16 @@
   document.getElementById("themeToggleBtn").addEventListener("click", () => {
     const cur = document.documentElement.getAttribute("data-theme");
     applyTheme(cur === "dark" ? "light" : "dark");
+  });
+  document.getElementById("liveStatusPill")?.addEventListener("click", () => {
+    if (liveCaps.live && liveCaps.mcpHttpEnabled && liveCaps.mcpHttpEndpoint) {
+      const n = Number(liveCaps.agentsCompat?.totalHarnesses || 14);
+      copyText(liveCaps.mcpHttpEndpoint, `Copied Loopback POST /mcp (${n} agents supported) ✓`);
+    } else if (liveCaps.live && liveCaps.lan) {
+      showToast("Live Studio (--lan mode · POST /mcp disabled for security)");
+    } else {
+      copyText("syntopik serve --open", "Offline — copied `syntopik serve --open` ✓");
+    }
   });
 
   document.getElementById("subjectFilter").addEventListener("change", () => {

@@ -4,6 +4,45 @@ All notable changes to **Syntopik** are documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.2.0] - 2026-11-27
+
+Adds **14-coding-agent universal compatibility**, a **zero-Node loopback Streamable-HTTP MCP server (`POST /mcp`)**, **4 pure-stdlib student ecosystem importers** (Anki `.apkg`, Quizlet/Anki CSV/TSV, zero-exec Jupyter `.ipynb`, Notion `.zip`/Obsidian MD folders), a **6-type EV-calibrated CBT exam engine** with sealed Why-Wrong Distractor Autopsies, an **Exam-Day Readiness Forecaster with `<= 72h` Pre-Exam Taper Mode & non-fabricated Pre-Mortem Shield**, **Rohrer Blind-Chapter Interleaved Drills**, and a calm **Day-1 Zero-State 4-Door Launchpad** — expanding to **`27` pure-stdlib `syntopik/` modules**, **`28` unified CLI verbs**, and **`23` MCP tools** (`15 synt_* + 8 mlh_*`) while tightening `AGENTS.md + GEMINI.md` strictly **`<= 7,000 B`** and keeping exact `17` skills.
+
+### Added
+
+- **14-Coding-Agent Universal Compatibility & Ephemeral-Cache Guards (`syntopik/agents_compat.py`, `syntopik/cli.py`, `bin/syntopik.mjs`, `scripts/setup_harness.py`, `scripts/study_doctor.py`)**:
+  - Expanded cross-OS detection, `syntopik attach`, `syntopik connect`, and `syntopik doctor --compat` from 8 to all **14 coding-agent harnesses** (`antigravity`, `claude`, `codex`, `cursor`, `windsurf`, `copilot`, `gemini`, `opencode`, plus 6 new: `cline`, `roo`, `zed`, `aider`, `continue`, `kiro`) with `--transport stdio|http`, ephemeral install-root guards (`_npx`, `uv/archive-v0`, `pipx`, `/tmp`), broken-symlink `lstatSync` hardening in Node, and host-safe config guards (`.clinerules` regular-file preservation, Zed 9-file first-match guard + JSONC `context_servers`, Aider non-destructive YAML `read:` merge, Windsurf `serverUrl`, Copilot `servers`, Gemini `httpUrl`, OpenCode `mcp`, Cline `streamableHttp`, Roo `streamable-http`, Continue `requestOptions.headers`, Kiro steering).
+- **Zero-Node Loopback Streamable-HTTP MCP (`syntopik/mcp_http.py`, `syntopik/server.py`)**:
+  - Pure-Python JSON-RPC 2.0 Streamable-HTTP MCP dispatcher (`MCP_PROTOCOL_VERSION = "2025-03-26"`, negotiating `2024-11-05`..`2025-11-25`) mounted on `POST /mcp` (`127.0.0.1` loopback only, constant-time `X-Syntopik-Token` / `Authorization: Bearer`, RFC-3986 Host/Origin DNS-rebinding guard, strict non-finite JSON rejection, hard `403` kill-switch under `--lan`).
+  - Exposes all **7 ambient headless tools** with zero Node.js dependency and defense-in-depth zero-leak sanitizers: `synt_next_move`, `synt_get_frontier`, `synt_capture_concept`, `synt_log_review`, `synt_whiteboard_step`, `synt_readiness`, and `synt_interleave`.
+- **4 Pure-Stdlib Student Ecosystem Importers (`syntopik/importers.py`, `syntopik/ingest.py`)**:
+  - Enforces streaming zip-slip/zip-bomb/symlink guards, safe HTML/MathJax sanitization, and **zero fake mastery** (every imported proposition starts `status: "planned"` with zero FSRS/revlog overwrite):
+    1. **Anki `.apkg`** (`--kind anki`): read-only SQLite, Basic + Cloze (`kind: "cloze"`), modern + classic schemas, built-in stub filter, crisp guidance on zstd `collection.anki21b`.
+    2. **Quizlet / Anki CSV & TSV** (`--kind cards`): UTF-8 BOM-safe, `#separator:`/`#deck:` directives, header aliases + headerless fallback.
+    3. **Jupyter Notebooks `.ipynb`** (`--kind notebook`): **zero execution** (`json.loads` + `ast.parse` + `ast.literal_eval` ONLY), emits `notebook.md`, planned propositions, and `code-tests.json` compatible with `code_verify.py test-cases`.
+    4. **Notion `.zip` & Obsidian/Markdown Folders** (`--kind notes_batch`): strips 32-hex & 36-char Notion UUID suffixes across directories, files, and URL-encoded internal links; extracts YAML frontmatter, `:::cue`, `{{cN::...}}`, and `Q:: / A::` cues.
+- **6-Type CBT Exam Engine, EV-Skip Calibration & Why-Wrong Distractor Autopsy (`scripts/exam_runner.py`, `demos/exam-cbt-template.html`)**:
+  - Backwards-compatible `schemaVersion: 1` extended to all **6 question types**: `single_correct`, `multi_correct` (`markingProfile`: `jee_adv_msq`, `gate_msq`, `strict_all_or_nothing`, `proportional`), `numerical`, `matrix_match` (`grid`/`code_options`, `rowResults`), `assertion_reason` (4opt/5opt + deterministic `arErrorKind`), and `vignette_stem` (top-level `vignettes[]` + inline `subQuestions[]` + `vignetteBreakdown`).
+  - Pre-submit bundle sanitizer (`strip_presubmit_bundle`) seals `whyWrong`/`trapCategory`/`confusedWith`/`distractorReasons` until submission (including offline `file://`); `grade_attempt()` computes exact **EV-Skip Calibration** ($p_{\text{be}} = (P+U)/(B+P)$, `negEvGamblesCount`, `marksLostToNegEv`, `underconfidentSkipsCount`, `marksLeftOnTable`, `evDisciplineScore`), logs option-level distractor traps, and wires response confidence into `srs_engine` & `learner_model`.
+- **Exam-Day Readiness Forecaster, `<= 72h` Taper Mode & Non-Fabricated Pre-Mortem Shield (`syntopik/readiness.py`, `syntopik/brainstem.py`)**:
+  - 5-pillar deterministic readiness index (`0..100`) fusing FSRS-6 $R(t_{\text{exam}}, S)$, 4-tier Evidence, syllabus coverage, Blunder Fork clearance, and timed EV discipline into a Bayesian-shrunk score band + top-3 ROI levers (`roiMarksPerHour`).
+  - O(1) `detect_taper_mode()` auto-activates `taper_72h`/`final_24h` (`allowNewConcepts: false`, protected sleep floor) in `brainstem.py` (`pre_exam_taper`); `build_premortem_shield()` builds max 3 Gollwitzer If-Then bullets exclusively from real logs (returns `bullets: []`, `sourceBasis: "cold_start_minimal"` when logs are empty).
+- **Blind-Chapter Interleaved Drill Generator (`syntopik/interleave.py`, `syntopik/brainstem.py`)**:
+  - Rohrer multi-chapter interleaving (`interleave-sessions.jsonl`) guaranteeing zero blocked runs (`chapter[i] != chapter[i-1]`), stripping chapter/lecture cues, sealing canonical chapters/principles/answers server-side, grading Step-1 governing-principle selection before Step-2 reveal, tracking cross-chapter surface confusion matrices, exporting blind CBT specs (`blindChapterLabels: true`), and routing via `brainstem.py` (`blind_interleave`).
+- **2 New First-Class CLI Verbs & 23-Tool MCP App v3.2 (`syntopik/cli.py`, `mcp-app/mlh-studio/`)**:
+  - Added `syntopik readiness` and `syntopik interleave [build|check|complete|stats|export-cbt]` (**28 unified CLI verbs** total).
+  - Bumped `syntopik-studio` MCP App to `3.2.0` (**23 tools**: `15 synt_* + 8 mlh_*`), enriching `synt_get_frontier` with lightweight `readinessSummary` & `taperActive` and adding `synt_readiness` and zero-leak `synt_interleave`.
+- **Day-1 Zero-State 4-Door Launchpad & v3.2 Studio UI (`dashboard.html`, `knowledge-graph/viewer.html`)**:
+  - Single-screen 4-door empty-workspace Launchpad, Exam Readiness + Pre-Mortem Shield card in `Exams`, Blind-Chapter Interleave mode toggle in `Gym` Station 4, upgraded universal drop/import picker in `Sources`, and clickable 14-agent + loopback `POST /mcp` modal.
+
+### Changed & Verified
+- **Tightened Context Budget & Skill Hygiene (`AGENTS.md`, `GEMINI.md`, `CLAUDE.md`, `BOOTSTRAP.md`, 5 `SKILL.md` files)**:
+  - Trimmed `AGENTS.md + GEMINI.md` strictly **`<= 7,000 B`** (`@AGENTS.md` preserved on line 1 of BOTH `CLAUDE.md` and `GEMINI.md`); updated `BOOTSTRAP.md` to all 14 coding agents + loopback `POST /mcp`; updated `exam-simulator`, `practice-drill`, `chapter-autopilot`, `ingest-chapter`, and `topic-onboarding` while preserving exact `17` skills (`3,311 B <= 3,400 B` YAML descriptions, `<= 207` chars each, zero `<...>` or script names).
+- **Doctor & 3-OS CI (`scripts/study_doctor.py`, `.github/workflows/ci.yml`)**:
+  - Verified all `27` pure-stdlib `syntopik/` modules (`49/49` full / `16/16` `--core-only` doctor), bumped CI wheel/npm version gates to `3.2.0`, and expanded the bare-stdlib CI suite to **26 targets** (`TestV32UniversalCompatImportersAndExamReadiness`).
+
+---
+
 ## [3.1.0] - 2026-11-27
 
 Adds all four flagship `v3.1` cognitive & synchronization breakthroughs on pure Python 3.12+ stdlib (`22` `syntopik/` modules, `10` Rosetta archetypes, `26` CLI verbs, zero new model-visible MCP tools, exact `17` skills, `AGENTS.md + GEMINI.md = 7,467 B <= 7,500 B`): Structural Isomorphism Rosetta Engine + `0.25` Cross-Domain FIRe credit, Offline-First CRDT Multi-Device Delta Sync, Longitudinal Learner Telemetry Replay Calibration, and Structured Proof-Graph Handwriting Diff.

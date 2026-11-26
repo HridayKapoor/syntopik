@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "syntopik"
-version = "3.1.0"
+version = "3.2.0"
 description = "Local-first, harness-native AI Deep-Mastery OS with FSRS-6 + BKT + True FIRe knowledge hypergraph, deterministic STEM/CS verifiers, calm tutoring, and a 2-way local Studio."
 readme = "README.md"
 license = { text = "MIT" }

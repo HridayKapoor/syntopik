@@ -749,3 +749,159 @@ export function validateProfileUpdateArgs(rawArgs) {
   if (errors.length > 0) return { ok: false, error: errors.join(" ") };
   return { ok: true, value: { op, overrides, calibration } };
 }
+
+export function validateReadinessArgs(rawArgs) {
+  const args = healRecord(rawArgs);
+  const errors = [];
+
+  let examDate;
+  if (args.examDate !== undefined && args.examDate !== null && args.examDate !== "") {
+    if (typeof args.examDate !== "string") {
+      errors.push("examDate must be a string (YYYY-MM-DD).");
+    } else {
+      examDate = args.examDate.trim() || undefined;
+    }
+  }
+
+  let subject;
+  if (args.subject !== undefined && args.subject !== null && args.subject !== "") {
+    if (typeof args.subject !== "string") {
+      errors.push("subject must be a string.");
+    } else {
+      subject = args.subject.trim() || undefined;
+    }
+  }
+
+  let chapter;
+  if (args.chapter !== undefined && args.chapter !== null && args.chapter !== "") {
+    if (typeof args.chapter !== "string") {
+      errors.push("chapter must be a string.");
+    } else {
+      chapter = args.chapter.trim() || undefined;
+    }
+  }
+
+  let maxMarks;
+  if (args.maxMarks !== undefined && args.maxMarks !== null && args.maxMarks !== "") {
+    const n = Number(args.maxMarks);
+    if (typeof args.maxMarks === "boolean" || !Number.isFinite(n) || n <= 0) {
+      errors.push("maxMarks must be a finite number > 0.");
+    } else {
+      maxMarks = n;
+    }
+  }
+
+  let premortemOnly = false;
+  if (args.premortemOnly !== undefined && args.premortemOnly !== null) {
+    if (typeof args.premortemOnly !== "boolean") {
+      errors.push("premortemOnly must be a boolean.");
+    } else {
+      premortemOnly = args.premortemOnly;
+    }
+  }
+
+  if (errors.length > 0) return { ok: false, error: errors.join(" ") };
+  return { ok: true, value: { examDate, subject, chapter, maxMarks, premortemOnly } };
+}
+
+const VALID_INTERLEAVE_ACTIONS = new Set(["build", "check", "stats"]);
+
+export function validateInterleaveArgs(rawArgs) {
+  const args = healRecord(rawArgs);
+  const errors = [];
+
+  const action =
+    typeof args.action === "string" && args.action.trim()
+      ? args.action.trim().toLowerCase()
+      : "build";
+  if (!VALID_INTERLEAVE_ACTIONS.has(action)) {
+    errors.push(`action must be one of build, check, or stats (got ${JSON.stringify(args.action)}).`);
+  }
+
+  if (action === "stats") {
+    if (errors.length > 0) return { ok: false, error: errors.join(" ") };
+    return { ok: true, value: { action } };
+  }
+
+  if (action === "check") {
+    const sessionId = typeof args.sessionId === "string" ? args.sessionId.trim() : "";
+    const itemId = typeof args.itemId === "string" ? args.itemId.trim() : "";
+    const selectedPrinciple =
+      typeof args.selectedPrinciple === "string" ? args.selectedPrinciple.trim() : "";
+    if (!sessionId) errors.push("sessionId must be a non-empty string when action is 'check'.");
+    if (!itemId) errors.push("itemId must be a non-empty string when action is 'check'.");
+    if (!selectedPrinciple) {
+      errors.push("selectedPrinciple must be a non-empty string when action is 'check'.");
+    }
+
+    let confidence = 0.5;
+    if (args.confidence !== undefined && args.confidence !== null && args.confidence !== "") {
+      const c = Number(args.confidence);
+      if (typeof args.confidence === "boolean" || !Number.isFinite(c)) {
+        errors.push("confidence must be a finite number.");
+      } else {
+        confidence = c;
+      }
+    }
+
+    let durationMs;
+    if (args.durationMs !== undefined && args.durationMs !== null && args.durationMs !== "") {
+      const d = Number(args.durationMs);
+      if (typeof args.durationMs === "boolean" || !Number.isFinite(d) || d < 0) {
+        errors.push("durationMs must be a finite number >= 0.");
+      } else {
+        durationMs = Math.round(d);
+      }
+    }
+
+    if (errors.length > 0) return { ok: false, error: errors.join(" ") };
+    return {
+      ok: true,
+      value: { action, sessionId, itemId, selectedPrinciple, confidence, durationMs },
+    };
+  }
+
+  // action === "build"
+  const rawN = args.n !== undefined && args.n !== null ? args.n : args.count;
+  let n = 6;
+  if (rawN !== undefined && rawN !== null && rawN !== "") {
+    const parsedN = Number(rawN);
+    if (typeof rawN === "boolean" || !Number.isFinite(parsedN) || !Number.isInteger(parsedN)) {
+      errors.push("n (or count) must be an integer.");
+    } else {
+      n = Math.max(1, Math.min(20, parsedN));
+    }
+  }
+
+  let subjects;
+  if (args.subjects !== undefined && args.subjects !== null) {
+    if (!Array.isArray(args.subjects) || !args.subjects.every((x) => typeof x === "string")) {
+      errors.push("subjects must be an array of strings.");
+    } else {
+      const cleaned = args.subjects.map((x) => x.trim()).filter(Boolean);
+      subjects = cleaned.length > 0 ? cleaned : undefined;
+    }
+  } else if (args.subject !== undefined && args.subject !== null && args.subject !== "") {
+    if (typeof args.subject !== "string") {
+      errors.push("subject must be a string.");
+    } else if (args.subject.trim()) {
+      subjects = [args.subject.trim()];
+    }
+  }
+
+  const mode =
+    typeof args.mode === "string" && args.mode.trim() ? args.mode.trim() : "principle_first";
+
+  let seed;
+  if (args.seed !== undefined && args.seed !== null && args.seed !== "") {
+    const parsedSeed = Number(args.seed);
+    if (typeof args.seed === "boolean" || !Number.isFinite(parsedSeed) || !Number.isInteger(parsedSeed)) {
+      errors.push("seed must be an integer.");
+    } else {
+      seed = parsedSeed;
+    }
+  }
+
+  if (errors.length > 0) return { ok: false, error: errors.join(" ") };
+  return { ok: true, value: { action, n, subjects, mode, seed } };
+}

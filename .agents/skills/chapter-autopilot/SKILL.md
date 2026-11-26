@@ -1,9 +1,9 @@
 ---
 name: chapter-autopilot
 description: >-
-  Hands-free orchestrator using the next-move brainstem, ICS auto-pacer, 48h
-  exam triage, and post-exam sunset pruning. Triggers on "Start", "Continue",
-  "What's next?", "I fell behind", or "5-min review".
+  Hands-free orchestrator using the next-move brainstem, ICS auto-pacer, 72h
+  taper and exam readiness, 48h triage, and sunset pruning. Triggers on
+  "Start", "Continue", "Am I ready?", or "5-min review".
 ---
 
 # Chapter Autopilot — Universal Hands-Free Foundations → Mastery Orchestrator
@@ -35,13 +35,15 @@ The learner's only job is thinking about the subject — CS, ML, Systems, Math, 
 | *"5-minute review"* / *"I have 5 minutes"* | **Micro-Review Sprint**: `syntopik run daily_plan --micro 5 --json` (`3–5` highest-ROI cues: bottleneck + trap + occlusion/audio) |
 | *"Plan my semester"* / *"Export calendar"* / *"Auto-pace"* | **Multi-Course Auto-Pacer**: `syntopik pace [--rebalance] [--ics <file.ics>] --json` (buffer-protected schedule + RFC-5545 `.ics` calendar export) |
 | *"Exam is over"* / *"Sunset `<chapter>`"* | **Semester Sunset Pruning**: `syntopik sunset <slug> [--apply] --json` (snapshots zero-PII pack, keeps core axioms at $R=0.80$, archives low-leverage leaves) |
-| *"Exam in 48 hours"* / crunch `< 72h` | **48h Exam Triage**: `syntopik triage --exam-in 48h --sleep-hours 7 [--crib-sheet] --json` (Pareto `salvage_70pct` / `protect_20pct` / `explicitly_cut` + sleep guard) |
+| *"Exam in 48 hours"* / crunch `< 72h` | **48h Exam Triage & `<= 72h` Taper**: `syntopik readiness --json` (auto-activates `taper_72h` / `final_24h` with `allowNewConcepts: false` & sleep floor) + `syntopik triage --exam-in 48h --sleep-hours 7 [--crib-sheet] --json` |
+| *"Am I ready?"* / *"Score forecast"* / *"Pre-Mortem Shield"* | **Exam-Day Readiness & Pre-Mortem**: MCP **`synt_readiness`** or `syntopik readiness [--exam-date YYYY-MM-DD] [--max-marks N] [--premortem-only] --json` (`exam-simulator`) |
+| *"Mix chapters"* / *"Blind interleave"* | **Blind-Chapter Interleave**: MCP **`synt_interleave`** or `syntopik interleave build --n 6 --json` (`practice-drill`) |
 | *"Blunder Fork"* / *"Arena"* / *"4-Min Blitz"* / *"Blackout"* / *"Axiom-Cut"* | Route to **Mastery Gym** (`practice-drill`: `fork_replay`, `falsify_arena`, `decision_blitz`, `derivation_forge`) |
 | *"Teach-back"* / *"Viva defense"* | **Protégé Capstone** (`teach-chapter`) or **5-Turn Adversarial Viva Defense** (`exam-simulator` / `viva_chamber`) |
 | *"Work mentor mode"* / *"Debrief my git diff"* | **Anti-Vibe-Coding Work Mentor**: `syntopik mode mentor` / `syntopik debrief --ref HEAD~1..HEAD --json` (crystallizes real diff bugs into Forks & KG nodes) |
 | Returning after `>= 4` days / *"Where was I?"* | **Cold-Start Re-Entry Brief**: `syntopik review --resume` (suppresses overdue guilt; 90s 3-bullet reload + 1 anchor cue `0.60 <= R <= 0.85`) |
 | *"Low energy"* / *"Deep focus"* | **Cognitive Energy Mode**: `syntopik next --energy low\|normal\|deep --json` / `daily_plan --energy ...` |
-| YouTube link / arXiv ID / GitHub repo / URL | `syntopik drop <target>` or `syntopik import <target> --register-tracker --json` (`topic-onboarding` / `ingest-chapter`) |
+| Anki `.apkg`, `.ipynb`, CSV/TSV, Notion `.zip`, YouTube, arXiv, GitHub, URL | `syntopik drop <target>` or `syntopik import <target> --register-tracker --json` (`topic-onboarding` / `ingest-chapter`) |
 
 ---
 
@@ -72,7 +74,7 @@ Silently query the **Pedagogical Brainstem** first (prefers MCP **`synt_next_mov
 syntopik next --json
 syntopik run chapter_tracker next --include-warmup --json
 ```
-Execute the brainstem's `recommendedMode` directly (`whiteboard_pin_answer` → `onboarding_calibration` → `cold_start_reentry` → `calm_wrapup` → `bridge_worked_example` → `causal_probe` → `fork_replay` → `fire_review` → `transfer_verify` → `teach_frontier`) while obeying `teachingPolicy` constraints (`maxProseWords`, `scaffoldingMode`, `affectIntervention`). *(If the learner gives a time budget like "I have 60 minutes", also run `syntopik run daily_plan --minutes <N> --json`; for multi-course calendar scheduling run `syntopik pace --ics <file.ics>`.)*
+Execute the brainstem's `recommendedMode` directly (`whiteboard_pin_answer` → `onboarding_calibration` → `cold_start_reentry` → `calm_wrapup` → `bridge_worked_example` → `causal_probe` → `fork_replay` → `fire_review` → `transfer_verify` → `pre_exam_taper` → `blind_interleave` → `teach_frontier`) while obeying `teachingPolicy` constraints (`maxProseWords`, `scaffoldingMode`, `affectIntervention`). When `pre_exam_taper` is active (`<= 72h` to exam), enforce `allowNewConcepts: false` (consolidate `0.55 <= R <= 0.85`, clear due Forks, review Pre-Mortem Shield, protect sleep floor). *(If the learner gives a time budget like "I have 60 minutes", also run `syntopik run daily_plan --minutes <N> --json`; for multi-course calendar scheduling run `syntopik pace --ics <file.ics>`.)*
 
 1. **FIRe-Compressed Spaced Warmup (`warmupItems`, max `3`)**: weave `<= 3` high-leverage cues from `srs_engine.py due --compress` (composite reviews that knock out due prerequisites via FIRe; note quiet 1-line FIRe summary when prerequisites refresh!). Also surface 1–2 due extracts from `reading-queue.jsonl` when active.
 2. **`teach_topic` (Bloom Mastery Gate)**:

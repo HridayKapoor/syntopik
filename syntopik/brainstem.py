@@ -25,9 +25,11 @@ from syntopik.evidence import compute_evidence_summary
 from syntopik.forks import list_due_forks
 from syntopik.fsrs_core import card_retrievability, compress_due_queue, load_fsrs_parameters
 from syntopik.ingest import detect_source_type, ingest_auto
+from syntopik.interleave import get_interleave_stats
 from syntopik.isomorphism import build_bijection_opener
 from syntopik.learner_model import compile_teaching_policy, load_profile
 from syntopik.paths import resolve_chapters_dir, resolve_kg_dir, resolve_workspace
+from syntopik.readiness import detect_taper_mode
 from syntopik.root_cause import find_blast_radius, select_diagnostic_probe
 from syntopik.schemas import LEVEL_RANK, normalize_level_soft, now_iso, slugify, today_iso
 from syntopik.storage import load_json, load_jsonl, save_json_atomic
@@ -441,8 +443,17 @@ def plan_next_move(
     anti_alerts = ev_summary.get("antiInflationAlerts") or []
     blast_list = find_blast_radius(kg_dir, limit=3)
 
+    # Fast O(1) Pre-Exam Taper Mode check (<= 72h)
+    try:
+        taper = detect_taper_mode(kg_dir, now=now_dt)
+    except Exception:
+        taper = {"active": False, "hoursRemaining": None, "phase": "none"}
+
     # Assemble compact global alerts (<= 3 short strings)
     alerts: list[str] = []
+    if taper.get("active"):
+        hrs_rem = int(round(float(taper.get("hoursRemaining") or 0.0)))
+        alerts.append(f"Exam in {hrs_rem}h: taper (0 new)")
     if days_absent >= 4:
         alerts.append(f"{days_absent}d away: calm re-entry")
     if blast_list:
@@ -553,28 +564,101 @@ def plan_next_move(
         skill_hint = "practice-drill"
         wb_hint = f"Open {suggested} transfer challenge for '{target_id}'."
     else:
-        mode = "teach_frontier"
-        if next_topic is not None:
-            t_props = next_topic.get("propIds") or []
-            target_id = str(t_props[0]) if t_props else str(next_topic.get("id") or "")
-            rationale = (
-                f"Teach frontier topic '{_clip(str(next_topic.get('title') or target_id), 44)}' "
-                f"via {compact_pol['scaffoldingMode']}."
+        # Check v3.2 Pre-Exam Taper Mode (<=72h) and Blind-Chapter Interleave before teach_frontier
+        active_props = [
+            p for p in props
+            if isinstance(p, dict) and str(p.get("id") or "").strip() and not bool(p.get("archived"))
+        ]
+        chapters_with_props = {
+            str(p.get("chapter") or "").strip().lower()
+            for p in active_props
+            if str(p.get("chapter") or "").strip()
+        }
+        planned_node = next((p for p in active_props if str(p.get("status") or "").lower() == "planned"), None)
+
+        dna = profile.get("failureDna") if isinstance(profile.get("failureDna"), dict) else {}
+        nea_window = int(dna.get("windowCount") or 0)
+        nea_cm = float(((dna.get("tierShares") or {}).get("comprehension_model")) or 0.0)
+
+        should_blind_interleave = False
+        interleave_reason = ""
+        if (not taper.get("active")) and len(chapters_with_props) >= 2:
+            explicit_ilv = (event == "interleave_due") or (
+                isinstance(event, dict) and bool(event.get("interleaveDue"))
             )
-            exact_cmd = f"syntopik run chapter_tracker next --slug {active_slug}"
-            skill_hint = "teach-chapter"
-            wb_hint = f"Push derivation_step for '{target_id}' ({compact_pol['scaffoldingMode']})."
+            try:
+                ilv_stats = get_interleave_stats(ws, kg_dir=kg_dir)
+                days_since_ilv = ilv_stats.get("daysSinceLastInterleave")
+            except Exception:
+                days_since_ilv = None
+
+            if explicit_ilv:
+                should_blind_interleave = True
+                interleave_reason = f"Blind interleave requested across {len(chapters_with_props)} chapters."
+            elif nea_window >= 1 and nea_cm >= 0.45:
+                should_blind_interleave = True
+                interleave_reason = (
+                    f"NEA comprehension_model={int(round(nea_cm * 100))}% across "
+                    f"{len(chapters_with_props)} chapters; run blind-chapter principle drill."
+                )
+            elif (next_topic is None and planned_node is None) and (days_since_ilv is None or days_since_ilv >= 3):
+                should_blind_interleave = True
+                interleave_reason = (
+                    f"Frontier clear across {len(chapters_with_props)} chapters; run blind-chapter interleave."
+                )
+            elif (days_since_ilv is not None and days_since_ilv >= 3) or (
+                days_since_ilv is None and total_events >= 6
+            ):
+                solid_chapters = {
+                    str(p.get("chapter") or "").strip().lower()
+                    for p in active_props
+                    if str(p.get("status") or "").lower() == "solid" and str(p.get("chapter") or "").strip()
+                }
+                if len(solid_chapters) >= 2:
+                    should_blind_interleave = True
+                    interleave_reason = (
+                        f"Blind-chapter interleave due across {len(solid_chapters)} solid chapters."
+                    )
+
+        if taper.get("active"):
+            hrs_rem = int(round(float(taper.get("hoursRemaining") or 0.0)))
+            mode = "pre_exam_taper"
+            target_id = None
+            rationale = (
+                f"Exam in {hrs_rem}h ({taper.get('phase')}); consolidate solid/forks & Pre-Mortem Shield (0 new concepts)."
+            )
+            exact_cmd = "syntopik readiness --json"
+            skill_hint = "chapter-autopilot"
+            wb_hint = "Display Pre-Mortem Shield & light consolidation only; zero new topics."
+        elif should_blind_interleave:
+            mode = "blind_interleave"
+            target_id = None
+            rationale = interleave_reason
+            exact_cmd = "syntopik interleave build --n 6 --json"
+            skill_hint = "practice-drill"
+            wb_hint = "Run 2-stage blind principle-first drill (strip chapter cues)."
         else:
-            planned = next((p for p in props if str(p.get("status") or "").lower() == "planned"), None)
-            target_id = str(planned["id"]) if planned else None
-            rationale = (
-                f"Teach planned node '{target_id}' via {compact_pol['scaffoldingMode']}."
-                if target_id
-                else "Workspace clear; drop sources or start a new chapter."
-            )
-            exact_cmd = "syntopik drop <source>" if target_id is None else f"syntopik run srs_engine list --json"
-            skill_hint = "topic-onboarding" if target_id is None else "teach-chapter"
-            wb_hint = "Ready for new topic scope or derivation frame."
+            mode = "teach_frontier"
+            if next_topic is not None:
+                t_props = next_topic.get("propIds") or []
+                target_id = str(t_props[0]) if t_props else str(next_topic.get("id") or "")
+                rationale = (
+                    f"Teach frontier topic '{_clip(str(next_topic.get('title') or target_id), 44)}' "
+                    f"via {compact_pol['scaffoldingMode']}."
+                )
+                exact_cmd = f"syntopik run chapter_tracker next --slug {active_slug}"
+                skill_hint = "teach-chapter"
+                wb_hint = f"Push derivation_step for '{target_id}' ({compact_pol['scaffoldingMode']})."
+            else:
+                target_id = str(planned_node["id"]) if planned_node else None
+                rationale = (
+                    f"Teach planned node '{target_id}' via {compact_pol['scaffoldingMode']}."
+                    if target_id
+                    else "Workspace clear; drop sources or start a new chapter."
+                )
+                exact_cmd = "syntopik drop <source>" if target_id is None else f"syntopik run srs_engine list --json"
+                skill_hint = "topic-onboarding" if target_id is None else "teach-chapter"
+                wb_hint = "Ready for new topic scope or derivation frame."
 
     envelope: dict[str, Any] = {
         "ok": True,

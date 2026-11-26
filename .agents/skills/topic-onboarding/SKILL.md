@@ -1,8 +1,8 @@
 ---
 name: topic-onboarding
 description: >-
-  Onboard any topic, course, YouTube, arXiv, repo, web doc, or PDF via
-  Teacher-First drop, Rosetta structural bridges, starter packs, optional 2-min
+  Onboard any topic, course, deck, notebook, YouTube, arXiv, repo, or PDF via
+  Day-1 Launchpad, 14-agent connect, Teacher-First drop, Rosetta bridges,
   non-VARK calibration, 90s placement, and Scope Charters.
 ---
 
@@ -16,9 +16,12 @@ Use this skill whenever a learner starts a brand-new topic, course, YouTube lect
 
 ## Calm Onboarding Laws, 3-Cadence Calibration & Plain-English Routing
 
-1. **Zero CLI Memorization & 10-Second Start (`syntopik drop` / `syntopik demo`)**: absorb plain-English requests silently:
-   - **Mixed local/URL files dropped together** → `syntopik drop <inputs...> [--slug <slug>] --json` (classifies Teacher-First spine vs problem bank vs references automatically, ingests safely, creates/updates tracker, and returns Probe #1!).
+1. **Zero CLI Memorization, Day-1 4-Door Launchpad & 14-Agent Connect (`syntopik drop` / `demo` / `connect`)**:
+   - **Day-1 Zero-State Studio (`syntopik serve --open` when `0` nodes exist)**: displays a calm single-screen 4-Door Launchpad — **Door A** (2-min Non-VARK Calibration), **Door B** (Drop/Import PDF, `.apkg`, `.ipynb`, CSV/TSV, Notion `.zip`, URL), **Door C** (1-click Starter Pack), and **Door D** (14-Agent Connect & Day-1 Prompt).
+   - **14-Coding-Agent Setup (`syntopik doctor --compat` / `syntopik connect <harness>`)**: wires any of **14 harnesses** (`antigravity`, `claude`, `codex`, `cursor`, `windsurf`, `copilot`, `gemini`, `opencode`, `cline`, `roo`, `zed`, `aider`, `continue`, `kiro`) via `syntopik attach . --harness auto|<id> [--transport stdio|http]` (zero git diff, zero-Node loopback `POST /mcp` supported!).
+   - **Mixed local/URL files dropped together** → `syntopik drop <inputs...> [--slug <slug>] --json` (classifies Teacher-First spine vs problem bank vs references automatically, ingests `.apkg`/`.ipynb`/CSV/Notion/PDF/URL safely, creates/updates tracker, and returns Probe #1!).
    - **Instant zero-PII starter packs** (*"Try a demo"* / *"Load starter pack"*) → `syntopik demo [--pack <slug|all>] [--open] --json` (loads bundled verified packs into `~/.syntopik-demo` without touching live ledgers).
+   - *"Import my Anki deck / Quizlet CSV / Jupyter notebook / Notion export"* → `syntopik import <path> --json` (zero fake mastery: starts `status: "planned"`).
    - *"Study this YouTube link / playlist"* → `syntopik import <youtube_url>` (caption-only, 5–8 min chunks + pause-points)
    - *"Walk me through arXiv 1706.03762"* → `syntopik import <arxiv_id_or_url>` (Keshav 3-Pass guide + optional PDF)
    - *"Help me understand this GitHub repo"* → `syntopik import <repo_url_or_path>` (Golden-Path Architecture Manifest)

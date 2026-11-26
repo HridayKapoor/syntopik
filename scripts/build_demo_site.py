@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
-"""Deterministic Builder & Verifier for Syntopik v3.1 1-Click Live GitHub Pages Demo Site.
+"""Deterministic Builder & Verifier for Syntopik v3.2 1-Click Live GitHub Pages Demo Site.
 
 Builds the zero-install, zero-CDN, zero-PII interactive browser sandbox directly from
-Syntopik v3.1's finished `dashboard.html`, `knowledge-graph/viewer.html`, `syntopik/pocket.py`,
+Syntopik v3.2's finished `dashboard.html`, `knowledge-graph/viewer.html`, `syntopik/pocket.py`,
 and the 3 bundled starter packs (`packs/*.syntopik-pack.zip`) plus cross-domain Rosetta twins:
 
-  - `docs/index.html`   (<= 650 KB self-contained Studio + Gym + Rosetta + Proof-Graph Diff + Sync)
+  - `docs/index.html`   (<= 650 KB self-contained Studio + Gym + Readiness + Interleave + 14-Agent MCP)
   - `docs/viewer.html`  (self-contained Hypergraph Viewer w/ Causal Halos, Rosetta Chords & T1-T4)
   - `docs/pocket.html`  (~25-35 KB self-contained Mobile Pocket Commute Deck)
   - `docs/.nojekyll`    (empty file so GitHub Pages skips Jekyll processing)
@@ -34,6 +34,7 @@ ROOT = Path(__file__).resolve().parent.parent
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
+from syntopik.agents_compat import ALL_HARNESSES, HARNESS_SPECS  # noqa: E402
 from syntopik.brainstem import plan_next_move  # noqa: E402
 from syntopik.evidence import (  # noqa: E402
     GENESIS_HASH,
@@ -64,6 +65,7 @@ from syntopik.learner_model import (  # noqa: E402
 )
 from syntopik.packs import import_pack, verify_pack  # noqa: E402
 from syntopik.pocket import export_pocket_html  # noqa: E402
+from syntopik.readiness import compute_readiness  # noqa: E402
 from syntopik.root_cause import find_blast_radius, localize_fault  # noqa: E402
 from syntopik.storage import load_json, load_jsonl, save_json_atomic, save_jsonl_atomic  # noqa: E402
 
@@ -799,13 +801,14 @@ def _seed_45_day_history(ws: Path, kg: Path, ch: Path) -> None:
     ]
     save_jsonl_atomic(kg / "viva-sessions.jsonl", viva_sessions)
 
-    # --- Seed 2 graded Exam Attempts ---
+    # --- Seed 2 graded Exam Attempts (with v3.2 EV-Skip calibration & Why-Wrong Distractor Autopsy) ---
     exam_attempts = [
         {
             "id": "exam-att-raft-01",
             "date": "2026-11-23",
             "examSlug": "raft-consensus-checkpoint",
             "title": "Raft Consensus Safety Checkpoint",
+            "examTitle": "Raft Consensus Safety Checkpoint",
             "subject": "Systems",
             "chapter": "Raft Consensus",
             "examType": "chapter_mock",
@@ -819,12 +822,30 @@ def _seed_45_day_history(ws: Path, kg: Path, ch: Path) -> None:
             "unattemptedCount": 0,
             "negativeMarksLost": 1.0,
             "timeSpentSec": 465,
+            "evDisciplineScore": 84.0,
+            "evCalibration": {
+                "evDisciplineScore": 84.0,
+                "negEvGamblesCount": 1,
+                "underconfidentSkipsCount": 0,
+                "positiveEvAttemptsCount": 4,
+                "evBasis": "observed",
+            },
+            "distractorAutopsy": [
+                {
+                    "questionId": "Q4",
+                    "optionId": "B",
+                    "trapCategory": "misconception",
+                    "confusedWith": "Current-term majority commit",
+                    "whyWrong": "Older-term entries replicated onto a majority can still be overwritten by a higher-term leader unless committed indirectly via a currentTerm entry.",
+                }
+            ],
         },
         {
             "id": "exam-att-shm-01",
             "date": "2026-11-16",
             "examSlug": "shm-physics-checkpoint",
             "title": "SHM Mechanics & Pendulum Mock",
+            "examTitle": "SHM Mechanics & Pendulum Mock",
             "subject": "Physics",
             "chapter": "Simple Harmonic Motion",
             "examType": "chapter_mock",
@@ -838,9 +859,38 @@ def _seed_45_day_history(ws: Path, kg: Path, ch: Path) -> None:
             "unattemptedCount": 0,
             "negativeMarksLost": 1.0,
             "timeSpentSec": 510,
+            "evDisciplineScore": 78.5,
+            "evCalibration": {
+                "evDisciplineScore": 78.5,
+                "negEvGamblesCount": 1,
+                "underconfidentSkipsCount": 1,
+                "positiveEvAttemptsCount": 3,
+                "evBasis": "observed",
+            },
+            "distractorAutopsy": [
+                {
+                    "questionId": "Q3",
+                    "optionId": "A",
+                    "trapCategory": "misconception",
+                    "confusedWith": "Parallel springs stiffness",
+                    "whyWrong": "Springs in series share tension F so extensions add: 1/k_eq = 1/k1 + 1/k2, making the chain softer than either spring alone (not k1 + k2).",
+                }
+            ],
         },
     ]
     save_jsonl_atomic(kg / "exam-attempts.jsonl", exam_attempts)
+
+    # --- Seed Exam Configuration for v3.2 Readiness Forecaster (10 days out from DEMO_TODAY) ---
+    save_json_atomic(
+        kg / "study-config.json",
+        {
+            "examDate": "2026-12-06",
+            "examName": "STEM Mastery Checkpoint (SHM · Raft · Attention)",
+            "maxMarks": 100,
+            "sleepHours": 7.5,
+            "dailyMinutes": 120,
+        },
+    )
 
     # --- Seed 1 Active Live Whiteboard Session (3 frames incl. 1 blurred prediction_gate + 1 explore_widget) ---
     wb_explore_spec = compile_explorable_spec(
@@ -1249,6 +1299,107 @@ def _build_demo_payloads(ws: Path, kg: Path, ch: Path) -> tuple[dict[str, Any], 
         "ledgerIntegrity": ev_summary.get("ledgerIntegrity") or {"ok": True, "count": 10, "brokenAt": None},
     }
 
+    # Compute deterministic v3.2 Exam-Day Readiness summary (sanitized: never echoes sealed fork secrets)
+    rd_raw = compute_readiness(ws, today=DEMO_NOW, kg_dir=kg, chapters_dir=ch)
+    shield_raw = rd_raw.get("preMortemShield") if isinstance(rd_raw, dict) else None
+    sealed_snips: list[str] = []
+    for fk in load_jsonl(kg / "forks.jsonl"):
+        if not isinstance(fk, dict):
+            continue
+        if str(fk.get("status") or "").lower() in ("mastered", "cleared", "archived"):
+            continue
+        for sk in ("sealedWinningMove", "sealedBlunder", "refutationMsg"):
+            val = str(fk.get(sk) or "").strip()
+            if val:
+                sealed_snips.append(val)
+                if len(val) > 107:
+                    sealed_snips.append(val[:107])
+    sanitized_shield: dict[str, Any] = (
+        dict(shield_raw)
+        if isinstance(shield_raw, dict)
+        else {"ok": True, "sourceBasis": "cold_start_minimal", "count": 0, "bullets": []}
+    )
+    if isinstance(sanitized_shield.get("bullets"), list):
+        clean_bullets: list[dict[str, Any]] = []
+        for b in sanitized_shield["bullets"]:
+            if not isinstance(b, dict):
+                continue
+            nb = dict(b)
+            is_unresolved_fork = str(nb.get("sourceKind") or "") == "blunder_fork"
+            if is_unresolved_fork or any(sn and sn in str(nb.get("thenAction") or "") for sn in sealed_snips):
+                nb["thenAction"] = "THEN verify boundary conditions & invariant before executing your first move."
+            if any(sn and sn in str(nb.get("ifCue") or "") for sn in sealed_snips):
+                nb["ifCue"] = "IF you encounter this unresolved Blunder Fork setup"
+            clean_bullets.append(nb)
+        sanitized_shield["bullets"] = clean_bullets
+        sanitized_shield["count"] = len(clean_bullets)
+
+    readiness_summary: dict[str, Any] = {
+        "ok": bool(rd_raw.get("ok", True)),
+        "readinessIndex": rd_raw.get("readinessIndex", 0.0),
+        "band": rd_raw.get("band", "building"),
+        "predictedScorePct": rd_raw.get("predictedScorePct") or {"low": 0.0, "expected": 0.0, "high": 0.0},
+        "predictedMarks": rd_raw.get("predictedMarks"),
+        "examDate": rd_raw.get("examDate") or "2026-12-06",
+        "examDateSource": str(rd_raw.get("examDateSource") or "study-config.json"),
+        "daysToExam": rd_raw.get("daysToExam", 10.0),
+        "hasExamConfig": True,
+        "taperMode": rd_raw.get("taperMode") or {"active": False, "phase": "none", "allowNewConcepts": True},
+        "preMortemShield": sanitized_shield,
+        "topLevers": list(rd_raw.get("topLevers") or [])[:3],
+        "pillars": rd_raw.get("pillars") or {},
+        "executionConfidence": rd_raw.get("executionConfidence", "observed"),
+        "uncertaintyReasons": list(rd_raw.get("uncertaintyReasons") or []),
+    }
+
+    interleave_stats: dict[str, Any] = {
+        "ok": True,
+        "totalSessions": 2,
+        "completedSessions": 2,
+        "totalItemsChecked": 12,
+        "tier1Correct": 9,
+        "tier1AccuracyPct": 75.0,
+        "principleAccuracyPct": 75.0,
+        "step2Correct": 10,
+        "step2Total": 12,
+        "step2AccuracyPct": 83.3,
+        "medianIdentifyMs": 11400,
+        "medianIdentifySec": 11.4,
+        "lastSessionAt": "2026-11-24T16:20:00Z",
+        "daysSinceLastInterleave": 2,
+        "distinctChaptersPracticed": 3,
+        "confusionMatrix": {},
+        "topConfusionPairs": [
+            {"trueChapter": "Simple Harmonic Motion", "confusedWithChapter": "AC Circuits & Resonance", "count": 2},
+            {"trueChapter": "Raft Consensus", "confusedWithChapter": "Transformers & Attention", "count": 1},
+        ],
+    }
+
+    compat_summary: dict[str, Any] = {
+        "totalHarnesses": len(ALL_HARNESSES),
+        "detectedCount": 4,
+        "configuredCount": 3,
+        "attachedCount": 3,
+        "httpSupportedCount": sum(1 for h in HARNESS_SPECS.values() if h.get("httpMcpSupported")),
+        "activeHarness": "antigravity",
+        "mcpHttpEndpoint": "http://127.0.0.1:4173/mcp",
+        "mcpHttpEnabled": True,
+    }
+
+    # Zero-loss compaction (#268): drop redundant precomputed fields safely recomputed/unused by dashboard.html
+    prof.pop("recentEvents", None)
+    if isinstance(ev_summary, dict) and isinstance(ev_summary.get("propositions"), dict):
+        ev_summary = dict(ev_summary)
+        ev_summary["propositions"] = {
+            pid: {
+                "tier": rec.get("tier", 1),
+                "tierLabel": rec.get("tierLabel", ""),
+                "sources": rec.get("sources") or [],
+            }
+            for pid, rec in ev_summary["propositions"].items()
+            if isinstance(rec, dict)
+        }
+
     # Drop redundant normalizedEdges (dashboard.html & viewer.html derive edges from chains in <1ms)
     study_graph.pop("normalizedEdges", None)
 
@@ -1263,6 +1414,9 @@ def _build_demo_payloads(ws: Path, kg: Path, ch: Path) -> tuple[dict[str, Any], 
     study_hub["explorables"] = explorables_map
     study_hub["rosetta"] = rosetta_payload
     study_hub["syncStatus"] = sync_status_payload
+    study_hub["readinessSummary"] = readiness_summary
+    study_hub["interleaveStats"] = interleave_stats
+    study_hub["compatSummary"] = compat_summary
     study_hub["rootCauseHotspots"] = {
         "byProp": {k: round(float(v), 4) for k, v in sorted(by_prop.items())},
         "blastRadius": blast,
@@ -1279,11 +1433,17 @@ def _build_demo_payloads(ws: Path, kg: Path, ch: Path) -> tuple[dict[str, Any], 
                 for d in days_list
                 if int(d.get("count") or 0) > 0
             ]
-    # forksDue is derived synchronously from forks by SHIM_JS on boot
+    # Zero-loss deduplication: dashboard.html recomputes mistakeStats via getMistakeStatsSafe(),
+    # resolves activeChapterTracker from chapterTrackers, and derives dueItems/forksDue on boot.
     study_hub.pop("forksDue", None)
+    study_hub.pop("mistakeStats", None)
+    study_hub.pop("dueItems", None)
+    study_hub.pop("activeChapterTracker", None)
     study_hub["stats"]["verifiedTransferPct"] = ev_summary.get("verifiedTransferPct", 0.0)
     study_hub["stats"]["explorablesCount"] = sum(len(v) for v in explorables_map.values())
     study_hub["stats"]["rosettaChordsCount"] = rosetta_payload["chordCount"]
+    study_hub["stats"]["readinessIndex"] = readiness_summary["readinessIndex"]
+    study_hub["stats"]["interleaveSessionsCount"] = interleave_stats["totalSessions"]
 
     # Strict zero-sealed-secret assertion on public static payloads
     leaks = _scan_forbidden_keys(study_graph, "graph.") + _scan_forbidden_keys(study_hub, "hub.")
@@ -1325,8 +1485,8 @@ VIEWER_DEMO_COMPACT_CSS = """
 SHIM_JS = r"""
 (() => {
   "use strict";
-  const KEY = "syntopik_live_demo_v31_state";
-  const VER = 4;
+  const KEY = "syntopik_live_demo_v32_state";
+  const VER = 5;
   const clone = (o) => JSON.parse(JSON.stringify(o));
   const normTxt = (s) => String(s || "").toLowerCase().replace(/\s+/g, "").replace(/[−–—]/g, "-");
   const normEq = (s) => normTxt(String(s || "").replace(/^line\s*\d+\s*[:.)-]\s*/i, "")).replace(/\^/g, "**").replace(/[·×]/g, "*");
@@ -1575,6 +1735,7 @@ SHIM_JS = r"""
   let state = loadState();
   const blitzStore = new Map();
   const vivaStore = new Map();
+  const interleaveStore = new Map();
 
   function recomputePolicy(lp, energy) {
     const base = clone(lp.compiledPolicy || { domain: "Distributed Systems", domainElo: 1560, expertiseBand: "intermediate", scaffoldingMode: "faded", allowWorkedExample: false, allowProductiveFailure: true, maxProseWords: 135, targetSuccessRate: 0.85, affectState: "flow", activeGuardrails: [] });
@@ -1652,7 +1813,8 @@ SHIM_JS = r"""
       derivations: state.hub.derivations, vivaSessions: state.hub.vivaSessions,
       evidenceSummary: state.hub.evidenceSummary, rootCauseHotspots: state.hub.rootCauseHotspots,
       whiteboard: state.hub.whiteboard, explorables: state.hub.explorables, starterPacks: state.hub.starterPacks,
-      rosetta: state.hub.rosetta, syncStatus: state.hub.syncStatus
+      rosetta: state.hub.rosetta, syncStatus: state.hub.syncStatus,
+      readinessSummary: state.hub.readinessSummary, interleaveStats: state.hub.interleaveStats, compatSummary: state.hub.compatSummary
     };
   }
 
@@ -2236,11 +2398,293 @@ SHIM_JS = r"""
     };
   }
 
+  const DEMO_HARNESS_ROWS = [
+    ["antigravity", "Google Antigravity", 0, 1, 1],
+    ["claude", "Claude Code", 1, 1, 1],
+    ["codex", "OpenAI Codex", 1, 1, 0],
+    ["cursor", "Cursor", 1, 1, 1],
+    ["windsurf", "Windsurf", 1, 0, 0],
+    ["copilot", "GitHub Copilot (VS Code)", 1, 0, 0],
+    ["gemini", "Gemini CLI", 1, 0, 0],
+    ["opencode", "OpenCode", 1, 0, 0],
+    ["cline", "Cline", 1, 0, 0],
+    ["roo", "Roo Code", 1, 0, 0],
+    ["zed", "Zed", 1, 0, 0],
+    ["aider", "Aider", 0, 0, 0],
+    ["continue", "Continue", 1, 0, 0],
+    ["kiro", "Kiro", 1, 0, 0]
+  ];
+  const DEMO_MCP_TOOLS = [
+    "synt_next_move", "synt_get_frontier", "synt_capture_concept",
+    "synt_log_review", "synt_whiteboard_step", "synt_readiness", "synt_interleave"
+  ];
+  function buildDemoAgentsCompat() {
+    const harnesses = DEMO_HARNESS_ROWS.map(([id, name, httpOk, det, cfg]) => ({
+      id, name,
+      transportSupport: id === "aider" ? [] : (httpOk ? ["stdio", "http"] : ["stdio"]),
+      httpMcpSupported: Boolean(httpOk),
+      detected: Boolean(det), configured: Boolean(cfg), attached: Boolean(cfg),
+      connectCmd: "syntopik connect " + id,
+      attachCmd: "syntopik attach . --harness " + id
+    }));
+    return {
+      ok: true, totalHarnesses: harnesses.length,
+      detectedCount: harnesses.filter((h) => h.detected).length,
+      configuredCount: harnesses.filter((h) => h.configured).length,
+      attachedCount: harnesses.filter((h) => h.attached).length,
+      httpSupportedCount: harnesses.filter((h) => h.httpMcpSupported).length,
+      activeHarness: "antigravity", harnesses
+    };
+  }
+
+  function handleReadinessGet(u) {
+    state = loadState();
+    const base = clone(state.hub.readinessSummary || {
+      ok: true, readinessIndex: 76.4, band: "exam_ready",
+      predictedScorePct: { low: 68.0, expected: 76.5, high: 85.0 },
+      predictedMarks: { maxMarks: 100, low: 68.0, expected: 76.5, high: 85.0 },
+      examDate: "2026-12-06", examDateSource: "study-config.json", daysToExam: 10.0,
+      hasExamConfig: true,
+      taperMode: { active: false, phase: "none", allowNewConcepts: true, hoursRemaining: 237.0, sleepFloorHours: 7.5, maxSessionMinutes: 120 },
+      preMortemShield: { ok: true, sourceBasis: "observed_logs", count: 0, bullets: [] },
+      topLevers: [],
+      pillars: { projectedRetention: 79.0, evidenceDepth: 68.0, syllabusCoverage: 90.0, forkClearance: 62.0, evDiscipline: 81.0 },
+      executionConfidence: "observed", uncertaintyReasons: []
+    });
+    const pmOnly = ["1", "true", "yes"].includes(String(u.searchParams.get("premortem_only") || u.searchParams.get("premortemOnly") || "").toLowerCase());
+    if (pmOnly) return base.preMortemShield || { ok: true, sourceBasis: "observed_logs", count: 0, bullets: [] };
+    const rawDate = String(u.searchParams.get("exam_date") || u.searchParams.get("examDate") || "").trim();
+    const rawDays = String(u.searchParams.get("days") || "").trim();
+    const tdy = state.hub.today || todayIso();
+    let daysToExam = Number(base.daysToExam ?? 10);
+    let examDate = base.examDate || addDays(tdy, 10);
+    if (rawDate && /^\d{4}-\d{2}-\d{2}/.test(rawDate)) {
+      examDate = rawDate.slice(0, 10);
+      const diff = (Date.parse(examDate + "T09:00:00Z") - Date.parse(tdy + "T12:00:00Z")) / 86400000;
+      daysToExam = Math.max(0, Number(diff.toFixed(1)));
+    } else if (rawDays && Number.isFinite(Number(rawDays))) {
+      daysToExam = Math.max(0, Number(Number(rawDays).toFixed(1)));
+      examDate = addDays(tdy, Math.round(daysToExam));
+    }
+    const hrs = Number((daysToExam * 24).toFixed(1));
+    const active = hrs <= 72;
+    const phase = !active ? "none" : (hrs <= 24 ? "final_24h" : "taper_72h");
+    base.examDate = examDate;
+    base.daysToExam = daysToExam;
+    base.hasExamConfig = true;
+    base.taperMode = {
+      active, phase, window: active ? (hrs <= 24 ? "final_24h" : hrs <= 48 ? "48h_to_24h" : "72h_to_48h") : "none",
+      hoursRemaining: hrs, allowNewConcepts: !active, sleepFloorHours: 7.5,
+      maxSessionMinutes: hrs <= 24 ? 60 : (hrs <= 48 ? 150 : (active ? 240 : 120)), examDate
+    };
+    if (rawDate || rawDays) {
+      const origDays = Number((state.hub.readinessSummary && state.hub.readinessSummary.daysToExam) ?? 10);
+      const deltaRet = Math.max(-18, Math.min(12, (origDays - daysToExam) * 0.65));
+      const pil = base.pillars || {};
+      if (typeof pil.projectedRetention === "number") pil.projectedRetention = Number(Math.max(15, Math.min(99, pil.projectedRetention + deltaRet)).toFixed(1));
+      const idx = Number(Math.max(10, Math.min(99, Number(base.readinessIndex || 75) + deltaRet * 0.32)).toFixed(1));
+      base.readinessIndex = idx;
+      base.band = idx >= 85 ? "peak" : idx >= 70 ? "exam_ready" : idx >= 50 ? "building" : "needs_foundation";
+      const exp = Number(Math.max(10, Math.min(99, Number((base.predictedScorePct && base.predictedScorePct.expected) || idx) + deltaRet * 0.25)).toFixed(1));
+      base.predictedScorePct = { low: Number(Math.max(0, exp - 8.5).toFixed(1)), expected: exp, high: Number(Math.min(100, exp + 8.5).toFixed(1)) };
+      if (base.predictedMarks && base.predictedMarks.maxMarks) {
+        const mm = Number(base.predictedMarks.maxMarks);
+        base.predictedMarks = { maxMarks: mm, low: Number((mm * base.predictedScorePct.low / 100).toFixed(1)), expected: Number((mm * exp / 100).toFixed(1)), high: Number((mm * base.predictedScorePct.high / 100).toFixed(1)) };
+      }
+    }
+    return base;
+  }
+
+  function stripBlindCues(txt, ch, sub) {
+    let s = String(txt || "").trim();
+    for (const lbl of [ch, sub, "SHM", "Raft"]) {
+      const clean = String(lbl || "").trim();
+      if (clean.length < 3) continue;
+      const escRe = clean.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+      s = s.replace(new RegExp("\\b(?:in|for|from|of)\\s+" + escRe + "\\b[,:\\s-]*", "gi"), "");
+      s = s.replace(new RegExp("(?<![A-Za-z0-9])" + escRe + "(?![A-Za-z0-9])\\s*[:\\-]?", "gi"), "");
+    }
+    s = s.replace(/\s{2,}/g, " ").replace(/^[,;:\-.\s]+/, "").trim();
+    return s ? s[0].toUpperCase() + s.slice(1) : "Identify the governing invariant and regime conditions for this problem.";
+  }
+
+  function handleInterleaveGet() {
+    state = loadState();
+    return state.hub.interleaveStats || { ok: true, totalSessions: 0, completedSessions: 0, totalItemsChecked: 0, tier1Correct: 0, tier1AccuracyPct: null, principleAccuracyPct: null, step2Correct: 0, step2Total: 0, step2AccuracyPct: null, medianIdentifyMs: null, medianIdentifySec: null, distinctChaptersPracticed: 0, confusionMatrix: {}, topConfusionPairs: [] };
+  }
+
+  function handleInterleaveBuild(body) {
+    state = loadState();
+    const props = (state.graph.propositions || []).filter((p) => p && p.id && p.title);
+    if (!props.length) return { ok: true, items: [], emptyReason: "Add propositions to start a blind interleave drill" };
+    const n = Math.max(1, Math.min(Math.min(12, props.length), Number((body && (body.n || body.count)) || 6)));
+    const byCh = new Map();
+    for (const p of props) {
+      const ch = String(p.chapter || "General");
+      if (!byCh.has(ch)) byCh.set(ch, []);
+      byCh.get(ch).push(p);
+    }
+    const chKeys = [...byCh.keys()];
+    const chosen = [];
+    let lastCh = "";
+    const used = new Set();
+    for (let k = 0; k < n; k++) {
+      let pick = null;
+      for (let off = 0; off < chKeys.length; off++) {
+        const ck = chKeys[(k + off) % chKeys.length];
+        if (chKeys.length > 1 && ck === lastCh) continue;
+        const cand = (byCh.get(ck) || []).find((x) => !used.has(x.id));
+        if (cand) { pick = cand; lastCh = ck; break; }
+      }
+      if (!pick) pick = props.find((x) => !used.has(x.id));
+      if (!pick) break;
+      used.add(pick.id);
+      chosen.push(pick);
+    }
+    const sid = "ilv-demo-" + Date.now();
+    const privItems = [];
+    const pubItems = chosen.map((p, idx) => {
+      const itemId = "ilv-" + (idx + 1);
+      const ch = String(p.chapter || "General");
+      const sub = String(p.subject || "General");
+      const cue = (p.cues && p.cues[0]) || { q: p.statement || p.title, a: p.statement || p.title };
+      const blindPrompt = stripBlindCues(cue.q || p.statement || p.title, ch, sub);
+      const truePr = stripBlindCues(p.title, ch, sub) || p.title;
+      const decoys = props.filter((x) => x.id !== p.id && String(x.chapter || "") !== ch);
+      const pickedDecoys = [];
+      for (let d = 0; d < 3 && decoys.length; d++) {
+        const cand = decoys[(idx * 3 + d * 5) % decoys.length];
+        if (cand && !pickedDecoys.some((z) => z.id === cand.id)) pickedDecoys.push(cand);
+      }
+      const rawOpts = [
+        { text: truePr, ch, isTrue: true },
+        ...pickedDecoys.map((d) => ({ text: stripBlindCues(d.title, String(d.chapter || ""), String(d.subject || "")) || d.title, ch: String(d.chapter || "General"), isTrue: false }))
+      ];
+      const rot = idx % rawOpts.length;
+      const ordered = rawOpts.slice(rot).concat(rawOpts.slice(0, rot));
+      const letters = ["A", "B", "C", "D"];
+      const optCh = {};
+      let correctId = "A";
+      const principleChoices = ordered.map((o, j) => {
+        const oid = letters[j] || String(j + 1);
+        optCh[oid] = o.ch;
+        if (o.isTrue) correctId = oid;
+        return { id: oid, text: o.text };
+      });
+      principleChoices.push({ id: "E", text: "I don't know" });
+      privItems.push({ itemId, pid: p.id, ch, sub, pr: truePr, ans: String(cue.a || p.statement || ""), s2Prompt: String(cue.q || p.statement || blindPrompt), correctId, optCh, choices: principleChoices, s1: null, s2: null });
+      return { itemId, prompt: blindPrompt, principleChoices, stage: "principle_select" };
+    });
+    const distinctChaptersCount = new Set(chosen.map((p) => String(p.chapter || "General"))).size;
+    interleaveStore.set(sid, { sessionId: sid, items: privItems });
+    return { ok: true, sessionId: sid, mode: "principle_first", blindChapterLabels: true, distinctChaptersCount, count: pubItems.length, items: pubItems };
+  }
+
+  function handleInterleaveCheck(body) {
+    const sess = interleaveStore.get(String(body.sessionId || ""));
+    if (!sess) return { ok: false, error: "Interleave session not found — build a fresh set." };
+    const it = sess.items.find((x) => x.itemId === String(body.itemId || ""));
+    if (!it) return { ok: false, error: "Interleave item not found." };
+    const selRaw = String(body.selectedPrinciple || body.chosenOptionId || body.optionId || "").trim();
+    const matched = it.choices.find((c) => c.id.toLowerCase() === selRaw.toLowerCase() || normTxt(c.text) === normTxt(selRaw)) || { id: selRaw, text: selRaw };
+    const isDk = matched.id === "E" || /don'?t\s*know/i.test(matched.text);
+    const correct = !isDk && (matched.id === it.correctId || normTxt(matched.text) === normTxt(it.pr));
+    let confusedChapter = !correct && !isDk ? (it.optCh[matched.id] || null) : null;
+    if (confusedChapter === it.ch) confusedChapter = null;
+    const conf = typeof body.confidence === "number" ? Math.max(0, Math.min(1, body.confidence)) : 0.7;
+    const dur = Number(body.durationMs || 8000);
+    it.s1 = { optId: matched.id, text: matched.text, correct, dontKnow: isDk, conf, dur, confusedChapter };
+    const checked = sess.items.filter((x) => x.s1);
+    const hits = checked.filter((x) => x.s1.correct).length;
+    const acc = checked.length ? Number(((hits / checked.length) * 100).toFixed(1)) : 0;
+    return {
+      ok: true, sessionId: sess.sessionId, itemId: it.itemId, stage: "principle_checked",
+      correct, dontKnow: isDk, selectedOptionId: matched.id, selectedPrinciple: matched.text,
+      expectedPrincipleId: it.correctId, expectedPrinciple: it.pr, revealedChapter: it.ch,
+      confusedChapter, confidence: conf, durationMs: dur, step2Unlocked: true,
+      step2Prompt: it.s2Prompt, tier1CheckedCount: checked.length, tier1AccuracyPct: acc
+    };
+  }
+
+  function handleInterleaveComplete(body) {
+    const sess = interleaveStore.get(String(body.sessionId || ""));
+    if (!sess) return { ok: false, error: "Interleave session not found." };
+    const rmap = (body && body.results && typeof body.results === "object") ? body.results : {};
+    let t1c = 0, t1t = 0, s2c = 0, s2t = 0, srsUpd = 0, evRec = 0, mLog = 0;
+    const cm = {};
+    const revealedItems = [];
+    state = loadState();
+    for (const it of sess.items) {
+      const r = rmap[it.itemId];
+      if (r && typeof r === "object" && "solved" in r) it.s2 = { correct: Boolean(r.solved) };
+      if (it.s1) {
+        t1t += 1;
+        if (it.s1.correct) { t1c += 1; cm[it.ch] = cm[it.ch] || {}; cm[it.ch][it.ch] = (cm[it.ch][it.ch] || 0) + 1; }
+        else {
+          mLog += 1;
+          const gc = it.s1.confusedChapter || (it.s1.dontKnow ? "I don't know" : "Other");
+          cm[it.ch] = cm[it.ch] || {}; cm[it.ch][gc] = (cm[it.ch][gc] || 0) + 1;
+        }
+      }
+      if (it.s2) { s2t += 1; if (it.s2.correct) s2c += 1; }
+      if (it.s1 || it.s2) {
+        srsUpd += 1;
+        if ((it.s1 ? it.s1.correct : true) && (it.s2 ? it.s2.correct : true)) {
+          if (promoteEvidence(state, it.pid, 3, "interleave_blind")) evRec += 1;
+        }
+      }
+      revealedItems.push({
+        itemId: it.itemId, chapter: it.ch, subject: it.sub, propId: it.pid,
+        principle: it.pr, expectedAnswer: it.ans,
+        step1Correct: it.s1 ? it.s1.correct : null, step2Correct: it.s2 ? it.s2.correct : null,
+        confusedChapter: it.s1 ? it.s1.confusedChapter : null
+      });
+    }
+    const pairs = [];
+    for (const [tc, row] of Object.entries(cm)) for (const [gc, cnt] of Object.entries(row)) if (gc !== tc) pairs.push({ trueChapter: tc, confusedWithChapter: gc, count: cnt });
+    pairs.sort((a, b) => b.count - a.count);
+    const t1Acc = t1t ? Number(((t1c / t1t) * 100).toFixed(1)) : null;
+    const s2Acc = s2t ? Number(((s2c / s2t) * 100).toFixed(1)) : null;
+    const st = state.hub.interleaveStats || { ok: true, totalSessions: 0, completedSessions: 0, totalItemsChecked: 0, tier1Correct: 0, step2Correct: 0, step2Total: 0, topConfusionPairs: [] };
+    st.totalSessions = Number(st.totalSessions || 0) + 1;
+    st.completedSessions = Number(st.completedSessions || 0) + 1;
+    st.totalItemsChecked = Number(st.totalItemsChecked || 0) + t1t;
+    st.tier1Correct = Number(st.tier1Correct || 0) + t1c;
+    st.tier1AccuracyPct = st.totalItemsChecked ? Number(((st.tier1Correct / st.totalItemsChecked) * 100).toFixed(1)) : t1Acc;
+    st.principleAccuracyPct = st.tier1AccuracyPct;
+    st.step2Correct = Number(st.step2Correct || 0) + s2c;
+    st.step2Total = Number(st.step2Total || 0) + s2t;
+    st.step2AccuracyPct = st.step2Total ? Number(((st.step2Correct / st.step2Total) * 100).toFixed(1)) : s2Acc;
+    if (pairs.length) st.topConfusionPairs = pairs.slice(0, 5);
+    state.hub.interleaveStats = st;
+    refreshDerived(state);
+    saveState(state);
+    return {
+      ok: true, sessionId: sess.sessionId, status: "completed", completedAt: new Date().toISOString(),
+      tier1Correct: t1c, tier1Total: t1t, tier1AccuracyPct: t1Acc,
+      step2Correct: s2c, step2Total: s2t, step2AccuracyPct: s2Acc,
+      confusionMatrix: cm, topConfusionPairs: pairs.slice(0, 5), revealedItems,
+      mistakesLogged: mLog, srsUpdated: srsUpd, evidenceRecorded: evRec
+    };
+  }
+
   function routeApi(method, urlStr, body) {
     const u = new URL(urlStr, window.location.origin || "http://localhost");
     const p = u.pathname;
-    if (p === "/api/capabilities") return { live: true, demo: true, token: "demo-sandbox", version: "3.1.0-demo", workspaceName: "syntopik-live-demo", lan: null };
+    if (p === "/api/capabilities") return {
+      live: true, demo: true, token: "demo-sandbox", version: "3.2.0-demo",
+      workspaceName: "syntopik-live-demo", lan: false,
+      mcpHttpEndpoint: "http://127.0.0.1:4173/mcp",
+      mcpHttpEnabled: true,
+      mcpHttpTools: DEMO_MCP_TOOLS,
+      agentsCompat: buildDemoAgentsCompat()
+    };
     if (p === "/api/state") return buildStateResponse(u.searchParams.get("energy") || "normal");
+    if (p === "/api/readiness") return handleReadinessGet(u);
+    if (p === "/api/interleave") return handleInterleaveGet();
+    if (p === "/api/interleave/build") return handleInterleaveBuild(body || {});
+    if (p === "/api/interleave/check") return handleInterleaveCheck(body || {});
+    if (p === "/api/interleave/complete") return handleInterleaveComplete(body || {});
     if (p === "/api/root-cause") return handleRootCause(u.searchParams.get("nodeId") || u.searchParams.get("propId") || "");
     if (p === "/api/rosetta") return handleRosettaGet(u);
     if (p === "/api/rosetta/link") return handleRosettaLink(body || {});
@@ -2477,7 +2921,12 @@ SHIM_JS = r"""
     if (p === "/api/pack/export") return { ok: true, relPath: "raft-consensus.syntopik-pack.zip", summary: "Demo sandbox: zero-PII pack schema verified (install locally via syntopik pack export to write zip)." };
     if (p === "/api/export/obsidian") return { ok: true, propositionsExported: (state.graph.propositions || []).length, summary: "Demo sandbox: 30 concepts ready for Obsidian vault sync (run syntopik obsidian sync locally)." };
     if (p === "/api/export/dossier") return { ok: true, relPath: "mastery-dossier.html", verifiedTransferPct: (state.hub.evidenceSummary && state.hub.evidenceSummary.verifiedTransferPct) || 33.3 };
-    if (p === "/api/import") return { ok: true, summary: "Demo sandbox: live URL/arXiv/YouTube/GitHub import runs locally via `syntopik serve`." };
+    if (p === "/api/import") return {
+      ok: true,
+      demo: true,
+      importedCount: 0,
+      summary: "Read-only demo sandbox: run `syntopik drop <file-or-url>` or `syntopik serve` locally to import PDFs, Anki .apkg, Jupyter .ipynb, CSV/TSV, Markdown folders, YouTube, arXiv, or GitHub repos."
+    };
     return { ok: true, demo: true };
   }
 
@@ -2521,7 +2970,7 @@ SHIM_JS = r"""
   };
 
   window.__SYNTOPIK_SHIM__ = {
-    version: "3.1.0-demo",
+    version: "3.2.0-demo",
     storageKey: KEY,
     reset() {
       try { localStorage.removeItem(KEY); } catch { /* ignore */ }
@@ -2542,6 +2991,336 @@ SHIM_JS = r"""
 # Phase E: Assemble docs/index.html, docs/viewer.html, docs/pocket.html, .nojekyll
 # ---------------------------------------------------------------------------
 
+_JS_REGEX_KEYWORDS: frozenset[str] = frozenset(
+    {
+        "return",
+        "case",
+        "throw",
+        "else",
+        "do",
+        "in",
+        "instanceof",
+        "typeof",
+        "void",
+        "delete",
+        "new",
+        "yield",
+        "await",
+        "of",
+    }
+)
+
+_JS_MULTI_PUNCT: tuple[str, ...] = (
+    ">>>=",
+    "===",
+    "!==",
+    ">>>",
+    "**=",
+    "<<=",
+    ">>=",
+    "&&=",
+    "||=",
+    "??=",
+    "...",
+    "==",
+    "!=",
+    "<=",
+    ">=",
+    "=>",
+    "&&",
+    "||",
+    "??",
+    "++",
+    "--",
+    "+=",
+    "-=",
+    "*=",
+    "/=",
+    "%=",
+    "**",
+    "<<",
+    ">>",
+    "&=",
+    "|=",
+    "^=",
+    "?.",
+)
+
+
+def _is_js_word_char(ch: str) -> bool:
+    return ch.isalnum() or ch in ("_", "$") or ord(ch) > 127
+
+
+def _js_can_start_regex(prev_kind: str | None, prev_val: str) -> bool:
+    if prev_kind is None:
+        return True
+    if prev_kind == "ident":
+        return prev_val in _JS_REGEX_KEYWORDS
+    if prev_kind == "punct":
+        return prev_val not in (")", "]", "}", "++", "--")
+    return False
+
+
+def _js_needs_space(prev_tok: str, curr_tok: str) -> bool:
+    if not prev_tok or not curr_tok:
+        return False
+    a = prev_tok[-1]
+    b = curr_tok[0]
+    if _is_js_word_char(a) and _is_js_word_char(b):
+        return True
+    if prev_tok in _JS_REGEX_KEYWORDS and b in "/+-":
+        return True
+    if (a == "+" and b == "+") or (a == "-" and b == "-"):
+        return True
+    if (a == "/" and b in "/*") or (a == "*" and b == "/"):
+        return True
+    if (a == "<" and b == "!") or (a == "-" and b == ">") or (a == "!" and b == "-"):
+        return True
+    return False
+
+
+def _compact_js(js_text: str) -> str:
+    """Lexical JS comment stripper & safe horizontal whitespace compactor.
+
+    Preserves single/double strings, template literals (with nested `${...}`),
+    regex literals (with `[...]` classes), ASI newlines, and `+`/`-`/`/` token
+    boundaries. Verified against `node --check` on every generated `<script>`.
+    """
+    n = len(js_text)
+    i = 0
+    out: list[str] = []
+    line_last = ""
+    had_space = False
+    prev_kind: str | None = None
+    prev_val = ""
+    tpl_brace_stack: list[int] = []
+
+    def emit(tok: str, kind: str | None = None) -> None:
+        nonlocal line_last, had_space, prev_kind, prev_val
+        if had_space and _js_needs_space(line_last, tok):
+            out.append(" ")
+        out.append(tok)
+        line_last = tok
+        had_space = False
+        if kind is not None:
+            prev_kind = kind
+            prev_val = tok
+
+    def emit_newline() -> None:
+        nonlocal line_last, had_space
+        # Eliding newlines directly after `;`, `{`, or `,` is strictly ASI-safe in ECMAScript
+        if line_last in (";", "{", ","):
+            had_space = False
+            return
+        if out and out[-1] != "\n":
+            out.append("\n")
+        line_last = ""
+        had_space = False
+
+    def scan_template_chunk(start_idx: int) -> int:
+        """Scan template literal raw text starting right after `` ` `` or `${...}` closing `}`."""
+        nonlocal line_last, had_space, prev_kind, prev_val
+        j = start_idx
+        buf: list[str] = []
+        while j < n:
+            ch = js_text[j]
+            if ch == "\\":
+                if j + 1 < n:
+                    buf.append(js_text[j : j + 2])
+                    j += 2
+                else:
+                    buf.append(ch)
+                    j += 1
+                continue
+            if ch == "`":
+                buf.append("`")
+                chunk = "".join(buf)
+                out.append(chunk)
+                line_last = "`"
+                had_space = False
+                prev_kind = "value"
+                prev_val = "`"
+                return j + 1
+            if ch == "$" and j + 1 < n and js_text[j + 1] == "{":
+                buf.append("${")
+                out.append("".join(buf))
+                line_last = "{"
+                had_space = False
+                prev_kind = "punct"
+                prev_val = "{"
+                tpl_brace_stack.append(0)
+                return j + 2
+            if ch == "\r":
+                j += 1
+                continue
+            if ch == "\n":
+                # Trim trailing spaces on line inside template chunk, keep newline, skip leading indent
+                while buf and buf[-1] in (" ", "\t"):
+                    buf.pop()
+                if buf and buf[-1] != "\n":
+                    buf.append("\n")
+                j += 1
+                while j < n and js_text[j] in (" ", "\t", "\r", "\n"):
+                    j += 1
+                continue
+            buf.append(ch)
+            j += 1
+        out.append("".join(buf))
+        return j
+
+    while i < n:
+        ch = js_text[i]
+
+        # Newlines (preserve for ASI safety; collapse blank lines)
+        if ch in ("\n", "\r"):
+            emit_newline()
+            i += 1
+            continue
+
+        # Horizontal whitespace
+        if ch in (" ", "\t", "\f", "\v"):
+            had_space = True
+            i += 1
+            continue
+
+        # Single-line comment `// ...`
+        if ch == "/" and i + 1 < n and js_text[i + 1] == "/":
+            i += 2
+            while i < n and js_text[i] not in ("\n", "\r"):
+                i += 1
+            continue
+
+        # Block comment `/* ... */`
+        if ch == "/" and i + 1 < n and js_text[i + 1] == "*":
+            end = js_text.find("*/", i + 2)
+            if end < 0:
+                break
+            if "\n" in js_text[i + 2 : end] or "\r" in js_text[i + 2 : end]:
+                emit_newline()
+            else:
+                had_space = True
+            i = end + 2
+            continue
+
+        # Single- or double-quoted string literal
+        if ch in ("'", '"'):
+            quote = ch
+            j = i + 1
+            while j < n:
+                c = js_text[j]
+                if c == "\\":
+                    j += 2
+                    continue
+                if c == quote:
+                    j += 1
+                    break
+                j += 1
+            emit(js_text[i:j], "value")
+            i = j
+            continue
+
+        # Template literal start `` ` ``
+        if ch == "`":
+            if had_space and _js_needs_space(line_last, "`"):
+                out.append(" ")
+            out.append("`")
+            had_space = False
+            i = scan_template_chunk(i + 1)
+            continue
+
+        # Template expression braces `{` / `}`
+        if ch == "{" and tpl_brace_stack:
+            tpl_brace_stack[-1] += 1
+            emit("{", "punct")
+            i += 1
+            continue
+        if ch == "}" and tpl_brace_stack:
+            if tpl_brace_stack[-1] == 0:
+                tpl_brace_stack.pop()
+                out.append("}")
+                line_last = "}"
+                had_space = False
+                i = scan_template_chunk(i + 1)
+                continue
+            tpl_brace_stack[-1] -= 1
+            emit("}", "punct")
+            i += 1
+            continue
+
+        # Regex literal `/pattern/flags`
+        if ch == "/" and _js_can_start_regex(prev_kind, prev_val):
+            j = i + 1
+            in_class = False
+            valid_re = False
+            while j < n:
+                c = js_text[j]
+                if c in ("\n", "\r"):
+                    break
+                if c == "\\":
+                    j += 2
+                    continue
+                if c == "[" and not in_class:
+                    in_class = True
+                    j += 1
+                    continue
+                if c == "]" and in_class:
+                    in_class = False
+                    j += 1
+                    continue
+                if c == "/" and not in_class:
+                    j += 1
+                    while j < n and js_text[j].isalpha():
+                        j += 1
+                    valid_re = True
+                    break
+                j += 1
+            if valid_re:
+                emit(js_text[i:j], "value")
+                i = j
+                continue
+
+        # Identifier or keyword
+        if ch.isalpha() or ch in ("_", "$") or ord(ch) > 127:
+            j = i + 1
+            while j < n and _is_js_word_char(js_text[j]):
+                j += 1
+            emit(js_text[i:j], "ident")
+            i = j
+            continue
+
+        # Numeric literal (decimal, hex, binary, octal, scientific)
+        if ch.isdigit() or (ch == "." and i + 1 < n and js_text[i + 1].isdigit()):
+            j = i + 1
+            while j < n:
+                c = js_text[j]
+                if c in ("e", "E") and j + 1 < n and js_text[j + 1] in ("+", "-"):
+                    j += 2
+                    continue
+                if c.isalnum() or c in (".", "_"):
+                    j += 1
+                    continue
+                break
+            emit(js_text[i:j], "value")
+            i = j
+            continue
+
+        # Multi-character punctuators
+        matched_multi = ""
+        for mp in _JS_MULTI_PUNCT:
+            if js_text.startswith(mp, i):
+                matched_multi = mp
+                break
+        if matched_multi:
+            emit(matched_multi, "punct")
+            i += len(matched_multi)
+            continue
+
+        # Single-character punctuator
+        emit(ch, "punct")
+        i += 1
+
+    return "".join(out).strip()
+
 
 def _compact_style_blocks(html_text: str) -> str:
     """Safely strip CSS comments and redundant whitespace inside <style> blocks only (preserves calc() +/- spacing)."""
@@ -2560,6 +3339,46 @@ def _compact_lines(text: str) -> str:
     return "\n".join(ln.strip() for ln in text.splitlines() if ln.strip())
 
 
+def _compact_html_markup(html_part: str) -> str:
+    """Strip HTML comments and redundant line indentation from non-script HTML markup."""
+    stripped = re.sub(r"<!--[\s\S]*?-->", "", html_part)
+    lines = _compact_lines(stripped)
+    return re.sub(r">\n<", "><", lines)
+
+
+def _compact_script_sections(fragment: str) -> str:
+    """Apply safe lexical JS compaction to every inline `<script>` block inside an HTML fragment."""
+    def _shrink_script(m: re.Match[str]) -> str:
+        open_tag, body = m.group(1), m.group(2)
+        return f"{open_tag}\n{_compact_js(body)}\n</script>"
+
+    compacted = re.sub(
+        r"(<script(?:\s+[^>]*)?>)([\s\S]*?)</script>",
+        _shrink_script,
+        fragment,
+        flags=re.IGNORECASE,
+    )
+    return _compact_lines(compacted)
+
+
+def _inject_demo_reset_pill(src: str, target_name: str) -> str:
+    """Insert the calm Interactive Demo Reset pill directly after `#liveStatusPill`."""
+    pill_re = re.compile(
+        r'(<(?:button|span)\b[^>]*\bid="liveStatusPill"[^>]*>.*?</(?:button|span)>)',
+        re.DOTALL,
+    )
+    m = pill_re.search(src)
+    if not m:
+        raise RuntimeError(f"Could not find #liveStatusPill in {target_name}")
+    demo_pill_html = (
+        m.group(1)
+        + '\n    <button type="button" id="demoResetBtn" class="demo-reset-pill" '
+        + 'title="Interactive browser sandbox (localStorage) — click to reset all demo progress">'
+        + "Interactive Demo · Reset</button>"
+    )
+    return src[: m.start()] + demo_pill_html + src[m.end() :]
+
+
 def _build_index_html(study_graph: dict[str, Any], study_hub: dict[str, Any]) -> str:
     src = (ROOT / "dashboard.html").read_text(encoding="utf-8")
 
@@ -2574,26 +3393,17 @@ def _build_index_html(study_graph: dict[str, Any], study_hub: dict[str, Any]) ->
     src = src.replace('href="/knowledge-graph/viewer.html"', 'href="./viewer.html"')
     src = src.replace('href="knowledge-graph/viewer.html"', 'href="./viewer.html"')
 
-    # 3. Add calm "Interactive Demo · Reset" pill right beside liveStatusPill in .topbar-right
-    pill_anchor = '<span class="pill live-pill" id="liveStatusPill" title="Studio connection status"><span class="live-dot"></span>Offline</span>'
-    if pill_anchor not in src:
-        raise RuntimeError("Could not find #liveStatusPill in dashboard.html")
-    demo_pill_html = (
-        pill_anchor
-        + '\n    <button type="button" id="demoResetBtn" class="demo-reset-pill" '
-        + 'title="Interactive browser sandbox (localStorage) — click to reset all demo progress">'
-        + "Interactive Demo · Reset</button>"
-    )
-    src = src.replace(pill_anchor, demo_pill_html, 1)
+    # 3. Add calm "Interactive Demo · Reset" pill right beside #liveStatusPill in .topbar-right
+    src = _inject_demo_reset_pill(src, "dashboard.html")
 
-    # 4. Compact HTML/JS indentation cleanly so docs/index.html stays comfortably below 650 KB
+    # 4. Compact HTML comments/markup & JS blocks safely so docs/index.html stays comfortably <= 645 KB
     script_tag = '<script src="./knowledge-graph/graph-data.js"></script>'
     if script_tag not in src:
         raise RuntimeError("Could not find graph-data.js script tag in dashboard.html")
     pre_script, post_script = src.split(script_tag, 1)
-    pre_script = _compact_lines(pre_script)
-    post_script = _compact_lines(post_script)
-    compact_shim = _compact_lines(SHIM_JS)
+    pre_script = _compact_html_markup(pre_script)
+    post_script = _compact_script_sections(post_script)
+    compact_shim = _compact_js(SHIM_JS)
 
     # 5. Inline window.__STUDY_GRAPH__, window.__STUDY_HUB__, and window.__SYNTOPIK_SHIM__
     inline_block = (
@@ -2618,16 +3428,7 @@ def _build_viewer_html(study_graph: dict[str, Any], study_hub: dict[str, Any]) -
     src = src.replace('href="../dashboard.html"', 'href="./index.html"')
 
     # 3. Add calm "Interactive Demo · Reset" pill next to #liveStatusPill
-    pill_anchor = '<span class="pill live-pill" id="liveStatusPill" title="Studio connection mode"><span class="live-dot"></span>Offline</span>'
-    if pill_anchor not in src:
-        raise RuntimeError("Could not find #liveStatusPill in viewer.html")
-    demo_pill_html = (
-        pill_anchor
-        + '\n    <button type="button" id="demoResetBtn" class="demo-reset-pill" '
-        + 'title="Interactive browser sandbox (localStorage) — click to reset all demo progress">'
-        + "Interactive Demo · Reset</button>"
-    )
-    src = src.replace(pill_anchor, demo_pill_html, 1)
+    src = _inject_demo_reset_pill(src, "viewer.html")
 
     # 4. Slim hub for viewer while keeping full Rosetta chords & localStorage parity
     viewer_hub = {
@@ -2650,7 +3451,7 @@ def _build_viewer_html(study_graph: dict[str, Any], study_hub: dict[str, Any]) -
         f"window.__STUDY_GRAPH__ = {_safe_script_json(study_graph)};\n"
         f"window.__STUDY_HUB__ = {_safe_script_json(viewer_hub)};\n"
         "</script>\n"
-        f"<script>\n{_compact_lines(SHIM_JS)}\n</script>"
+        f"<script>\n{_compact_js(SHIM_JS)}\n</script>"
     )
     src = src.replace(script_tag, inline_block, 1)
     return src
@@ -2743,6 +3544,26 @@ def build_demo_site(out_dir: Path) -> dict[str, Any]:
 # ---------------------------------------------------------------------------
 
 
+def _verify_inline_scripts_with_node(html_text: str, filename: str) -> list[str]:
+    """Validate syntax of every inline `<script>` block via `node --check` when node is installed."""
+    node_bin = shutil.which("node")
+    if not node_bin:
+        return []
+    errs: list[str] = []
+    blocks = re.findall(r"<script(?:\s+[^>]*)?>([\s\S]*?)</script>", html_text, flags=re.IGNORECASE)
+    with tempfile.TemporaryDirectory(prefix="synt-js-chk-") as tmp:
+        for idx, body in enumerate(blocks):
+            if not body.strip():
+                continue
+            js_path = Path(tmp) / f"{filename}.script{idx}.js"
+            js_path.write_text(body, encoding="utf-8")
+            proc = subprocess.run([node_bin, "--check", str(js_path)], capture_output=True, text=True, check=False)
+            if proc.returncode != 0:
+                msg = (proc.stderr or proc.stdout or "syntax error").strip().splitlines()[0]
+                errs.append(f"{filename}: <script>[{idx}] failed node --check: {msg}")
+    return errs
+
+
 def check_demo_site(out_dir: Path) -> dict[str, Any]:
     out_dir = out_dir.expanduser().resolve()
     errors: list[str] = []
@@ -2785,7 +3606,11 @@ def check_demo_site(out_dir: Path) -> dict[str, Any]:
             if stok in txt:
                 errors.append(f"{name}: forbidden sealed secret token present: {stok!r}")
 
-        # 5. Relative navigation & shim assertions
+        # 5. Verify every inline <script> block passes `node --check`
+        if name in ("index.html", "viewer.html"):
+            errors.extend(_verify_inline_scripts_with_node(txt, name))
+
+        # 6. Relative navigation & shim assertions
         if name == "index.html":
             if 'href="./viewer.html"' not in txt:
                 errors.append("index.html: missing rewritten './viewer.html' link")
@@ -2808,6 +3633,9 @@ def check_demo_site(out_dir: Path) -> dict[str, Any]:
             for v31_tok in ('"second_order_oscillator"', '"boltzmann_softmax"', "/api/rosetta/link", "/api/sync/merge", "/api/profile/replay", "/api/derivation/diff"):
                 if v31_tok not in txt:
                     errors.append(f"index.html: missing v3.1 token {v31_tok!r}")
+            for v32_tok in ("/api/readiness", "/api/interleave/build", "/api/interleave/check", "/api/interleave/complete", "mcpHttpEndpoint", "examReadinessCard", "agentCompatModal", "zeroStateLaunchpad"):
+                if v32_tok not in txt:
+                    errors.append(f"index.html: missing v3.2 token {v32_tok!r}")
         elif name == "viewer.html":
             if 'href="./index.html"' not in txt:
                 errors.append("viewer.html: missing rewritten './index.html' back-link")
@@ -2833,7 +3661,7 @@ def check_demo_site(out_dir: Path) -> dict[str, Any]:
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
         prog="build_demo_site.py",
-        description="Build & verify Syntopik v3.1 1-Click Zero-Install Live GitHub Pages Demo Site.",
+        description="Build & verify Syntopik v3.2 1-Click Zero-Install Live GitHub Pages Demo Site.",
     )
     parser.add_argument(
         "--out-dir",
@@ -2876,7 +3704,7 @@ def main(argv: list[str] | None = None) -> int:
             f = build_res["files"]
             c = build_res["counts"]
             print(
-                f"Built Syntopik v3.1 Live Demo Site → {build_res['outDir']}\n"
+                f"Built Syntopik v3.2 Live Demo Site → {build_res['outDir']}\n"
                 f"  index.html  : {f['index.html']:,} B (ceiling {MAX_INDEX_BYTES:,} B)\n"
                 f"  viewer.html : {f['viewer.html']:,} B\n"
                 f"  pocket.html : {f['pocket.html']:,} B ({c['pocketCards']} commute cards)\n"

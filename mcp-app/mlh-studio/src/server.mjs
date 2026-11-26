@@ -1,18 +1,19 @@
 /**
- * syntopik-studio — Official SEP-1865 MCP App Server v2.0 (with backwards-compatible mlh_* aliases)
+ * syntopik-studio — Official SEP-1865 MCP App Server v3.2 (with backwards-compatible mlh_* aliases)
  *
- * Exposes 17 tools:
+ * Exposes 23 tools (15 synt_* + 8 mlh_*):
  *   - Canonical UI model-visible tools (3):
  *       1. synt_quiz_card      (inline ui://syntopik/quiz-card.html)
- *       2. synt_practice_card  (inline ui://syntopik/practice-card.html — standard, parsons, faded)
+ *       2. synt_practice_card  (inline ui://syntopik/practice-card.html — standard, parsons, faded, blackout)
  *       3. synt_lesson_studio  (aux_pane + global ui://syntopik/studio-pane.html)
  *   - Backwards-compatible UI aliases (3):
  *       mlh_quiz_card, mlh_practice_card, mlh_lesson_studio (ui://mlh/*.html)
- *   - Ambient Cross-Session Headless MCP tools (3, usable from ANY chat without spawning UI):
- *       synt_capture_concept, synt_get_frontier, synt_log_review
- *   - App-only tools (8, _meta.ui.visibility = ["app"], 0 model tokens):
- *       synt_app_load_state, synt_app_rate_flashcard, synt_app_save_sketch, synt_app_card_state
- *       (+ mlh_app_* aliases)
+ *   - Ambient Cross-Session Headless MCP tools (7, usable from ANY chat without spawning UI):
+ *       synt_next_move, synt_whiteboard_step, synt_capture_concept, synt_get_frontier,
+ *       synt_log_review, synt_readiness, synt_interleave
+ *   - App-only tools (10, _meta.ui.visibility = ["app"], 0 model tokens):
+ *       synt_app_load_state, synt_app_rate_flashcard, synt_app_save_sketch,
+ *       synt_app_card_state, synt_app_update_profile (+ mlh_app_* aliases)
  *   - Terminal Host Safeguard:
  *       Inspects client initialize capabilities (`extensions["io.modelcontextprotocol/ui"]`).
  *       When absent (e.g., `claude` or `codex` TUI), emits clean Markdown question + bare
@@ -36,23 +37,27 @@ import {
 import { RESOURCE_MIME_TYPE } from "@modelcontextprotocol/ext-apps";
 import {
   hashSeed,
+  validateInterleaveArgs,
   validateNextMoveArgs,
   validatePracticeAction,
   validatePracticeConclude,
   validatePracticePose,
   validateProfileUpdateArgs,
   validateQuizArgs,
+  validateReadinessArgs,
   validateStudioArgs,
   validateWhiteboardStepArgs,
 } from "./validation.mjs";
 import {
   captureConcept,
   getFrontier,
+  getReadiness,
   loadWorkspaceState,
   logReview,
   planNextMove,
   pushWhiteboardStep,
   rateFlashcard,
+  runInterleave,
   saveSketchPng,
   updateLearnerProfile,
 } from "./workspace.mjs";
@@ -465,6 +470,46 @@ const WHITEBOARD_STEP_SCHEMA = {
   },
 };
 
+const READINESS_SCHEMA = {
+  type: "object",
+  properties: {
+    examDate: { type: "string", description: "Optional target exam date (YYYY-MM-DD)." },
+    subject: { type: "string", description: "Optional subject filter." },
+    chapter: { type: "string", description: "Optional chapter filter." },
+    maxMarks: { type: "number", description: "Optional maximum exam marks for score projection." },
+    premortemOnly: { type: "boolean", description: "Return only the 3-bullet Pre-Mortem Shield." },
+  },
+};
+
+const INTERLEAVE_SCHEMA = {
+  type: "object",
+  properties: {
+    action: {
+      type: "string",
+      enum: ["build", "check", "stats"],
+      description: "Operation to run (default: build).",
+    },
+    n: { type: "integer", description: "Number of interleaved items to generate (default: 6)." },
+    count: { type: "integer", description: "Alias for n." },
+    subjects: {
+      type: "array",
+      items: { type: "string" },
+      description: "Optional list of subjects to interleave.",
+    },
+    subject: { type: "string", description: "Optional single subject filter." },
+    mode: { type: "string", description: "Drill mode (default: principle_first)." },
+    seed: { type: "integer", description: "Optional deterministic RNG seed." },
+    sessionId: { type: "string", description: "Session ID (required for action='check')." },
+    itemId: { type: "string", description: "Item ID (required for action='check')." },
+    selectedPrinciple: {
+      type: "string",
+      description: "Learner's selected principle (required for action='check').",
+    },
+    confidence: { type: "number", description: "Learner confidence (0..1 or 0..100)." },
+    durationMs: { type: "number", description: "Response duration in milliseconds." },
+  },
+};
+
 const UPDATE_PROFILE_SCHEMA = {
   type: "object",
   properties: {
@@ -543,12 +588,12 @@ const TOOLS = [
       },
     },
   },
-  // --- Ambient Cross-Session Headless Knowledge & Teacher Tools (5, zero UI spawned) ---
+  // --- Ambient Cross-Session Headless Knowledge & Teacher Tools (7, zero UI spawned) ---
   {
     name: "synt_next_move",
     title: "Syntopik Pedagogical Brainstem (Next Optimal Move)",
     description:
-      "Return the compact <=180-token Action Envelope fusing FSRS-6/FIRe, Learner Psychology TeachingPolicy, causal root-cause probes, Blunder Forks, Rosetta isomorphicBridge openers, and live whiteboard learner pins.",
+      "Return the compact <=180-token Action Envelope fusing FSRS-6/FIRe, Learner Psychology TeachingPolicy, causal root-cause probes, Blunder Forks, Rosetta isomorphicBridge openers, taper mode, and live whiteboard learner pins.",
     inputSchema: NEXT_MOVE_SCHEMA,
   },
   {
@@ -569,7 +614,7 @@ const TOOLS = [
     name: "synt_get_frontier",
     title: "Get Syntopik Study Frontier & Learner Policy",
     description:
-      "Ambient headless query: return FIRe-compressed due items, active Autopilot, learnerProfile, Active TeachingPolicy, dueForks, arenasCount, coldStartDays, pendingPins, rosettaBridgesCount, syncDeviceId, traps, and Brier calibration.",
+      "Ambient headless query: return FIRe-compressed due items, active Autopilot, learnerProfile, Active TeachingPolicy, dueForks, arenasCount, coldStartDays, pendingPins, rosettaBridgesCount, syncDeviceId, readinessSummary, taperActive, traps, and Brier calibration.",
     inputSchema: GET_FRONTIER_SCHEMA,
   },
   {
@@ -578,6 +623,20 @@ const TOOLS = [
     description:
       "Ambient headless review: run srs_engine.py review with FIRe propagation, optional hintsUsed (0..5) & durationMs for Tier-3 learner psychology updates, and revlog.jsonl persistence.",
     inputSchema: LOG_REVIEW_SCHEMA,
+  },
+  {
+    name: "synt_readiness",
+    title: "Exam-Day Readiness Forecaster & Pre-Mortem Shield",
+    description:
+      "Project deterministic FSRS-6 retention at exam date, fuse 4-tier Evidence coverage, unresolved Blunder Forks, EV-skip discipline, top-3 ROI levers, <=72h taper mode, and non-fabricated 3-bullet Pre-Mortem Shield.",
+    inputSchema: READINESS_SCHEMA,
+  },
+  {
+    name: "synt_interleave",
+    title: "Blind-Chapter Interleaved Drill Generator & Step-1 Grader",
+    description:
+      "Generate Rohrer blind-chapter interleaved drills (chapter labels & canonical answers sealed!) or grade Step-1 governing-principle identification cleanly without leaking sealed answers.",
+    inputSchema: INTERLEAVE_SCHEMA,
   },
   // Backwards-compatible mlh_* aliases
   {
@@ -1063,7 +1122,7 @@ function handleLessonStudio(rawArgs, toolName) {
 
 function createServer() {
   const server = new Server(
-    { name: "syntopik-studio", version: "3.1.0" },
+    { name: "syntopik-studio", version: "3.2.0" },
     { capabilities: { tools: {}, resources: {} } }
   );
 
@@ -1197,6 +1256,42 @@ function createServer() {
           if (!res.ok) return toolError(res.error);
           const structuredContent = {
             kind: "synt_log_review_result",
+            ...res,
+          };
+          return {
+            content: [{ type: "text", text: JSON.stringify(structuredContent) }],
+            structuredContent,
+          };
+        }
+
+        case "synt_readiness": {
+          const checked = validateReadinessArgs(args);
+          if (!checked.ok) return toolError(`Invalid synt_readiness arguments: ${checked.error}`);
+          const res = getReadiness(WORKSPACE_ROOT, checked.value);
+          if (!res.ok) return toolError(res.error || "synt_readiness failed.");
+          const structuredContent = {
+            kind: "synt_readiness",
+            ...res,
+          };
+          return {
+            content: [{ type: "text", text: JSON.stringify(structuredContent) }],
+            structuredContent,
+          };
+        }
+
+        case "synt_interleave": {
+          const checked = validateInterleaveArgs(args);
+          if (!checked.ok) return toolError(`Invalid synt_interleave arguments: ${checked.error}`);
+          const res = runInterleave(WORKSPACE_ROOT, checked.value);
+          if (!res.ok) return toolError(res.error || "synt_interleave failed.");
+          const kind =
+            checked.value.action === "stats"
+              ? "synt_interleave_stats"
+              : checked.value.action === "check"
+                ? "synt_interleave_check"
+                : "synt_interleave";
+          const structuredContent = {
+            kind,
             ...res,
           };
           return {

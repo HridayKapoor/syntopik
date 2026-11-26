@@ -109,6 +109,14 @@ V31_SYNTOPIK_MODULES: list[str] = [
     "sync_delta.py",
 ]
 
+V32_SYNTOPIK_MODULES: list[str] = [
+    "interleave.py",
+    "readiness.py",
+    "importers.py",
+    "mcp_http.py",
+    "agents_compat.py",
+]
+
 EXPECTED_SKILLS: list[str] = [
     "chapter-autopilot",
     "exam-simulator",
@@ -575,29 +583,42 @@ def check_syntopik_package(ws: Path, pkg_root: Path | None = None) -> dict[str, 
     missing_v3 = [m for m in V3_SYNTOPIK_MODULES if m not in present_v3]
     present_v31 = [m for m in V31_SYNTOPIK_MODULES if (pkg_dir / m).is_file()]
     missing_v31 = [m for m in V31_SYNTOPIK_MODULES if m not in present_v31]
-    expected_total = len(EXPECTED_SYNTOPIK_MODULES) + len(V3_SYNTOPIK_MODULES) + len(V31_SYNTOPIK_MODULES)
+    present_v32 = [m for m in V32_SYNTOPIK_MODULES if (pkg_dir / m).is_file()]
+    missing_v32 = [m for m in V32_SYNTOPIK_MODULES if m not in present_v32]
+    expected_total = (
+        len(EXPECTED_SYNTOPIK_MODULES)
+        + len(V3_SYNTOPIK_MODULES)
+        + len(V31_SYNTOPIK_MODULES)
+        + len(V32_SYNTOPIK_MODULES)
+    )
     if missing:
         return {
             "name": "Core Package (syntopik/)",
             "category": "workspace",
             "status": "fail",
             "required": True,
-            "count": len(EXPECTED_SYNTOPIK_MODULES) - len(missing) + len(present_v3) + len(present_v31),
+            "count": len(EXPECTED_SYNTOPIK_MODULES) - len(missing) + len(present_v3) + len(present_v31) + len(present_v32),
             "expectedCount": expected_total,
             "v3Present": len(present_v3),
             "v3Missing": missing_v3,
             "v31Present": len(present_v31),
             "v31Missing": missing_v31,
+            "v32Present": len(present_v32),
+            "v32Missing": missing_v32,
             "detail": f"missing: {', '.join(missing)}",
         }
-    total_present = len(EXPECTED_SYNTOPIK_MODULES) + len(present_v3) + len(present_v31)
-    if not missing_v3 and not missing_v31:
-        detail = f"all {total_present} pure-stdlib modules present (12 core + {len(present_v3)} v3.0 + {len(present_v31)} v3.1)"
+    total_present = len(EXPECTED_SYNTOPIK_MODULES) + len(present_v3) + len(present_v31) + len(present_v32)
+    if not missing_v3 and not missing_v31 and not missing_v32:
+        detail = (
+            f"all {total_present} pure-stdlib modules present "
+            f"(12 core + {len(present_v3)} v3.0 + {len(present_v31)} v3.1 + {len(present_v32)} v3.2)"
+        )
     else:
         detail = (
             f"{len(EXPECTED_SYNTOPIK_MODULES)}/{len(EXPECTED_SYNTOPIK_MODULES)} core + "
             f"{len(present_v3)}/{len(V3_SYNTOPIK_MODULES)} v3.0 + "
-            f"{len(present_v31)}/{len(V31_SYNTOPIK_MODULES)} v3.1 pure-stdlib modules present"
+            f"{len(present_v31)}/{len(V31_SYNTOPIK_MODULES)} v3.1 + "
+            f"{len(present_v32)}/{len(V32_SYNTOPIK_MODULES)} v3.2 pure-stdlib modules present"
         )
     return {
         "name": "Core Package (syntopik/)",
@@ -610,6 +631,8 @@ def check_syntopik_package(ws: Path, pkg_root: Path | None = None) -> dict[str, 
         "v3Missing": missing_v3,
         "v31Present": len(present_v31),
         "v31Missing": missing_v31,
+        "v32Present": len(present_v32),
+        "v32Missing": missing_v32,
         "detail": detail,
     }
 
@@ -1147,13 +1170,37 @@ def run_doctor(workspace: str | Path | None = None, *, core_only: bool = False) 
     }
 
 
+def check_compat_matrix(ws: str | Path | None = None) -> dict[str, Any]:
+    root_str = str(ROOT)
+    if root_str not in sys.path:
+        sys.path.insert(0, root_str)
+    from syntopik.agents_compat import get_compat_matrix
+
+    proj = Path(ws).expanduser().resolve() if ws is not None else Path.cwd().resolve()
+    return get_compat_matrix(project_dir=proj)
+
+
 def main(argv: list[str] | None = None) -> None:
     parser = argparse.ArgumentParser(description="Fast Cross-Platform Health Diagnostic for Syntopik")
     parser.add_argument("--workspace", default=None, help="Optional workspace root directory override")
     parser.add_argument("--core-only", action="store_true", help="Check bare-stdlib core & multi-harness integrity without requiring optional STEM .venv packages")
+    parser.add_argument("--compat", action="store_true", help="Print cross-OS 14-coding-agent compatibility matrix")
     parser.add_argument("--fix", action="store_true", help="Non-destructively initialize missing ledgers, repair .claude/skills mirror, and sync graph-data.js before checking")
     parser.add_argument("--json", action="store_true", help="Output machine-readable JSON")
     args = parser.parse_args(argv)
+
+    if args.compat:
+        root_str = str(ROOT)
+        if root_str not in sys.path:
+            sys.path.insert(0, root_str)
+        from syntopik.agents_compat import format_compat_table
+
+        matrix = check_compat_matrix(args.workspace)
+        if args.json:
+            print(json.dumps(matrix, indent=2, ensure_ascii=False))
+        else:
+            print(format_compat_table(matrix))
+        sys.exit(0)
 
     fix_actions: list[str] = []
     if args.fix:

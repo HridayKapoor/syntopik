@@ -2,8 +2,8 @@
 name: practice-drill
 description: >-
   Run live drills: BKT-gated Parsons/faded scaffolding, bug-hunts, Blunder Fork
-  replay, Counterexample Arena, 4-min First-Move Blitz, Derivation Blackout,
-  Axiom-Cut surgery, R0-R5 hints, and Pause Law.
+  replay, Counterexample Arena, 4-min Blitz, Blind-Chapter Interleave,
+  Derivation Blackout, Axiom-Cut, R0-R5 hints, and Pause Law.
 ---
 
 # Practice Drill — Quiet Availability Under Load (Any Domain)
@@ -52,7 +52,14 @@ Read each target's live `bktMastery` from `propositions.jsonl` (default `0.25` o
 - Present a compact (`<= 15`-line) plausible-but-flawed snippet, derivation, or proof pre-verified to fail a hidden test or CAS equality check (`code_verify.py` / `math_verify.py`).
 - Ask the learner to pinpoint the **earliest broken line**, name the **violated invariant**, and supply a minimal fix or failing counterexample (verified live before concluding!).
 
-### High-Velocity Precision Drills & Mastery Gym Engines (v3.0)
+### High-Velocity Precision Drills & Mastery Gym Engines (v3.0–v3.2)
+- **Blind-Chapter Interleaved Drill (`syntopik interleave` / MCP `synt_interleave`, v3.2)**: Rohrer multi-chapter interleaving across `>= 2` chapters with zero blocked runs (`chapter[i] != chapter[i-1]`), stripped chapter/topic/lecture cues, and server-sealed `sealedChapter`/`sealedPrinciple`/`sealedAnswer` (`interleave-sessions.jsonl`). Enforces **Step-1 governing-principle selection BEFORE Step-2 reveal**, logs Newman Tier-1 accuracy + surface-confusion matrix into `learner_model`, and exports blind CBT specs:
+  ```bash
+  syntopik interleave build --n 6 [--subjects Physics,CS] [--seed 42] --json
+  syntopik interleave check --session-id <sid> --item-id <iid> --principle "<choice>" --confidence 0.75 --json
+  syntopik interleave stats --json
+  syntopik interleave export-cbt --n 10 --out /tmp/blind-cbt-spec.json --json
+  ```
 - **Blunder FEN Fork Replay** (`syntopik run fork_replay due|check|capture|mutate` / `scripts/fork_replay.py`): drops the learner directly into the mutated mid-derivation/mid-code fork one step before a past blunder (`forks.jsonl`); plays a deterministic refutation on repeat blunders before revealing the fix.
 - **Adversarial Counterexample Arena** (`syntopik run falsify_arena create|list|test|repair` / `scripts/falsify_arena.py`): learner hunts minimal inputs to kill server-sealed Conceptual Mutants (`arenas.jsonl`, zero survivor leaks) and writes a 1-line Lakatos lemma repair (awards **T3** transfer evidence).
 - **4-Min ShadowBox First-Move Blitz** (`syntopik run decision_blitz build --slug <chapter> --n 6` / `grade` / `stats` / `scripts/decision_blitz.py`): 6 interleaved lookalikes in 4 min with zero solving — asks only **Kill-Cue**, **First Move**, and **Rejected Decoy**, logging Newman Tier-1 recognition speed (`decisions.jsonl`).

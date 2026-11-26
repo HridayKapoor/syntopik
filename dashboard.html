@@ -2552,6 +2552,86 @@
     padding: 13px 14px; display: flex; flex-direction: column; gap: 7px;
   }
 
+  /* v3.2 Day-1 Launchpad, Readiness Forecaster, Blind Interleave, Import & 14-Agent Modal */
+  button.live-pill {
+    cursor: pointer; font-family: inherit; appearance: none;
+  }
+  button.live-pill:hover { border-color: var(--accent); color: var(--text); }
+  .launchpad-card {
+    border-left: 3.5px solid var(--accent); display: flex; flex-direction: column; gap: 12px;
+  }
+  .launchpad-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 11px; }
+  .launchpad-door {
+    background: var(--bg-card); border: 1px solid var(--border); border-radius: 11px;
+    padding: 13px 14px; display: flex; flex-direction: column; gap: 8px;
+  }
+  .launchpad-door h3 { margin: 0; font-size: 14px; font-weight: 700; color: var(--text); }
+  .launchpad-door p { margin: 0; font-size: 12px; color: var(--text-2); line-height: 1.45; }
+  .launchpad-foot {
+    display: flex; align-items: center; justify-content: space-between; gap: 10px;
+    padding-top: 6px; border-top: 1px solid var(--border); font-size: 11.5px; color: var(--muted);
+  }
+  .link-subtle-btn {
+    background: none; border: none; padding: 2px 4px; color: var(--muted);
+    font-size: 11.5px; text-decoration: underline; cursor: pointer;
+  }
+  .link-subtle-btn:hover { color: var(--text); background: none; }
+  .readiness-grid { display: grid; grid-template-columns: minmax(0, 1.15fr) minmax(0, 0.95fr); gap: 14px; }
+  .readiness-col {
+    background: var(--bg-card); border: 1px solid var(--border); border-radius: 11px;
+    padding: 13px 14px; display: flex; flex-direction: column; gap: 10px;
+  }
+  .readiness-score-row { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; }
+  .readiness-big { font-size: 32px; font-weight: 800; letter-spacing: -0.02em; line-height: 1; }
+  .readiness-pillars { display: flex; flex-wrap: wrap; gap: 6px; }
+  .lever-list, .premortem-list { display: flex; flex-direction: column; gap: 7px; }
+  .lever-row {
+    background: var(--bg-elev); border: 1px solid var(--border); border-radius: 8px;
+    padding: 8px 10px; display: flex; justify-content: space-between; align-items: flex-start; gap: 8px;
+  }
+  .premortem-bullet {
+    background: var(--bg-elev); border: 1px solid var(--border); border-left: 3px solid var(--shaky);
+    border-radius: 8px; padding: 8px 10px; display: flex; flex-direction: column; gap: 3px;
+    font-size: 12px; line-height: 1.45;
+  }
+  .autopsy-details {
+    margin-top: 6px; background: var(--bg-elev); border: 1px solid var(--border);
+    border-radius: 8px; padding: 7px 10px; font-size: 12px;
+  }
+  .autopsy-details summary { cursor: pointer; font-weight: 650; color: var(--text); }
+  .autopsy-row {
+    padding: 6px 0; border-top: 1px solid var(--border); display: flex; flex-direction: column; gap: 2px;
+  }
+  .import-chips { display: flex; flex-wrap: wrap; gap: 5px; }
+  .import-chip {
+    font-size: 10.5px; padding: 2px 7px; border-radius: 999px;
+    border: 1px solid var(--border); background: var(--bg-elev); color: var(--text-2);
+  }
+  .compat-mcp-box {
+    background: var(--bg-card); border: 1px solid var(--border); border-left: 3px solid var(--teal);
+    border-radius: 10px; padding: 11px 13px; display: flex; flex-direction: column; gap: 7px;
+  }
+  .compat-table { width: 100%; border-collapse: collapse; font-size: 12px; }
+  .compat-table th, .compat-table td {
+    padding: 7px 8px; text-align: left; border-bottom: 1px solid var(--border); vertical-align: middle;
+  }
+  .compat-table th {
+    font-size: 10.5px; text-transform: uppercase; letter-spacing: 0.04em; color: var(--muted);
+    background: var(--bg-card);
+  }
+  .gym-mode-bar {
+    display: inline-flex; gap: 4px; padding: 3px; border-radius: 9px;
+    border: 1px solid var(--border); background: var(--bg-elev); align-self: flex-start;
+  }
+  .gym-mode-btn {
+    border: none; background: transparent; padding: 5px 10px; border-radius: 6px;
+    font-size: 12px; font-weight: 600; color: var(--text-2); cursor: pointer;
+  }
+  .gym-mode-btn.active { background: var(--accent); color: #fff; }
+  @media (max-width: 900px) {
+    .launchpad-grid, .readiness-grid { grid-template-columns: 1fr; }
+  }
+
   @media (max-width: 1380px) {
     .topbar {
       padding: 7px 12px;
@@ -2682,7 +2762,7 @@
       <button type="button" class="energy-btn active" data-energy="normal">Normal</button>
       <button type="button" class="energy-btn" data-energy="deep">Deep</button>
     </div>
-    <span class="pill live-pill" id="liveStatusPill" title="Studio connection status"><span class="live-dot"></span>Offline</span>
+    <button type="button" class="pill live-pill" id="liveStatusPill" title="Studio connection, Loopback POST /mcp &amp; 14-Agent setup"><span class="live-dot"></span>Offline</button>
     <span class="sync-pill hide-at-1360" id="syncStamp">Synced offline</span>
     <a class="btn-link" href="./knowledge-graph/viewer.html" title="Open standalone full-screen Knowledge Graph"><span class="hide-at-1360">Standalone </span>Graph ↗</a>
     <button id="themeToggleBtn" title="Switch Dark / Light theme (t)">☀ Light</button>
@@ -2705,6 +2785,12 @@
 <!-- TAB 1: OVERVIEW -->
 <section class="view-panel active" id="panel-overview" role="tabpanel">
   <div class="container">
+    <div class="surface-card launchpad-card" id="zeroStateLaunchpad" hidden></div>
+
+    <div id="zeroStateReturnBar" hidden style="display:flex;justify-content:flex-end;">
+      <button type="button" class="link-subtle-btn" id="returnToLaunchpadBtn">← Return to Day-1 Launchpad</button>
+    </div>
+
     <div class="surface-card reentry-card" id="reentryCard" hidden></div>
 
     <div class="kpi-grid" id="overviewKpis"></div>
@@ -2761,11 +2847,11 @@
       <div id="mistakeAnalyticsContainer"></div>
     </div>
 
-    <div>
+    <div id="promptsCardWrap">
       <div class="section-head">
         <div>
           <h2>1-Click Syntopik Study Prompts</h2>
-          <p>Paste into Antigravity 2.0, Claude Code, OpenAI Codex / T3 Code, or any AI harness to trigger the matching skill automatically.</p>
+          <p>Paste into any of Syntopik's 14 supported coding agents (Antigravity, Claude Code, Codex, Cursor, Windsurf, Copilot, Gemini CLI, OpenCode, Cline, Roo, Zed, Aider, Continue, Kiro) to trigger the matching skill automatically.</p>
         </div>
       </div>
       <div class="prompts-grid" id="promptsGrid"></div>
@@ -2800,7 +2886,7 @@
       <button type="button" class="gym-tab-btn active" role="tab" data-gym="whiteboard">Live AI Chalkboard <span class="tab-badge" id="gym-badge-whiteboard">0</span></button>
       <button type="button" class="gym-tab-btn" role="tab" data-gym="forks">Blunder Fork Dojo <span class="tab-badge" id="gym-badge-forks">0</span></button>
       <button type="button" class="gym-tab-btn" role="tab" data-gym="arenas">Counterexample Arena <span class="tab-badge" id="gym-badge-arenas">0</span></button>
-      <button type="button" class="gym-tab-btn" role="tab" data-gym="blitz">4-Min ShadowBox Blitz</button>
+      <button type="button" class="gym-tab-btn" role="tab" data-gym="blitz">Blitz &amp; Interleave</button>
       <button type="button" class="gym-tab-btn" role="tab" data-gym="derivations">Derivation &amp; Axiom-Cut <span class="tab-badge" id="gym-badge-derivations">0</span></button>
       <button type="button" class="gym-tab-btn" role="tab" data-gym="viva">Viva Defense Chamber <span class="tab-badge" id="gym-badge-viva">0</span></button>
     </div>
@@ -2869,7 +2955,7 @@
       <div class="graph-empty" id="graphEmpty" hidden>
         <div class="empty-box">
           <h3 id="graphEmptyTitle">Your Knowledge Graph is Ready</h3>
-          <p id="graphEmptyDesc">Start a topic, course, paper, or chapter in Syntopik and record reviews via <code>scripts/srs_engine.py</code>. Every concept, BKT mastery probability, FSRS-6 schedule, and reasoning edge renders live right here.</p>
+          <p id="graphEmptyDesc">Start a topic, course, paper, or chapter in Syntopik and log reviews via <code>syntopik review</code> or Live Studio. Every concept, BKT mastery probability, FSRS-6 schedule, and reasoning edge renders live right here.</p>
         </div>
       </div>
     </div>
@@ -2948,11 +3034,23 @@
     <div class="quick-import-card" id="quickImportCard">
       <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;">
         <strong style="font-size:13.5px;">Quick Universal Import</strong>
-        <span style="font-size:11.5px;color:var(--muted);" id="quickImportHint">Paste any YouTube, arXiv, GitHub, or web URL</span>
+        <span style="font-size:11.5px;color:var(--muted);" id="quickImportHint">Paste any URL or workspace path, or upload a local study file (≤ 15 MiB)</span>
+      </div>
+      <div class="import-chips" aria-label="Supported import formats">
+        <span class="import-chip">.apkg Anki</span>
+        <span class="import-chip">.ipynb Jupyter</span>
+        <span class="import-chip">.csv / .tsv Cards</span>
+        <span class="import-chip">Notion .zip / MD</span>
+        <span class="import-chip">PDF</span>
+        <span class="import-chip">YouTube</span>
+        <span class="import-chip">arXiv</span>
+        <span class="import-chip">GitHub</span>
       </div>
       <div class="quick-import-row">
-        <input id="quickImportInput" type="url" placeholder="https://youtu.be/... · https://arxiv.org/abs/... · https://github.com/..." aria-label="Source URL to import" />
+        <input id="quickImportInput" type="text" placeholder="URL (YouTube, arXiv, GitHub, Web) or workspace path (.apkg, .ipynb, .csv, MD folder)…" aria-label="Source URL or workspace path to import" />
         <input id="quickImportSlug" type="text" placeholder="Optional slug" aria-label="Optional source slug" />
+        <input id="quickImportFile" type="file" accept=".apkg,.ipynb,.csv,.tsv,.zip,.md,.pdf" hidden aria-label="Upload study file" />
+        <button id="quickImportFileBtn" type="button" title="Upload .apkg, .ipynb, .csv, .tsv, Notion .zip, .md, or .pdf (≤ 15 MiB)">Upload File…</button>
         <button class="primary" id="quickImportBtn" type="button">Import Source</button>
       </div>
     </div>
@@ -2994,6 +3092,8 @@
     </div>
 
     <div class="exam-kpi-grid" id="examKpis"></div>
+
+    <div class="surface-card" id="examReadinessCard"></div>
 
     <div class="surface-card">
       <div class="section-head">
@@ -3126,6 +3226,20 @@
   </div>
 </div>
 
+<!-- 14-AGENT COMPATIBILITY & LOOPBACK POST /MCP MODAL -->
+<div class="modal-backdrop" id="agentCompatModal" role="dialog" aria-modal="true" aria-labelledby="agentCompatModalTitle">
+  <div class="v3-modal-shell">
+    <div class="modal-header">
+      <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+        <strong id="agentCompatModalTitle">14 Coding Agents &amp; Loopback HTTP MCP</strong>
+        <span class="pill teal" id="agentCompatCountPill">14 harnesses</span>
+      </div>
+      <button id="agentCompatModalCloseBtn" type="button">Close (Esc)</button>
+    </div>
+    <div class="v3-modal-body" id="agentCompatModalBody"></div>
+  </div>
+</div>
+
 <!-- PREVIEW MODAL -->
 <div class="modal-backdrop" id="previewModal" role="dialog" aria-modal="true" aria-labelledby="modalTitle">
   <div class="modal-shell">
@@ -3235,9 +3349,28 @@
       title: "Daily Review",
       skill: "knowledge-graph · FSRS-6 + FIRe",
       icon: "↻",
-      prompt: "Run srs_engine.py due, review my top due/weak concepts calmly without spoilers, update my FSRS-6 + BKT ratings, and propagate FIRe prerequisite credit.",
+      prompt: "Run syntopik review, review my top due/weak concepts calmly without spoilers, update my FSRS-6 + BKT ratings, and propagate FIRe prerequisite credit.",
     },
   ];
+
+  const DEFAULT_COMPAT_HARNESSES = [
+    { id: "antigravity", name: "Google Antigravity", transportSupport: ["stdio"], httpMcpSupported: false, connectCmd: "syntopik connect antigravity", attachCmd: "syntopik attach . --harness antigravity" },
+    { id: "claude", name: "Claude Code", transportSupport: ["stdio", "http"], httpMcpSupported: true, connectCmd: "syntopik connect claude", attachCmd: "syntopik attach . --harness claude" },
+    { id: "codex", name: "OpenAI Codex", transportSupport: ["stdio", "http"], httpMcpSupported: true, connectCmd: "syntopik connect codex", attachCmd: "syntopik attach . --harness codex" },
+    { id: "cursor", name: "Cursor", transportSupport: ["stdio", "http"], httpMcpSupported: true, connectCmd: "syntopik connect cursor", attachCmd: "syntopik attach . --harness cursor" },
+    { id: "windsurf", name: "Windsurf", transportSupport: ["stdio", "http"], httpMcpSupported: true, connectCmd: "syntopik connect windsurf", attachCmd: "syntopik attach . --harness windsurf" },
+    { id: "copilot", name: "GitHub Copilot (VS Code)", transportSupport: ["stdio", "http"], httpMcpSupported: true, connectCmd: "syntopik connect copilot", attachCmd: "syntopik attach . --harness copilot" },
+    { id: "gemini", name: "Gemini CLI", transportSupport: ["stdio", "http"], httpMcpSupported: true, connectCmd: "syntopik connect gemini", attachCmd: "syntopik attach . --harness gemini" },
+    { id: "opencode", name: "OpenCode", transportSupport: ["stdio", "http"], httpMcpSupported: true, connectCmd: "syntopik connect opencode", attachCmd: "syntopik attach . --harness opencode" },
+    { id: "cline", name: "Cline", transportSupport: ["stdio", "http"], httpMcpSupported: true, connectCmd: "syntopik connect cline", attachCmd: "syntopik attach . --harness cline" },
+    { id: "roo", name: "Roo Code", transportSupport: ["stdio", "http"], httpMcpSupported: true, connectCmd: "syntopik connect roo", attachCmd: "syntopik attach . --harness roo" },
+    { id: "zed", name: "Zed", transportSupport: ["stdio", "http"], httpMcpSupported: true, connectCmd: "syntopik connect zed", attachCmd: "syntopik attach . --harness zed" },
+    { id: "aider", name: "Aider", transportSupport: [], httpMcpSupported: false, connectCmd: "syntopik connect aider", attachCmd: "syntopik attach . --harness aider" },
+    { id: "continue", name: "Continue", transportSupport: ["stdio", "http"], httpMcpSupported: true, connectCmd: "syntopik connect continue", attachCmd: "syntopik attach . --harness continue" },
+    { id: "kiro", name: "Kiro", transportSupport: ["stdio", "http"], httpMcpSupported: true, connectCmd: "syntopik connect kiro", attachCmd: "syntopik attach . --harness kiro" },
+  ];
+
+  const MAX_IMPORT_UPLOAD_BYTES = 15 * 1024 * 1024;
 
   const BUNDLED_STARTER_PACKS = [
     {
@@ -3260,8 +3393,8 @@
     },
   ];
 
-  const MISTAKE_DRILL_PROMPT = "Run mistake_analytics.py summary and drill my top 3 trap categories";
-  const BUILD_EXAM_PROMPT = "Use exam-simulator to build a verified timed mastery assessment or NTA JEE CBT mock on [Topic / Chapter] (single_correct, multi_correct, numerical, or matrix_match), compile it with scripts/exam_runner.py build into exams/, and give me the launch path.";
+  const MISTAKE_DRILL_PROMPT = "Run syntopik run mistake_analytics summary and drill my top 3 trap categories";
+  const BUILD_EXAM_PROMPT = "Use exam-simulator to build a verified timed mastery assessment or NTA JEE CBT mock on [Topic / Chapter] (single_correct, multi_correct, numerical, matrix_match, assertion_reason, or vignette_stem), compile it with syntopik run exam_runner build into exams/, and give me the launch path.";
 
   const MISTAKE_CATEGORY_META = {
     concept_gap: { label: "Concept Gap", color: "var(--misconception)", pill: "misconception" },
@@ -3319,7 +3452,13 @@
     starterPacks: [],
     rosetta: { chords: [], archetypesCount: 0 },
     syncStatus: { deviceId: null, lastSyncedAt: null, lamportClock: 0 },
+    readinessSummary: null,
+    interleaveStats: null,
+    compatSummary: null,
   };
+  let zeroStatePreviewTelemetry = false;
+  let readinessOverride = null;
+  let readinessBusy = false;
   let serverExtras = {
     forksDue: 0,
     arenasCount: 0,
@@ -3351,7 +3490,8 @@
     selectedArenaId: null,
     arenaLastResult: null,
     arenaRepairResult: null,
-    // 4-Min ShadowBox Blitz
+    // 4-Min ShadowBox Blitz & Blind-Chapter Interleave (Station 4)
+    blitzSubMode: "shadowbox", // shadowbox | interleave
     blitzSession: null,
     blitzIdx: 0,
     blitzStartTs: null,
@@ -3360,6 +3500,16 @@
     blitzSelections: { killCue: "", firstMove: "", rejectedDecoy: "", confidencePct: 70 },
     blitzLastGrade: null,
     blitzResults: [],
+    // Blind-Chapter Interleave state
+    ilvSession: null,
+    ilvIdx: 0,
+    ilvItemStartTs: null,
+    ilvSelectedOpt: "",
+    ilvConfPct: 70,
+    ilvStep1Res: null,
+    ilvStep2Map: {},
+    ilvSummary: null,
+    ilvBusy: false,
     // Derivation Blackout, Axiom-Cut & Proof-Graph Diff
     selectedDerivId: null,
     derivMode: "blackout", // blackout | cut | diff
@@ -3388,6 +3538,10 @@
     version: "",
     workspaceName: "",
     lan: null,
+    mcpHttpEndpoint: "http://127.0.0.1:4173/mcp",
+    mcpHttpEnabled: false,
+    mcpHttpTools: [],
+    agentsCompat: null,
   };
   let sseSource = null;
   let sseRefreshTimer = null;
@@ -3580,10 +3734,10 @@
       if (pill) {
         pill.classList.add("is-live");
         pill.innerHTML = `<span class="live-dot"></span>Live Studio`;
-        pill.title = `Connected to Syntopik Studio${liveCaps.version ? ` v${liveCaps.version}` : ""}`;
+        pill.title = `Connected to Syntopik Studio${liveCaps.version ? ` v${liveCaps.version}` : ""} — click for 14-Agent & POST /mcp setup`;
       }
       if (sub) sub.textContent = "Local Deep-Mastery OS · Live Studio";
-      if (importHint) importHint.textContent = "Live import via syntopik — YouTube, arXiv, GitHub, or web URL";
+      if (importHint) importHint.textContent = "Live import via syntopik — URL, workspace path, or file upload (≤ 15 MiB)";
       if (revBadge) {
         revBadge.classList.add("is-live");
         revBadge.innerHTML = `<span class="live-dot"></span>Live Studio`;
@@ -3592,7 +3746,7 @@
       if (pill) {
         pill.classList.remove("is-live");
         pill.innerHTML = `<span class="live-dot"></span>Offline`;
-        pill.title = "100% offline read-only workbench";
+        pill.title = "Offline read-only mode — click for 14-Agent & Loopback MCP setup";
       }
       if (sub) sub.textContent = "Local Deep-Mastery OS · 100% Offline";
       if (importHint) importHint.textContent = "Offline mode — copies a ready-to-run syntopik import command";
@@ -3825,6 +3979,7 @@
         "learnerProfile", "nextMove", "forks", "forksDue", "arenas", "decisions",
         "derivations", "vivaSessions", "evidenceSummary", "rootCauseHotspots",
         "whiteboard", "explorables", "starterPacks", "rosetta", "syncStatus",
+        "readinessSummary", "interleaveStats", "compatSummary",
       ];
       for (const k of v3Keys) {
         if (st && st[k] !== undefined) mergedHub[k] = st[k];
@@ -3923,6 +4078,10 @@
           version: String(caps.version || ""),
           workspaceName: String(caps.workspaceName || ""),
           lan: caps.lan || null,
+          mcpHttpEndpoint: String(caps.mcpHttpEndpoint || `${window.location.origin}/mcp`),
+          mcpHttpEnabled: caps.mcpHttpEnabled !== undefined ? Boolean(caps.mcpHttpEnabled) : !caps.lan,
+          mcpHttpTools: Array.isArray(caps.mcpHttpTools) ? caps.mcpHttpTools : [],
+          agentsCompat: caps.agentsCompat || null,
         };
         updateLiveStatusUI();
         await refreshLiveState();
@@ -3932,7 +4091,17 @@
     } catch {
       // Remain cleanly in offline read-only mode with zero console errors.
     }
-    liveCaps = { live: false, token: "", version: "", workspaceName: "", lan: null };
+    liveCaps = {
+      live: false,
+      token: "",
+      version: "",
+      workspaceName: "",
+      lan: null,
+      mcpHttpEndpoint: "http://127.0.0.1:4173/mcp",
+      mcpHttpEnabled: false,
+      mcpHttpTools: [],
+      agentsCompat: null,
+    };
     updateLiveStatusUI();
     return false;
   }
@@ -5526,7 +5695,7 @@
         if (readerExploreSpecs[idx]) mountExplorableWidget(host, readerExploreSpecs[idx]);
       });
     } else {
-      bodyEl.innerHTML = `<div class="empty-box"><h3>Offline Reader Content Not Synced Yet</h3><p>Run <code>node scripts/sync-graph.mjs</code> to embed this chapter's Markdown for 100% offline in-browser reading, or click <strong>Open File ↗</strong> above.</p></div>`;
+      bodyEl.innerHTML = `<div class="empty-box"><h3>Offline Reader Content Not Synced Yet</h3><p>Run <code>syntopik sync</code> to embed this chapter's Markdown for 100% offline in-browser reading, or click <strong>Open File ↗</strong> above.</p></div>`;
     }
 
     applyReaderFontSize();
@@ -6031,15 +6200,15 @@
   /* ================= STUDIO LIVE ACTIONS (RECOVER, TRIAGE, POCKET, PACK, OBSIDIAN) ================= */
   async function runStudioAction(kind, params = {}) {
     if (studioActionBusy) return;
-    const chapterSlug = params.chapter || hubData.activeChapterTracker?.slug || "";
+    const chapterSlug = params.chapter || hubData.activeChapterTracker?.slug || (hubData.chapterTrackers || []).find((t) => t.active)?.slug || "";
 
     if (!liveCaps.live) {
       const prompts = {
-        recover: "I fell behind — run srs_engine.py recover --daily-cap 15 --apply to smooth my review backlog calmly.",
+        recover: "I fell behind — run syntopik review --recover --daily-cap 15 to smooth my review backlog calmly.",
         triage: `Run 48h exam triage and compile an Anti-Mastery 1-page crib sheet PDF${chapterSlug ? ` for ${chapterSlug}` : ""}.`,
         pocket: "Export an offline Pocket Phone Deck (25 cards) using syntopik.pocket so I can review on my phone.",
         pack: `Export a zero-PII portable Study Pack (.syntopik-pack.zip) for ${chapterSlug || "my active chapter"}.`,
-        obsidian: "Sync my Knowledge Graph and chapter notes with Obsidian via scripts/vault_sync.py.",
+        obsidian: "Sync my Knowledge Graph and chapter notes with Obsidian via syntopik export obsidian.",
         dossier: "Export my hash-chained 4-Tier Epistemic Evidence Mastery Dossier via syntopik.evidence.",
       };
       copyText(prompts[kind] || "Continue", "Offline mode — copied prompt to clipboard ✓");
@@ -6201,7 +6370,7 @@
         </div>
         <div class="empty-box" style="padding:20px;">
           <h3>No Active Autopilot Tracker Yet</h3>
-          <p>Paste <code>Start &lt;Topic, Course, or Chapter&gt;</code> (with or without attached PDFs/code) in Antigravity, Claude Code, or Codex. Your live Topics progress, Question ledger, Milestones, and 1-click <code>Continue</code> resume button appear right here.</p>
+          <p>Paste <code>Start &lt;Topic, Course, or Chapter&gt;</code> (with or without attached PDFs/code) in any supported coding agent (Antigravity, Claude Code, Codex, Cursor, Windsurf, Copilot, Gemini CLI, OpenCode, Cline, Roo, Zed, Aider, Continue, or Kiro). Your live Topics progress, Question ledger, Milestones, and 1-click <code>Continue</code> resume button appear right here.</p>
           ${trackers.length > 0 ? `<div class="ap-other-row" style="justify-content:center;">Saved trackers (${trackers.length}): ${trackers.map((t) => `<span class="pill">${esc(t.title)} · ${esc(String(t.pct ?? 0))}%</span>`).join("")}</div>` : ""}
         </div>
         <div class="ap-tools-row">
@@ -6279,6 +6448,15 @@
       ` : "";
     })();
 
+    const rdSummary = readinessOverride || hubData.readinessSummary || null;
+    const rdHasExam = Boolean(rdSummary && (rdSummary.hasExamConfig || rdSummary.taperMode?.active));
+    const rdPillHtml = rdHasExam
+      ? `<button type="button" class="pill-btn ${rdSummary.taperMode?.active ? "shaky" : "teal"}" id="apJumpReadinessBtn" title="View Exam-Day Readiness Forecaster &amp; Pre-Mortem Shield">Readiness ${Math.round(Number(rdSummary.readinessIndex || 0))}%${rdSummary.daysToExam != null ? ` · ${Math.ceil(Number(rdSummary.daysToExam))}d` : ""} →</button>`
+      : "";
+    const taperPillHtml = rdSummary?.taperMode?.active
+      ? `<span class="pill shaky" title="Pre-Exam Taper Mode active: 0 new concepts, consolidate solid/borderline invariants &amp; protect sleep">Taper · ${esc(String(rdSummary.taperMode.hoursRemaining ?? "≤72"))}h left · 0 new</span>`
+      : "";
+
     card.innerHTML = `
       <div class="section-head" style="margin-bottom:8px;">
         <div>
@@ -6286,6 +6464,8 @@
             <span class="pill accent">Autopilot Active</span>
             <span class="pill teal">${esc(active.subject || "General")}</span>
             <span class="pill solid">${esc(String(active.pct ?? 0))}% complete</span>
+            ${rdPillHtml}
+            ${taperPillHtml}
             ${Number(active.doubtCount) > 0 ? `<span class="pill shaky">${Number(active.doubtCount)} open doubt${Number(active.doubtCount) === 1 ? "" : "s"}</span>` : ""}
             ${serverExtras.triageRecommended ? `<span class="pill shaky">Exam Near · 48h Triage Ready</span>` : ""}
           </div>
@@ -6388,6 +6568,10 @@
       contBtn.addEventListener("click", () => {
         copyText("Continue", 'Copied "Continue" prompt — paste into your AI harness ✓');
       });
+    }
+    const jumpRdBtn = document.getElementById("apJumpReadinessBtn");
+    if (jumpRdBtn) {
+      jumpRdBtn.addEventListener("click", () => switchTab("exams"));
     }
     const lowWarmBtn = document.getElementById("apLowWarmupBtn");
     if (lowWarmBtn) {
@@ -7621,9 +7805,320 @@
     });
   }
 
+  /* ================= 14-AGENT COMPATIBILITY & LOOPBACK POST /MCP MODAL ================= */
+  function closeAgentCompatModal() {
+    document.getElementById("agentCompatModal")?.classList.remove("open");
+  }
+
+  function openAgentCompatModal() {
+    const modal = document.getElementById("agentCompatModal");
+    const body = document.getElementById("agentCompatModalBody");
+    const countPill = document.getElementById("agentCompatCountPill");
+    if (!modal || !body) return;
+
+    const matrix = liveCaps.agentsCompat && Array.isArray(liveCaps.agentsCompat.harnesses) && liveCaps.agentsCompat.harnesses.length
+      ? liveCaps.agentsCompat
+      : {
+        totalHarnesses: DEFAULT_COMPAT_HARNESSES.length,
+        detectedCount: 0,
+        configuredCount: 0,
+        harnesses: DEFAULT_COMPAT_HARNESSES.map((h) => ({ ...h, detected: false, configured: false, attached: false })),
+      };
+    const harnesses = matrix.harnesses || [];
+    const endpoint = liveCaps.mcpHttpEndpoint || "http://127.0.0.1:4173/mcp";
+    const tools = Array.isArray(liveCaps.mcpHttpTools) && liveCaps.mcpHttpTools.length
+      ? liveCaps.mcpHttpTools
+      : ["synt_next_move", "synt_get_frontier", "synt_capture_concept", "synt_log_review", "synt_whiteboard_step", "synt_readiness", "synt_interleave"];
+
+    if (countPill) {
+      countPill.textContent = liveCaps.live
+        ? `${matrix.configuredCount || 0} configured · ${matrix.detectedCount || 0} detected / ${harnesses.length}`
+        : `${harnesses.length} supported harnesses`;
+    }
+
+    const mcpStatusBadge = !liveCaps.live
+      ? `<span class="pill">Offline — run <code>syntopik serve</code></span>`
+      : liveCaps.lan
+        ? `<span class="pill shaky">Disabled in --lan mode (403)</span>`
+        : `<span class="pill solid">Active · Loopback + Token</span>`;
+
+    body.innerHTML = `
+      <div class="compat-mcp-box">
+        <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;">
+          <div style="display:flex;align-items:center;gap:7px;flex-wrap:wrap;">
+            <strong>Loopback Streamable-HTTP MCP</strong>
+            ${mcpStatusBadge}
+          </div>
+          <div style="display:flex;gap:6px;flex-wrap:wrap;">
+            <button type="button" id="copyMcpEndpointBtn">Copy Endpoint</button>
+            ${liveCaps.live && !liveCaps.lan && liveCaps.token ? `<button type="button" id="copyMcpCurlBtn">Copy Auth Curl</button>` : ""}
+          </div>
+        </div>
+        <div style="font-size:12px;color:var(--text-2);">
+          Endpoint: <code>POST ${esc(endpoint)}</code> · Pure Python stdlib (zero Node.js required). Accepts <code>X-Syntopik-Token</code> or <code>Authorization: Bearer</code> strictly on loopback.
+        </div>
+        <div style="display:flex;gap:5px;flex-wrap:wrap;">
+          ${tools.map((t) => `<span class="pill">${esc(t)}</span>`).join("")}
+        </div>
+      </div>
+
+      <div style="overflow-x:auto;">
+        <table class="compat-table">
+          <thead>
+            <tr>
+              <th>Coding Agent</th>
+              <th>Status</th>
+              <th>Transports</th>
+              <th>1-Click Setup</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${harnesses.map((h) => {
+              const hid = String(h.id || "");
+              const stCls = h.configured || h.attached ? "solid" : h.detected ? "teal" : "";
+              const stLbl = h.configured || h.attached ? "Configured ✓" : h.detected ? "Detected" : "Available";
+              const trs = Array.isArray(h.transportSupport) && h.transportSupport.length ? h.transportSupport.join(" + ") : "rules-only";
+              const connectCmd = `syntopik connect ${hid}`;
+              const httpCmd = `syntopik attach . --harness ${hid} --transport http`;
+              return `
+                <tr>
+                  <td><strong>${esc(h.name || hid)}</strong> <code style="font-size:10.5px;">${esc(hid)}</code></td>
+                  <td><span class="pill ${stCls}">${stLbl}</span></td>
+                  <td><span style="font-size:11.5px;color:var(--text-2);">${esc(trs)}</span></td>
+                  <td>
+                    <div style="display:flex;gap:5px;flex-wrap:wrap;">
+                      <button type="button" data-copy-agent-cmd="${esc(connectCmd)}" style="padding:3px 8px;font-size:11px;">Copy connect</button>
+                      ${h.httpMcpSupported ? `<button type="button" data-copy-agent-cmd="${esc(httpCmd)}" style="padding:3px 8px;font-size:11px;">--transport http</button>` : ""}
+                    </div>
+                  </td>
+                </tr>
+              `;
+            }).join("")}
+          </tbody>
+        </table>
+      </div>
+    `;
+
+    modal.classList.add("open");
+    document.getElementById("copyMcpEndpointBtn")?.addEventListener("click", () => {
+      copyText(endpoint, "Copied POST /mcp endpoint ✓");
+    });
+    document.getElementById("copyMcpCurlBtn")?.addEventListener("click", () => {
+      const cmd = `curl -sS -X POST "${endpoint}" -H "Content-Type: application/json" -H "Authorization: Bearer ${liveCaps.token}" -d '{"jsonrpc":"2.0","id":1,"method":"tools/list"}'`;
+      copyText(cmd, "Copied authenticated POST /mcp curl command ✓");
+    });
+    body.querySelectorAll("[data-copy-agent-cmd]").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        const cmd = btn.getAttribute("data-copy-agent-cmd") || "";
+        copyText(cmd, `Copied "${cmd}" ✓`);
+      });
+    });
+  }
+
+  /* ================= FILE UPLOAD HELPER (<= 15 MiB -> POST /api/import) ================= */
+  async function uploadStudyFileToImport(file, slugVal = "") {
+    if (!file) return;
+    if (file.size > MAX_IMPORT_UPLOAD_BYTES) {
+      showToast(`File exceeds 15 MiB limit (${formatBytes(file.size)})`);
+      return;
+    }
+    if (!liveCaps.live) {
+      copyText(`syntopik import "sources/${file.name}"`, "Offline mode — copied syntopik import command ✓");
+      return;
+    }
+    const contentBase64 = await new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => {
+        const res = String(reader.result || "");
+        const idx = res.indexOf(";base64,");
+        resolve(idx >= 0 ? res.slice(idx + 8) : res);
+      };
+      reader.onerror = () => reject(new Error("Could not read local file"));
+      reader.readAsDataURL(file);
+    });
+    const payload = { filename: file.name, contentBase64 };
+    if (slugVal) payload.slug = slugVal;
+    const res = await apiPost("/api/import", payload);
+    const impN = Number(res.importedCount ?? 0);
+    const msg = res.summary || (impN > 0 ? `${impN} unseen cue${impN === 1 ? "" : "s"} imported (0 fake mastery) ✓` : `Imported "${file.name}" ✓`);
+    showToast(msg);
+    await refreshLiveState();
+  }
+
+  /* ================= DAY-1 ZERO-STATE LAUNCHPAD ================= */
+  function renderZeroStateLaunchpad() {
+    const card = document.getElementById("zeroStateLaunchpad");
+    const retBar = document.getElementById("zeroStateReturnBar");
+    const propsCount = (graphData.propositions || []).length;
+    const showLaunchpad = propsCount === 0 && !zeroStatePreviewTelemetry;
+
+    const hideIds = [
+      "overviewKpis",
+      "activeAutopilotCard",
+      "retentionIntelCard",
+      "learnerProfileCard",
+      "dueStrip",
+      "mistakeAnalyticsCard",
+      "promptsCardWrap",
+      "recentAssetsWrap",
+    ];
+    for (const id of hideIds) {
+      const el = document.getElementById(id);
+      if (el) el.hidden = showLaunchpad;
+    }
+    if (retBar) retBar.hidden = !(propsCount === 0 && zeroStatePreviewTelemetry);
+    if (!card) return;
+    card.hidden = !showLaunchpad;
+    if (!showLaunchpad) return;
+
+    const calibrated = Boolean(hubData.learnerProfile?.calibration?.completed);
+    const packs = (Array.isArray(hubData.starterPacks) && hubData.starterPacks.length > 0)
+      ? hubData.starterPacks.slice(0, 3)
+      : BUNDLED_STARTER_PACKS;
+    const firstPrompt = "Start [topic or attached notes] — run a 2-min placement, build my plan, and teach from first principles.";
+    const compatSum = hubData.compatSummary || liveCaps.agentsCompat || null;
+    const detectedCnt = Number(compatSum?.detectedCount || 0);
+
+    card.innerHTML = `
+      <div class="section-head" style="margin-bottom:0;">
+        <div>
+          <div style="display:flex;align-items:center;gap:7px;flex-wrap:wrap;margin-bottom:4px;">
+            <span class="pill accent">Day-1 Launchpad</span>
+            <span class="pill ${calibrated ? "solid" : "sage"}">${calibrated ? "Teacher Calibrated ✓" : "Zero Setup Required"}</span>
+          </div>
+          <h2 style="margin:0;">Start Mastering Any Subject — Calmly, From First Principles</h2>
+          <p style="margin:3px 0 0;font-size:12.5px;color:var(--muted);">Pick any door below. As soon as your first concept or pack lands, your live Knowledge Graph, FSRS-6 review deck, and Mastery Gym unlock automatically.</p>
+        </div>
+      </div>
+
+      <div class="launchpad-grid">
+        <div class="launchpad-door">
+          <div style="display:flex;justify-content:space-between;align-items:center;gap:6px;">
+            <span class="pill sage">Door A</span>
+            ${calibrated ? `<span class="pill solid">Calibrated ✓</span>` : `<span class="pill">~2 min · Non-VARK</span>`}
+          </div>
+          <h3>2-Min Non-VARK Teacher Calibration</h3>
+          <p>Set entry scaffolding, challenge appetite, prose ceiling, and session length with zero learning-style myths.</p>
+          <div style="margin-top:auto;display:flex;gap:7px;flex-wrap:wrap;">
+            <button type="button" class="primary" id="lpCalibrateBtn">${calibrated ? "Update Calibration" : "Start Calibration"}</button>
+          </div>
+        </div>
+
+        <div class="launchpad-door">
+          <div style="display:flex;justify-content:space-between;align-items:center;gap:6px;">
+            <span class="pill teal">Door B</span>
+            <span class="pill">.apkg · .ipynb · CSV · MD · PDF · URL</span>
+          </div>
+          <h3>Drop or Import Study Material</h3>
+          <p>Import Anki decks, Jupyter notebooks, CSV/TSV flashcards, Notion exports, PDFs, YouTube lectures, or arXiv papers (0 fake mastery).</p>
+          <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:auto;">
+            <input type="text" id="lpImportInput" class="gym-input" style="flex:1;min-width:140px;padding:6px 8px;font-size:12px;" placeholder="Paste URL or workspace path…" />
+            <input type="file" id="lpImportFile" accept=".apkg,.ipynb,.csv,.tsv,.zip,.md,.pdf" hidden />
+            <button type="button" id="lpImportUploadBtn">Upload</button>
+            <button type="button" class="primary" id="lpImportGoBtn">Import</button>
+            <button type="button" id="lpOpenSourcesBtn">Sources →</button>
+          </div>
+        </div>
+
+        <div class="launchpad-door">
+          <div style="display:flex;justify-content:space-between;align-items:center;gap:6px;">
+            <span class="pill accent">Door C</span>
+            <span class="pill">Zero-PII Curated</span>
+          </div>
+          <h3>1-Click Verified Starter Pack</h3>
+          <p>Load a complete 10-concept chapter with <code>:::explore</code> lab, blunder forks, arena, and timed CBT exam in one click.</p>
+          <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:auto;">
+            ${packs.map((pk) => {
+              const slug = pk.slug || pk.id || "";
+              const shortLbl = slug === "shm-physics" ? "SHM Physics" : slug === "transformers-attention" ? "Transformers" : slug === "raft-consensus" ? "Raft Consensus" : (pk.title || slug).slice(0, 22);
+              return `<button type="button" class="primary" data-lp-pack="${esc(slug)}" style="font-size:11.5px;padding:5px 9px;">${esc(shortLbl)}</button>`;
+            }).join("")}
+            <button type="button" id="lpMorePacksBtn" style="font-size:11.5px;padding:5px 9px;">All Packs…</button>
+          </div>
+        </div>
+
+        <div class="launchpad-door">
+          <div style="display:flex;justify-content:space-between;align-items:center;gap:6px;">
+            <span class="pill">Door D</span>
+            <span class="pill teal">${detectedCnt > 0 ? `${detectedCnt} detected / 14 agents` : "14 Coding Agents + HTTP MCP"}</span>
+          </div>
+          <h3>Connect Coding Agent &amp; Copy First Prompt</h3>
+          <p>Wire Antigravity, Claude Code, Codex, Cursor, Windsurf, Copilot, Gemini CLI, Zed, Cline, Roo, or any agent in one command.</p>
+          <div style="display:flex;gap:7px;flex-wrap:wrap;margin-top:auto;">
+            <button type="button" class="primary" id="lpCopyPromptBtn">Copy First Prompt</button>
+            <button type="button" id="lpCompatModalBtn">14-Agent Setup &amp; MCP</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="launchpad-foot">
+        <span>100% local-first · pure stdlib · zero telemetry</span>
+        <button type="button" class="link-subtle-btn" id="lpPreviewTelemetryBtn">Preview full telemetry cards</button>
+      </div>
+    `;
+
+    document.getElementById("lpCalibrateBtn")?.addEventListener("click", openCalibrationModal);
+    document.getElementById("lpOpenSourcesBtn")?.addEventListener("click", () => switchTab("sources"));
+    document.getElementById("lpMorePacksBtn")?.addEventListener("click", openStarterPackModal);
+    document.getElementById("lpCopyPromptBtn")?.addEventListener("click", () => {
+      copyText(firstPrompt, "Copied Day-1 starter prompt ✓");
+    });
+    document.getElementById("lpCompatModalBtn")?.addEventListener("click", openAgentCompatModal);
+    document.getElementById("lpPreviewTelemetryBtn")?.addEventListener("click", () => {
+      zeroStatePreviewTelemetry = true;
+      renderOverview();
+    });
+    document.getElementById("lpImportUploadBtn")?.addEventListener("click", () => {
+      document.getElementById("lpImportFile")?.click();
+    });
+    document.getElementById("lpImportFile")?.addEventListener("change", async (e) => {
+      const f = e.target.files && e.target.files[0];
+      e.target.value = "";
+      if (!f) return;
+      try { await uploadStudyFileToImport(f); } catch (err) { showToast(`Upload failed: ${err?.message || "error"}`); }
+    });
+    document.getElementById("lpImportGoBtn")?.addEventListener("click", async () => {
+      const val = String(document.getElementById("lpImportInput")?.value || "").trim();
+      if (!val) { showToast("Enter a URL or workspace path, or click Upload"); return; }
+      if (!liveCaps.live) {
+        copyText(`syntopik import "${val}"`, "Offline mode — copied syntopik import command ✓");
+        return;
+      }
+      try {
+        const res = await apiPost("/api/import", { target: val });
+        showToast(res.summary || `Imported "${res.slug || "source"}" ✓`);
+        await refreshLiveState();
+      } catch (err) {
+        showToast(`Import failed: ${err?.message || "check input"}`);
+      }
+    });
+    card.querySelectorAll("[data-lp-pack]").forEach((btn) => {
+      btn.addEventListener("click", async () => {
+        const slug = btn.getAttribute("data-lp-pack") || "";
+        if (!liveCaps.live) {
+          copyText(`syntopik demo --pack ${slug}`, `Offline mode — copied "syntopik demo --pack ${slug}" ✓`);
+          return;
+        }
+        btn.disabled = true;
+        try {
+          await apiPost("/api/demo/load", { packSlug: slug });
+          showToast(`Loaded starter pack "${slug}" ✓`);
+          await refreshLiveState();
+        } catch (err) {
+          showToast(`Starter pack failed: ${err?.message || "error"}`);
+          btn.disabled = false;
+        }
+      });
+    });
+  }
+
   /* ================= OVERVIEW TAB ================= */
   function renderOverview() {
+    renderZeroStateLaunchpad();
     const props = graphData.propositions || [];
+    if (props.length === 0 && !zeroStatePreviewTelemetry) {
+      return;
+    }
     const chains = graphData.chains || [];
     const counts = { solid: 0, shaky: 0, misconception: 0, planned: 0 };
     const bkts = [];
@@ -7954,12 +8449,12 @@
     pill.className = total > 0 ? "pill misconception" : "pill";
 
     if (total === 0) {
-      subtitle.textContent = "Log conceptual, edge-case, sign, unit, and timed-pressure traps via mistake_analytics.py or exam_runner.py.";
+      subtitle.textContent = "Personal conceptual, edge-case, sign, unit, and timed-pressure traps logged across sessions and exams.";
       const allCats = Object.keys(MISTAKE_CATEGORY_META);
       container.innerHTML = `
         <div class="empty-box" style="padding:22px;">
           <h3>No Personal Traps Logged Yet</h3>
-          <p>When you log misses via <code>scripts/mistake_analytics.py log</code> or grade an assessment with <code>scripts/exam_runner.py grade</code>, your Top 3 recurring error categories, hottest chapters, and <strong>Cue → Fix</strong> traps appear here — and get injected at Turn 0 of every session.</p>
+          <p>When you log misses via <code>syntopik run mistake_analytics log</code> or grade a timed assessment, your Top 3 recurring error categories, hottest chapters, and <strong>Cue → Fix</strong> traps appear here — and get injected at Turn 0 of every session.</p>
           <div class="mistake-badges-wrap" style="justify-content:center;margin-top:4px;">
             ${allCats.map((c) => `<span class="pill">${esc(c)}</span>`).join("")}
           </div>
@@ -8170,7 +8665,7 @@
       return `
         <div class="empty-box" style="padding:22px;">
           <h3>No Graded Exam Attempts Yet</h3>
-          <p>Launch a CBT exam from <code>exams/</code>, download your attempt JSON at submission, and grade it with <code>scripts/exam_runner.py grade</code> to plot your Score % &amp; Accuracy % progression here.</p>
+          <p>Launch a CBT exam from <code>exams/</code> and submit in Live Studio (or grade offline via <code>syntopik run exam_runner grade</code>) to plot your Score % &amp; Accuracy % progression here.</p>
         </div>
       `;
     }
@@ -8335,6 +8830,181 @@
     return raw.replace(/[_-]+/gu, " ").replace(/\bjee\b/giu, "JEE").replace(/\bnta\b/giu, "NTA").replace(/\bcbt\b/giu, "CBT").replace(/\b\w/gu, (c) => c.toUpperCase());
   }
 
+  function renderExamReadinessCard(examAttempts) {
+    const card = document.getElementById("examReadinessCard");
+    if (!card) return;
+    const rd = readinessOverride || hubData.readinessSummary || null;
+    const idxVal = Number.isFinite(Number(rd?.readinessIndex)) ? Number(rd.readinessIndex) : 0;
+    const bandRaw = String(rd?.band || "needs_foundation");
+    const bandMeta = {
+      peak: { label: "Peak", cls: "solid", color: "var(--solid)" },
+      exam_ready: { label: "Exam Ready", cls: "teal", color: "var(--teal)" },
+      building: { label: "Building", cls: "shaky", color: "var(--shaky)" },
+      needs_foundation: { label: "Needs Foundation", cls: "misconception", color: "var(--misconception)" },
+    }[bandRaw] || { label: bandRaw.replace(/_/gu, " "), cls: "", color: "var(--accent)" };
+
+    const pred = rd?.predictedScorePct || { low: 0, expected: 0, high: 0 };
+    const marks = rd?.predictedMarks || null;
+    const taper = rd?.taperMode || { active: false, phase: "none" };
+    const shield = rd?.preMortemShield || { sourceBasis: "cold_start_minimal", count: 0, bullets: [] };
+    const bullets = Array.isArray(shield.bullets) ? shield.bullets : [];
+    const levers = Array.isArray(rd?.topLevers) ? rd.topLevers.slice(0, 3) : [];
+    const pillars = rd?.pillars || {};
+
+    // Latest EV-Skip discipline from graded attempts
+    const latestEvAttempt = [...(examAttempts || [])]
+      .reverse()
+      .find((a) => a && (a.evCalibration || typeof a.evDisciplineScore === "number"));
+    const evCal = latestEvAttempt?.evCalibration || null;
+    const evScore = typeof evCal?.evDisciplineScore === "number"
+      ? evCal.evDisciplineScore
+      : (typeof latestEvAttempt?.evDisciplineScore === "number" ? latestEvAttempt.evDisciplineScore : null);
+
+    card.innerHTML = `
+      <div class="section-head" style="margin-bottom:10px;">
+        <div>
+          <div style="display:flex;align-items:center;gap:7px;flex-wrap:wrap;margin-bottom:3px;">
+            <h2 style="margin:0;">Exam-Day Readiness Forecaster &amp; Pre-Mortem Shield</h2>
+            <span class="pill ${bandMeta.cls}">${esc(bandMeta.label)}</span>
+            ${taper.active ? `<span class="pill shaky">Taper Mode Active · ${esc(String(taper.hoursRemaining ?? "≤72"))}h left · 0 new concepts</span>` : ""}
+          </div>
+          <p style="margin:0;font-size:12px;color:var(--muted);">Deterministic FSRS-6 exam-day retention projection, T1–T4 transfer depth, top ROI study levers, and non-fabricated personal Failure Shield.</p>
+        </div>
+        <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;">
+          <input type="date" id="readinessDateInput" value="${esc(String(rd?.examDate || "").slice(0, 10))}" aria-label="Target exam date" style="padding:4px 8px;font-size:12px;" />
+          <button type="button" id="readinessRefreshBtn" ${readinessBusy ? "disabled" : ""}>${readinessBusy ? "Projecting…" : "Forecast"}</button>
+        </div>
+      </div>
+
+      <div class="readiness-grid">
+        <div class="readiness-col">
+          <div class="readiness-score-row">
+            <span class="readiness-big" style="color:${bandMeta.color}">${idxVal.toFixed(1)}%</span>
+            <span class="pill accent">Predicted Band: ${Number(pred.low ?? 0).toFixed(0)}–${Number(pred.high ?? 0).toFixed(0)}% (exp ${Number(pred.expected ?? 0).toFixed(0)}%)</span>
+            ${marks ? `<span class="pill teal">${esc(String(marks.low))}–${esc(String(marks.high))} / ${esc(String(marks.maxMarks))}m</span>` : ""}
+          </div>
+          <div class="progress-bar" style="height:7px;">
+            <div class="progress-fill" style="width:${Math.max(0, Math.min(100, idxVal))}%;background:${bandMeta.color}"></div>
+          </div>
+          <div class="readiness-pillars">
+            <span class="pill">Retention ${esc(String(pillars.projectedRetention ?? "—"))}%</span>
+            <span class="pill">Evidence ${esc(String(pillars.evidenceDepth ?? "—"))}%</span>
+            <span class="pill">Syllabus ${esc(String(pillars.syllabusCoverage ?? "—"))}%</span>
+            <span class="pill">Traps ${esc(String(pillars.forkClearance ?? "—"))}%</span>
+            <span class="pill">EV Exec ${esc(String(pillars.evDiscipline ?? "—"))}%</span>
+          </div>
+          ${taper.active ? `
+            <div class="gym-feedback warn" style="font-size:12px;">
+              <strong>Pre-Exam Taper (${esc(String(taper.phase || "taper_72h").replace(/_/gu, " "))}):</strong> Zero new concepts. Consolidate borderline cards, clear due Blunder Forks, cap study at ${esc(String(taper.maxSessionMinutes || 150))} min, and protect ≥ ${esc(String(taper.sleepFloorHours || 7.5))}h sleep.
+            </div>
+          ` : ""}
+          <div>
+            <div class="section-heading" style="margin:0 0 6px;">Top-3 Highest-ROI Study Levers</div>
+            ${levers.length ? `
+              <div class="lever-list">
+                ${levers.map((lv) => `
+                  <div class="lever-row">
+                    <div style="display:flex;flex-direction:column;gap:2px;min-width:0;">
+                      <strong style="font-size:12.5px;">#${esc(String(lv.rank || ""))} ${esc(lv.title || "")}</strong>
+                      <span style="font-size:11.5px;color:var(--text-2);">${esc(lv.why || "")}</span>
+                      <div style="display:flex;gap:5px;flex-wrap:wrap;margin-top:2px;">
+                        <span class="pill solid">+${esc(String(lv.roiMarksPerHour ?? 0))} ROI/hr</span>
+                        <span class="pill">${esc(String(lv.effortMinutes ?? 20))}m</span>
+                      </div>
+                    </div>
+                    <button type="button" data-lever-cmd="${esc(lv.exactCmd || "syntopik next")}" data-lever-kind="${esc(lv.kind || "")}" style="padding:4px 8px;font-size:11px;white-space:nowrap;">Act →</button>
+                  </div>
+                `).join("")}
+              </div>
+            ` : `<div style="font-size:12px;color:var(--muted);">Add propositions or chapters to rank highest-ROI study levers.</div>`}
+          </div>
+        </div>
+
+        <div class="readiness-col">
+          <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;">
+            <strong style="font-size:13.5px;">Personal Pre-Mortem Failure Shield</strong>
+            ${evScore !== null ? `<span class="pill ${evScore >= 80 ? "solid" : evScore >= 60 ? "shaky" : "misconception"}">EV-Skip Discipline ${Math.round(evScore)}%</span>` : `<span class="pill">EV-Skip: untested</span>`}
+          </div>
+          ${evCal ? `
+            <div style="display:flex;gap:6px;flex-wrap:wrap;font-size:11.5px;">
+              <span class="pill ${Number(evCal.negEvGamblesCount || 0) > 0 ? "misconception" : "solid"}">${Number(evCal.negEvGamblesCount || 0)} -EV gamble(s)</span>
+              <span class="pill ${Number(evCal.underconfidentSkipsCount || 0) > 0 ? "shaky" : ""}">${Number(evCal.underconfidentSkipsCount || 0)} underconfident skip(s)</span>
+              <span class="pill">Basis: ${esc(String(evCal.evBasis || "observed").replace(/_/gu, " "))}</span>
+            </div>
+          ` : ""}
+          ${bullets.length === 0 ? `
+            <div class="empty-box" style="padding:16px;">
+              <h3 style="font-size:13px;">Cold-Start Shield (Zero Fabricated Advice)</h3>
+              <p style="font-size:12px;">No personal mistake clusters, unresolved Blunder Forks, or timed exam traps have been observed yet. Syntopik keeps this shield strictly empty until real logs exist.</p>
+            </div>
+          ` : `
+            <div class="premortem-list">
+              ${bullets.map((b) => `
+                <div class="premortem-bullet">
+                  <div style="display:flex;justify-content:space-between;gap:6px;flex-wrap:wrap;">
+                    <span class="pill shaky" style="font-size:10.5px;">#${esc(String(b.rank || ""))} ${esc(b.evidenceBadge || b.sourceKind || "")}</span>
+                  </div>
+                  <div><strong>${esc(b.ifCue || "")}</strong></div>
+                  <div style="color:var(--text-2);">${esc(b.thenAction || "")}</div>
+                </div>
+              `).join("")}
+            </div>
+          `}
+          ${Array.isArray(rd?.uncertaintyReasons) && rd.uncertaintyReasons.length ? `
+            <div style="font-size:11px;color:var(--muted);margin-top:auto;padding-top:6px;border-top:1px solid var(--border);">
+              ${esc(rd.uncertaintyReasons.slice(0, 2).join(" "))}
+            </div>
+          ` : ""}
+        </div>
+      </div>
+    `;
+
+    document.getElementById("readinessRefreshBtn")?.addEventListener("click", async () => {
+      const dateVal = String(document.getElementById("readinessDateInput")?.value || "").trim();
+      if (!liveCaps.live) {
+        const cmd = dateVal ? `syntopik readiness --exam-date ${dateVal}` : "syntopik readiness";
+        copyText(cmd, `Offline mode — copied "${cmd}" ✓`);
+        return;
+      }
+      readinessBusy = true;
+      renderExamReadinessCard(examAttempts);
+      try {
+        const qs = dateVal ? `?exam_date=${encodeURIComponent(dateVal)}` : "";
+        readinessOverride = await apiGet(`/api/readiness${qs}`);
+        showToast(dateVal ? `Projected readiness for ${dateVal} ✓` : "Refreshed readiness forecast ✓");
+      } catch (err) {
+        showToast(`Readiness failed: ${err?.message || "error"}`);
+      } finally {
+        readinessBusy = false;
+        renderExamReadinessCard(examAttempts);
+        renderActiveAutopilot();
+      }
+    });
+
+    card.querySelectorAll("[data-lever-cmd]").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        const kind = btn.getAttribute("data-lever-kind") || "";
+        const cmd = btn.getAttribute("data-lever-cmd") || "syntopik next";
+        if (kind === "interleave_drill") {
+          gymState.station = "blitz";
+          gymState.blitzSubMode = "interleave";
+          switchTab("gym");
+          return;
+        }
+        if (kind === "clear_forks") {
+          gymState.station = "forks";
+          switchTab("gym");
+          return;
+        }
+        if (kind === "refresh_decay" || kind === "repair_misconception") {
+          openReviewModal();
+          return;
+        }
+        copyText(cmd, `Copied "${cmd}" ✓`);
+      });
+    });
+  }
+
   function renderExams() {
     const examFiles = Array.isArray(hubData.examFiles) ? hubData.examFiles : [];
     const examAttempts = Array.isArray(hubData.examAttempts) ? hubData.examAttempts : [];
@@ -8393,6 +9063,9 @@
       </div>
     `;
 
+    // 1b. Exam-Day Readiness Forecaster & Pre-Mortem Shield
+    renderExamReadinessCard(examAttempts);
+
     // 2. Trend chart
     const trendSubtitle = document.getElementById("examTrendSubtitle");
     trendSubtitle.textContent = examAttempts.length > 0
@@ -8421,7 +9094,7 @@
       filesContainer.innerHTML = `
         <div class="empty-box">
           <h3>${examFiles.length ? "No matching exam papers" : "No Compiled Assessments Yet"}</h3>
-          <p>Use Syntopik's <code>exam-simulator</code> skill or run <code>.venv/bin/python scripts/exam_runner.py build &lt;spec.json&gt; --out exams/&lt;slug&gt;.html</code> to generate standalone 100% offline timed mastery assessments or NTA JEE CBT mocks.</p>
+          <p>Use Syntopik's <code>exam-simulator</code> skill or run <code>syntopik run exam_runner build &lt;spec.json&gt; --out exams/&lt;slug&gt;.html</code> to generate standalone 100% offline timed mastery assessments or NTA JEE CBT mocks.</p>
           <button class="primary" id="copyBuildExamFromEmpty">Copy Build Assessment Prompt</button>
         </div>
       `;
@@ -8436,7 +9109,7 @@
         const prev = attemptsBySlug.get(slug) || [];
         const bestPrev = prev.length ? Math.max(...prev.map(resolveAttemptPct)) : null;
         const isJeePaper = /\b(?:jee|nta|iit)\b/iu.test(`${item.title || ""} ${item.name || ""} ${slug}`);
-        const gradePrompt = `Grade my downloaded attempt JSON for ${item.relPath} using scripts/exam_runner.py grade, log mistakes into mistakes.jsonl, and push missed concepts to FSRS.`;
+        const gradePrompt = `Grade my downloaded attempt JSON for ${item.relPath} using syntopik run exam_runner grade, log mistakes into mistakes.jsonl, and push missed concepts to FSRS.`;
         return `
           <article class="asset-card">
             <div class="asset-body">
@@ -8497,7 +9170,7 @@
       attemptsContainer.innerHTML = `
         <div class="empty-box">
           <h3>${examAttempts.length ? "No matching graded attempts" : "No Graded Attempts Recorded Yet"}</h3>
-          <p>After completing an offline CBT exam and downloading your attempt JSON, run <code>.venv/bin/python scripts/exam_runner.py grade &lt;spec.json&gt; &lt;attempt.json&gt;</code> to record deterministic scores, negative-mark losses, slow questions, and automatic FSRS/mistake updates.</p>
+          <p>Submit a timed exam in Live Studio (or run <code>syntopik run exam_runner grade &lt;spec.json&gt; &lt;attempt.json&gt;</code> offline) to record deterministic scores, EV-skip calibration, Why-Wrong distractor autopsy, and automatic FSRS updates.</p>
         </div>
       `;
       return;
@@ -8515,6 +9188,14 @@
       const mistakesCount = countLike(a.mistakesLogged);
       const srsCount = countLike(a.srsUpdated);
       const subjectPills = formatSubjectPills(a.subjectBreakdown);
+      const evCal = a.evCalibration && typeof a.evCalibration === "object" ? a.evCalibration : null;
+      const evScore = typeof evCal?.evDisciplineScore === "number"
+        ? Math.round(evCal.evDisciplineScore)
+        : (typeof a.evDisciplineScore === "number" ? Math.round(a.evDisciplineScore) : null);
+      const distItems = Array.isArray(a.distractorAutopsy)
+        ? a.distractorAutopsy
+        : (Array.isArray(a.distractorSummary?.items) ? a.distractorSummary.items : []);
+      const distCount = distItems.length || Number(a.distractorTriggeredCount || 0);
 
       return `
         <article class="attempt-card">
@@ -8543,11 +9224,23 @@
             <span class="pill">— ${unattempted} Unattempted</span>
             <span class="pill ${negLost > 0 ? "misconception" : "solid"}">Neg Lost: ${negLost > 0 ? `-${negLost}` : "0"}</span>
             <span class="pill ${slowCount > 0 ? "shaky" : ""}">Slow Qs: ${slowCount}</span>
+            ${evScore !== null ? `<span class="pill ${evScore >= 80 ? "solid" : evScore >= 60 ? "shaky" : "misconception"}">EV Discipline ${evScore}%</span>` : ""}
             ${mistakesCount > 0 ? `<span class="pill">${mistakesCount} mistake${mistakesCount === 1 ? "" : "s"} logged</span>` : ""}
             ${srsCount > 0 ? `<span class="pill planned">${srsCount} FSRS updated</span>` : ""}
           </div>
 
           ${subjectPills ? `<div class="attempt-subjects"><span class="section-heading" style="margin:0 6px 0 0;">Subjects</span>${subjectPills}</div>` : ""}
+          ${distCount > 0 ? `
+            <details class="autopsy-details">
+              <summary>Why-Wrong Distractor Autopsy (${distCount} triggered trap${distCount === 1 ? "" : "s"})</summary>
+              ${distItems.length ? distItems.slice(0, 10).map((d) => `
+                <div class="autopsy-row">
+                  <div><code>${esc(d.questionId || "Q")}</code> · Option <strong>${esc(d.optionId || "")}</strong>${d.trapCategory ? ` <span class="pill shaky">${esc(d.trapCategory)}</span>` : ""}${d.confusedWith ? ` <span class="pill">vs ${esc(d.confusedWith)}</span>` : ""}</div>
+                  <div style="color:var(--text-2);">${esc(d.whyWrong || "")}</div>
+                </div>
+              `).join("") : `<div class="autopsy-row" style="color:var(--text-2);">${distCount} distractor trap(s) logged into Personal Traps Analytics.</div>`}
+            </details>
+          ` : ""}
         </article>
       `;
     }).join("")}</div>`;
@@ -8769,7 +9462,7 @@
     const target = String(inputEl?.value || "").trim();
     const slug = String(slugEl?.value || "").trim();
     if (!target) {
-      showToast("Paste a YouTube, arXiv, GitHub, or web URL first");
+      showToast("Paste a URL or workspace path (.apkg, .ipynb, .csv, MD folder), or click Upload File");
       if (inputEl) inputEl.focus();
       return;
     }
@@ -9474,8 +10167,276 @@
     });
   }
 
-  /* Station 4: 4-Min ShadowBox First-Move Decision Blitz */
+  /* Station 4: ShadowBox Blitz & Blind-Chapter Interleave (Internal 2-Mode Toggle) */
+  function renderBlitzModeBarHtml() {
+    const m = gymState.blitzSubMode === "interleave" ? "interleave" : "shadowbox";
+    return `
+      <div class="gym-mode-bar" role="tablist" aria-label="Station 4 Drill Mode">
+        <button type="button" class="gym-mode-btn ${m === "shadowbox" ? "active" : ""}" data-blitz-submode="shadowbox" role="tab" aria-selected="${m === "shadowbox" ? "true" : "false"}">4-Min ShadowBox Blitz</button>
+        <button type="button" class="gym-mode-btn ${m === "interleave" ? "active" : ""}" data-blitz-submode="interleave" role="tab" aria-selected="${m === "interleave" ? "true" : "false"}">Blind-Chapter Interleave</button>
+      </div>
+    `;
+  }
+
+  function wireBlitzModeBar(container) {
+    container.querySelectorAll("[data-blitz-submode]").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        gymState.blitzSubMode = btn.getAttribute("data-blitz-submode") === "interleave" ? "interleave" : "shadowbox";
+        renderGymStation();
+      });
+    });
+  }
+
+  function renderInterleaveSubStation(container) {
+    const stats = hubData.interleaveStats || {};
+    const sess = gymState.ilvSession;
+    const summary = gymState.ilvSummary;
+    const items = Array.isArray(sess?.items) ? sess.items : [];
+    const curItem = sess && gymState.ilvIdx < items.length ? items[gymState.ilvIdx] : null;
+    const distinctChapters = new Set((graphData.propositions || []).map((p) => String(p.chapter || "").trim()).filter(Boolean)).size;
+
+    if (summary) {
+      const confPairs = Array.isArray(summary.topConfusionPairs) ? summary.topConfusionPairs : [];
+      const revItems = Array.isArray(summary.revealedItems) ? summary.revealedItems : [];
+      container.innerHTML = `
+        <div class="gym-stage">
+          ${renderBlitzModeBarHtml()}
+          <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;">
+            <h3 style="margin:0;">Blind-Chapter Interleave Complete</h3>
+            <button type="button" class="primary" id="ilvRestartBtn">Run Another Interleave Set</button>
+          </div>
+          <div style="display:flex;gap:8px;flex-wrap:wrap;">
+            <span class="pill sage">Step-1 Principle Acc: ${summary.tier1AccuracyPct != null ? `${summary.tier1AccuracyPct}%` : "—"} (${summary.tier1Correct ?? 0}/${summary.tier1Total ?? 0})</span>
+            ${summary.step2Total ? `<span class="pill teal">Step-2 Solve Acc: ${summary.step2AccuracyPct}% (${summary.step2Correct}/${summary.step2Total})</span>` : ""}
+            ${summary.srsUpdated ? `<span class="pill planned">${summary.srsUpdated} FSRS updated</span>` : ""}
+            ${summary.evidenceRecorded ? `<span class="pill solid">${summary.evidenceRecorded} T3 transfer logged</span>` : ""}
+          </div>
+          ${confPairs.length ? `
+            <div class="gym-feedback warn">
+              <strong>Cross-Chapter Confusion Pairs</strong>
+              ${confPairs.map((cp) => `<div>${esc(cp.trueChapter)} confused with <strong>${esc(cp.confusedWithChapter)}</strong> (${cp.count}x)</div>`).join("")}
+            </div>
+          ` : ""}
+          <div style="display:flex;flex-direction:column;gap:7px;">
+            ${revItems.map((ri, i) => `
+              <div class="gym-feedback ${ri.step1Correct ? "ok" : "warn"}">
+                <strong>Item ${i + 1} · Revealed Chapter: ${esc(ri.chapter || "")}</strong>
+                <div>Principle: <strong>${esc(ri.principle || "")}</strong> ${ri.step1Correct ? "✓" : "✗"}${ri.confusedChapter ? ` (confused with ${esc(ri.confusedChapter)})` : ""}</div>
+                ${ri.expectedAnswer ? `<div style="font-size:12px;color:var(--text-2);margin-top:3px;">Canonical result: ${esc(ri.expectedAnswer)}</div>` : ""}
+              </div>
+            `).join("")}
+          </div>
+        </div>
+      `;
+      wireBlitzModeBar(container);
+      document.getElementById("ilvRestartBtn")?.addEventListener("click", () => {
+        gymState.ilvSession = null;
+        gymState.ilvSummary = null;
+        gymState.ilvStep1Res = null;
+        gymState.ilvStep2Map = {};
+        renderGymStation();
+      });
+      return;
+    }
+
+    if (!sess || !curItem) {
+      const topPairs = Array.isArray(stats.topConfusionPairs) ? stats.topConfusionPairs : [];
+      container.innerHTML = `
+        <div class="gym-stage">
+          ${renderBlitzModeBarHtml()}
+          <div class="section-head" style="margin-bottom:0;">
+            <div>
+              <h3 style="margin:0;font-size:15.5px;">Blind-Chapter Interleaved Drill</h3>
+              <p style="margin:2px 0 0;font-size:12.5px;color:var(--muted);">Rohrer zero-blocked-run interleaving. Chapter labels stay hidden so you must identify the governing principle (Step 1) before Step 2 unlocks.</p>
+            </div>
+            <div style="display:flex;gap:6px;flex-wrap:wrap;">
+              <span class="pill">${distinctChapters} chapter${distinctChapters === 1 ? "" : "s"} in graph</span>
+              ${stats.tier1AccuracyPct != null ? `<span class="pill sage">Tier-1 Acc ${esc(String(stats.tier1AccuracyPct))}%</span>` : ""}
+              ${stats.medianIdentifySec != null ? `<span class="pill">Med ${esc(String(stats.medianIdentifySec))}s</span>` : ""}
+            </div>
+          </div>
+          ${topPairs.length ? `
+            <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;font-size:12px;">
+              <span style="color:var(--muted);">Top confusions:</span>
+              ${topPairs.slice(0, 3).map((cp) => `<span class="pill shaky">${esc(cp.trueChapter)} ↔ ${esc(cp.confusedWithChapter)} (${cp.count}x)</span>`).join("")}
+            </div>
+          ` : ""}
+          <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+            <label style="display:flex;align-items:center;gap:6px;font-size:12px;color:var(--text-2);">
+              <span>Items</span>
+              <select id="ilvCountSel">
+                <option value="4">4 mixed items</option>
+                <option value="6" selected>6 mixed items (Standard)</option>
+                <option value="8">8 mixed items</option>
+              </select>
+            </label>
+            <button type="button" class="primary" id="ilvStartBtn" ${gymState.ilvBusy ? "disabled" : ""}>${gymState.ilvBusy ? "Building…" : "Start Blind-Chapter Interleave"}</button>
+          </div>
+        </div>
+      `;
+      wireBlitzModeBar(container);
+      document.getElementById("ilvStartBtn")?.addEventListener("click", async () => {
+        const n = Number(document.getElementById("ilvCountSel")?.value || 6);
+        if (!liveCaps.live) {
+          copyText(`syntopik interleave build --n ${n} --json`, `Offline mode — copied "syntopik interleave build --n ${n} --json" ✓`);
+          return;
+        }
+        gymState.ilvBusy = true;
+        renderGymStation();
+        try {
+          const built = await apiPost("/api/interleave/build", { n });
+          if (!built.items || built.items.length === 0) {
+            showToast(built.emptyReason || "Add propositions to start a blind interleave drill");
+          } else {
+            gymState.ilvSession = built;
+            gymState.ilvIdx = 0;
+            gymState.ilvItemStartTs = Date.now();
+            gymState.ilvSelectedOpt = "";
+            gymState.ilvConfPct = 70;
+            gymState.ilvStep1Res = null;
+            gymState.ilvStep2Map = {};
+            gymState.ilvSummary = null;
+          }
+        } catch (err) {
+          showToast(`Interleave build failed: ${err?.message || "error"}`);
+        } finally {
+          gymState.ilvBusy = false;
+          renderGymStation();
+        }
+      });
+      return;
+    }
+
+    const choices = Array.isArray(curItem.principleChoices) ? curItem.principleChoices : [];
+    const s1 = gymState.ilvStep1Res;
+    const isLast = gymState.ilvIdx + 1 >= items.length;
+
+    container.innerHTML = `
+      <div class="gym-stage">
+        ${renderBlitzModeBarHtml()}
+        <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;">
+          <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;">
+            <span class="pill sage">Item ${gymState.ilvIdx + 1} / ${items.length}</span>
+            <span class="pill accent">Blind Chapter · Hidden</span>
+            ${sess.distinctChaptersCount ? `<span class="pill">${sess.distinctChaptersCount} chapters mixed</span>` : ""}
+          </div>
+          <button type="button" id="ilvExitBtn" style="padding:4px 8px;font-size:11px;">End Set</button>
+        </div>
+
+        <div style="font-family:var(--font-prose);font-size:16px;line-height:1.55;">${esc(curItem.prompt || "")}</div>
+
+        <div>
+          <div class="section-heading" style="margin-bottom:6px;">Step 1 — Select Governing Principle (Required Before Step-2 Reveal)</div>
+          <div class="blitz-choice-group">
+            ${choices.map((ch) => {
+              const oid = String(ch.id || "");
+              const isSel = gymState.ilvSelectedOpt === oid;
+              return `<button type="button" class="blitz-choice-btn ${isSel ? "selected" : ""}" data-ilv-opt="${esc(oid)}" ${s1 ? "disabled" : ""}><strong>${esc(oid)}.</strong> ${esc(ch.text || "")}</button>`;
+            }).join("")}
+          </div>
+        </div>
+
+        ${!s1 ? `
+          <label class="fc-conf-box">
+            <span>Principle Confidence</span>
+            <input type="range" id="ilvConfSlider" min="0" max="100" step="5" value="${gymState.ilvConfPct}" />
+            <span class="fc-conf-num" id="ilvConfNum">${gymState.ilvConfPct}%</span>
+          </label>
+          <button type="button" class="primary" id="ilvCheckStep1Btn" style="align-self:flex-start;" ${gymState.ilvBusy ? "disabled" : ""}>${gymState.ilvBusy ? "Checking…" : "Lock Governing Principle →"}</button>
+        ` : `
+          <div class="gym-feedback ${s1.correct ? "ok" : "warn"}">
+            <strong>Step-1 ${s1.correct ? "Correct ✓" : "Missed ✗"} · True Chapter Revealed: ${esc(s1.revealedChapter || "")}</strong>
+            <div>Expected Principle: <strong>${esc(s1.expectedPrinciple || "")}</strong>${s1.confusedChapter ? ` · Confused with: <em>${esc(s1.confusedChapter)}</em>` : ""}</div>
+          </div>
+          <div style="background:var(--bg-elev);border:1px solid var(--border);border-radius:9px;padding:11px 13px;display:flex;flex-direction:column;gap:8px;">
+            <div class="section-heading" style="margin:0;">Step 2 — Unlocked Execution Prompt</div>
+            <div style="font-size:13.5px;line-height:1.5;">${esc(s1.step2Prompt || curItem.prompt || "")}</div>
+            <div style="display:flex;gap:8px;flex-wrap:wrap;">
+              <button type="button" class="primary" data-ilv-step2="1" ${gymState.ilvBusy ? "disabled" : ""}>${isLast ? "Solved Step 2 & Finish →" : "Solved Step 2 · Next →"}</button>
+              <button type="button" data-ilv-step2="0" ${gymState.ilvBusy ? "disabled" : ""}>${isLast ? "Needs Review & Finish →" : "Needs Review · Next →"}</button>
+            </div>
+          </div>
+        `}
+      </div>
+    `;
+
+    wireBlitzModeBar(container);
+    container.querySelectorAll("[data-ilv-opt]").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        gymState.ilvSelectedOpt = btn.getAttribute("data-ilv-opt") || "";
+        renderGymStation();
+      });
+    });
+    document.getElementById("ilvConfSlider")?.addEventListener("input", (e) => {
+      gymState.ilvConfPct = Number(e.target.value);
+      const num = document.getElementById("ilvConfNum");
+      if (num) num.textContent = `${gymState.ilvConfPct}%`;
+    });
+    document.getElementById("ilvExitBtn")?.addEventListener("click", () => {
+      gymState.ilvSession = null;
+      gymState.ilvStep1Res = null;
+      renderGymStation();
+    });
+    document.getElementById("ilvCheckStep1Btn")?.addEventListener("click", async () => {
+      if (!gymState.ilvSelectedOpt) { showToast("Select a principle option (or I don't know) first"); return; }
+      const durationMs = Math.max(200, Date.now() - (gymState.ilvItemStartTs || Date.now()));
+      gymState.ilvBusy = true;
+      renderGymStation();
+      try {
+        const res = await apiPost("/api/interleave/check", {
+          sessionId: sess.sessionId,
+          itemId: curItem.itemId,
+          selectedPrinciple: gymState.ilvSelectedOpt,
+          confidence: gymState.ilvConfPct / 100,
+          durationMs,
+        });
+        gymState.ilvStep1Res = res;
+      } catch (err) {
+        showToast(`Step-1 check failed: ${err?.message || "error"}`);
+      } finally {
+        gymState.ilvBusy = false;
+        renderGymStation();
+      }
+    });
+    container.querySelectorAll("[data-ilv-step2]").forEach((btn) => {
+      btn.addEventListener("click", async () => {
+        const solved = btn.getAttribute("data-ilv-step2") === "1";
+        gymState.ilvStep2Map[curItem.itemId] = { solved };
+        if (!isLast) {
+          gymState.ilvIdx += 1;
+          gymState.ilvItemStartTs = Date.now();
+          gymState.ilvSelectedOpt = "";
+          gymState.ilvConfPct = 70;
+          gymState.ilvStep1Res = null;
+          renderGymStation();
+          return;
+        }
+        gymState.ilvBusy = true;
+        renderGymStation();
+        try {
+          const doneRes = await apiPost("/api/interleave/complete", {
+            sessionId: sess.sessionId,
+            results: gymState.ilvStep2Map,
+          });
+          gymState.ilvSummary = doneRes;
+          gymState.ilvSession = null;
+          gymState.ilvStep1Res = null;
+          await refreshLiveState();
+        } catch (err) {
+          showToast(`Complete failed: ${err?.message || "error"}`);
+        } finally {
+          gymState.ilvBusy = false;
+          renderGymStation();
+        }
+      });
+    });
+  }
+
   function renderBlitzStation(container) {
+    if (gymState.blitzSubMode === "interleave") {
+      renderInterleaveSubStation(container);
+      return;
+    }
     const sess = gymState.blitzSession;
     const items = Array.isArray(sess?.items) ? sess.items : [];
     const done = sess && gymState.blitzIdx >= items.length;
@@ -9484,6 +10445,7 @@
       const pastCount = Array.isArray(hubData.decisions) ? hubData.decisions.length : 0;
       container.innerHTML = `
         <div class="gym-stage">
+          ${renderBlitzModeBarHtml()}
           <div class="section-head" style="margin-bottom:0;">
             <div>
               <h3 style="margin:0;font-size:15.5px;">4-Min ShadowBox First-Move Blitz</h3>
@@ -9504,6 +10466,7 @@
           </div>
         </div>
       `;
+      wireBlitzModeBar(container);
       document.getElementById("blitzStartBtn")?.addEventListener("click", async () => {
         const count = Number(document.getElementById("blitzCountSel")?.value || 6);
         if (!liveCaps.live) {
@@ -9533,6 +10496,7 @@
       const tier1Pct = total ? Math.round((fmHits / total) * 100) : 0;
       container.innerHTML = `
         <div class="gym-stage">
+          ${renderBlitzModeBarHtml()}
           <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;">
             <h3 style="margin:0;">ShadowBox Blitz Complete</h3>
             <button type="button" class="primary" id="blitzRestartBtn">Run Another Blitz</button>
@@ -9552,6 +10516,7 @@
           </div>
         </div>
       `;
+      wireBlitzModeBar(container);
       document.getElementById("blitzRestartBtn")?.addEventListener("click", () => {
         gymState.blitzSession = null;
         renderGymStation();
@@ -9580,6 +10545,7 @@
 
     container.innerHTML = `
       <div class="gym-stage">
+        ${renderBlitzModeBarHtml()}
         <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;">
           <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;">
             <span class="pill sage">Card ${gymState.blitzIdx + 1} / ${items.length}</span>
@@ -9620,6 +10586,7 @@
       </div>
     `;
 
+    wireBlitzModeBar(container);
     const cdEl = document.getElementById("blitzCountdownLbl");
     gymState.blitzTimerId = setInterval(() => {
       if (!cdEl) return;
@@ -9679,7 +10646,7 @@
         <div class="gym-stage">
           <div class="empty-box" style="padding:26px;">
             <h3>No Derivations Loaded Yet</h3>
-            <p>Load any curated Starter Pack or build a step-DAG derivation with <code>derivation_forge.py</code> to practice Clean-Room Blackout Reconstruction and Axiom-Cut Surgery.</p>
+            <p>Load any curated Starter Pack or build a step-DAG derivation with <code>syntopik run derivation_forge</code> to practice Clean-Room Blackout Reconstruction and Axiom-Cut Surgery.</p>
             <button type="button" class="primary" id="derivOpenPacksBtn">Load a Starter Pack</button>
           </div>
         </div>
@@ -10762,7 +11729,7 @@
       document.getElementById("graphEmptyDesc").textContent = "Clear your subject, chapter, status, or search filter to show more concepts.";
     } else if ((graphData.propositions || []).length === 0) {
       document.getElementById("graphEmptyTitle").textContent = "Your Knowledge Graph is Ready";
-      document.getElementById("graphEmptyDesc").innerHTML = "Start a topic, course, paper, or chapter in Syntopik and record reviews via <code>scripts/srs_engine.py</code>. Every concept, BKT mastery probability, FSRS-6 schedule, and reasoning edge renders live right here.";
+      document.getElementById("graphEmptyDesc").innerHTML = "Start a topic, course, paper, or chapter in Syntopik and log reviews via <code>syntopik review</code> or Live Studio. Every concept, BKT mastery probability, FSRS-6 schedule, and reasoning edge renders live right here.";
     }
 
     const { pos, clusters, bounds } = layoutMode === "clustered" ? layoutClustered(nodes, edges) : layoutLayered(nodes, edges);
@@ -11227,7 +12194,7 @@
     });
     document.getElementById("copyConceptDrillBtn").addEventListener("click", () => {
       copyText(
-        `Drill me on ${n.id} ("${n.title || n.id}") without spoilers using fresh scenarios, verify my reasoning, and update my FSRS + BKT rating with scripts/srs_engine.py.`,
+        `Drill me on ${n.id} ("${n.title || n.id}") without spoilers using fresh scenarios, verify my reasoning, and update my FSRS + BKT rating with syntopik review.`,
         "Copied concept drill prompt ✓"
       );
     });
@@ -11377,13 +12344,38 @@
       renderReviewModalBody();
     });
 
-    // Sources quick-import bar
+    // Sources quick-import bar & file upload (<= 15 MiB)
     document.getElementById("quickImportBtn").addEventListener("click", handleQuickImport);
+    document.getElementById("quickImportFileBtn")?.addEventListener("click", () => {
+      document.getElementById("quickImportFile")?.click();
+    });
+    document.getElementById("quickImportFile")?.addEventListener("change", async (e) => {
+      const f = e.target.files && e.target.files[0];
+      e.target.value = "";
+      if (!f) return;
+      const slugVal = String(document.getElementById("quickImportSlug")?.value || "").trim();
+      try {
+        await uploadStudyFileToImport(f, slugVal);
+      } catch (err) {
+        showToast(`Upload failed: ${err?.message || "error"}`);
+      }
+    });
     document.getElementById("quickImportInput").addEventListener("keydown", (e) => {
       if (e.key === "Enter") {
         e.preventDefault();
         handleQuickImport();
       }
+    });
+
+    // Live Status Pill -> 14-Agent & Loopback POST /mcp Modal
+    document.getElementById("liveStatusPill")?.addEventListener("click", openAgentCompatModal);
+    document.getElementById("agentCompatModalCloseBtn")?.addEventListener("click", closeAgentCompatModal);
+    document.getElementById("agentCompatModal")?.addEventListener("click", (e) => {
+      if (e.target.id === "agentCompatModal") closeAgentCompatModal();
+    });
+    document.getElementById("returnToLaunchpadBtn")?.addEventListener("click", () => {
+      zeroStatePreviewTelemetry = false;
+      renderOverview();
     });
 
     // Chapter Reader inline cloze & :::cue rating delegation
@@ -11406,7 +12398,7 @@
         const statusEl = strip ? strip.querySelector(".md-cue-status") : null;
         if (!liveCaps.live) {
           copyText(
-            `Record FSRS rating "${rating}" for ${propId}${cueId ? ` (cue ${cueId})` : ""} using scripts/srs_engine.py.`,
+            `Record FSRS rating "${rating}" for ${propId}${cueId ? ` (cue ${cueId})` : ""} using syntopik review.`,
             "Offline mode — copied rating prompt ✓"
           );
           if (statusEl) statusEl.textContent = "Copied prompt ✓";
@@ -11630,6 +12622,8 @@
           document.getElementById("starterPackModal").classList.remove("open");
         } else if (document.getElementById("syncModal")?.classList.contains("open")) {
           closeSyncModal();
+        } else if (document.getElementById("agentCompatModal")?.classList.contains("open")) {
+          closeAgentCompatModal();
         } else if (reviewState.open) {
           closeReviewModal();
         } else if (document.getElementById("chapterReaderDrawer").classList.contains("open")) {

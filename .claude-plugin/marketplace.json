@@ -7,7 +7,7 @@
     "url": "https://github.com/HridayKapoor"
   },
   "metadata": {
-    "version": "3.1.0",
+    "version": "3.2.0",
     "pluginRoot": "./"
   },
   "plugins": [
@@ -15,7 +15,7 @@
       "name": "syntopik",
       "displayName": "Syntopik",
       "description": "17 mastery skills, SEP-1865 Studio MCP App, and live Knowledge Graph hooks.",
-      "version": "3.1.0",
+      "version": "3.2.0",
       "source": "./",
       "category": "learning",
       "tags": [

@@ -230,6 +230,159 @@ function loadSyncDeviceId(kgDir) {
   return devId || null;
 }
 
+const SEALED_INTERLEAVE_FIELDS = new Set([
+  "sealedChapter",
+  "sealedPrinciple",
+  "sealedAnswer",
+  "canonicalAnswer",
+  "correctPrinciple",
+  "trueChapter",
+  "expectedAnswer",
+  "modelSolution",
+  "solution",
+  "answer",
+  "chapter",
+  "chapterSlug",
+]);
+
+function sanitizeInterleaveItemJs(item) {
+  if (!item || typeof item !== "object") return item;
+  if (Array.isArray(item)) return item.map((el) => sanitizeInterleaveItemJs(el));
+  const clean = {};
+  for (const [k, v] of Object.entries(item)) {
+    if (SEALED_INTERLEAVE_FIELDS.has(k) || String(k).toLowerCase().startsWith("sealed")) {
+      continue;
+    }
+    clean[k] = sanitizeInterleaveItemJs(v);
+  }
+  return clean;
+}
+
+function sanitizeInterleaveBuildJs(res) {
+  if (!res || typeof res !== "object") return res;
+  const out = {};
+  for (const [k, v] of Object.entries(res)) {
+    if (SEALED_INTERLEAVE_FIELDS.has(k) || String(k).toLowerCase().startsWith("sealed")) {
+      continue;
+    }
+    if (k === "items" && Array.isArray(v)) {
+      out.items = v.map((it) => sanitizeInterleaveItemJs(it));
+    } else {
+      out[k] = v;
+    }
+  }
+  return out;
+}
+
+function computeHoursUntilJs(rawDate, nowMs) {
+  if (typeof rawDate !== "string" || !rawDate.trim()) return null;
+  const s = rawDate.trim();
+  const isDateOnly = /^\d{4}-\d{2}-\d{2}$/.test(s);
+  if (isDateOnly) {
+    const todayIso = new Date(nowMs).toISOString().slice(0, 10);
+    if (s < todayIso) return -1;
+    if (s === todayIso) {
+      const eodMs = Date.parse(`${s}T23:59:00Z`);
+      return Number.isFinite(eodMs) ? Math.max(0, Math.min(24, (eodMs - nowMs) / 3600000)) : null;
+    }
+    const targetMs = Date.parse(`${s}T09:00:00Z`);
+    return Number.isFinite(targetMs) ? (targetMs - nowMs) / 3600000 : null;
+  }
+  const parsed = Date.parse(s);
+  if (!Number.isFinite(parsed)) return null;
+  return (parsed - nowMs) / 3600000;
+}
+
+function detectTaperModeFastJs(kgDir, explicitExamDate = null) {
+  const nowMs = Date.now();
+  const candidates = [];
+  if (typeof explicitExamDate === "string" && explicitExamDate.trim()) {
+    candidates.push(explicitExamDate.trim());
+  } else {
+    const cfg =
+      readJsonSafe(path.join(kgDir, "study-config.json"), null) ||
+      readJsonSafe(path.join(kgDir, "exam-config.json"), null) ||
+      {};
+    if (Array.isArray(cfg.exams)) {
+      for (const ex of cfg.exams) {
+        const d = ex?.examDate || ex?.date || ex?.targetDate;
+        if (typeof d === "string" && d.trim()) candidates.push(d.trim());
+      }
+    }
+    for (const key of ["examDate", "exam_date", "targetExamDate", "nextExamDate"]) {
+      if (typeof cfg[key] === "string" && cfg[key].trim()) {
+        candidates.push(cfg[key].trim());
+        break;
+      }
+    }
+  }
+  let bestHours = null;
+  let bestDate = null;
+  for (const rawD of candidates) {
+    const hrs = computeHoursUntilJs(rawD, nowMs);
+    if (hrs === null || hrs < 0) continue;
+    if (bestHours === null || hrs < bestHours) {
+      bestHours = hrs;
+      bestDate = rawD;
+    }
+  }
+  const active = bestHours !== null && bestHours <= 72;
+  const phase = !active ? "none" : bestHours <= 24 ? "final_24h" : "taper_72h";
+  return {
+    active,
+    phase,
+    examDate: bestDate,
+    hoursRemaining: bestHours !== null ? Math.round(bestHours * 10) / 10 : null,
+    allowNewConcepts: !active,
+  };
+}
+
+function computeReadinessSummaryFastJs(kgDir, propositions, dueForksCount) {
+  const taper = detectTaperModeFastJs(kgDir);
+  const activeProps = (Array.isArray(propositions) ? propositions : []).filter(
+    (p) => p && !p.archived && !p.suspended
+  );
+  if (activeProps.length === 0) {
+    return {
+      readinessIndex: 0,
+      band: "Early",
+      taperActive: taper.active,
+      phase: taper.phase,
+      hoursRemaining: taper.hoursRemaining,
+    };
+  }
+  const statusScore = { solid: 0.9, shaky: 0.35, misconception: 0.12, planned: 0.0 };
+  let sum = 0;
+  let miscCount = 0;
+  for (const p of activeProps) {
+    const st = String(p.status || "planned").toLowerCase();
+    if (st === "misconception") miscCount += 1;
+    sum += statusScore[st] ?? 0.25;
+  }
+  const baseRatio = sum / activeProps.length;
+  const trapFactor = Math.exp(
+    -(1.5 * miscCount + 1.0 * Number(dueForksCount || 0)) / Math.max(5.0, 0.35 * activeProps.length)
+  );
+  const readinessIndex = Math.max(0, Math.min(100, Math.round((0.82 * baseRatio + 0.18 * trapFactor) * 100)));
+  const band =
+    readinessIndex >= 88
+      ? "Mastery Lock"
+      : readinessIndex >= 75
+        ? "Exam-Ready"
+        : readinessIndex >= 60
+          ? "Contender"
+          : readinessIndex >= 40
+            ? "Building"
+            : "Early";
+  return {
+    readinessIndex,
+    band,
+    taperActive: taper.active,
+    phase: taper.phase,
+    hoursRemaining: taper.hoursRemaining,
+  };
+}
+
 function findPersistedIsomorphicBridgeJs(propositions, chains, targetNodeId) {
   const tid = String(targetNodeId || "").trim();
   if (!tid) return null;
@@ -1580,6 +1733,8 @@ export function getFrontier(workspaceRoot, { limit = 10, compress = true } = {})
   const pendingPins = loadWhiteboardPendingPins(kgDir);
   const rosettaBridgesCount = countRosettaBridges(chains);
   const syncDeviceId = loadSyncDeviceId(kgDir);
+  const readinessSummary = computeReadinessSummaryFastJs(kgDir, propositions, dueForksCount);
+  const taperActive = Boolean(readinessSummary.taperActive);
 
   return {
     ok: true,
@@ -1604,6 +1759,8 @@ export function getFrontier(workspaceRoot, { limit = 10, compress = true } = {})
     coldStartDays,
     pendingPins,
     rosettaBridgesCount,
+    readinessSummary,
+    taperActive,
     ...(syncDeviceId ? { syncDeviceId } : {}),
     stats: {
       totalPropositions: propositions.length,
@@ -2174,4 +2331,151 @@ export function saveSketchPng(workspaceRoot, { dataUrl, label }) {
     relativePath: path.posix.join("sources", "attempts", filename),
     bytes: buf.length,
   };
+}
+
+export function getReadiness(
+  workspaceRoot,
+  { examDate, subject, chapter, maxMarks, premortemOnly = false } = {}
+) {
+  const kgDir = resolveKgDir(workspaceRoot);
+  const customCh = process.env.SYNT_CHAPTERS_DIR || process.env.MLH_CHAPTERS_DIR || "";
+  const chaptersDir = customCh.trim()
+    ? path.resolve(customCh.trim())
+    : path.join(workspaceRoot, "chapters");
+  const pyBin = resolvePythonBin(workspaceRoot);
+
+  const pyCode = [
+    "import json, sys",
+    "from pathlib import Path",
+    "from syntopik import readiness as readiness_mod",
+    "req = json.loads(sys.stdin.read() or '{}')",
+    "ws = Path(req['workspace'])",
+    "kg = Path(req['kgDir'])",
+    "ch = Path(req['chaptersDir'])",
+    "if req.get('premortemOnly'):",
+    "    chap = req.get('chapter')",
+    "    res = readiness_mod.build_premortem_shield(ws, subject=req.get('subject'), chapters=[chap] if chap else None, kg_dir=kg)",
+    "else:",
+    "    mm = req.get('maxMarks')",
+    "    res = readiness_mod.compute_readiness(ws, exam_date=req.get('examDate'), subject=req.get('subject'), max_marks=int(round(mm)) if mm is not None else None, kg_dir=kg, chapters_dir=ch)",
+    "print(json.dumps(res, ensure_ascii=False, allow_nan=False))",
+  ].join("\n");
+
+  try {
+    const out = execFileSync(pyBin, ["-B", "-c", pyCode], {
+      cwd: fs.existsSync(workspaceRoot) ? workspaceRoot : process.cwd(),
+      env: buildPythonEnv(workspaceRoot),
+      input: JSON.stringify({
+        workspace: workspaceRoot,
+        kgDir,
+        chaptersDir,
+        examDate: examDate ?? null,
+        subject: subject ?? null,
+        chapter: chapter ?? null,
+        maxMarks: maxMarks ?? null,
+        premortemOnly: Boolean(premortemOnly),
+      }),
+      encoding: "utf8",
+      timeout: 12000,
+    });
+    const parsed = JSON.parse(out);
+    if (parsed && typeof parsed === "object") {
+      return { ok: Boolean(parsed.ok ?? true), ...parsed };
+    }
+  } catch {
+    // Pure-Node fallback below (strict non-fabrication)
+  }
+
+  const today = new Date().toISOString().slice(0, 10);
+  const propositions = readJsonl(path.join(kgDir, "propositions.jsonl"));
+  const { dueForksCount } = loadDueForksSummary(kgDir, today);
+  const taperMode = detectTaperModeFastJs(kgDir, examDate || null);
+  const summary = computeReadinessSummaryFastJs(kgDir, propositions, dueForksCount);
+
+  if (premortemOnly) {
+    return {
+      ok: true,
+      bullets: [],
+      sourceBasis: "cold_start_minimal",
+      taperMode,
+    };
+  }
+  return {
+    ok: true,
+    readinessIndex: summary.readinessIndex,
+    band: summary.band,
+    taperMode,
+    topLevers: [],
+    preMortemShield: { bullets: [], sourceBasis: "cold_start_minimal" },
+    uncertaintyReasons: ["python_fallback_minimal"],
+  };
+}
+
+export function runInterleave(
+  workspaceRoot,
+  { action = "build", n = 6, subjects, mode = "principle_first", seed, sessionId, itemId, selectedPrinciple, confidence = 0.5, durationMs } = {}
+) {
+  const kgDir = resolveKgDir(workspaceRoot);
+  const pyBin = resolvePythonBin(workspaceRoot);
+
+  const pyCode = [
+    "import json, sys",
+    "from pathlib import Path",
+    "from syntopik import interleave as interleave_mod",
+    "req = json.loads(sys.stdin.read() or '{}')",
+    "ws = Path(req['workspace'])",
+    "kg = Path(req['kgDir'])",
+    "act = str(req.get('action') or 'build').lower()",
+    "try:",
+    "    if act == 'stats':",
+    "        res = interleave_mod.get_interleave_stats(ws, kg_dir=kg)",
+    "    elif act == 'check':",
+    "        res = interleave_mod.check_principle_step(ws, session_id=req['sessionId'], item_id=req['itemId'], selected_principle=req['selectedPrinciple'], confidence=req.get('confidence', 0.5), duration_ms=req.get('durationMs'), kg_dir=kg)",
+    "    else:",
+    "        res = interleave_mod.build_interleave_set(ws, n=int(req.get('n') or 6), subjects=req.get('subjects'), mode=str(req.get('mode') or 'principle_first'), seed=req.get('seed'), kg_dir=kg)",
+    "    print(json.dumps(res, ensure_ascii=False, allow_nan=False))",
+    "except (KeyError, ValueError) as exc:",
+    "    print(json.dumps({'ok': False, 'error': str(exc)}, ensure_ascii=False))",
+  ].join("\n");
+
+  try {
+    const out = execFileSync(pyBin, ["-B", "-c", pyCode], {
+      cwd: fs.existsSync(workspaceRoot) ? workspaceRoot : process.cwd(),
+      env: buildPythonEnv(workspaceRoot),
+      input: JSON.stringify({
+        workspace: workspaceRoot,
+        kgDir,
+        action,
+        n,
+        subjects: subjects ?? null,
+        mode,
+        seed: seed ?? null,
+        sessionId: sessionId ?? null,
+        itemId: itemId ?? null,
+        selectedPrinciple: selectedPrinciple ?? null,
+        confidence: confidence ?? 0.5,
+        durationMs: durationMs ?? null,
+      }),
+      encoding: "utf8",
+      timeout: 12000,
+    });
+    const parsed = JSON.parse(out);
+    if (!parsed || typeof parsed !== "object") {
+      return { ok: false, error: "Unexpected interleave response." };
+    }
+    if (parsed.ok === false) {
+      return { ok: false, error: String(parsed.error || "Interleave operation failed.") };
+    }
+    if (action === "build") {
+      // Defense-in-depth zero-leak sanitization: strip all sealed chapters/principles/answers!
+      const safe = sanitizeInterleaveBuildJs(parsed);
+      return { ok: Boolean(safe.ok ?? true), ...safe };
+    }
+    return { ok: Boolean(parsed.ok ?? true), ...parsed };
+  } catch (err) {
+    return {
+      ok: false,
+      error: `Blind-chapter interleave engine failed: ${err?.message || String(err)}`,
+    };
+  }
 }
