@@ -141,6 +141,25 @@ def _sandbox_env(work_dir: Path, memory_mb: int) -> dict[str, str]:
         "LC_ALL": "C.UTF-8",
         "LANG": "C.UTF-8",
     }
+    if os.name == "nt":
+        # Windows binaries (especially Node.js/V8/libuv & Winsock DLLs) require
+        # SYSTEMROOT/WINDIR/COMSPEC/PATHEXT to initialize inside a sandboxed env.
+        env["USERPROFILE"] = str(work_dir)
+        env["APPDATA"] = str(work_dir)
+        env["LOCALAPPDATA"] = str(work_dir)
+        for win_key in (
+            "SYSTEMROOT",
+            "WINDIR",
+            "SYSTEMDRIVE",
+            "COMSPEC",
+            "PATHEXT",
+            "PROCESSOR_ARCHITECTURE",
+            "NUMBER_OF_PROCESSORS",
+            "OS",
+        ):
+            val = os.environ.get(win_key)
+            if val:
+                env[win_key] = val
     if memory_mb > 0:
         env["NODE_OPTIONS"] = f"--max-old-space-size={max(64, int(memory_mb))}"
     return env

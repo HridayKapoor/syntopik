@@ -943,7 +943,7 @@ except Exception as exc:
 
 
 def _sandbox_env(work_dir: Path) -> dict[str, str]:
-    return {
+    env = {
         "PATH": os.environ.get("PATH", "/usr/local/bin:/usr/bin:/bin"),
         "HOME": str(work_dir),
         "TMPDIR": str(work_dir),
@@ -953,6 +953,13 @@ def _sandbox_env(work_dir: Path) -> dict[str, str]:
         "PYTHONUNBUFFERED": "1",
         "PYTHONNOUSERSITE": "1",
     }
+    if os.name == "nt":
+        env["USERPROFILE"] = str(work_dir)
+        for win_key in ("SYSTEMROOT", "WINDIR", "SYSTEMDRIVE", "COMSPEC", "PATHEXT", "OS"):
+            val = os.environ.get(win_key)
+            if val:
+                env[win_key] = val
+    return env
 
 
 def _load_code_verify() -> Any | None:

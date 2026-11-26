@@ -2722,7 +2722,7 @@ class TestCodeVerifyEngine(unittest.TestCase):
                 self.assertTrue(spy_preexec.call_args.kwargs.get("apply_rlimit_as"))
 
             rc_js, res_js = _cv(["run", "--lang", "node", "--code", "console.log(2 ** 10)", "--json"])
-            self.assertEqual(rc_js, 0)
+            self.assertEqual(rc_js, 0, f"node sandbox run failed: {res_js}")
             self.assertTrue(res_js["ok"])
             self.assertEqual(res_js["stdout"].strip(), "1024")
             if os.name != "nt":

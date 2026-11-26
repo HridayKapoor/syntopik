@@ -99,6 +99,11 @@ Homepage = "https://github.com/HridayKapoor/syntopik"
 Repository = "https://github.com/HridayKapoor/syntopik"
 Issues = "https://github.com/HridayKapoor/syntopik/issues"
 
+[tool.hatch.build.targets.sdist]
+artifacts = [
+  "mcp-app/mlh-studio/dist/**",
+]
+
 [tool.hatch.build.targets.wheel]
 packages = ["syntopik"]
 

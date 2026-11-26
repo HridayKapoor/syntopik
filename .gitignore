@@ -54,7 +54,7 @@ animations/*
 *.syntopik-pack.zip
 !packs/*.syntopik-pack.zip
 .syntopik/
-dist/
+/dist/
 *.egg-info/
 .mlh-studio-state/
 .syntopik-studio-state/
