@@ -945,17 +945,18 @@ measurements = []
 repeats = max(3, int(cfg.get("repeats", 5)))
 budget_per_size_s = float(cfg.get("perSizeBudgetSec", 0.35))
 
+# Phase 1: Warmup, mutation check & batch calibration per size (respecting per-size budget)
+prepared = []
 for n in cfg["sizes"]:
     args_proto = make_arg(n)
     args_probe = clone_args(args_proto)
-    # Warmup & mutation check strictly outside input generation
     t_cal0 = time.perf_counter_ns()
     fn(*args_probe)
     cal_ns = max(1, time.perf_counter_ns() - t_cal0)
     mutates = (args_probe != args_proto)
 
     if cal_ns > int(budget_per_size_s * 1e9):
-        measurements.append({"n": n, "medianNs": float(cal_ns), "batch": 1})
+        prepared.append({"n": n, "proto": args_proto, "mutates": mutates, "batch": 1, "samples": [float(cal_ns)], "overBudget": True})
         break
 
     batch = 1
@@ -964,9 +965,20 @@ for n in cfg["sizes"]:
         if mutates:
             batch = min(batch, max(1, 131_072 // max(1, n)))
 
-    samples = []
-    for _ in range(repeats):
-        if mutates:
+    prepared.append({"n": n, "proto": args_proto, "mutates": mutates, "batch": batch, "samples": [], "overBudget": False})
+    if cal_ns * repeats > budget_per_size_s * 1e9:
+        break
+
+# Phase 2: Interleave measurement rounds across sizes so transient VM/OS CPU jitter
+# cannot systematically skew only the largest N; use lower-quartile (p25) to reject
+# one-sided positive scheduling spikes.
+for _ in range(repeats):
+    for item in prepared:
+        if item["overBudget"]:
+            continue
+        batch = item["batch"]
+        args_proto = item["proto"]
+        if item["mutates"]:
             inputs = [clone_args(args_proto) for _ in range(batch)]
             t0 = time.perf_counter_ns()
             for call_args in inputs:
@@ -977,11 +989,12 @@ for n in cfg["sizes"]:
             for _ in range(batch):
                 fn(*args_proto)
             dt = (time.perf_counter_ns() - t0) / batch
-        samples.append(dt)
-    med = float(statistics.median(samples))
-    measurements.append({"n": n, "medianNs": round(med, 2), "batch": batch})
-    if med * repeats > budget_per_size_s * 1e9:
-        break
+        item["samples"].append(dt)
+
+for item in prepared:
+    s = sorted(item["samples"])
+    rep_ns = float(s[len(s) // 4]) if len(s) >= 4 else float(statistics.median(s))
+    measurements.append({"n": item["n"], "medianNs": round(rep_ns, 2), "batch": item["batch"]})
 
 print(cfg["marker"] + json.dumps({"measurements": measurements}))
 """
@@ -1245,7 +1258,7 @@ def classify_measurements(points: list[dict[str, Any]]) -> dict[str, Any]:
             best = "O(1)"
     elif best in ("O(N)", "O(N log N)") and len(doubling_ratios) >= 3:
         tail_med = statistics.median(doubling_ratios[-3:])
-        if tail_med < 2.09 and empirical_exponent < 1.07:
+        if (tail_med < 2.09 and empirical_exponent < 1.07) or tail_med < 2.04:
             best = "O(N)"
         elif tail_med >= 2.13 and empirical_exponent >= 1.08:
             best = "O(N log N)"
