@@ -1,0 +1,169 @@
+name: Syntopik Core CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: syntopik-ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  core-verify:
+    name: Core Stdlib + Node (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Set up Node.js 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Fresh-clone bootstrap (setup_harness.py)
+        run: python3 -B scripts/setup_harness.py auto --json
+
+      - name: Core health doctor (0 warn, 0 fail)
+        run: |
+          python3 -B - <<'PY'
+          import json, subprocess, sys
+          proc = subprocess.run(
+              [sys.executable, "-B", "scripts/study_doctor.py", "--core-only", "--json"],
+              capture_output=True, text=True, check=False,
+          )
+          print(proc.stdout)
+          if proc.stderr:
+              print(proc.stderr, file=sys.stderr)
+          if proc.returncode != 0:
+              sys.exit(proc.returncode)
+          report = json.loads(proc.stdout)
+          assert report.get("healthy") is True, f"Doctor unhealthy: {report.get('summary')}"
+          assert report["summary"]["warn"] == 0, f"Doctor warnings: {[c for c in report['checks'] if c['status'] == 'warn']}"
+          assert report["summary"]["fail"] == 0, f"Doctor failures: {[c for c in report['checks'] if c['status'] == 'fail']}"
+          PY
+
+      - name: Python & Node syntax / warning gate
+        run: |
+          python3 -B -W error::SyntaxWarning - <<'PY'
+          import pathlib, py_compile, tempfile, warnings
+          py_files = sorted(pathlib.Path("scripts").glob("*.py")) + sorted(pathlib.Path("tests").glob("*.py"))
+          assert len(py_files) >= 25, f"Expected >=25 Python files, found {len(py_files)}"
+          with tempfile.TemporaryDirectory(prefix="synt-ci-pyc-") as tmp:
+              tmp_dir = pathlib.Path(tmp)
+              for idx, path in enumerate(py_files):
+                  with warnings.catch_warnings():
+                      warnings.simplefilter("error", SyntaxWarning)
+                      py_compile.compile(str(path), cfile=str(tmp_dir / f"{idx}_{path.stem}.pyc"), doraise=True)
+          print(f"py_compile OK ({len(py_files)} files, 0 SyntaxWarnings)")
+          PY
+          node --check \
+            .agents/hooks/session-start.mjs \
+            .agents/hooks/post-graph-sync.mjs \
+            scripts/sync-graph.mjs \
+            mcp-app/mlh-studio/dist/server.mjs
+
+      - name: Pure-stdlib & Node sandboxed unittest suite
+        env:
+          PYTHONPATH: tests
+        run: |
+          python3 -B -m unittest -v \
+            test_harness.TestSyntaxAndCLI.test_all_python_scripts_compile_without_syntax_warnings \
+            test_harness.TestSyntaxAndCLI.test_all_node_scripts_syntax_check \
+            test_harness.TestHooksSkillsBudget \
+            test_harness.TestMcpAppStudio \
+            test_harness.TestP3BackupAndHubSync \
+            test_harness.TestSelfImproveAndDoctor.test_p0_and_p1_skills_exist_with_valid_frontmatter \
+            test_harness.TestEdunitiPyqBank \
+            test_harness.TestSetupHarnessFreshClone \
+            test_harness.TestCodeVerifyEngine \
+            test_harness.TestResearchScout \
+            test_harness.TestTriProtocolHooksAndMcp \
+            test_harness.TestGitHubHygieneAndPortability
+
+      - name: Public release hygiene & config gate
+        run: |
+          python3 -B - <<'PY'
+          import json, pathlib, re, subprocess, tomllib
+
+          root = pathlib.Path(".").resolve()
+
+          # 1. Zero personal home-directory leaks in tracked files
+          personal_re = re.compile(
+              r"(?:/(?:Users|home)/[A-Za-z0-9._-]+(?:/|[\"'\s]|$)|C:\\Users\\[A-Za-z0-9._-]+\\)"
+          )
+          tracked = subprocess.check_output(["git", "ls-files"], text=True).splitlines()
+          assert len(tracked) >= 40, f"Unexpectedly few tracked files: {len(tracked)}"
+
+          # Ensure personal learner ledgers are never tracked in git
+          forbidden_tracked = {
+              "knowledge-graph/propositions.jsonl",
+              "knowledge-graph/chains.jsonl",
+              "knowledge-graph/mistakes.jsonl",
+              "knowledge-graph/exam-attempts.jsonl",
+              "knowledge-graph/review-queue.md",
+              "knowledge-graph/graph-data.js",
+          }
+          tracked_personal = sorted(forbidden_tracked.intersection(tracked))
+          assert not tracked_personal, f"Personal learner files tracked in git: {tracked_personal}"
+
+          leaks = []
+          for rel in tracked:
+              p = root / rel
+              if not p.is_file() or p.is_symlink():
+                  continue
+              raw = p.read_bytes()
+              if b"\x00" in raw[:4096]:
+                  continue
+              text = raw.decode("utf-8", errors="ignore")
+              for m in personal_re.finditer(text):
+                  token = m.group(0)
+                  if "..." in token:
+                      continue
+                  leaks.append(f"{rel}: {token.strip()!r}")
+          assert not leaks, f"Personal home-directory leaks detected: {leaks}"
+
+          # 2. Always-on rule budget & CLAUDE.md import invariant
+          claude_text = (root / "CLAUDE.md").read_text(encoding="utf-8")
+          assert claude_text.startswith("@AGENTS.md"), "CLAUDE.md must start with '@AGENTS.md'"
+          assert not claude_text.lstrip().startswith("---"), "CLAUDE.md must not have YAML frontmatter"
+
+          agents_bytes = (root / "AGENTS.md").read_bytes()
+          gemini_bytes = (root / "GEMINI.md").read_bytes()
+          combined = len(agents_bytes) + len(gemini_bytes)
+          assert combined <= 9600, f"GEMINI.md + AGENTS.md ({combined} B) exceeds 9,600 B ceiling"
+          for name, raw in (("AGENTS.md", agents_bytes), ("GEMINI.md", gemini_bytes)):
+              assert len(raw) < 24576, f"{name} exceeds 24 KB limit"
+              assert not raw.decode("utf-8").lstrip().startswith("---"), f"{name} must not have YAML frontmatter"
+
+          # 3. Validate TOML & JSON multi-harness configuration files
+          tomllib.loads((root / ".codex" / "config.toml").read_text(encoding="utf-8"))
+          for json_rel in (
+              ".agents/hooks.json",
+              ".claude/settings.json",
+              ".codex/hooks.json",
+              ".mcp.json",
+              "mcp-app/mlh-studio/plugin.json",
+              "mcp-app/mlh-studio/mcp_config.json",
+              "knowledge-graph/reagents.json",
+          ):
+              json.loads((root / json_rel).read_text(encoding="utf-8"))
+
+          print(f"Hygiene gate OK: {len(tracked)} tracked files, rules={combined} B (<=9600 B), configs valid.")
+          PY

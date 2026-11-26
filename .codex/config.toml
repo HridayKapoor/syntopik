@@ -1,0 +1,11 @@
+project_doc_max_bytes = 65536
+
+[features]
+multi_agent = true
+hooks = true
+
+[mcp_servers.syntopik-studio]
+command = "node"
+args = ["./mcp-app/mlh-studio/dist/server.mjs"]
+startup_timeout_sec = 10
+tool_timeout_sec = 60

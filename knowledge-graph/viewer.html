@@ -1,0 +1,1867 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Syntopik — Knowledge Hypergraph</title>
+<style>
+  :root, [data-theme="dark"] {
+    /* Warm Obsidian & Vellum Ink */
+    --bg: #111315;
+    --bg-elev: #171A1D;
+    --bg-card: #1E2227;
+    --bg-input: #252A30;
+    --bg-hover: #2C323B;
+    --border: #2A3038;
+    --border-strong: #3B434E;
+    --text: #E8E6E1;
+    --text-2: #A8B0BC;
+    --muted: #757F8D;
+    --dot-grid: #22272E;
+    --solid: #4E9F76;
+    --solid-bg: rgba(78, 159, 118, 0.14);
+    --shaky: #D4943A;
+    --shaky-bg: rgba(212, 148, 58, 0.14);
+    --misconception: #C85A53;
+    --misconception-bg: rgba(200, 90, 83, 0.14);
+    --planned: #6B8E9B;
+    --planned-bg: rgba(107, 142, 155, 0.14);
+    --accent: #7C93C3;
+    --accent-bg: rgba(124, 147, 195, 0.15);
+    --edge-default: #525C6A;
+    --edge-derives: #7C93C3;
+    --edge-generalizes: #4E9F96;
+    --edge-contrasts: #D4943A;
+    --bar-track: #252A30;
+    --cluster-bg: rgba(30, 34, 39, 0.62);
+    --shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
+    --font-ui: "Inter", -apple-system, BlinkMacSystemFont, "SF Pro Text", system-ui, sans-serif;
+  }
+  [data-theme="light"] {
+    /* Archival Vellum & Graphite */
+    --bg: #F7F5F0;
+    --bg-elev: #FCFBF8;
+    --bg-card: #FFFFFF;
+    --bg-input: #EFECE4;
+    --bg-hover: #E6E1D6;
+    --border: #E2DDD2;
+    --border-strong: #C8C1B2;
+    --text: #1C2024;
+    --text-2: #495057;
+    --muted: #747B84;
+    --dot-grid: #DDD7CB;
+    --solid: #2B7A52;
+    --solid-bg: rgba(43, 122, 82, 0.10);
+    --shaky: #A86814;
+    --shaky-bg: rgba(168, 104, 20, 0.11);
+    --misconception: #B23A34;
+    --misconception-bg: rgba(178, 58, 52, 0.10);
+    --planned: #456978;
+    --planned-bg: rgba(69, 105, 120, 0.10);
+    --accent: #36538C;
+    --accent-bg: rgba(54, 83, 140, 0.10);
+    --edge-default: #8E959E;
+    --edge-derives: #36538C;
+    --edge-generalizes: #2A7B76;
+    --edge-contrasts: #A86814;
+    --bar-track: #E5E0D5;
+    --cluster-bg: rgba(239, 236, 228, 0.72);
+    --shadow: 0 6px 20px rgba(28, 32, 36, 0.07);
+  }
+
+  * { box-sizing: border-box; }
+  html, body { height: 100%; }
+  body {
+    margin: 0;
+    font-family: var(--font-ui);
+    font-variant-numeric: tabular-nums;
+    background: var(--bg);
+    color: var(--text);
+    display: grid;
+    grid-template-rows: auto 1fr;
+    overflow: hidden;
+    -webkit-font-smoothing: antialiased;
+  }
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after {
+      transition-duration: 0.01ms !important;
+      animation-duration: 0.01ms !important;
+      scroll-behavior: auto !important;
+    }
+  }
+
+  header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 9px 14px;
+    border-bottom: 1px solid var(--border);
+    background: var(--bg-elev);
+    flex-wrap: wrap;
+    z-index: 10;
+  }
+  .brand {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-right: 2px;
+  }
+  .back-link {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    padding: 5px 9px;
+    border-radius: 7px;
+    border: 1px solid var(--border);
+    background: var(--bg-input);
+    color: var(--text-2);
+    text-decoration: none;
+    font-size: 12px;
+    font-weight: 500;
+    white-space: nowrap;
+    transition: border-color 0.15s, color 0.15s, background 0.15s;
+  }
+  .back-link:hover {
+    border-color: var(--accent);
+    color: var(--text);
+    background: var(--bg-hover);
+  }
+  header h1 {
+    font-size: 14px;
+    font-weight: 650;
+    margin: 0;
+    letter-spacing: -0.015em;
+    white-space: nowrap;
+  }
+  .controls {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    flex-wrap: wrap;
+    flex: 1;
+    min-width: 0;
+  }
+  select, input[type="search"], button {
+    font-family: inherit;
+    background: var(--bg-input);
+    color: var(--text);
+    border: 1px solid var(--border);
+    border-radius: 7px;
+    padding: 5px 9px;
+    font-size: 12px;
+    line-height: 1.2;
+    outline: none;
+    transition: border-color 0.15s, background 0.15s;
+  }
+  select { max-width: 145px; }
+  input[type="search"] { min-width: 140px; flex: 0 1 185px; }
+  select:focus, input[type="search"]:focus { border-color: var(--accent); }
+  button {
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    font-weight: 500;
+  }
+  button:hover { border-color: var(--accent); background: var(--bg-hover); }
+  button.active {
+    background: var(--accent-bg);
+    border-color: var(--accent);
+    color: var(--accent);
+  }
+  .spacer { flex: 1; min-width: 8px; }
+  .pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    font-size: 11.5px;
+    font-weight: 500;
+    padding: 4px 9px;
+    border-radius: 999px;
+    border: 1px solid var(--border);
+    background: var(--bg-input);
+    color: var(--text-2);
+    white-space: nowrap;
+  }
+  .pill.solid { color: var(--solid); background: var(--solid-bg); border-color: transparent; }
+  .pill.shaky { color: var(--shaky); background: var(--shaky-bg); border-color: transparent; }
+  .pill.misconception { color: var(--misconception); background: var(--misconception-bg); border-color: transparent; }
+  .pill.planned { color: var(--planned); background: var(--planned-bg); border-color: transparent; }
+  .pill.accent { color: var(--accent); background: var(--accent-bg); border-color: transparent; }
+  .dot {
+    display: inline-block;
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    flex-shrink: 0;
+  }
+
+  main {
+    display: grid;
+    grid-template-columns: 1fr 360px;
+    min-height: 0;
+  }
+  #stage {
+    position: relative;
+    overflow: hidden;
+    background-color: var(--bg);
+    background-image: radial-gradient(circle at 1px 1px, var(--dot-grid) 1px, transparent 0);
+    background-size: 24px 24px;
+    min-height: 0;
+  }
+  svg#graphSvg {
+    width: 100%;
+    height: 100%;
+    display: block;
+    cursor: grab;
+    user-select: none;
+  }
+  svg#graphSvg:active { cursor: grabbing; }
+
+  .stage-hud {
+    position: absolute;
+    left: 14px;
+    bottom: 14px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+    pointer-events: none;
+  }
+  .hud-group {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    padding: 5px 8px;
+    border-radius: 9px;
+    background: var(--bg-elev);
+    border: 1px solid var(--border);
+    box-shadow: var(--shadow);
+    pointer-events: auto;
+    font-size: 11px;
+    color: var(--muted);
+  }
+  .hud-group button {
+    padding: 4px 8px;
+    font-size: 12px;
+    border-radius: 6px;
+  }
+  .legend-item {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    padding: 0 5px;
+  }
+  .legend-line {
+    width: 16px;
+    height: 2px;
+    border-radius: 2px;
+    display: inline-block;
+  }
+
+  /* SVG semantic styling reactive to theme */
+  .cluster-box {
+    fill: var(--cluster-bg);
+    stroke: var(--border);
+    stroke-width: 1.2;
+    stroke-dasharray: 5 4;
+  }
+  .cluster-label {
+    fill: var(--muted);
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+  }
+  .edge-path {
+    fill: none;
+    stroke-width: 1.65;
+    transition: opacity 0.15s, stroke-width 0.15s;
+  }
+  .edge-path.rel-requires { stroke: var(--edge-default); }
+  .edge-path.rel-derives { stroke: var(--edge-derives); }
+  .edge-path.rel-generalizes { stroke: var(--edge-generalizes); }
+  .edge-path.rel-contrasts_with { stroke: var(--edge-contrasts); stroke-dasharray: 5 4; }
+  .edge-path.dimmed { opacity: 0.14; }
+  .edge-path.highlighted { stroke-width: 2.5; opacity: 1; }
+
+  .joint-node { transition: opacity 0.15s; cursor: default; }
+  .joint-node.dimmed { opacity: 0.16; }
+  .joint-dot {
+    fill: var(--bg-card);
+    stroke-width: 1.8;
+    transition: stroke-width 0.15s;
+  }
+  .joint-node.rel-requires .joint-dot { stroke: var(--edge-default); }
+  .joint-node.rel-derives .joint-dot { stroke: var(--edge-derives); }
+  .joint-node.rel-generalizes .joint-dot { stroke: var(--edge-generalizes); }
+  .joint-node.rel-contrasts_with .joint-dot { stroke: var(--edge-contrasts); }
+  .joint-node.highlighted .joint-dot { stroke-width: 2.5; }
+  .joint-symbol {
+    font-size: 10.5px;
+    font-weight: 800;
+    pointer-events: none;
+    user-select: none;
+  }
+  .joint-node.rel-requires .joint-symbol { fill: var(--edge-default); }
+  .joint-node.rel-derives .joint-symbol { fill: var(--edge-derives); }
+  .joint-node.rel-generalizes .joint-symbol { fill: var(--edge-generalizes); }
+  .joint-node.rel-contrasts_with .joint-symbol { fill: var(--edge-contrasts); }
+
+  .joint-premises-row {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 5px;
+  }
+  .premise-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    padding: 3px 8px;
+    border-radius: 6px;
+    background: var(--bg-input);
+    border: 1px solid var(--border);
+    color: var(--text);
+    font-size: 11.5px;
+    font-weight: 600;
+    transition: border-color 0.15s, background 0.15s;
+  }
+  .premise-chip.clickable { cursor: pointer; }
+  .premise-chip.clickable:hover { border-color: var(--accent); background: var(--bg-hover); }
+  .conj-op {
+    font-size: 11px;
+    font-weight: 800;
+    color: var(--accent);
+    padding: 0 1px;
+  }
+  .legend-joint {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 15px;
+    height: 15px;
+    border-radius: 50%;
+    border: 1.5px solid var(--edge-derives);
+    color: var(--edge-derives);
+    font-size: 9px;
+    font-weight: 800;
+    line-height: 1;
+  }
+
+  .node-group { cursor: pointer; transition: opacity 0.15s; }
+  .node-group.dimmed { opacity: 0.34; }
+  .node-bg {
+    fill: var(--bg-card);
+    stroke: var(--border-strong);
+    stroke-width: 1.3;
+    transition: stroke 0.15s, stroke-width 0.15s;
+  }
+  .node-group:hover .node-bg { stroke: var(--accent); stroke-width: 1.9; }
+  .node-group.selected .node-bg { stroke: var(--accent); stroke-width: 2.4; }
+  .node-title { fill: var(--text); font-size: 12.5px; font-weight: 650; }
+  .node-sub { fill: var(--muted); font-size: 10px; font-weight: 500; }
+  .node-meta { fill: var(--text-2); font-size: 10px; font-weight: 600; font-family: "SF Mono", ui-monospace, Menlo, monospace; }
+  .node-bar-track { fill: var(--bar-track); }
+
+  aside#inspector {
+    border-left: 1px solid var(--border);
+    background: var(--bg-elev);
+    padding: 16px;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+  }
+  .empty {
+    position: absolute;
+    inset: 0;
+    display: grid;
+    place-items: center;
+    text-align: center;
+    color: var(--muted);
+    padding: 32px;
+    pointer-events: none;
+  }
+  .empty[hidden] { display: none; }
+  .empty-card {
+    max-width: 460px;
+    background: var(--bg-elev);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    padding: 24px 26px;
+    box-shadow: var(--shadow);
+    pointer-events: auto;
+  }
+  .empty-card h2 { margin: 0 0 8px; font-size: 16px; color: var(--text); }
+  .empty-card p { margin: 8px 0; font-size: 13px; line-height: 1.55; color: var(--text-2); }
+  code {
+    font-family: "SF Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-size: 11.5px;
+    background: var(--bg-input);
+    padding: 2px 6px;
+    border-radius: 5px;
+    color: var(--accent);
+    border: 1px solid var(--border);
+  }
+
+  .summary-grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 8px;
+  }
+  .metric-box {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 10px 12px;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+  .metric-label {
+    font-size: 10.5px;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: var(--muted);
+  }
+  .metric-value {
+    font-size: 18px;
+    font-weight: 700;
+    letter-spacing: -0.02em;
+    color: var(--text);
+  }
+  .metric-sub {
+    font-size: 11px;
+    color: var(--muted);
+  }
+  .progress-bar {
+    height: 6px;
+    border-radius: 999px;
+    background: var(--bar-track);
+    overflow: hidden;
+    margin-top: 2px;
+  }
+  .progress-fill {
+    height: 100%;
+    border-radius: 999px;
+    transition: width 0.25s ease;
+  }
+
+  .detail-title { font-size: 15.5px; font-weight: 700; margin: 0; line-height: 1.35; letter-spacing: -0.015em; }
+  .detail-meta { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
+  .detail-body { font-size: 13px; line-height: 1.55; color: var(--text-2); margin: 0; }
+  .notes-box {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-left: 3px solid var(--accent);
+    border-radius: 8px;
+    padding: 10px 12px;
+    font-size: 12.5px;
+    line-height: 1.55;
+    color: var(--text-2);
+  }
+  .section-heading {
+    font-size: 11px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--muted);
+    margin: 0 0 6px;
+  }
+  .edge-list {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    font-size: 12px;
+  }
+  .edge-item {
+    padding: 8px 10px;
+    border-radius: 8px;
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    transition: border-color 0.15s, background 0.15s;
+  }
+  .edge-item.clickable { cursor: pointer; }
+  .edge-item.clickable:hover { border-color: var(--accent); background: var(--bg-hover); }
+  .edge-item-head { display: flex; align-items: center; justify-content: space-between; gap: 6px; }
+  .edge-item-title { font-weight: 600; color: var(--text); font-size: 12.5px; }
+  .edge-item-why { color: var(--muted); font-size: 11.5px; line-height: 1.45; }
+
+  .toast {
+    position: fixed;
+    right: 18px;
+    bottom: 18px;
+    background: var(--bg-elev);
+    color: var(--text);
+    border: 1px solid var(--accent);
+    border-radius: 9px;
+    padding: 8px 14px;
+    font-size: 12.5px;
+    font-weight: 500;
+    box-shadow: var(--shadow);
+    opacity: 0;
+    transform: translateY(8px);
+    pointer-events: none;
+    transition: opacity 0.18s, transform 0.18s;
+    z-index: 99;
+  }
+  .toast.show { opacity: 1; transform: translateY(0); }
+
+  @media (max-width: 900px) {
+    main { grid-template-columns: 1fr; grid-template-rows: 1fr 290px; }
+    aside#inspector { border-left: none; border-top: 1px solid var(--border); }
+  }
+</style>
+</head>
+<body>
+<header>
+  <div class="brand">
+    <a class="back-link" href="../dashboard.html" title="Back to Syntopik Hub">← Syntopik Hub</a>
+    <h1>Syntopik · Knowledge Graph</h1>
+  </div>
+  <div class="controls">
+    <select id="subjectFilter" aria-label="Filter by subject"><option value="">All subjects</option></select>
+    <select id="chapterFilter" aria-label="Filter by chapter"><option value="">All chapters</option></select>
+    <select id="statusFilter" aria-label="Filter by status">
+      <option value="">All states</option>
+      <option value="due">Due / Weak</option>
+      <option value="solid">Solid</option>
+      <option value="shaky">Shaky</option>
+      <option value="misconception">Misconception</option>
+      <option value="planned">Planned</option>
+    </select>
+    <input id="search" type="search" placeholder="Search concepts, IDs, notes… (/)" aria-label="Search concepts" />
+    <button id="layoutToggleBtn" title="Switch between Layered DAG and Subject Clusters">Layout: Layered DAG</button>
+    <button id="fitBtn" title="Fit entire graph to viewport">Fit View</button>
+    <span class="spacer"></span>
+    <span class="pill" id="countPill">0 nodes · 0 edges</span>
+    <span class="pill accent" id="bktAvgPill" title="Average Bayesian Knowledge Tracing mastery">BKT —</span>
+    <button id="themeToggleBtn" title="Toggle Dark / Light theme">☀ Light</button>
+  </div>
+</header>
+
+<main>
+  <div id="stage">
+    <svg id="graphSvg" aria-label="Interactive Knowledge Graph">
+      <defs>
+        <marker id="arrow-requires" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+          <path d="M 0 1.2 L 10 5 L 0 8.8 z" fill="var(--edge-default)" />
+        </marker>
+        <marker id="arrow-derives" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+          <path d="M 0 1.2 L 10 5 L 0 8.8 z" fill="var(--edge-derives)" />
+        </marker>
+        <marker id="arrow-generalizes" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+          <path d="M 0 1.2 L 10 5 L 0 8.8 z" fill="var(--edge-generalizes)" />
+        </marker>
+        <marker id="arrow-contrasts_with" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+          <path d="M 0 1.2 L 10 5 L 0 8.8 z" fill="var(--edge-contrasts)" />
+        </marker>
+      </defs>
+      <g id="viewport">
+        <g id="clusters"></g>
+        <g id="edges"></g>
+        <g id="nodes"></g>
+      </g>
+    </svg>
+
+    <div class="stage-hud">
+      <div class="hud-group">
+        <button id="zoomOutBtn" title="Zoom out">−</button>
+        <span id="zoomLabel" style="min-width:40px;text-align:center;font-family:ui-monospace,monospace;">100%</span>
+        <button id="zoomInBtn" title="Zoom in">+</button>
+      </div>
+      <div class="hud-group">
+        <span class="legend-item"><span class="legend-line" style="background:var(--edge-default)"></span>requires</span>
+        <span class="legend-item"><span class="legend-line" style="background:var(--edge-derives)"></span>derives</span>
+        <span class="legend-item"><span class="legend-line" style="background:var(--edge-generalizes)"></span>generalizes</span>
+        <span class="legend-item"><span class="legend-line" style="border-top:2px dashed var(--edge-contrasts);height:0"></span>contrasts</span>
+        <span class="legend-item"><span class="legend-joint">∧</span>joint</span>
+      </div>
+    </div>
+
+    <div class="empty" id="emptyState" hidden>
+      <div class="empty-card">
+        <h2 id="emptyTitle">Your Knowledge Graph is Ready</h2>
+        <p id="emptyDesc">Start any topic, course, paper, or chapter in <strong>Syntopik</strong> (Antigravity 2.0, Claude Code, or Codex / T3 Code). Every mastered proposition, BKT mastery probability, FSRS-6 review schedule, and reasoning chain is persisted into <code>knowledge-graph/propositions.jsonl</code> and <code>chains.jsonl</code>.</p>
+        <p>Run <code>node scripts/sync-graph.mjs --open</code> anytime to open the Syntopik Hub, or <code>--graph</code> for this viewer.</p>
+      </div>
+    </div>
+  </div>
+
+  <aside id="inspector"></aside>
+</main>
+
+<div class="toast" id="toast"></div>
+
+<script src="./graph-data.js"></script>
+<script>
+(() => {
+  "use strict";
+
+  const NODE_W = 240;
+  const NODE_H = 82;
+  const SVG_NS = "http://www.w3.org/2000/svg";
+
+  let data = { propositions: [], chains: [] };
+  let view = { x: 40, y: 40, k: 1 };
+  let layoutMode = "layered"; // "layered" | "clustered"
+  let selectedId = null;
+  let lastPositions = new Map();
+  let lastBounds = null;
+
+  const esc = (s) => String(s ?? "").replace(/[&<>"]/gu, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+
+  function safeStorageGet(key) {
+    try { return window.localStorage.getItem(key); } catch { return null; }
+  }
+  function safeStorageSet(key, val) {
+    try { window.localStorage.setItem(key, val); } catch { /* ignore file:// storage restrictions */ }
+  }
+
+  function showToast(msg) {
+    const el = document.getElementById("toast");
+    el.textContent = msg;
+    el.classList.add("show");
+    clearTimeout(showToast._t);
+    showToast._t = setTimeout(() => el.classList.remove("show"), 2000);
+  }
+
+  async function copyText(text, label) {
+    try {
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        await navigator.clipboard.writeText(text);
+        showToast(label || "Copied to clipboard");
+        return;
+      }
+    } catch { /* fallback below */ }
+    const ta = document.createElement("textarea");
+    ta.value = text;
+    ta.style.position = "fixed";
+    ta.style.opacity = "0";
+    document.body.appendChild(ta);
+    ta.select();
+    try { document.execCommand("copy"); } catch { /* ignore */ }
+    document.body.removeChild(ta);
+    showToast(label || "Copied to clipboard");
+  }
+
+  function applyTheme(theme) {
+    const next = theme === "light" ? "light" : "dark";
+    document.documentElement.setAttribute("data-theme", next);
+    safeStorageSet("study-harness-theme", next);
+    const btn = document.getElementById("themeToggleBtn");
+    btn.textContent = next === "dark" ? "☀ Light" : "☾ Dark";
+  }
+
+  function getTodayIso() {
+    const now = new Date();
+    const y = now.getFullYear();
+    const m = String(now.getMonth() + 1).padStart(2, "0");
+    const d = String(now.getDate()).padStart(2, "0");
+    return `${y}-${m}-${d}`;
+  }
+
+  function parseDateUtcDays(iso) {
+    if (!iso || typeof iso !== "string") return null;
+    const m = iso.trim().match(/^(\d{4})-(\d{2})-(\d{2})/u);
+    if (!m) return null;
+    return Math.floor(Date.UTC(Number(m[1]), Number(m[2]) - 1, Number(m[3])) / 86400000);
+  }
+
+  function getBkt(n) {
+    if (typeof n.bktMastery === "number" && Number.isFinite(n.bktMastery)) return n.bktMastery;
+    if (typeof n.confidence === "number" && Number.isFinite(n.confidence)) return n.confidence;
+    return null;
+  }
+
+  function getStability(n) {
+    const raw = n?.fsrs?.stability ?? n?.stabilityDays ?? n?.stability;
+    return typeof raw === "number" && Number.isFinite(raw) ? raw : null;
+  }
+
+  function getDifficulty(n) {
+    const raw = n?.fsrs?.difficulty ?? n?.difficulty;
+    return typeof raw === "number" && Number.isFinite(raw) ? raw : null;
+  }
+
+  function getNextReview(n) {
+    if (typeof n.nextReview === "string" && n.nextReview.trim()) return n.nextReview.trim().slice(0, 10);
+    if (typeof n?.fsrs?.due === "string" && n.fsrs.due.trim()) return n.fsrs.due.trim().slice(0, 10);
+    return null;
+  }
+
+  function getRetrievability(n) {
+    const stab = getStability(n);
+    if (stab === null || stab <= 0) return null;
+    const lastStr = n?.fsrs?.last_review || n.lastTested;
+    const lastDay = parseDateUtcDays(lastStr);
+    const todayDay = parseDateUtcDays(getTodayIso());
+    if (lastDay === null || todayDay === null) return null;
+    const elapsed = Math.max(0, todayDay - lastDay);
+    const r = Math.pow(1 + (19 / 81) * (elapsed / stab), -0.5);
+    return Math.max(0, Math.min(1, r));
+  }
+
+  function getCountdown(n) {
+    const nextStr = getNextReview(n);
+    if (!nextStr) return { text: "Unscheduled", short: "—", overdue: false, dueToday: false, days: null };
+    const dueDay = parseDateUtcDays(nextStr);
+    const todayDay = parseDateUtcDays(getTodayIso());
+    if (dueDay === null || todayDay === null) {
+      return { text: nextStr, short: nextStr, overdue: false, dueToday: false, days: null };
+    }
+    const diff = dueDay - todayDay;
+    if (diff < 0) return { text: `Overdue ${Math.abs(diff)}d (${nextStr})`, short: `-${Math.abs(diff)}d`, overdue: true, dueToday: false, days: diff };
+    if (diff === 0) return { text: `Due today (${nextStr})`, short: "Due today", overdue: false, dueToday: true, days: 0 };
+    if (diff === 1) return { text: `Tomorrow (${nextStr})`, short: "1d", overdue: false, dueToday: false, days: 1 };
+    return { text: `In ${diff}d (${nextStr})`, short: `${diff}d`, overdue: false, dueToday: false, days: diff };
+  }
+
+  function isNodeDue(n) {
+    if (n.status === "misconception" || n.status === "shaky") return true;
+    const cd = getCountdown(n);
+    return cd.overdue || cd.dueToday;
+  }
+
+  function statusVar(status) {
+    if (status === "solid") return "var(--solid)";
+    if (status === "shaky") return "var(--shaky)";
+    if (status === "misconception") return "var(--misconception)";
+    return "var(--planned)";
+  }
+
+  function bktColorVar(val) {
+    if (val === null) return "var(--muted)";
+    if (val >= 0.78) return "var(--solid)";
+    if (val >= 0.5) return "var(--shaky)";
+    return "var(--misconception)";
+  }
+
+  function formatStability(days) {
+    if (days === null) return "—";
+    if (days >= 100) return `${Math.round(days)}d`;
+    if (days >= 10) return `${days.toFixed(1)}d`;
+    return `${days.toFixed(1)}d`;
+  }
+
+  function truncate(str, max) {
+    const s = String(str || "");
+    return s.length > max ? `${s.slice(0, max - 1)}…` : s;
+  }
+
+  function normalizeChains(rawChains) {
+    const out = [];
+    const byKey = new Map();
+    for (const raw of rawChains || []) {
+      if (!raw || typeof raw !== "object") continue;
+      const conclusion =
+        typeof raw.conclusion === "string" && raw.conclusion.trim()
+          ? raw.conclusion.trim()
+          : typeof raw.to === "string" && raw.to.trim()
+            ? raw.to.trim()
+            : "";
+      if (!conclusion) continue;
+
+      let premises = [];
+      if (Array.isArray(raw.premises)) {
+        premises = raw.premises
+          .map((p) => (typeof p === "string" ? p.trim() : String(p ?? "").trim()))
+          .filter((p) => p && p !== conclusion);
+      } else if (typeof raw.from === "string" && raw.from.trim() && raw.from.trim() !== conclusion) {
+        premises = [raw.from.trim()];
+      }
+      premises = [...new Set(premises)];
+      if (premises.length === 0) continue;
+
+      const chainKey = `${[...premises].sort().join("+")}>${conclusion}`;
+      const rel = ["requires", "derives", "generalizes", "contrasts_with"].includes(raw.relation)
+        ? raw.relation
+        : "requires";
+      const why =
+        typeof raw.why === "string" && raw.why.trim()
+          ? raw.why.trim()
+          : typeof raw.note === "string" && raw.note.trim()
+            ? raw.note.trim()
+            : "";
+
+      const existing = byKey.get(chainKey);
+      if (existing) {
+        if (!existing.why && why) existing.why = why;
+        continue;
+      }
+
+      const isJoint = premises.length >= 2;
+      const norm = {
+        ...raw,
+        premises,
+        conclusion,
+        from: isJoint ? undefined : premises[0],
+        to: conclusion,
+        relation: rel,
+        why,
+        note: typeof raw.note === "string" && raw.note.trim() ? raw.note.trim() : why,
+        chainKey,
+        isJoint,
+      };
+      byKey.set(chainKey, norm);
+      out.push(norm);
+    }
+    return out;
+  }
+
+  function computeTopologicalDepths(nodes, chains) {
+    const idSet = new Set(nodes.map((n) => n.id));
+    const adj = new Map(nodes.map((n) => [n.id, []]));
+    const parents = new Map(nodes.map((n) => [n.id, []]));
+    const inDeg = new Map(nodes.map((n) => [n.id, 0]));
+    const seenPairs = new Set();
+
+    for (const c of chains) {
+      const to = c.conclusion || c.to;
+      const prems = Array.isArray(c.premises) ? c.premises : (c.from ? [c.from] : []);
+      if (!idSet.has(to)) continue;
+      for (const from of prems) {
+        if (!idSet.has(from) || from === to) continue;
+        const pairKey = `${from}\u0000${to}`;
+        if (seenPairs.has(pairKey)) continue;
+        seenPairs.add(pairKey);
+        adj.get(from).push(to);
+        parents.get(to).push(from);
+        inDeg.set(to, inDeg.get(to) + 1);
+      }
+    }
+
+    // Kahn's topological sort (cycle-safe!)
+    const queue = [];
+    for (const n of nodes) {
+      if (inDeg.get(n.id) === 0) queue.push(n.id);
+    }
+    const order = [];
+    const depth = new Map(nodes.map((n) => [n.id, 0]));
+
+    while (queue.length > 0) {
+      const u = queue.shift();
+      order.push(u);
+      const du = depth.get(u) || 0;
+      for (const v of adj.get(u)) {
+        if ((depth.get(v) || 0) < du + 1) depth.set(v, du + 1);
+        const rem = inDeg.get(v) - 1;
+        inDeg.set(v, rem);
+        if (rem === 0) queue.push(v);
+      }
+    }
+
+    // Any nodes inside a cycle get bounded fallback depths
+    if (order.length < nodes.length) {
+      const visited = new Set(order);
+      for (const n of nodes) {
+        if (!visited.has(n.id)) {
+          let maxParent = 0;
+          for (const p of parents.get(n.id)) {
+            if (visited.has(p)) maxParent = Math.max(maxParent, (depth.get(p) || 0) + 1);
+          }
+          depth.set(n.id, Math.min(maxParent, nodes.length));
+        }
+      }
+    }
+
+    return { depth, adj, parents };
+  }
+
+  function layoutLayered(nodes, chains) {
+    const pos = new Map();
+    const clusters = [];
+    if (nodes.length === 0) return { pos, clusters, bounds: null };
+
+    const { depth, parents } = computeTopologicalDepths(nodes, chains);
+    const layers = new Map();
+    for (const n of nodes) {
+      const d = depth.get(n.id) || 0;
+      if (!layers.has(d)) layers.set(d, []);
+      layers.get(d).push(n);
+    }
+
+    const layerKeys = [...layers.keys()].sort((a, b) => a - b);
+    // Initial deterministic grouping by subject -> chapter -> title
+    for (const d of layerKeys) {
+      layers.get(d).sort((a, b) =>
+        String(a.subject || "").localeCompare(String(b.subject || "")) ||
+        String(a.chapter || "").localeCompare(String(b.chapter || "")) ||
+        String(a.title || a.id).localeCompare(String(b.title || b.id))
+      );
+    }
+
+    // Two-pass barycenter crossing reduction
+    const indexInLayer = new Map();
+    const recordIndices = () => {
+      for (const d of layerKeys) {
+        layers.get(d).forEach((n, i) => indexInLayer.set(n.id, i));
+      }
+    };
+    recordIndices();
+    for (let pass = 0; pass < 2; pass++) {
+      for (let li = 1; li < layerKeys.length; li++) {
+        const list = layers.get(layerKeys[li]);
+        list.sort((a, b) => {
+          const bary = (n) => {
+            const ps = parents.get(n.id) || [];
+            if (!ps.length) return indexInLayer.get(n.id) ?? 0;
+            return ps.reduce((sum, pid) => sum + (indexInLayer.get(pid) ?? 0), 0) / ps.length;
+          };
+          const diff = bary(a) - bary(b);
+          if (Math.abs(diff) > 0.01) return diff;
+          return String(a.subject || "").localeCompare(String(b.subject || ""));
+        });
+      }
+      recordIndices();
+    }
+
+    const maxCols = Math.max(4, Math.min(7, Math.ceil(Math.sqrt(nodes.length * 1.15))));
+    const colStep = NODE_W + 32;
+    const subRowStep = NODE_H + 26;
+    const layerGap = 86;
+
+    let cursorY = 60;
+    for (const d of layerKeys) {
+      const list = layers.get(d);
+      const subRowCount = Math.ceil(list.length / maxCols);
+      for (let r = 0; r < subRowCount; r++) {
+        const slice = list.slice(r * maxCols, (r + 1) * maxCols);
+        const rowW = slice.length * colStep - 32;
+        const startX = -rowW / 2 + NODE_W / 2;
+        const y = cursorY + r * subRowStep;
+        slice.forEach((n, i) => {
+          pos.set(n.id, { x: startX + i * colStep, y });
+        });
+      }
+      cursorY += (subRowCount - 1) * subRowStep + NODE_H + layerGap;
+    }
+
+    return { pos, clusters, bounds: computeBounds(pos, clusters) };
+  }
+
+  function layoutClustered(nodes, chains) {
+    const pos = new Map();
+    const clusters = [];
+    if (nodes.length === 0) return { pos, clusters, bounds: null };
+
+    const bySubject = new Map();
+    for (const n of nodes) {
+      const subj = n.subject || "General";
+      if (!bySubject.has(subj)) bySubject.set(subj, []);
+      bySubject.get(subj).push(n);
+    }
+
+    const subjects = [...bySubject.keys()].sort();
+    const colStep = NODE_W + 28;
+    const subRowStep = NODE_H + 24;
+    const layerGap = 64;
+    const clusterPadX = 28;
+    const clusterPadTop = 44;
+    const clusterPadBottom = 26;
+    const clusterGap = 52;
+
+    let offsetX = 0;
+    for (const subj of subjects) {
+      const subNodes = bySubject.get(subj);
+      const subSet = new Set(subNodes.map((n) => n.id));
+      const subChains = chains.filter(
+        (c) => subSet.has(c.conclusion) && c.premises.every((pid) => subSet.has(pid))
+      );
+      const { depth } = computeTopologicalDepths(subNodes, subChains);
+
+      const layers = new Map();
+      for (const n of subNodes) {
+        const d = depth.get(n.id) || 0;
+        if (!layers.has(d)) layers.set(d, []);
+        layers.get(d).push(n);
+      }
+      const layerKeys = [...layers.keys()].sort((a, b) => a - b);
+      const maxCols = Math.max(2, Math.min(4, Math.ceil(Math.sqrt(subNodes.length * 0.9))));
+
+      let maxRowW = NODE_W;
+      for (const d of layerKeys) {
+        const list = layers.get(d);
+        list.sort((a, b) =>
+          String(a.chapter || "").localeCompare(String(b.chapter || "")) ||
+          String(a.title || a.id).localeCompare(String(b.title || b.id))
+        );
+        const colsInLayer = Math.min(list.length, maxCols);
+        maxRowW = Math.max(maxRowW, colsInLayer * colStep - 28);
+      }
+
+      const boxW = maxRowW + clusterPadX * 2;
+      const centerX = offsetX + boxW / 2;
+      let cursorY = clusterPadTop + NODE_H / 2;
+
+      for (const d of layerKeys) {
+        const list = layers.get(d);
+        const subRowCount = Math.ceil(list.length / maxCols);
+        for (let r = 0; r < subRowCount; r++) {
+          const slice = list.slice(r * maxCols, (r + 1) * maxCols);
+          const rowW = slice.length * colStep - 28;
+          const startX = centerX - rowW / 2 + NODE_W / 2;
+          const y = cursorY + r * subRowStep;
+          slice.forEach((n, i) => {
+            pos.set(n.id, { x: startX + i * colStep, y });
+          });
+        }
+        cursorY += (subRowCount - 1) * subRowStep + NODE_H + layerGap;
+      }
+
+      const boxH = Math.max(150, cursorY - layerGap - NODE_H / 2 + NODE_H / 2 + clusterPadBottom);
+      clusters.push({
+        label: `${subj} (${subNodes.length})`,
+        x: offsetX,
+        y: 0,
+        w: boxW,
+        h: boxH,
+      });
+      offsetX += boxW + clusterGap;
+    }
+
+    return { pos, clusters, bounds: computeBounds(pos, clusters) };
+  }
+
+  function computeBounds(pos, clusters) {
+    let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+    for (const p of pos.values()) {
+      minX = Math.min(minX, p.x - NODE_W / 2);
+      maxX = Math.max(maxX, p.x + NODE_W / 2);
+      minY = Math.min(minY, p.y - NODE_H / 2);
+      maxY = Math.max(maxY, p.y + NODE_H / 2);
+    }
+    for (const c of clusters) {
+      minX = Math.min(minX, c.x);
+      maxX = Math.max(maxX, c.x + c.w);
+      minY = Math.min(minY, c.y);
+      maxY = Math.max(maxY, c.y + c.h);
+    }
+    if (!Number.isFinite(minX)) return null;
+    return { minX, maxX, minY, maxY, w: maxX - minX, h: maxY - minY };
+  }
+
+  function getFiltered() {
+    const subj = document.getElementById("subjectFilter").value;
+    const chap = document.getElementById("chapterFilter").value;
+    const stat = document.getElementById("statusFilter").value;
+    const q = document.getElementById("search").value.trim().toLowerCase();
+
+    const nodes = data.propositions.filter((p) => {
+      if (subj && p.subject !== subj) return false;
+      if (chap && p.chapter !== chap) return false;
+      if (stat === "due") {
+        if (!isNodeDue(p)) return false;
+      } else if (stat && p.status !== stat) {
+        return false;
+      }
+      if (q) {
+        const aliasText = Array.isArray(p.aliases) ? p.aliases.join(" ") : "";
+        const hay = `${p.id || ""} ${p.title || ""} ${aliasText} ${p.subject || ""} ${p.chapter || ""} ${p.kind || ""} ${p.notes || ""} ${p.status || ""}`.toLowerCase();
+        if (!hay.includes(q)) return false;
+      }
+      return true;
+    });
+
+    const idSet = new Set(nodes.map((n) => n.id));
+    const chains = data.chains.filter(
+      (c) => idSet.has(c.conclusion) && c.premises.every((pid) => idSet.has(pid))
+    );
+    return { nodes, edges: chains };
+  }
+
+  function populateFilters() {
+    const subjSel = document.getElementById("subjectFilter");
+    const prevSubj = subjSel.value;
+    const subjects = [...new Set(data.propositions.map((p) => p.subject).filter(Boolean))].sort();
+    subjSel.innerHTML = `<option value="">All subjects</option>` + subjects.map((s) => `<option value="${esc(s)}">${esc(s)}</option>`).join("");
+    if (subjects.includes(prevSubj)) subjSel.value = prevSubj;
+    populateChapters();
+  }
+
+  function populateChapters() {
+    const subj = document.getElementById("subjectFilter").value;
+    const chapSel = document.getElementById("chapterFilter");
+    const prevChap = chapSel.value;
+    const chapters = [
+      ...new Set(
+        data.propositions
+          .filter((p) => !subj || p.subject === subj)
+          .map((p) => p.chapter)
+          .filter(Boolean)
+      ),
+    ].sort();
+    chapSel.innerHTML = `<option value="">All chapters</option>` + chapters.map((c) => `<option value="${esc(c)}">${esc(c)}</option>`).join("");
+    if (chapters.includes(prevChap)) chapSel.value = prevChap;
+  }
+
+  function computeLineage(id, chains) {
+    const relatedNodes = new Set([id]);
+    const relatedEdges = new Set();
+    // Upstream ancestors (includes all joint premises)
+    const upQ = [id];
+    const seenUp = new Set([id]);
+    while (upQ.length) {
+      const cur = upQ.shift();
+      chains.forEach((c, idx) => {
+        if (c.conclusion === cur) {
+          relatedEdges.add(idx);
+          for (const prem of c.premises) {
+            relatedNodes.add(prem);
+            if (!seenUp.has(prem)) { seenUp.add(prem); upQ.push(prem); }
+          }
+        }
+      });
+    }
+    // Downstream descendants (highlights co-premises of triggered joint arguments)
+    const downQ = [id];
+    const seenDown = new Set([id]);
+    while (downQ.length) {
+      const cur = downQ.shift();
+      chains.forEach((c, idx) => {
+        if (c.premises.includes(cur)) {
+          relatedEdges.add(idx);
+          relatedNodes.add(c.conclusion);
+          for (const prem of c.premises) relatedNodes.add(prem);
+          if (!seenDown.has(c.conclusion)) { seenDown.add(c.conclusion); downQ.push(c.conclusion); }
+        }
+      });
+    }
+    return { relatedNodes, relatedEdges };
+  }
+
+  function buildEdgePath(a, b) {
+    const dy = b.y - a.y;
+    if (dy > NODE_H * 0.6) {
+      const y1 = a.y + NODE_H / 2;
+      const y2 = b.y - NODE_H / 2 - 2;
+      const ctrl = Math.max(36, (y2 - y1) * 0.45);
+      return `M ${a.x} ${y1} C ${a.x} ${y1 + ctrl}, ${b.x} ${y2 - ctrl}, ${b.x} ${y2}`;
+    }
+    if (Math.abs(dy) <= NODE_H * 0.6) {
+      const dir = b.x >= a.x ? 1 : -1;
+      const x1 = a.x + dir * (NODE_W / 2);
+      const x2 = b.x - dir * (NODE_W / 2 + 2);
+      const arcY = Math.min(a.y, b.y) - 34;
+      const mx = (x1 + x2) / 2;
+      return `M ${x1} ${a.y} Q ${mx} ${arcY} ${x2} ${b.y}`;
+    }
+    // Upward / back edge
+    const side = a.x <= b.x ? -1 : 1;
+    const x1 = a.x + side * (NODE_W / 2);
+    const x2 = b.x + side * (NODE_W / 2 + 2);
+    const bulge = Math.min(a.x, b.x) + side * (NODE_W * 0.85);
+    return `M ${x1} ${a.y} C ${bulge} ${a.y}, ${bulge} ${b.y}, ${x2} ${b.y}`;
+  }
+
+  function buildToJunctionPath(a, j, obstacleCoords = []) {
+    const bottomY = a.y + NODE_H / 2;
+    if (j.y > bottomY + 6) {
+      const midX = (a.x + j.x) / 2;
+      const blocked = obstacleCoords.some(
+        (o) =>
+          o !== a &&
+          o.y > a.y + NODE_H * 0.45 &&
+          o.y < j.y &&
+          Math.abs(o.x - midX) < NODE_W * 0.65
+      );
+      if (blocked) {
+        const side = a.x <= j.x ? -1 : 1;
+        const x1 = a.x + side * (NODE_W / 2);
+        const y1 = a.y + 8;
+        const x2 = j.x + side * 9.5;
+        const bulgeX = (side < 0 ? Math.min(a.x, j.x) : Math.max(a.x, j.x)) + side * (NODE_W * 0.78);
+        return `M ${x1} ${y1} C ${bulgeX} ${y1}, ${bulgeX} ${j.y}, ${x2} ${j.y}`;
+      }
+      const dy = j.y - bottomY;
+      const ctrl = Math.max(18, dy * 0.52);
+      return `M ${a.x} ${bottomY} C ${a.x} ${bottomY + ctrl}, ${j.x} ${j.y - ctrl * 0.65}, ${j.x} ${j.y}`;
+    }
+    const dir = j.x >= a.x ? 1 : -1;
+    const x1 = a.x + dir * (NODE_W / 2);
+    const mx = (x1 + j.x) / 2;
+    const cy = Math.min(a.y, j.y) - 24;
+    return `M ${x1} ${a.y} Q ${mx} ${cy} ${j.x} ${j.y}`;
+  }
+
+  function buildFromJunctionPath(j, b) {
+    const topY = b.y - NODE_H / 2 - 2;
+    if (topY > j.y + 8) {
+      const y1 = j.y + 9.5;
+      const dy = topY - y1;
+      const ctrl = Math.max(16, dy * 0.5);
+      return `M ${j.x} ${y1} C ${j.x} ${y1 + ctrl}, ${b.x} ${topY - ctrl}, ${b.x} ${topY}`;
+    }
+    const dir = b.x >= j.x ? 1 : -1;
+    const x1 = j.x + dir * 9.5;
+    const x2 = b.x - dir * (NODE_W / 2 + 2);
+    const mx = (x1 + x2) / 2;
+    const cy = Math.min(j.y, b.y) - 26;
+    return `M ${x1} ${j.y} Q ${mx} ${cy} ${x2} ${b.y}`;
+  }
+
+  function render(shouldFit = true) {
+    const { nodes, edges } = getFiltered();
+    const hasJoint = edges.some((c) => c.isJoint);
+    document.getElementById("countPill").textContent = `${nodes.length} nodes · ${edges.length} ${hasJoint ? "chains" : "edges"}`;
+
+    const bkts = nodes.map(getBkt).filter((v) => v !== null);
+    const avgBkt = bkts.length ? Math.round((bkts.reduce((a, b) => a + b, 0) / bkts.length) * 100) : null;
+    document.getElementById("bktAvgPill").textContent = avgBkt !== null ? `Avg BKT ${avgBkt}%` : "Avg BKT —";
+
+    const emptyEl = document.getElementById("emptyState");
+    emptyEl.hidden = nodes.length > 0;
+    if (nodes.length === 0 && data.propositions.length > 0) {
+      document.getElementById("emptyTitle").textContent = "No Matching Concepts";
+      document.getElementById("emptyDesc").textContent = "Clear your subject, chapter, status, or search filter to reveal the rest of your Knowledge Graph.";
+    } else if (data.propositions.length === 0) {
+      document.getElementById("emptyTitle").textContent = "Your Knowledge Graph is Ready";
+      document.getElementById("emptyDesc").innerHTML = "Start any topic, course, paper, or chapter in <strong>Syntopik</strong> (Antigravity 2.0, Claude Code, or Codex / T3 Code). Every mastered proposition, BKT probability, FSRS-6 schedule, and reasoning edge is saved into <code>knowledge-graph/propositions.jsonl</code> and <code>chains.jsonl</code>.";
+    }
+
+    const { pos, clusters, bounds } =
+      layoutMode === "clustered" ? layoutClustered(nodes, edges) : layoutLayered(nodes, edges);
+    lastPositions = pos;
+    lastBounds = bounds;
+
+    if (selectedId && !pos.has(selectedId)) selectedId = null;
+    const lineage = selectedId ? computeLineage(selectedId, edges) : null;
+
+    const clustersG = document.getElementById("clusters");
+    const edgesG = document.getElementById("edges");
+    const nodesG = document.getElementById("nodes");
+    clustersG.innerHTML = "";
+    edgesG.innerHTML = "";
+    nodesG.innerHTML = "";
+
+    for (const c of clusters) {
+      const rect = document.createElementNS(SVG_NS, "rect");
+      rect.setAttribute("class", "cluster-box");
+      rect.setAttribute("x", c.x);
+      rect.setAttribute("y", c.y);
+      rect.setAttribute("width", c.w);
+      rect.setAttribute("height", c.h);
+      rect.setAttribute("rx", "14");
+      clustersG.appendChild(rect);
+
+      const lbl = document.createElementNS(SVG_NS, "text");
+      lbl.setAttribute("class", "cluster-label");
+      lbl.setAttribute("x", c.x + 16);
+      lbl.setAttribute("y", c.y + 24);
+      lbl.textContent = c.label;
+      clustersG.appendChild(lbl);
+    }
+
+    const placedJunctions = [];
+    edges.forEach((c, idx) => {
+      const b = pos.get(c.conclusion);
+      if (!b) return;
+      const rel = ["requires", "derives", "generalizes", "contrasts_with"].includes(c.relation)
+        ? c.relation
+        : "requires";
+      let stateCls = "";
+      if (lineage) {
+        stateCls = lineage.relatedEdges.has(idx) ? " highlighted" : " dimmed";
+      }
+
+      if (!c.isJoint) {
+        const a = pos.get(c.premises[0]);
+        if (!a) return;
+        const path = document.createElementNS(SVG_NS, "path");
+        path.setAttribute("class", `edge-path rel-${rel}${stateCls}`);
+        path.setAttribute("d", buildEdgePath(a, b));
+        path.setAttribute("marker-end", `url(#arrow-${rel})`);
+        if (c.why) {
+          const title = document.createElementNS(SVG_NS, "title");
+          title.textContent = `${c.premises[0]} —[${rel}]→ ${c.conclusion}: ${c.why}`;
+          path.appendChild(title);
+        }
+        edgesG.appendChild(path);
+        return;
+      }
+
+      // Multi-premise jointly-entailing hyperedge: headless premise arcs -> ∧ junction -> single arrowed stem
+      const premCoords = c.premises.map((pid) => pos.get(pid)).filter(Boolean);
+      if (premCoords.length < 2) return;
+
+      const avgPx = premCoords.reduce((sum, p) => sum + p.x, 0) / premCoords.length;
+      const maxPy = Math.max(...premCoords.map((p) => p.y));
+      const minPy = Math.min(...premCoords.map((p) => p.y));
+      let jx;
+      let jy;
+      if (b.y > maxPy + NODE_H * 0.45) {
+        const bottomPremY = maxPy + NODE_H / 2;
+        const topTargetY = b.y - NODE_H / 2;
+        jx = avgPx * 0.65 + b.x * 0.35;
+        jy = bottomPremY + (topTargetY - bottomPremY) * 0.5;
+      } else {
+        jx = (avgPx + b.x) / 2;
+        jy = Math.min(minPy, b.y) - NODE_H * 0.65;
+      }
+      // Nudge if another joint junction already sits right here
+      let guard = 0;
+      while (placedJunctions.some((pt) => Math.hypot(pt.x - jx, pt.y - jy) < 24) && guard < 8) {
+        guard++;
+        jx += (guard % 2 === 1 ? 1 : -1) * Math.ceil(guard / 2) * 26;
+      }
+      const junction = { x: jx, y: jy };
+      placedJunctions.push(junction);
+
+      const tooltipText = `${c.premises.join(" ∧ ")} —[joint ${rel}]→ ${c.conclusion}${c.why ? `: ${c.why}` : ""}`;
+
+      const allNodeCoords = [...pos.values()];
+      for (const a of premCoords) {
+        const leg = document.createElementNS(SVG_NS, "path");
+        leg.setAttribute("class", `edge-path rel-${rel}${stateCls}`);
+        leg.setAttribute("d", buildToJunctionPath(a, junction, allNodeCoords));
+        const tip = document.createElementNS(SVG_NS, "title");
+        tip.textContent = tooltipText;
+        leg.appendChild(tip);
+        edgesG.appendChild(leg);
+      }
+
+      const stem = document.createElementNS(SVG_NS, "path");
+      stem.setAttribute("class", `edge-path rel-${rel}${stateCls}`);
+      stem.setAttribute("d", buildFromJunctionPath(junction, b));
+      stem.setAttribute("marker-end", `url(#arrow-${rel})`);
+      const stemTip = document.createElementNS(SVG_NS, "title");
+      stemTip.textContent = tooltipText;
+      stem.appendChild(stemTip);
+      edgesG.appendChild(stem);
+
+      const jGroup = document.createElementNS(SVG_NS, "g");
+      jGroup.setAttribute("class", `joint-node rel-${rel}${stateCls}`);
+      const jTip = document.createElementNS(SVG_NS, "title");
+      jTip.textContent = tooltipText;
+      jGroup.appendChild(jTip);
+
+      const dot = document.createElementNS(SVG_NS, "circle");
+      dot.setAttribute("class", "joint-dot");
+      dot.setAttribute("cx", String(jx));
+      dot.setAttribute("cy", String(jy));
+      dot.setAttribute("r", "9.5");
+      jGroup.appendChild(dot);
+
+      const sym = document.createElementNS(SVG_NS, "text");
+      sym.setAttribute("class", "joint-symbol");
+      sym.setAttribute("x", String(jx));
+      sym.setAttribute("y", String(jy + 0.5));
+      sym.setAttribute("text-anchor", "middle");
+      sym.setAttribute("dominant-baseline", "central");
+      sym.textContent = "∧";
+      jGroup.appendChild(sym);
+
+      edgesG.appendChild(jGroup);
+    });
+
+    for (const n of nodes) {
+      const p = pos.get(n.id);
+      const g = document.createElementNS(SVG_NS, "g");
+      let cls = "node-group";
+      if (selectedId === n.id) cls += " selected";
+      else if (lineage && !lineage.relatedNodes.has(n.id)) cls += " dimmed";
+      g.setAttribute("class", cls);
+      g.setAttribute("transform", `translate(${p.x - NODE_W / 2}, ${p.y - NODE_H / 2})`);
+
+      const bkt = getBkt(n);
+      const bktPct = bkt !== null ? Math.round(bkt * 100) : null;
+      const stab = getStability(n);
+      const cd = getCountdown(n);
+      const sColor = statusVar(n.status);
+
+      const titleTip = document.createElementNS(SVG_NS, "title");
+      titleTip.textContent = `${n.title || n.id}\nStatus: ${n.status || "planned"} · BKT: ${bktPct !== null ? bktPct + "%" : "—"} · FSRS S: ${formatStability(stab)} · ${cd.text}`;
+      g.appendChild(titleTip);
+
+      // Card body
+      const rect = document.createElementNS(SVG_NS, "rect");
+      rect.setAttribute("class", "node-bg");
+      rect.setAttribute("width", NODE_W);
+      rect.setAttribute("height", NODE_H);
+      rect.setAttribute("rx", "11");
+      g.appendChild(rect);
+
+      // Left status stripe
+      const stripe = document.createElementNS(SVG_NS, "rect");
+      stripe.setAttribute("x", "1");
+      stripe.setAttribute("y", "8");
+      stripe.setAttribute("width", "4");
+      stripe.setAttribute("height", NODE_H - 16);
+      stripe.setAttribute("rx", "2");
+      stripe.setAttribute("fill", sColor);
+      g.appendChild(stripe);
+
+      // Top row: chapter/subject + due countdown
+      const subText = document.createElementNS(SVG_NS, "text");
+      subText.setAttribute("class", "node-sub");
+      subText.setAttribute("x", "14");
+      subText.setAttribute("y", "19");
+      subText.textContent = truncate([n.subject, n.chapter].filter(Boolean).join(" · ") || n.kind || "Concept", 25);
+      g.appendChild(subText);
+
+      const dueText = document.createElementNS(SVG_NS, "text");
+      dueText.setAttribute("x", String(NODE_W - 10));
+      dueText.setAttribute("y", "19");
+      dueText.setAttribute("text-anchor", "end");
+      dueText.setAttribute("font-size", "9.5");
+      dueText.setAttribute("font-weight", "700");
+      dueText.setAttribute("fill", cd.overdue ? "var(--misconception)" : cd.dueToday ? "var(--shaky)" : "var(--muted)");
+      dueText.textContent = cd.short;
+      g.appendChild(dueText);
+
+      // Middle row: title
+      const titleEl = document.createElementNS(SVG_NS, "text");
+      titleEl.setAttribute("class", "node-title");
+      titleEl.setAttribute("x", "14");
+      titleEl.setAttribute("y", "41");
+      titleEl.textContent = truncate(n.title || n.id, 30);
+      g.appendChild(titleEl);
+
+      // Bottom row: BKT progress bar + percentage + FSRS stability
+      const bktLabel = document.createElementNS(SVG_NS, "text");
+      bktLabel.setAttribute("class", "node-meta");
+      bktLabel.setAttribute("x", "14");
+      bktLabel.setAttribute("y", "61");
+      bktLabel.textContent = bktPct !== null ? `BKT ${bktPct}%` : "BKT —";
+      g.appendChild(bktLabel);
+
+      const stabLabel = document.createElementNS(SVG_NS, "text");
+      stabLabel.setAttribute("class", "node-meta");
+      stabLabel.setAttribute("x", String(NODE_W - 10));
+      stabLabel.setAttribute("y", "61");
+      stabLabel.setAttribute("text-anchor", "end");
+      stabLabel.setAttribute("fill", "var(--muted)");
+      stabLabel.textContent = `S ${formatStability(stab)}`;
+      g.appendChild(stabLabel);
+
+      const track = document.createElementNS(SVG_NS, "rect");
+      track.setAttribute("class", "node-bar-track");
+      track.setAttribute("x", "14");
+      track.setAttribute("y", "68");
+      track.setAttribute("width", String(NODE_W - 24));
+      track.setAttribute("height", "5");
+      track.setAttribute("rx", "2.5");
+      g.appendChild(track);
+
+      if (bktPct !== null && bktPct > 0) {
+        const fill = document.createElementNS(SVG_NS, "rect");
+        fill.setAttribute("x", "14");
+        fill.setAttribute("y", "68");
+        fill.setAttribute("width", String(Math.max(4, ((NODE_W - 24) * bktPct) / 100)));
+        fill.setAttribute("height", "5");
+        fill.setAttribute("rx", "2.5");
+        fill.setAttribute("fill", bktColorVar(bkt));
+        g.appendChild(fill);
+      }
+
+      g.addEventListener("click", (ev) => {
+        ev.stopPropagation();
+        selectNode(n.id, false);
+      });
+      nodesG.appendChild(g);
+    }
+
+    if (shouldFit) fitToView();
+    else applyTransform();
+
+    if (selectedId) {
+      const selNode = data.propositions.find((p) => p.id === selectedId);
+      if (selNode) renderInspector(selNode);
+      else renderDefaultInspector(nodes);
+    } else {
+      renderDefaultInspector(nodes);
+    }
+  }
+
+  function selectNode(id, centerOnNode = true) {
+    selectedId = id;
+    render(false);
+    if (centerOnNode && lastPositions.has(id)) {
+      const p = lastPositions.get(id);
+      const rect = document.getElementById("graphSvg").getBoundingClientRect();
+      if (rect.width > 0 && rect.height > 0) {
+        const k = Math.max(view.k, 0.85);
+        view = { x: rect.width / 2 - p.x * k, y: rect.height / 2 - p.y * k, k };
+        applyTransform();
+      }
+    }
+  }
+
+  function renderDefaultInspector(visibleNodes) {
+    const counts = { solid: 0, shaky: 0, misconception: 0, planned: 0 };
+    let dueCount = 0;
+    const bkts = [];
+    for (const n of visibleNodes) {
+      if (n.status in counts) counts[n.status]++;
+      if (isNodeDue(n)) dueCount++;
+      const b = getBkt(n);
+      if (b !== null) bkts.push(b);
+    }
+    const avgBkt = bkts.length ? Math.round((bkts.reduce((a, b) => a + b, 0) / bkts.length) * 100) : null;
+    const dueList = visibleNodes.filter(isNodeDue).slice(0, 8);
+
+    document.getElementById("inspector").innerHTML = `
+      <div>
+        <div class="section-heading">Graph Telemetry</div>
+        <div class="detail-meta">
+          <span class="pill solid"><span class="dot" style="background:var(--solid)"></span>${counts.solid} Solid</span>
+          <span class="pill shaky"><span class="dot" style="background:var(--shaky)"></span>${counts.shaky} Shaky</span>
+          <span class="pill misconception"><span class="dot" style="background:var(--misconception)"></span>${counts.misconception} Misconception</span>
+          <span class="pill planned"><span class="dot" style="background:var(--planned)"></span>${counts.planned} Planned</span>
+        </div>
+      </div>
+      <div class="summary-grid">
+        <div class="metric-box">
+          <span class="metric-label">Avg BKT Mastery</span>
+          <span class="metric-value">${avgBkt !== null ? `${avgBkt}%` : "—"}</span>
+          <div class="progress-bar"><div class="progress-fill" style="width:${avgBkt ?? 0}%;background:${bktColorVar(avgBkt !== null ? avgBkt / 100 : null)}"></div></div>
+        </div>
+        <div class="metric-box">
+          <span class="metric-label">FSRS Due / Weak</span>
+          <span class="metric-value" style="color:${dueCount > 0 ? "var(--shaky)" : "var(--solid)"}">${dueCount}</span>
+          <span class="metric-sub">${dueCount > 0 ? "Needs review" : "All caught up"}</span>
+        </div>
+      </div>
+      <p class="detail-body">Click any node in the graph to inspect its <strong>BKT mastery probability</strong>, <strong>FSRS stability &amp; review countdown</strong>, misconception notes, and full prerequisite/unlock dependency chain.</p>
+      ${dueList.length ? `
+        <div>
+          <div class="section-heading">Priority Review Queue (${dueList.length})</div>
+          <ul class="edge-list">
+            ${dueList.map((n) => {
+              const b = getBkt(n);
+              const cd = getCountdown(n);
+              return `<li class="edge-item clickable" data-jump="${esc(n.id)}">
+                <div class="edge-item-head">
+                  <span class="edge-item-title"><span class="dot" style="background:${statusVar(n.status)};margin-right:6px"></span>${esc(n.title || n.id)}</span>
+                  <span class="pill ${esc(n.status || "planned")}">${esc(cd.short)}</span>
+                </div>
+                <span class="edge-item-why">${esc(n.subject || "General")}${n.chapter ? ` · ${esc(n.chapter)}` : ""} · BKT ${b !== null ? Math.round(b * 100) + "%" : "—"} · S ${formatStability(getStability(n))}</span>
+              </li>`;
+            }).join("")}
+          </ul>
+        </div>
+      ` : ""}
+    `;
+
+    document.querySelectorAll("#inspector [data-jump]").forEach((el) => {
+      el.addEventListener("click", () => selectNode(el.getAttribute("data-jump"), true));
+    });
+  }
+
+  function renderInspector(n) {
+    const byId = new Map(data.propositions.map((p) => [p.id, p]));
+    const incoming = data.chains.filter((c) => c.conclusion === n.id);
+    const outgoing = data.chains.filter((c) => c.premises.includes(n.id));
+    const bkt = getBkt(n);
+    const bktPct = bkt !== null ? Math.round(bkt * 100) : null;
+    const stab = getStability(n);
+    const diff = getDifficulty(n);
+    const retr = getRetrievability(n);
+    const cd = getCountdown(n);
+    const statusCls = ["solid", "shaky", "misconception", "planned"].includes(n.status) ? n.status : "planned";
+    const cues = Array.isArray(n.cues) ? n.cues.filter((c) => c && typeof c === "object") : [];
+    const aliases = Array.isArray(n.aliases) ? n.aliases.filter((a) => typeof a === "string" && a.trim()) : [];
+
+    const renderPremiseChip = (pid) => {
+      const target = byId.get(pid);
+      const existsInView = lastPositions.has(pid);
+      return `<span class="premise-chip ${existsInView ? "clickable" : ""}" ${existsInView ? `data-jump="${esc(pid)}"` : ""}>${target ? `<span class="dot" style="background:${statusVar(target.status)}"></span>${esc(target.title || pid)}` : `<code>${esc(pid)}</code>`}</span>`;
+    };
+
+    const renderIncomingItem = (c) => {
+      if (!c.isJoint) {
+        const targetId = c.premises[0];
+        const target = byId.get(targetId);
+        const existsInView = lastPositions.has(targetId);
+        return `<li class="edge-item ${existsInView ? "clickable" : ""}" ${existsInView ? `data-jump="${esc(targetId)}"` : ""}>
+          <div class="edge-item-head">
+            <span class="edge-item-title">${target ? `<span class="dot" style="background:${statusVar(target.status)};margin-right:6px"></span>${esc(target.title || targetId)}` : `<code>${esc(targetId)}</code>`}</span>
+            <span class="pill">${esc(c.relation || "requires")}</span>
+          </div>
+          ${c.why ? `<span class="edge-item-why">${esc(c.why)}</span>` : ""}
+        </li>`;
+      }
+      const chipsHtml = c.premises
+        .map((pid) => renderPremiseChip(pid))
+        .join(`<span class="conj-op">∧</span>`);
+      return `<li class="edge-item">
+        <div class="edge-item-head">
+          <span class="pill accent">∧ Joint (${c.premises.length} premises)</span>
+          <span class="pill">${esc(c.relation || "derives")}</span>
+        </div>
+        <div class="joint-premises-row">${chipsHtml}</div>
+        ${c.why ? `<span class="edge-item-why">${esc(c.why)}</span>` : ""}
+      </li>`;
+    };
+
+    const renderOutgoingItem = (c) => {
+      const targetId = c.conclusion;
+      const target = byId.get(targetId);
+      const existsInView = lastPositions.has(targetId);
+      if (!c.isJoint) {
+        return `<li class="edge-item ${existsInView ? "clickable" : ""}" ${existsInView ? `data-jump="${esc(targetId)}"` : ""}>
+          <div class="edge-item-head">
+            <span class="edge-item-title">${target ? `<span class="dot" style="background:${statusVar(target.status)};margin-right:6px"></span>${esc(target.title || targetId)}` : `<code>${esc(targetId)}</code>`}</span>
+            <span class="pill">${esc(c.relation || "requires")}</span>
+          </div>
+          ${c.why ? `<span class="edge-item-why">${esc(c.why)}</span>` : ""}
+        </li>`;
+      }
+      const coPremises = c.premises.filter((pid) => pid !== n.id);
+      const coHtml = coPremises.map((pid) => renderPremiseChip(pid)).join(`<span class="conj-op">∧</span>`);
+      return `<li class="edge-item">
+        <div class="edge-item-head">
+          <span class="edge-item-title ${existsInView ? "clickable" : ""}" ${existsInView ? `data-jump="${esc(targetId)}" style="cursor:pointer"` : ""}>${target ? `<span class="dot" style="background:${statusVar(target.status)};margin-right:6px"></span>${esc(target.title || targetId)}` : `<code>${esc(targetId)}</code>`}</span>
+          <span class="pill accent">∧ ${esc(c.relation || "derives")}</span>
+        </div>
+        <div class="joint-premises-row"><span class="edge-item-why">Jointly with:</span>${coHtml}</div>
+        ${c.why ? `<span class="edge-item-why">${esc(c.why)}</span>` : ""}
+      </li>`;
+    };
+
+    document.getElementById("inspector").innerHTML = `
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px;">
+        <h2 class="detail-title">${esc(n.title || n.id)}</h2>
+        <button id="clearSelBtn" title="Close node inspector" style="padding:3px 7px;flex-shrink:0;">✕</button>
+      </div>
+      <div class="detail-meta">
+        <span class="pill ${statusCls}"><span class="dot" style="background:${statusVar(n.status)}"></span>${esc(n.status || "planned")}</span>
+        ${n.kind ? `<span class="pill">${esc(n.kind)}</span>` : ""}
+        ${n.subject ? `<span class="pill">${esc(n.subject)}</span>` : ""}
+        ${n.chapter ? `<span class="pill">${esc(n.chapter)}</span>` : ""}
+      </div>
+      <div><code>${esc(n.id)}</code></div>
+      ${aliases.length ? `<div class="edge-item-why">Aliases: ${aliases.map((a) => esc(a)).join(" · ")}</div>` : ""}
+
+      <div class="summary-grid">
+        <div class="metric-box">
+          <span class="metric-label">BKT Mastery</span>
+          <span class="metric-value" style="color:${bktColorVar(bkt)}">${bktPct !== null ? `${bktPct}%` : "—"}</span>
+          <div class="progress-bar"><div class="progress-fill" style="width:${bktPct ?? 0}%;background:${bktColorVar(bkt)}"></div></div>
+          <span class="metric-sub">${typeof n.bktMastery === "number" ? "Bayesian KT" : typeof n.confidence === "number" ? "Confidence est." : "Not tested yet"}</span>
+        </div>
+        <div class="metric-box">
+          <span class="metric-label">FSRS Stability</span>
+          <span class="metric-value">${formatStability(stab)}</span>
+          <span class="metric-sub">${diff !== null ? `Difficulty ${diff.toFixed(1)}/10` : "Unrated card"}${retr !== null ? ` · R≈${Math.round(retr * 100)}%` : ""}</span>
+        </div>
+      </div>
+
+      <div class="metric-box">
+        <span class="metric-label">Next Review Countdown</span>
+        <span style="font-size:13.5px;font-weight:650;color:${cd.overdue ? "var(--misconception)" : cd.dueToday ? "var(--shaky)" : "var(--text)"}">${esc(cd.text)}</span>
+        <span class="metric-sub">${n.lastTested ? `Last tested: ${esc(n.lastTested)}` : "Never tested yet"}</span>
+      </div>
+
+      ${n.notes ? `<div class="notes-box">${esc(n.notes)}</div>` : ""}
+
+      <button id="copyNodePromptBtn" style="justify-content:center;width:100%;">Copy Drill Prompt for This Concept</button>
+
+      ${cues.length ? `
+        <div>
+          <div class="section-heading">Retrieval Cues (${cues.length})</div>
+          <ul class="edge-list">
+            ${cues.map((cue, i) => `
+              <li class="edge-item">
+                <div class="edge-item-head">
+                  <span class="edge-item-title"><code>${esc(cue.id || `c${i + 1}`)}</code></span>
+                  <span class="pill">${esc(cue.lastRating || "untried")} · ${Number(cue.reviews || 0)} rev</span>
+                </div>
+                <span class="edge-item-why">${esc(cue.q || "")}</span>
+              </li>
+            `).join("")}
+          </ul>
+        </div>
+      ` : ""}
+
+      <div>
+        <div class="section-heading">Depends On (${incoming.length})</div>
+        <ul class="edge-list">
+          ${incoming.length ? incoming.map(renderIncomingItem).join("") : `<li class="edge-item" style="color:var(--muted)">Root / Foundation concept</li>`}
+        </ul>
+      </div>
+
+      <div>
+        <div class="section-heading">Unlocks (${outgoing.length})</div>
+        <ul class="edge-list">
+          ${outgoing.length ? outgoing.map(renderOutgoingItem).join("") : `<li class="edge-item" style="color:var(--muted)">Leaf / Terminal concept</li>`}
+        </ul>
+      </div>
+    `;
+
+    document.getElementById("clearSelBtn").addEventListener("click", () => {
+      selectedId = null;
+      render(false);
+    });
+    document.getElementById("copyNodePromptBtn").addEventListener("click", () => {
+      const prompt = `Drill me on ${n.id} ("${n.title || n.id}") without spoilers using fresh scenarios, verify my reasoning, and update my FSRS + BKT rating with scripts/srs_engine.py.`;
+      copyText(prompt, "Copied concept drill prompt ✓");
+    });
+    document.querySelectorAll("#inspector [data-jump]").forEach((el) => {
+      el.addEventListener("click", (ev) => {
+        ev.stopPropagation();
+        selectNode(el.getAttribute("data-jump"), true);
+      });
+    });
+  }
+
+  function applyTransform() {
+    document.getElementById("viewport").setAttribute("transform", `translate(${view.x},${view.y}) scale(${view.k})`);
+    document.getElementById("zoomLabel").textContent = `${Math.round(view.k * 100)}%`;
+  }
+
+  function fitToView() {
+    const svg = document.getElementById("graphSvg");
+    const rect = svg.getBoundingClientRect();
+    if (!lastBounds || rect.width <= 0 || rect.height <= 0) {
+      view = { x: 0, y: 0, k: 1 };
+      applyTransform();
+      return;
+    }
+    const pad = 48;
+    const scaleX = (rect.width - pad * 2) / Math.max(1, lastBounds.w);
+    const scaleY = (rect.height - pad * 2) / Math.max(1, lastBounds.h);
+    const k = Math.max(0.18, Math.min(1.12, Math.min(scaleX, scaleY)));
+    const cx = (lastBounds.minX + lastBounds.maxX) / 2;
+    const cy = (lastBounds.minY + lastBounds.maxY) / 2;
+    view = {
+      x: rect.width / 2 - cx * k,
+      y: rect.height / 2 - cy * k,
+      k,
+    };
+    applyTransform();
+  }
+
+  function zoomBy(factor, cx, cy) {
+    const svg = document.getElementById("graphSvg");
+    const rect = svg.getBoundingClientRect();
+    const px = cx ?? rect.width / 2;
+    const py = cy ?? rect.height / 2;
+    const nextK = Math.max(0.16, Math.min(2.6, view.k * factor));
+    const ratio = nextK / view.k;
+    view.x = px - (px - view.x) * ratio;
+    view.y = py - (py - view.y) * ratio;
+    view.k = nextK;
+    applyTransform();
+  }
+
+  async function loadJsonl(url) {
+    const res = await fetch(url);
+    if (!res.ok) throw new Error("fetch failed");
+    const text = await res.text();
+    return text.split(/\r?\n/u).map((s) => s.trim()).filter(Boolean).map((s) => JSON.parse(s));
+  }
+
+  async function init() {
+    applyTheme(safeStorageGet("study-harness-theme") || "dark");
+
+    let rawData;
+    if (window.location.protocol !== "file:") {
+      try {
+        const [propositions, chains] = await Promise.all([
+          loadJsonl("./propositions.jsonl"),
+          loadJsonl("./chains.jsonl"),
+        ]);
+        rawData = { propositions, chains };
+      } catch {
+        rawData = window.__STUDY_GRAPH__ || { propositions: [], chains: [] };
+      }
+    } else {
+      rawData = window.__STUDY_GRAPH__ || { propositions: [], chains: [] };
+    }
+
+    data = {
+      propositions: Array.isArray(rawData.propositions) ? rawData.propositions : [],
+      chains: normalizeChains(rawData.chains),
+    };
+
+    populateFilters();
+    const params = new URLSearchParams(window.location.search);
+    if (params.get("node")) selectedId = params.get("node");
+    render(true);
+  }
+
+  // Event wiring
+  const svg = document.getElementById("graphSvg");
+  let drag = null;
+  svg.addEventListener("pointerdown", (e) => {
+    if (e.target.closest(".node-group")) return;
+    drag = { x: e.clientX - view.x, y: e.clientY - view.y };
+  });
+  window.addEventListener("pointermove", (e) => {
+    if (!drag) return;
+    view.x = e.clientX - drag.x;
+    view.y = e.clientY - drag.y;
+    applyTransform();
+  });
+  window.addEventListener("pointerup", () => { drag = null; });
+  svg.addEventListener("click", (e) => {
+    if (!e.target.closest(".node-group") && selectedId) {
+      selectedId = null;
+      render(false);
+    }
+  });
+  svg.addEventListener("dblclick", (e) => {
+    if (!e.target.closest(".node-group")) fitToView();
+  });
+  svg.addEventListener("wheel", (e) => {
+    e.preventDefault();
+    const rect = svg.getBoundingClientRect();
+    zoomBy(e.deltaY < 0 ? 1.1 : 0.91, e.clientX - rect.left, e.clientY - rect.top);
+  }, { passive: false });
+
+  document.getElementById("fitBtn").addEventListener("click", fitToView);
+  document.getElementById("zoomInBtn").addEventListener("click", () => zoomBy(1.2));
+  document.getElementById("zoomOutBtn").addEventListener("click", () => zoomBy(0.83));
+
+  document.getElementById("layoutToggleBtn").addEventListener("click", () => {
+    layoutMode = layoutMode === "layered" ? "clustered" : "layered";
+    document.getElementById("layoutToggleBtn").textContent =
+      layoutMode === "layered" ? "Layout: Layered DAG" : "Layout: Subject Clusters";
+    render(true);
+  });
+
+  document.getElementById("themeToggleBtn").addEventListener("click", () => {
+    const cur = document.documentElement.getAttribute("data-theme");
+    applyTheme(cur === "dark" ? "light" : "dark");
+  });
+
+  document.getElementById("subjectFilter").addEventListener("change", () => {
+    document.getElementById("chapterFilter").value = "";
+    populateChapters();
+    render(true);
+  });
+  document.getElementById("chapterFilter").addEventListener("change", () => render(true));
+  document.getElementById("statusFilter").addEventListener("change", () => render(true));
+  document.getElementById("search").addEventListener("input", () => render(true));
+
+  window.addEventListener("keydown", (e) => {
+    if (e.key === "/" && document.activeElement?.tagName !== "INPUT") {
+      e.preventDefault();
+      document.getElementById("search").focus();
+    } else if (e.key === "Escape") {
+      if (selectedId) { selectedId = null; render(false); }
+    }
+  });
+
+  if (typeof ResizeObserver !== "undefined") {
+    let firstResize = true;
+    new ResizeObserver(() => {
+      if (firstResize) { firstResize = false; return; }
+      fitToView();
+    }).observe(document.getElementById("stage"));
+  }
+
+  init();
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,25 @@
+{
+  "study-session-context": {
+    "SessionStart": [
+      {
+        "type": "command",
+        "command": "node ./hooks/session-start.mjs",
+        "timeout": 10
+      }
+    ]
+  },
+  "knowledge-graph-autosync": {
+    "PostToolUse": [
+      {
+        "matcher": "write_file|edit_file|replace_file_content|multi_replace_file_content|write_to_file|run_command",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node ./hooks/post-graph-sync.mjs",
+            "timeout": 10
+          }
+        ]
+      }
+    ]
+  }
+}

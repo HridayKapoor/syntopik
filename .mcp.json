@@ -1,0 +1,12 @@
+{
+  "mcpServers": {
+    "syntopik-studio": {
+      "type": "stdio",
+      "command": "node",
+      "args": [
+        "./mcp-app/mlh-studio/dist/server.mjs",
+        "--workspace=${CLAUDE_PROJECT_DIR:-.}"
+      ]
+    }
+  }
+}

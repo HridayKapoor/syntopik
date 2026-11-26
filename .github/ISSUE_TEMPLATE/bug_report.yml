@@ -1,0 +1,95 @@
+name: Bug Report
+description: Report a defect in Syntopik scripts, skills, hooks, MCP Studio, or offline UI.
+title: "[Bug]: "
+labels: ["bug", "triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for reporting a bug in **Syntopik**. Please scrub any personal study notes or local home paths before submitting.
+
+  - type: dropdown
+    id: harness
+    attributes:
+      label: AI Harness
+      description: Which AI coding harness were you using when this occurred?
+      options:
+        - Google Antigravity 2.0
+        - Anthropic Claude Code
+        - OpenAI Codex / T3 Code
+        - Cursor
+        - Windsurf / Cline / Zed
+        - Other / Bare CLI
+    validations:
+      required: true
+
+  - type: dropdown
+    id: os
+    attributes:
+      label: Operating System
+      options:
+        - macOS (Apple Silicon)
+        - macOS (Intel)
+        - Linux (Ubuntu / Debian / Other)
+        - Windows (WSL2)
+        - Windows (Native)
+    validations:
+      required: true
+
+  - type: input
+    id: runtimes
+    attributes:
+      label: Python & Node.js Versions
+      description: Run `python3 --version && node --version` (or `.venv/bin/python --version`).
+      placeholder: "Python 3.12.7, Node v22.11.0"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: install_mode
+    attributes:
+      label: Environment Mode
+      options:
+        - Core-Only (Zero Pip Dependencies)
+        - Full STEM Suite (requirements-stem.txt + chempy --no-deps)
+    validations:
+      required: true
+
+  - type: textarea
+    id: description
+    attributes:
+      label: What Happened?
+      description: Concise description of the actual vs. expected behavior.
+      placeholder: Describe the failure, incorrect verification output, or broken UI state.
+    validations:
+      required: true
+
+  - type: textarea
+    id: repro
+    attributes:
+      label: Steps to Reproduce
+      description: Exact command, prompt, or minimal input needed to reproduce the issue.
+      placeholder: |
+        1. Run `python3 -B scripts/...`
+        2. Observe ...
+    validations:
+      required: true
+
+  - type: textarea
+    id: doctor
+    attributes:
+      label: study_doctor.py Output
+      description: Paste output from `python3 -B scripts/study_doctor.py --core-only` or `.venv/bin/python -B scripts/study_doctor.py` (redact personal usernames/paths).
+      render: shell
+    validations:
+      required: false
+
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Pre-Submission Checks
+      options:
+        - label: I scrubbed personal study files and local user home paths from logs above.
+          required: true
+        - label: I searched existing issues to confirm this is not a duplicate.
+          required: true

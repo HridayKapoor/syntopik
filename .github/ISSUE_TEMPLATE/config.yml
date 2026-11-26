@@ -1,0 +1,11 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Security Vulnerability (Private Advisory)
+    url: https://github.com/HridayKapoor/syntopik/security/advisories/new
+    about: Report security or sandbox issues privately via GitHub Security Advisories — never in a public issue.
+  - name: Universal Bootstrap & Harness Setup
+    url: https://github.com/HridayKapoor/syntopik/blob/main/BOOTSTRAP.md
+    about: Step-by-step setup for Antigravity 2.0, Claude Code, Codex / T3 Code, Cursor, and any agent.
+  - name: Contributing & Architecture Invariants
+    url: https://github.com/HridayKapoor/syntopik/blob/main/CONTRIBUTING.md
+    about: Read context-budget limits, privacy rules, and verification commands before opening a PR.

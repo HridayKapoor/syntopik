@@ -1,0 +1,63 @@
+name: Feature Request
+description: Propose a new deterministic verifier, skill improvement, harness integration, or UX refinement.
+title: "[Feature]: "
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Syntopik prioritizes **calm cognitive load** (`<= 160` words/turn), **deterministic local verification**, **zero heavyweight local ML weights**, and **multi-harness portability**.
+
+  - type: dropdown
+    id: area
+    attributes:
+      label: Feature Area
+      options:
+        - Deterministic Verification Engine (scripts/)
+        - Pedagogy & Skills (.agents/skills/)
+        - Multi-Harness Hooks & Configs (Antigravity / Claude / Codex / T3)
+        - Syntopik Studio MCP App / Offline Dashboard UI
+        - Documentation / Onboarding
+        - Other
+    validations:
+      required: true
+
+  - type: dropdown
+    id: harness
+    attributes:
+      label: Primary AI Harness
+      options:
+        - All Harnesses
+        - Google Antigravity 2.0
+        - Anthropic Claude Code
+        - OpenAI Codex / T3 Code
+        - Cursor / Windsurf / Cline / Zed
+        - Other
+    validations:
+      required: true
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: Learning Friction or Problem Statement
+      description: What breaks, slows down understanding, or requires fragile prompting today?
+      placeholder: "When studying <subject/workflow>, currently ..."
+    validations:
+      required: true
+
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed Solution
+      description: Describe the CLI contract, skill workflow, or UI behavior you envision.
+    validations:
+      required: true
+
+  - type: textarea
+    id: invariants
+    attributes:
+      label: Architecture & Footprint Notes
+      description: Does this require any new pip/npm dependency or affect always-on rule size (`GEMINI.md + AGENTS.md <= 9,500 B`)?
+      placeholder: "Pure Python stdlib / uses existing SymPy / zero new dependencies."
+    validations:
+      required: false

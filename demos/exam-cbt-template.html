@@ -1,0 +1,2866 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>__EXAM_TITLE__ — Syntopik Timed Assessment &amp; CBT</title>
+<style>
+  :root, [data-theme="light"] {
+    /* Archival Vellum & Graphite */
+    --bg: #F7F5F0;
+    --bg-elev: #FCFBF8;
+    --bg-card: #FFFFFF;
+    --bg-subtle: #EFECE4;
+    --bg-hover: #E6E1D6;
+    --border: #E2DDD2;
+    --border-strong: #C8C1B2;
+    --text: #1C2024;
+    --text-2: #495057;
+    --muted: #747B84;
+    --nta-header: #284070;
+    --nta-header-2: #1E3156;
+    --nta-header-text: #FCFBF8;
+    --nta-subbar: #EFECE4;
+    --accent: #36538C;
+    --accent-strong: #284070;
+    --accent-bg: rgba(54, 83, 140, 0.10);
+    --green: #2B7A52;
+    --green-strong: #216140;
+    --green-bg: rgba(43, 122, 82, 0.11);
+    --red: #B23A34;
+    --red-strong: #922D28;
+    --red-bg: rgba(178, 58, 52, 0.11);
+    --amber: #A86814;
+    --amber-bg: rgba(168, 104, 20, 0.12);
+    --purple: #5C4B8A;
+    --purple-strong: #48396F;
+    --purple-bg: rgba(92, 75, 138, 0.12);
+    --not-visited-bg: #E5E0D5;
+    --not-visited-border: #B5AEA0;
+    --not-visited-text: #2C3238;
+    --fig-bg: #FCFBF8;
+    --shadow: 0 8px 26px rgba(28, 32, 36, 0.08);
+    --modal-backdrop: rgba(17, 19, 21, 0.56);
+    --font-prose: "Newsreader", "Source Serif 4", "Charter", Georgia, serif;
+    --font-ui: "Inter", -apple-system, BlinkMacSystemFont, "SF Pro Text", system-ui, sans-serif;
+  }
+
+  [data-theme="dark"] {
+    /* Warm Obsidian & Vellum Ink */
+    --bg: #111315;
+    --bg-elev: #171A1D;
+    --bg-card: #1E2227;
+    --bg-subtle: #252A30;
+    --bg-hover: #2C323B;
+    --border: #2A3038;
+    --border-strong: #3B434E;
+    --text: #E8E6E1;
+    --text-2: #A8B0BC;
+    --muted: #757F8D;
+    --nta-header: #1A212B;
+    --nta-header-2: #131820;
+    --nta-header-text: #E8E6E1;
+    --nta-subbar: #171A1D;
+    --accent: #7C93C3;
+    --accent-strong: #5B76B0;
+    --accent-bg: rgba(124, 147, 195, 0.15);
+    --green: #4E9F76;
+    --green-strong: #3D835F;
+    --green-bg: rgba(78, 159, 118, 0.15);
+    --red: #C85A53;
+    --red-strong: #A84640;
+    --red-bg: rgba(200, 90, 83, 0.15);
+    --amber: #D4943A;
+    --amber-bg: rgba(212, 148, 58, 0.16);
+    --purple: #9B8EC4;
+    --purple-strong: #7F70B0;
+    --purple-bg: rgba(155, 142, 196, 0.16);
+    --not-visited-bg: #252A30;
+    --not-visited-border: #454E5B;
+    --not-visited-text: #D5D9DF;
+    --fig-bg: #FCFBF8;
+    --shadow: 0 12px 32px rgba(0, 0, 0, 0.45);
+    --modal-backdrop: rgba(8, 10, 12, 0.76);
+  }
+
+  * { box-sizing: border-box; }
+  html, body { height: 100%; margin: 0; }
+  body {
+    font-family: var(--font-ui);
+    font-variant-numeric: tabular-nums;
+    background: var(--bg);
+    color: var(--text);
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    -webkit-font-smoothing: antialiased;
+  }
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after {
+      transition-duration: 0.01ms !important;
+      animation-duration: 0.01ms !important;
+      scroll-behavior: auto !important;
+    }
+  }
+
+  /* NTA Top Header */
+  .exam-header {
+    background: linear-gradient(180deg, var(--nta-header), var(--nta-header-2));
+    color: var(--nta-header-text);
+    padding: 9px 16px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    flex-wrap: wrap;
+    border-bottom: 1px solid rgba(255,255,255,0.12);
+    flex-shrink: 0;
+    z-index: 30;
+  }
+  .brand-wrap {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    min-width: 0;
+  }
+  .nta-badge {
+    background: rgba(255,255,255,0.16);
+    border: 1px solid rgba(255,255,255,0.28);
+    color: #fff;
+    font-weight: 800;
+    font-size: 11px;
+    letter-spacing: 0.06em;
+    padding: 4px 8px;
+    border-radius: 6px;
+    text-transform: uppercase;
+    flex-shrink: 0;
+  }
+  .exam-title-block {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+  }
+  .exam-title-block h1 {
+    margin: 0;
+    font-size: 15px;
+    font-weight: 700;
+    letter-spacing: -0.01em;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 44vw;
+  }
+  .exam-subtitle {
+    font-size: 11px;
+    opacity: 0.84;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .header-controls {
+    margin-left: auto;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+  }
+  .timer-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    padding: 5px 12px;
+    border-radius: 8px;
+    background: rgba(0, 0, 0, 0.28);
+    border: 1px solid rgba(255, 255, 255, 0.25);
+    font-family: "SF Mono", ui-monospace, Menlo, Consolas, monospace;
+    font-size: 14px;
+    font-weight: 750;
+    letter-spacing: 0.02em;
+    color: #fff;
+  }
+  .timer-pill .timer-lbl {
+    font-family: inherit;
+    font-size: 10.5px;
+    font-weight: 600;
+    text-transform: uppercase;
+    opacity: 0.82;
+  }
+  .timer-pill.warn {
+    background: #d97706;
+    border-color: #fde68a;
+    color: #fff;
+  }
+  .timer-pill.danger {
+    background: #dc2626;
+    border-color: #fecaca;
+    color: #fff;
+    animation: pulseDanger 1.1s infinite ease-in-out;
+  }
+  @keyframes pulseDanger {
+    0%, 100% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.65); }
+    50% { box-shadow: 0 0 0 6px rgba(239, 68, 68, 0); }
+  }
+
+  .hdr-btn {
+    background: rgba(255,255,255,0.13);
+    color: #fff;
+    border: 1px solid rgba(255,255,255,0.24);
+    border-radius: 7px;
+    padding: 6px 10px;
+    font-size: 12px;
+    font-weight: 600;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    transition: background 0.15s, border-color 0.15s;
+  }
+  .hdr-btn:hover { background: rgba(255,255,255,0.24); }
+  .hdr-btn.submit-top {
+    background: #16a34a;
+    border-color: #4ade80;
+    font-weight: 700;
+  }
+  .hdr-btn.submit-top:hover { background: #15803d; }
+
+  /* Subject Section Sub-bar */
+  .section-bar {
+    background: var(--nta-subbar);
+    border-bottom: 1px solid var(--border);
+    padding: 7px 16px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    overflow-x: auto;
+    flex-shrink: 0;
+  }
+  .section-label {
+    font-size: 11px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--muted);
+    margin-right: 4px;
+    white-space: nowrap;
+  }
+  .sec-tab {
+    background: var(--bg-elev);
+    color: var(--text-2);
+    border: 1px solid var(--border);
+    border-radius: 7px;
+    padding: 5px 12px;
+    font-size: 12.5px;
+    font-weight: 650;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    white-space: nowrap;
+    transition: all 0.15s;
+  }
+  .sec-tab:hover { border-color: var(--accent); color: var(--text); }
+  .sec-tab.active {
+    background: var(--accent);
+    border-color: var(--accent-strong);
+    color: #fff;
+  }
+  .sec-tab .sec-count {
+    font-size: 10.5px;
+    font-family: "SF Mono", ui-monospace, Menlo, monospace;
+    padding: 1px 6px;
+    border-radius: 999px;
+    background: var(--bg-subtle);
+    color: var(--muted);
+  }
+  .sec-tab.active .sec-count {
+    background: rgba(255,255,255,0.22);
+    color: #fff;
+  }
+  .review-mode-pill {
+    margin-left: auto;
+    background: var(--purple-bg);
+    color: var(--purple);
+    border: 1px solid var(--purple);
+    border-radius: 999px;
+    padding: 4px 10px;
+    font-size: 11.5px;
+    font-weight: 700;
+    white-space: nowrap;
+    display: none;
+  }
+  .review-mode-pill.visible { display: inline-flex; align-items: center; gap: 6px; }
+
+  /* Main Split Workspace */
+  .workspace {
+    flex: 1;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 316px;
+    min-height: 0;
+    overflow: hidden;
+  }
+
+  /* Left Question Pane */
+  .question-pane {
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+    background: var(--bg-elev);
+    border-right: 1px solid var(--border);
+    position: relative;
+  }
+  .q-meta-bar {
+    padding: 10px 20px;
+    border-bottom: 1px solid var(--border);
+    background: var(--bg-subtle);
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-wrap: wrap;
+    flex-shrink: 0;
+  }
+  .q-num-title {
+    font-size: 15px;
+    font-weight: 800;
+    color: var(--text);
+  }
+  .badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    font-size: 11.5px;
+    font-weight: 650;
+    padding: 3px 9px;
+    border-radius: 999px;
+    border: 1px solid var(--border);
+    background: var(--bg-elev);
+    color: var(--text-2);
+  }
+  .badge.type-badge { background: var(--accent-bg); border-color: var(--accent); color: var(--accent); }
+  .badge.marking-badge { background: var(--green-bg); border-color: var(--green); color: var(--green-strong); font-family: "SF Mono", ui-monospace, Menlo, monospace; }
+  [data-theme="dark"] .badge.marking-badge { color: var(--green); }
+  .badge.chapter-badge { color: var(--muted); }
+  .q-timer-pill {
+    margin-left: auto;
+    font-family: "SF Mono", ui-monospace, Menlo, monospace;
+    font-size: 12px;
+    font-weight: 650;
+    padding: 3px 9px;
+    border-radius: 7px;
+    border: 1px solid var(--border);
+    background: var(--bg-elev);
+    color: var(--text-2);
+  }
+  .q-timer-pill.slow {
+    background: var(--amber-bg);
+    border-color: var(--amber);
+    color: var(--amber);
+  }
+
+  .q-scroll {
+    flex: 1;
+    overflow-y: auto;
+    padding: 22px 26px 28px;
+    min-height: 0;
+  }
+  .q-stem {
+    font-family: var(--font-prose);
+    font-size: 16px;
+    line-height: 1.65;
+    color: var(--text);
+    margin-bottom: 18px;
+    max-width: 65ch;
+  }
+  .q-stem p { margin: 0 0 10px; }
+  .q-stem p:last-child { margin-bottom: 0; }
+
+  .q-figure-wrap {
+    margin: 14px 0 20px;
+    padding: 14px;
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    background: var(--fig-bg);
+    display: inline-flex;
+    flex-direction: column;
+    align-items: center;
+    max-width: 100%;
+    color: #111827;
+  }
+  .q-figure-wrap svg {
+    max-width: min(640px, 100%);
+    height: auto;
+    display: block;
+  }
+  .q-figure-wrap img {
+    max-width: min(640px, 100%);
+    max-height: 360px;
+    height: auto;
+    display: block;
+    border-radius: 4px;
+  }
+  .q-figure-caption {
+    margin-top: 8px;
+    font-size: 12px;
+    color: #475569;
+    font-style: italic;
+  }
+
+  /* Options (Single & Multi) */
+  .options-list {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    max-width: 860px;
+  }
+  .opt-hint {
+    font-size: 12px;
+    color: var(--muted);
+    margin-bottom: 8px;
+    font-weight: 550;
+  }
+  .opt-card {
+    display: flex;
+    align-items: flex-start;
+    gap: 12px;
+    padding: 13px 15px;
+    border: 1.5px solid var(--border);
+    border-radius: 10px;
+    background: var(--bg-card);
+    cursor: pointer;
+    transition: border-color 0.14s, background 0.14s, box-shadow 0.14s;
+    user-select: none;
+  }
+  .opt-card:hover {
+    border-color: var(--accent);
+    background: var(--bg-hover);
+  }
+  .opt-card.selected {
+    border-color: var(--accent);
+    background: var(--accent-bg);
+    box-shadow: 0 0 0 1px var(--accent);
+  }
+  .opt-card.rev-correct {
+    border-color: var(--green) !important;
+    background: var(--green-bg) !important;
+  }
+  .opt-card.rev-wrong {
+    border-color: var(--red) !important;
+    background: var(--red-bg) !important;
+  }
+  .opt-control {
+    margin-top: 2px;
+    width: 20px;
+    height: 20px;
+    border: 2px solid var(--border-strong);
+    border-radius: 50%;
+    flex-shrink: 0;
+    display: grid;
+    place-items: center;
+    background: var(--bg-elev);
+    font-size: 12px;
+    font-weight: 800;
+    color: #fff;
+  }
+  .opt-control.checkbox { border-radius: 5px; }
+  .opt-card.selected .opt-control {
+    border-color: var(--accent);
+    background: var(--accent);
+  }
+  .opt-id {
+    font-weight: 800;
+    font-size: 14px;
+    color: var(--accent);
+    min-width: 22px;
+    padding-top: 1px;
+  }
+  .opt-text {
+    font-size: 15px;
+    line-height: 1.55;
+    color: var(--text);
+    flex: 1;
+  }
+
+  /* Numerical Input & NTA Virtual Keypad */
+  .num-wrap {
+    max-width: 440px;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+  .num-input-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+  .num-input {
+    flex: 1;
+    font-family: "SF Mono", ui-monospace, Menlo, monospace;
+    font-size: 20px;
+    font-weight: 700;
+    padding: 11px 14px;
+    border-radius: 9px;
+    border: 2px solid var(--border-strong);
+    background: var(--bg-elev);
+    color: var(--text);
+    outline: none;
+  }
+  .num-input:focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-bg); }
+  .keypad {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 7px;
+    padding: 12px;
+    border-radius: 10px;
+    border: 1px solid var(--border);
+    background: var(--bg-subtle);
+    max-width: 290px;
+  }
+  .key-btn {
+    padding: 10px 8px;
+    font-size: 15px;
+    font-weight: 700;
+    border-radius: 7px;
+    border: 1px solid var(--border-strong);
+    background: var(--bg-elev);
+    color: var(--text);
+    cursor: pointer;
+    transition: background 0.12s, border-color 0.12s;
+  }
+  .key-btn:hover { background: var(--bg-hover); border-color: var(--accent); }
+  .key-btn.wide { grid-column: span 2; }
+  .key-btn.action { background: var(--accent-bg); color: var(--accent); border-color: var(--accent); font-size: 12.5px; }
+  .key-btn.clear-key { background: var(--red-bg); color: var(--red); border-color: var(--red); font-size: 12.5px; }
+
+  /* Matrix Match Layout */
+  .matrix-lists {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+    gap: 14px;
+    margin-bottom: 18px;
+    max-width: 900px;
+  }
+  .matrix-col-box {
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    background: var(--bg-subtle);
+    padding: 12px 14px;
+  }
+  .matrix-col-box h4 {
+    margin: 0 0 9px;
+    font-size: 12px;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--accent);
+  }
+  .matrix-item {
+    display: flex;
+    gap: 8px;
+    padding: 5px 0;
+    border-top: 1px dashed var(--border);
+    font-size: 14px;
+    line-height: 1.48;
+  }
+  .matrix-item:first-of-type { border-top: none; }
+  .matrix-key {
+    font-weight: 800;
+    color: var(--accent);
+    min-width: 24px;
+  }
+  .matrix-table-wrap { overflow-x: auto; max-width: 680px; }
+  .matrix-grid {
+    width: 100%;
+    border-collapse: collapse;
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    overflow: hidden;
+    background: var(--bg-card);
+  }
+  .matrix-grid th, .matrix-grid td {
+    border: 1px solid var(--border);
+    padding: 10px 12px;
+    text-align: center;
+    font-size: 13.5px;
+  }
+  .matrix-grid th {
+    background: var(--bg-subtle);
+    font-weight: 750;
+    color: var(--text);
+  }
+  .matrix-cell-btn {
+    width: 34px;
+    height: 34px;
+    border-radius: 7px;
+    border: 1.5px solid var(--border-strong);
+    background: var(--bg-elev);
+    color: var(--text-2);
+    font-weight: 800;
+    font-size: 13px;
+    cursor: pointer;
+    display: inline-grid;
+    place-items: center;
+    transition: all 0.13s;
+  }
+  .matrix-cell-btn:hover { border-color: var(--accent); background: var(--bg-hover); }
+  .matrix-cell-btn.checked {
+    background: var(--accent);
+    border-color: var(--accent-strong);
+    color: #fff;
+  }
+  .matrix-cell-btn.rev-right { background: var(--green); border-color: var(--green-strong); color: #fff; }
+  .matrix-cell-btn.rev-miss { border-color: var(--green); border-style: dashed; color: var(--green); }
+  .matrix-cell-btn.rev-extra { background: var(--red); border-color: var(--red-strong); color: #fff; }
+
+  /* Review Solution Box */
+  .review-box {
+    margin-top: 22px;
+    padding: 16px 18px;
+    border-radius: 11px;
+    border: 1.5px solid var(--border);
+    background: var(--bg-subtle);
+    max-width: 860px;
+  }
+  .review-box.verdict-correct { border-color: var(--green); }
+  .review-box.verdict-partial { border-color: var(--amber); }
+  .review-box.verdict-wrong { border-color: var(--red); }
+  .review-head {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-wrap: wrap;
+    margin-bottom: 10px;
+  }
+  .verdict-pill {
+    padding: 3px 10px;
+    border-radius: 999px;
+    font-size: 12px;
+    font-weight: 750;
+    text-transform: uppercase;
+  }
+  .verdict-pill.correct { background: var(--green-bg); color: var(--green); }
+  .verdict-pill.partial { background: var(--amber-bg); color: var(--amber); }
+  .verdict-pill.wrong { background: var(--red-bg); color: var(--red); }
+  .verdict-pill.unattempted { background: var(--bg-hover); color: var(--muted); }
+  .review-ans-line { font-size: 13.5px; color: var(--text-2); margin-bottom: 10px; }
+  .review-solution {
+    font-size: 14.5px;
+    line-height: 1.62;
+    color: var(--text);
+    padding-top: 8px;
+    border-top: 1px solid var(--border);
+  }
+  .trap-callout {
+    margin-top: 12px;
+    padding: 10px 13px;
+    border-left: 4px solid var(--red);
+    border-radius: 6px;
+    background: var(--red-bg);
+    font-size: 13.5px;
+    line-height: 1.5;
+    color: var(--text);
+  }
+  .trap-callout strong { color: var(--red); }
+
+  /* Bottom Action Footer */
+  .q-footer {
+    padding: 11px 18px;
+    border-top: 1px solid var(--border);
+    background: var(--bg-subtle);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    flex-wrap: wrap;
+    flex-shrink: 0;
+  }
+  .footer-group {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+  }
+  .act-btn {
+    padding: 8px 13px;
+    border-radius: 7px;
+    font-size: 12.5px;
+    font-weight: 650;
+    cursor: pointer;
+    border: 1px solid var(--border-strong);
+    background: var(--bg-elev);
+    color: var(--text);
+    transition: all 0.14s;
+  }
+  .act-btn:hover { border-color: var(--accent); background: var(--bg-hover); }
+  .act-btn:disabled { opacity: 0.48; cursor: not-allowed; }
+  .act-btn.save-next {
+    background: var(--green);
+    border-color: var(--green-strong);
+    color: #fff;
+    font-weight: 700;
+  }
+  .act-btn.save-next:hover { background: var(--green-strong); }
+  .act-btn.save-mark {
+    background: var(--amber-bg);
+    border-color: var(--amber);
+    color: var(--amber);
+  }
+  .act-btn.mark-next {
+    background: var(--purple-bg);
+    border-color: var(--purple);
+    color: var(--purple);
+  }
+  .act-btn.clear-btn { color: var(--red); border-color: var(--border-strong); }
+  .act-btn.clear-btn:hover { border-color: var(--red); background: var(--red-bg); }
+
+  /* Right NTA Sidebar */
+  .palette-pane {
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+    background: var(--bg-subtle);
+  }
+  .candidate-strip {
+    padding: 10px 14px;
+    border-bottom: 1px solid var(--border);
+    background: var(--bg-elev);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    flex-shrink: 0;
+  }
+  .progress-meta {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    flex: 1;
+  }
+  .progress-meta span { font-size: 11.5px; font-weight: 650; color: var(--text-2); }
+  .progress-track {
+    height: 6px;
+    border-radius: 999px;
+    background: var(--border);
+    overflow: hidden;
+  }
+  .progress-fill {
+    height: 100%;
+    background: var(--green);
+    width: 0%;
+    transition: width 0.2s;
+  }
+  .reset-link {
+    background: transparent;
+    border: 1px solid var(--border);
+    color: var(--muted);
+    font-size: 11px;
+    font-weight: 600;
+    padding: 4px 8px;
+    border-radius: 6px;
+    cursor: pointer;
+  }
+  .reset-link:hover { color: var(--red); border-color: var(--red); }
+
+  /* NTA 5-State Legend */
+  .legend-box {
+    padding: 10px 12px;
+    border-bottom: 1px solid var(--border);
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px 6px;
+    flex-shrink: 0;
+    background: var(--bg-elev);
+  }
+  .legend-item {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    font-size: 11px;
+    color: var(--text-2);
+    line-height: 1.25;
+  }
+  .legend-item.full-row { grid-column: span 2; }
+
+  /* Authentic NTA Palette Token Shapes */
+  .nta-shape {
+    width: 28px;
+    height: 26px;
+    display: inline-grid;
+    place-items: center;
+    font-size: 11.5px;
+    font-weight: 800;
+    flex-shrink: 0;
+    position: relative;
+    user-select: none;
+  }
+  .st-not_visited {
+    background: var(--not-visited-bg);
+    color: var(--not-visited-text);
+    border: 1px solid var(--not-visited-border);
+    border-radius: 4px;
+  }
+  .st-not_answered {
+    background: #e14122;
+    color: #fff;
+    border-radius: 4px 4px 12px 12px;
+  }
+  .st-answered {
+    background: #1f9d45;
+    color: #fff;
+    border-radius: 12px 12px 4px 4px;
+  }
+  .st-marked {
+    background: #6d28d9;
+    color: #fff;
+    border-radius: 50%;
+  }
+  .st-answered_marked {
+    background: #6d28d9;
+    color: #fff;
+    border-radius: 50%;
+  }
+  .st-answered_marked::after {
+    content: "✓";
+    position: absolute;
+    right: -3px;
+    bottom: -3px;
+    width: 13px;
+    height: 13px;
+    border-radius: 50%;
+    background: #22c55e;
+    color: #fff;
+    font-size: 8.5px;
+    font-weight: 900;
+    display: grid;
+    place-items: center;
+    border: 1.5px solid var(--bg-elev);
+  }
+
+  .palette-header {
+    padding: 8px 14px;
+    background: var(--nta-header);
+    color: #fff;
+    font-size: 12px;
+    font-weight: 700;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    flex-shrink: 0;
+  }
+  .palette-grid {
+    flex: 1;
+    overflow-y: auto;
+    padding: 12px 14px;
+    display: grid;
+    grid-template-columns: repeat(5, 1fr);
+    gap: 9px;
+    align-content: start;
+  }
+  .pal-btn {
+    width: 44px;
+    height: 38px;
+    margin: 0 auto;
+    border: none;
+    cursor: pointer;
+    font-size: 13px;
+    font-weight: 750;
+    display: inline-grid;
+    place-items: center;
+    position: relative;
+    transition: transform 0.1s, box-shadow 0.14s;
+  }
+  .pal-btn:hover { transform: translateY(-1px); filter: brightness(1.06); }
+  .pal-btn.current {
+    box-shadow: 0 0 0 2.5px var(--bg-subtle), 0 0 0 5px var(--accent);
+  }
+  .pal-btn.rev-tag::before {
+    content: attr(data-rev);
+    position: absolute;
+    top: -5px;
+    left: -5px;
+    font-size: 9px;
+    font-weight: 800;
+    padding: 1px 4px;
+    border-radius: 4px;
+    background: var(--bg-elev);
+    color: var(--text);
+    border: 1px solid var(--border-strong);
+  }
+
+  .palette-footer {
+    padding: 12px 14px;
+    border-top: 1px solid var(--border);
+    background: var(--bg-elev);
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    flex-shrink: 0;
+  }
+  .submit-side-btn {
+    width: 100%;
+    padding: 10px 14px;
+    border-radius: 8px;
+    border: none;
+    background: var(--accent);
+    color: #fff;
+    font-size: 13.5px;
+    font-weight: 750;
+    cursor: pointer;
+    transition: background 0.15s;
+  }
+  .submit-side-btn:hover { background: var(--accent-strong); }
+  .autosave-note {
+    font-size: 10.5px;
+    color: var(--muted);
+    text-align: center;
+  }
+
+  /* Pause Curtain */
+  .pause-overlay {
+    position: absolute;
+    inset: 0;
+    z-index: 20;
+    background: var(--bg-elev);
+    display: none;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 14px;
+    text-align: center;
+    padding: 24px;
+  }
+  .pause-overlay.visible { display: flex; }
+
+  /* Modals */
+  .modal-backdrop {
+    position: fixed;
+    inset: 0;
+    z-index: 60;
+    background: var(--modal-backdrop);
+    display: none;
+    align-items: center;
+    justify-content: center;
+    padding: 20px;
+  }
+  .modal-backdrop.open { display: flex; }
+  .modal {
+    background: var(--bg-elev);
+    color: var(--text);
+    border: 1px solid var(--border);
+    border-radius: 13px;
+    box-shadow: var(--shadow);
+    width: min(780px, 100%);
+    max-height: 88vh;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+  .modal.wide { width: min(920px, 100%); }
+  .modal-head {
+    padding: 14px 18px;
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    background: var(--bg-subtle);
+  }
+  .modal-head h2 { margin: 0; font-size: 16px; font-weight: 750; }
+  .modal-close {
+    background: transparent;
+    border: 1px solid var(--border);
+    color: var(--text-2);
+    border-radius: 7px;
+    padding: 4px 10px;
+    font-size: 13px;
+    font-weight: 700;
+    cursor: pointer;
+  }
+  .modal-close:hover { border-color: var(--red); color: var(--red); }
+  .modal-body {
+    padding: 18px 20px;
+    overflow-y: auto;
+    flex: 1;
+    font-size: 14px;
+    line-height: 1.55;
+  }
+  .modal-foot {
+    padding: 12px 18px;
+    border-top: 1px solid var(--border);
+    background: var(--bg-subtle);
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 8px;
+    flex-wrap: wrap;
+  }
+
+  .kpi-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+    gap: 10px;
+    margin-bottom: 16px;
+  }
+  .kpi-card {
+    padding: 11px 13px;
+    border-radius: 9px;
+    border: 1px solid var(--border);
+    background: var(--bg-subtle);
+  }
+  .kpi-card .k-lbl { font-size: 11px; color: var(--muted); font-weight: 600; text-transform: uppercase; }
+  .kpi-card .k-val { font-size: 20px; font-weight: 800; margin-top: 3px; font-family: "SF Mono", ui-monospace, Menlo, monospace; }
+  .summary-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 13px;
+    margin-top: 10px;
+  }
+  .summary-table th, .summary-table td {
+    border: 1px solid var(--border);
+    padding: 8px 10px;
+    text-align: left;
+  }
+  .summary-table th { background: var(--bg-subtle); font-weight: 700; }
+
+  .qp-card {
+    padding: 14px 16px;
+    border: 1px solid var(--border);
+    border-radius: 9px;
+    margin-bottom: 12px;
+    background: var(--bg-card);
+  }
+  .qp-card-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    margin-bottom: 8px;
+  }
+
+  .toast {
+    position: fixed;
+    bottom: 20px;
+    left: 50%;
+    transform: translateX(-50%);
+    background: #0f172a;
+    color: #fff;
+    padding: 9px 16px;
+    border-radius: 9px;
+    font-size: 13px;
+    font-weight: 600;
+    box-shadow: var(--shadow);
+    z-index: 90;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.2s;
+  }
+  .toast.show { opacity: 1; }
+
+  /* Offline Pure-JS Math Typography */
+  .math-inline {
+    font-family: "Cambria Math", "STIX Two Math", "Times New Roman", Georgia, serif;
+    font-size: 1.06em;
+    white-space: normal;
+  }
+  .math-display {
+    display: block;
+    text-align: center;
+    margin: 10px 0;
+    font-family: "Cambria Math", "STIX Two Math", "Times New Roman", Georgia, serif;
+    font-size: 1.14em;
+    overflow-x: auto;
+  }
+  .m-var { font-style: italic; }
+  .m-rm { font-style: normal; font-family: inherit; }
+  .m-bf { font-weight: 700; font-style: normal; }
+  .m-frac {
+    display: inline-flex;
+    flex-direction: column;
+    align-items: center;
+    vertical-align: middle;
+    margin: 0 2px;
+    font-size: 0.88em;
+    line-height: 1.12;
+  }
+  .m-num {
+    border-bottom: 1.2px solid currentColor;
+    padding: 0 3px 1px;
+    text-align: center;
+  }
+  .m-den {
+    padding: 1px 3px 0;
+    text-align: center;
+  }
+  .m-sqrt {
+    display: inline-flex;
+    align-items: stretch;
+    vertical-align: baseline;
+  }
+  .m-root { font-size: 0.65em; margin-right: -2px; align-self: flex-start; }
+  .m-rad { font-size: 1.05em; line-height: 1; padding-right: 1px; }
+  .m-radicand {
+    border-top: 1.2px solid currentColor;
+    padding: 0 2px;
+    line-height: 1.15;
+  }
+  .m-subsup {
+    display: inline-flex;
+    flex-direction: column;
+    vertical-align: -0.32em;
+    font-size: 0.72em;
+    line-height: 1.05;
+    margin-left: 1px;
+  }
+  .m-over {
+    display: inline-block;
+    border-top: 1.2px solid currentColor;
+    padding-top: 1px;
+    line-height: 1.1;
+  }
+  .m-vec {
+    position: relative;
+    display: inline-block;
+  }
+  .m-vec::before {
+    content: "→";
+    position: absolute;
+    top: -0.62em;
+    left: 50%;
+    transform: translateX(-50%);
+    font-size: 0.65em;
+    font-style: normal;
+  }
+  .m-hat {
+    position: relative;
+    display: inline-block;
+  }
+  .m-hat::before {
+    content: "^";
+    position: absolute;
+    top: -0.52em;
+    left: 50%;
+    transform: translateX(-50%);
+    font-size: 0.72em;
+    font-style: normal;
+  }
+  .m-bigop { font-size: 1.28em; vertical-align: -0.08em; margin-right: 2px; }
+  .m-chem { font-family: -apple-system, BlinkMacSystemFont, "Inter", sans-serif; font-style: normal; font-size: 0.96em; }
+  .m-matrix {
+    display: inline-table;
+    vertical-align: middle;
+    border-left: 1.5px solid currentColor;
+    border-right: 1.5px solid currentColor;
+    border-radius: 4px;
+    padding: 1px 5px;
+    margin: 0 2px;
+  }
+  .m-matrix td { padding: 1px 5px; text-align: center; }
+
+  @media (max-width: 900px) {
+    body { overflow: auto; }
+    .workspace { grid-template-columns: 1fr; overflow: visible; }
+    .question-pane { border-right: none; border-bottom: 1px solid var(--border); }
+    .palette-pane { max-height: 440px; }
+    .exam-title-block h1 { max-width: 72vw; }
+  }
+</style>
+</head>
+<body>
+  <header class="exam-header">
+    <div class="brand-wrap">
+      <span class="nta-badge" id="examTypeBadge">Syntopik CBT</span>
+      <div class="exam-title-block">
+        <h1 id="examTitle">Timed Mastery Assessment</h1>
+        <div class="exam-subtitle">
+          <span id="examMetaLine">Syntopik · Offline Assessment Simulator</span>
+        </div>
+      </div>
+    </div>
+    <div class="header-controls">
+      <div class="timer-pill" id="timerPill" title="Remaining Exam Time">
+        <span class="timer-lbl">Time Left</span>
+        <span id="timerText">00:00:00</span>
+      </div>
+      <button class="hdr-btn" id="pauseBtn" type="button" title="Pause or Resume Exam">Pause</button>
+      <button class="hdr-btn" id="qpBtn" type="button">Question Paper</button>
+      <button class="hdr-btn" id="instrBtn" type="button">Instructions</button>
+      <button class="hdr-btn" id="themeBtn" type="button" title="Toggle Light/Dark Theme">Dark</button>
+      <button class="hdr-btn submit-top" id="topSubmitBtn" type="button">Submit Test</button>
+    </div>
+  </header>
+
+  <nav class="section-bar" id="sectionBar" aria-label="Exam Sections"></nav>
+
+  <main class="workspace">
+    <section class="question-pane" aria-label="Question Workspace">
+      <div class="q-meta-bar">
+        <span class="q-num-title" id="qNumTitle">Question No. 1</span>
+        <span class="badge type-badge" id="qTypeBadge">Single Correct</span>
+        <span class="badge marking-badge" id="qMarkingBadge">+4 / -1</span>
+        <span class="badge chapter-badge" id="qChapterBadge">General</span>
+        <span class="q-timer-pill" id="qTimerPill" title="Time spent on this question">This Q: 00:00</span>
+      </div>
+
+      <div class="q-scroll" id="qScroll">
+        <div class="q-stem" id="qStem"></div>
+        <div id="qFigureContainer"></div>
+        <div id="qResponseArea"></div>
+        <div id="qReviewContainer"></div>
+      </div>
+
+      <div class="q-footer">
+        <div class="footer-group">
+          <button class="act-btn mark-next" id="markNextBtn" type="button">Mark for Review &amp; Next</button>
+          <button class="act-btn save-mark" id="saveMarkBtn" type="button">Save &amp; Mark for Review</button>
+          <button class="act-btn clear-btn" id="clearBtn" type="button">Clear Response</button>
+        </div>
+        <div class="footer-group">
+          <button class="act-btn" id="prevBtn" type="button">&larr; Previous</button>
+          <button class="act-btn save-next" id="saveNextBtn" type="button">Save &amp; Next &rarr;</button>
+        </div>
+      </div>
+
+      <div class="pause-overlay" id="pauseOverlay">
+        <h2 style="margin:0;">Exam Paused</h2>
+        <p style="margin:0;color:var(--muted);max-width:380px;">Countdown and per-question timers are paused. Question content is hidden until you resume.</p>
+        <button class="act-btn save-next" id="resumeOverlayBtn" type="button">Resume Exam</button>
+      </div>
+    </section>
+
+    <aside class="palette-pane" aria-label="Question Palette">
+      <div class="candidate-strip">
+        <div class="progress-meta">
+          <span id="progressLabel">Answered 0 / 0</span>
+          <div class="progress-track"><div class="progress-fill" id="progressFill"></div></div>
+        </div>
+        <button class="reset-link" id="resetBtn" type="button" title="Clear local saved attempt and restart">Reset</button>
+      </div>
+
+      <div class="legend-box">
+        <div class="legend-item"><span class="nta-shape st-answered" id="cntAnswered">0</span><span>Answered</span></div>
+        <div class="legend-item"><span class="nta-shape st-not_answered" id="cntNotAnswered">0</span><span>Not Answered</span></div>
+        <div class="legend-item"><span class="nta-shape st-not_visited" id="cntNotVisited">0</span><span>Not Visited</span></div>
+        <div class="legend-item"><span class="nta-shape st-marked" id="cntMarked">0</span><span>Marked for Review</span></div>
+        <div class="legend-item full-row">
+          <span class="nta-shape st-answered_marked" id="cntAnsMarked">0</span>
+          <span>Answered &amp; Marked for Review <em>(will be considered for evaluation)</em></span>
+        </div>
+      </div>
+
+      <div class="palette-header">
+        <span id="paletteSectionTitle">All Questions</span>
+        <span id="paletteSectionCount">0 Qs</span>
+      </div>
+
+      <div class="palette-grid" id="paletteGrid"></div>
+
+      <div class="palette-footer">
+        <button class="submit-side-btn" id="sideSubmitBtn" type="button">Submit Test</button>
+        <div class="autosave-note" id="autosaveNote">Offline Auto-Save Active</div>
+      </div>
+    </aside>
+  </main>
+
+  <!-- Question Paper Modal -->
+  <div class="modal-backdrop" id="qpModal">
+    <div class="modal wide">
+      <div class="modal-head">
+        <h2>Full Question Paper</h2>
+        <button class="modal-close" data-close="qpModal" type="button">Close</button>
+      </div>
+      <div class="modal-body" id="qpModalBody"></div>
+    </div>
+  </div>
+
+  <!-- Instructions Modal -->
+  <div class="modal-backdrop" id="instrModal">
+    <div class="modal">
+      <div class="modal-head">
+        <h2>Assessment Instructions &amp; Marking Scheme</h2>
+        <button class="modal-close" data-close="instrModal" type="button">Close</button>
+      </div>
+      <div class="modal-body" id="instrModalBody"></div>
+    </div>
+  </div>
+
+  <!-- Confirm Submit Modal -->
+  <div class="modal-backdrop" id="confirmModal">
+    <div class="modal">
+      <div class="modal-head">
+        <h2>Confirm Exam Submission</h2>
+        <button class="modal-close" data-close="confirmModal" type="button">Cancel</button>
+      </div>
+      <div class="modal-body" id="confirmModalBody"></div>
+      <div class="modal-foot">
+        <button class="act-btn" data-close="confirmModal" type="button">Return to Exam</button>
+        <button class="act-btn save-next" id="confirmSubmitBtn" type="button">Yes, Submit Final Attempt</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Post-Submit Summary & Export Modal -->
+  <div class="modal-backdrop" id="summaryModal">
+    <div class="modal wide">
+      <div class="modal-head">
+        <h2>Exam Submitted — Summary &amp; Attempt Export</h2>
+        <button class="modal-close" data-close="summaryModal" type="button">Close</button>
+      </div>
+      <div class="modal-body" id="summaryModalBody"></div>
+      <div class="modal-foot">
+        <button class="act-btn" id="copyJsonBtn" type="button">Copy Attempt JSON</button>
+        <button class="act-btn save-next" id="downloadJsonBtn" type="button">Download Attempt JSON</button>
+        <button class="act-btn mark-next" id="reviewSolBtn" type="button">Review Solutions</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="toast" id="toast"></div>
+
+<script>
+window.__EXAM_SPEC__ = __EXAM_SPEC_JSON__;
+</script>
+<script>
+(function () {
+  "use strict";
+
+  const SPEC = window.__EXAM_SPEC__ || { examSlug: "demo", title: "Demo Exam", durationMinutes: 60, questions: [] };
+  const QUESTIONS = Array.isArray(SPEC.questions) ? SPEC.questions : [];
+  const STORAGE_KEY = "mlh_cbt_attempt_v1_" + (SPEC.examSlug || "exam");
+  const THEME_KEY = "mlh_cbt_theme_v1";
+
+  /* ---------------- Safe HTML & Offline Pure-JS LaTeX Renderer ---------------- */
+  function escHtml(s) {
+    return String(s == null ? "" : s)
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;")
+      .replace(/'/g, "&#39;");
+  }
+
+  const GREEK_AND_SYM = {
+    alpha: "α", beta: "β", gamma: "γ", delta: "δ", epsilon: "ϵ", varepsilon: "ε",
+    zeta: "ζ", eta: "η", theta: "θ", vartheta: "ϑ", iota: "ι", kappa: "κ",
+    lambda: "λ", mu: "μ", nu: "ν", xi: "ξ", pi: "π", varpi: "ϖ", rho: "ρ",
+    varrho: "ϱ", sigma: "σ", varsigma: "ς", tau: "τ", upsilon: "υ", phi: "ϕ",
+    varphi: "φ", chi: "χ", psi: "ψ", omega: "ω",
+    Gamma: "Γ", Delta: "Δ", Theta: "Θ", Lambda: "Λ", Xi: "Ξ", Pi: "Π",
+    Sigma: "Σ", Upsilon: "Υ", Phi: "Φ", Psi: "Ψ", Omega: "Ω",
+    times: "×", cdot: "·", div: "÷", pm: "±", mp: "∓", ast: "∗", star: "⋆",
+    circ: "°", degree: "°", propto: "∝", approx: "≈", equiv: "≡", neq: "≠", ne: "≠",
+    le: "≤", leq: "≤", ge: "≥", geq: "≥", ll: "≪", gg: "≫", sim: "∼", simeq: "≃", cong: "≅",
+    to: "→", rightarrow: "→", leftarrow: "←", leftrightarrow: "↔",
+    Rightarrow: "⇒", Leftarrow: "⇐", Leftrightarrow: "⇔", implies: "⇒", iff: "⇔",
+    rightleftharpoons: "⇌", uparrow: "↑", downarrow: "↓", mapsto: "↦",
+    infty: "∞", partial: "∂", nabla: "∇", hbar: "ℏ", ell: "ℓ", Re: "ℜ", Im: "ℑ",
+    in: "∈", notin: "∉", subset: "⊂", subseteq: "⊆", supset: "⊃", supseteq: "⊇",
+    cup: "∪", cap: "∩", emptyset: "∅", varnothing: "∅", forall: "∀", exists: "∃",
+    therefore: "∴", because: "∵", angle: "∠", triangle: "△", perp: "⊥", parallel: "∥",
+    dots: "…", ldots: "…", cdots: "⋯", vdots: "⋮", ddots: "⋱", prime: "′",
+    langle: "⟨", rangle: "⟩", lfloor: "⌊", rfloor: "⌋", lceil: "⌈", rceil: "⌉",
+    quad: "\u2001", qquad: "\u2001\u2001",
+    "int": "<span class=\"m-bigop\">∫</span>",
+    "oint": "<span class=\"m-bigop\">∮</span>",
+    "iint": "<span class=\"m-bigop\">∬</span>",
+    "sum": "<span class=\"m-bigop\">∑</span>",
+    "prod": "<span class=\"m-bigop\">∏</span>"
+  };
+
+  const UPRIGHT_FUNCS = new Set([
+    "sin","cos","tan","cot","sec","csc","arcsin","arccos","arctan",
+    "sinh","cosh","tanh","log","ln","exp","lim","max","min","sup","inf",
+    "det","dim","gcd","arg","deg","ker","Pr","mod"
+  ]);
+
+  const BLACKBOARD = { R: "ℝ", Z: "ℤ", N: "ℕ", Q: "ℚ", C: "ℂ", E: "𝔼", P: "ℙ" };
+
+  function renderChemFormula(src) {
+    let s = String(src || "").trim();
+    s = s.replace(/<=>/g, " ⇌ ").replace(/<->/g, " ↔ ").replace(/->/g, " → ").replace(/<-/g, " ← ");
+    const tokens = s.split(/(\s+)/);
+    return '<span class="m-chem">' + tokens.map(function (tok) {
+      if (!tok || /^\s+$/.test(tok)) return tok;
+      if (tok === "→" || tok === "⇌" || tok === "↔" || tok === "←" || tok === "+") return escHtml(tok);
+      // Separate leading stoichiometric coefficient
+      let m = tok.match(/^(\d+(?:\.\d+)?)(.*)$/);
+      let prefix = "";
+      let body = tok;
+      if (m && m[2]) { prefix = escHtml(m[1]); body = m[2]; }
+      // Parse braces for charge like ^{2+} or ^-
+      let out = prefix;
+      let i = 0;
+      while (i < body.length) {
+        if (body[i] === "^") {
+          i++;
+          let chg = "";
+          if (body[i] === "{") {
+            let depth = 1; i++;
+            while (i < body.length && depth > 0) {
+              if (body[i] === "{") depth++;
+              else if (body[i] === "}") { depth--; if (depth === 0) { i++; break; } }
+              if (depth > 0) chg += body[i++];
+            }
+          } else {
+            while (i < body.length && /[0-9+\-]/.test(body[i])) chg += body[i++];
+          }
+          out += "<sup>" + escHtml(chg.replace(/-/g, "−")) + "</sup>";
+        } else if (body[i] === "_") {
+          i++;
+          let sub = "";
+          if (body[i] === "{") {
+            let depth = 1; i++;
+            while (i < body.length && depth > 0) {
+              if (body[i] === "{") depth++;
+              else if (body[i] === "}") { depth--; if (depth === 0) { i++; break; } }
+              if (depth > 0) sub += body[i++];
+            }
+          } else if (i < body.length) {
+            sub = body[i++];
+          }
+          out += "<sub>" + escHtml(sub) + "</sub>";
+        } else if (/[0-9]/.test(body[i]) && i > 0 && /[A-Za-z)\]]/.test(body[i - 1])) {
+          let num = "";
+          while (i < body.length && /[0-9]/.test(body[i])) num += body[i++];
+          if (i < body.length && (body[i] === "+" || body[i] === "-") && i === body.length - 1) {
+            out += "<sup>" + escHtml(num + body[i].replace("-", "−")) + "</sup>";
+            i++;
+          } else {
+            out += "<sub>" + escHtml(num) + "</sub>";
+          }
+        } else if ((body[i] === "+" || body[i] === "-") && i === body.length - 1 && i > 0) {
+          out += "<sup>" + (body[i] === "-" ? "−" : "+") + "</sup>";
+          i++;
+        } else {
+          out += escHtml(body[i++]);
+        }
+      }
+      return out;
+    }).join("") + "</span>";
+  }
+
+  function readGroup(str, idx) {
+    while (idx < str.length && str[idx] === " ") idx++;
+    if (idx >= str.length) return ["", idx];
+    if (str[idx] === "{") {
+      let depth = 1;
+      let start = idx + 1;
+      let i = start;
+      while (i < str.length && depth > 0) {
+        if (str[i] === "\\" && i + 1 < str.length) { i += 2; continue; }
+        if (str[i] === "{") depth++;
+        else if (str[i] === "}") depth--;
+        i++;
+      }
+      return [str.slice(start, depth === 0 ? i - 1 : i), i];
+    }
+    if (str[idx] === "\\") {
+      let j = idx + 1;
+      if (j < str.length && /[A-Za-z]/.test(str[j])) {
+        while (j < str.length && /[A-Za-z]/.test(str[j])) j++;
+        return [str.slice(idx, j), j];
+      }
+      return [str.slice(idx, Math.min(idx + 2, str.length)), Math.min(idx + 2, str.length)];
+    }
+    return [str[idx], idx + 1];
+  }
+
+  function renderTexNodes(tex) {
+    const s = String(tex || "");
+    let i = 0;
+    let out = [];
+
+    function parseScript(pos) {
+      let sup = null, sub = null;
+      let p = pos;
+      while (p < s.length) {
+        while (p < s.length && s[p] === " ") p++;
+        if (s[p] === "^" && sup === null) {
+          const g = readGroup(s, p + 1);
+          sup = renderTexNodes(g[0]);
+          p = g[1];
+        } else if (s[p] === "_" && sub === null) {
+          const g = readGroup(s, p + 1);
+          sub = renderTexNodes(g[0]);
+          p = g[1];
+        } else {
+          break;
+        }
+      }
+      return { sup: sup, sub: sub, next: p };
+    }
+
+    while (i < s.length) {
+      const ch = s[i];
+      if (ch === " " || ch === "\t" || ch === "\n") {
+        i++;
+        continue;
+      }
+      let atom = "";
+      if (ch === "\\") {
+        if (i + 1 >= s.length) { i++; break; }
+        const nxt = s[i + 1];
+        if (!/[A-Za-z]/.test(nxt)) {
+          i += 2;
+          if (nxt === "," || nxt === ":") atom = "\u2009";
+          else if (nxt === ";") atom = "\u2004";
+          else if (nxt === "!") atom = "";
+          else if (nxt === " ") atom = " ";
+          else if (nxt === "\\") atom = "<br>";
+          else if (nxt === "{" || nxt === "}" || nxt === "%" || nxt === "_" || nxt === "&" || nxt === "#") atom = escHtml(nxt);
+          else if (nxt === "|") atom = "‖";
+          else atom = escHtml(nxt);
+        } else {
+          let j = i + 1;
+          while (j < s.length && /[A-Za-z]/.test(s[j])) j++;
+          const cmd = s.slice(i + 1, j);
+          i = j;
+
+          if (cmd === "frac" || cmd === "dfrac" || cmd === "tfrac") {
+            const num = readGroup(s, i);
+            const den = readGroup(s, num[1]);
+            i = den[1];
+            atom = '<span class="m-frac"><span class="m-num">' + renderTexNodes(num[0]) +
+                   '</span><span class="m-den">' + renderTexNodes(den[0]) + "</span></span>";
+          } else if (cmd === "sqrt") {
+            let rootHtml = "";
+            while (i < s.length && s[i] === " ") i++;
+            if (s[i] === "[") {
+              const closeIdx = s.indexOf("]", i + 1);
+              if (closeIdx !== -1) {
+                rootHtml = '<sup class="m-root">' + renderTexNodes(s.slice(i + 1, closeIdx)) + "</sup>";
+                i = closeIdx + 1;
+              }
+            }
+            const rad = readGroup(s, i);
+            i = rad[1];
+            atom = '<span class="m-sqrt">' + rootHtml + '<span class="m-rad">√</span><span class="m-radicand">' +
+                   renderTexNodes(rad[0]) + "</span></span>";
+          } else if (cmd === "text" || cmd === "mathrm" || cmd === "textrm" || cmd === "operatorname") {
+            const g = readGroup(s, i);
+            i = g[1];
+            atom = '<span class="m-rm">' + escHtml(g[0]) + "</span>";
+          } else if (cmd === "mathbf" || cmd === "textbf" || cmd === "boldsymbol") {
+            const g = readGroup(s, i);
+            i = g[1];
+            atom = '<span class="m-bf">' + renderTexNodes(g[0]) + "</span>";
+          } else if (cmd === "mathbb") {
+            const g = readGroup(s, i);
+            i = g[1];
+            atom = '<span class="m-rm">' + escHtml(g[0].split("").map(function (c) { return BLACKBOARD[c] || c; }).join("")) + "</span>";
+          } else if (cmd === "ce") {
+            const g = readGroup(s, i);
+            i = g[1];
+            atom = renderChemFormula(g[0]);
+          } else if (cmd === "vec") {
+            const g = readGroup(s, i);
+            i = g[1];
+            atom = '<span class="m-vec">' + renderTexNodes(g[0]) + "</span>";
+          } else if (cmd === "hat" || cmd === "widehat") {
+            const g = readGroup(s, i);
+            i = g[1];
+            atom = '<span class="m-hat">' + renderTexNodes(g[0]) + "</span>";
+          } else if (cmd === "bar" || cmd === "overline") {
+            const g = readGroup(s, i);
+            i = g[1];
+            atom = '<span class="m-over">' + renderTexNodes(g[0]) + "</span>";
+          } else if (cmd === "dot" || cmd === "ddot") {
+            const g = readGroup(s, i);
+            i = g[1];
+            atom = renderTexNodes(g[0]) + (cmd === "dot" ? "\u0307" : "\u0308");
+          } else if (cmd === "left" || cmd === "right" || cmd === "big" || cmd === "Big" || cmd === "bigg" || cmd === "Bigg") {
+            while (i < s.length && s[i] === " ") i++;
+            if (i < s.length) {
+              if (s[i] === ".") { i++; atom = ""; }
+              else if (s[i] === "\\") {
+                const g = readGroup(s, i);
+                i = g[1];
+                const sym = g[0].slice(1);
+                atom = GREEK_AND_SYM[sym] || escHtml(sym);
+              } else {
+                atom = escHtml(s[i++]);
+              }
+            }
+          } else if (cmd === "begin") {
+            const envG = readGroup(s, i);
+            i = envG[1];
+            const env = envG[0].trim();
+            const endTag = "\\end{" + env + "}";
+            const endIdx = s.indexOf(endTag, i);
+            const inner = endIdx === -1 ? s.slice(i) : s.slice(i, endIdx);
+            i = endIdx === -1 ? s.length : endIdx + endTag.length;
+            const rows = inner.split("\\\\").map(function (r) { return r.trim(); }).filter(Boolean);
+            if (env.indexOf("matrix") !== -1) {
+              atom = '<table class="m-matrix">' + rows.map(function (r) {
+                return "<tr>" + r.split("&").map(function (c) { return "<td>" + renderTexNodes(c) + "</td>"; }).join("") + "</tr>";
+              }).join("") + "</table>";
+            } else {
+              atom = rows.map(function (r) { return renderTexNodes(r.replace(/&/g, " ")); }).join("<br>");
+            }
+          } else if (UPRIGHT_FUNCS.has(cmd)) {
+            atom = '<span class="m-rm">' + escHtml(cmd) + "</span>\u2009";
+          } else if (Object.prototype.hasOwnProperty.call(GREEK_AND_SYM, cmd)) {
+            atom = GREEK_AND_SYM[cmd];
+          } else {
+            atom = '<span class="m-rm">' + escHtml(cmd) + "</span>";
+          }
+        }
+      } else if (ch === "{") {
+        const g = readGroup(s, i);
+        i = g[1];
+        atom = renderTexNodes(g[0]);
+      } else if (ch === "^" || ch === "_") {
+        // Standalone script without preceding atom
+        const sc = parseScript(i);
+        i = sc.next;
+        if (sc.sup !== null && sc.sub !== null) {
+          atom = '<span class="m-subsup"><span>' + sc.sup + "</span><span>" + sc.sub + "</span></span>";
+        } else if (sc.sup !== null) {
+          atom = "<sup>" + sc.sup + "</sup>";
+        } else if (sc.sub !== null) {
+          atom = "<sub>" + sc.sub + "</sub>";
+        }
+        out.push(atom);
+        continue;
+      } else if (/[A-Za-z]/.test(ch)) {
+        atom = '<span class="m-var">' + escHtml(ch) + "</span>";
+        i++;
+      } else if (ch === "-") {
+        atom = " − ";
+        i++;
+      } else if (ch === "+" || ch === "=" || ch === "<" || ch === ">") {
+        atom = " " + escHtml(ch) + " ";
+        i++;
+      } else {
+        atom = escHtml(ch);
+        i++;
+      }
+
+      // Attach trailing superscript/subscript to atom
+      const sc = parseScript(i);
+      i = sc.next;
+      if (sc.sup !== null && sc.sub !== null) {
+        out.push(atom + '<span class="m-subsup"><span>' + sc.sup + "</span><span>" + sc.sub + "</span></span>");
+      } else if (sc.sup !== null) {
+        out.push(atom + "<sup>" + sc.sup + "</sup>");
+      } else if (sc.sub !== null) {
+        out.push(atom + "<sub>" + sc.sub + "</sub>");
+      } else {
+        out.push(atom);
+      }
+    }
+    return out.join("");
+  }
+
+  function renderMathExpr(expr, displayMode) {
+    if (window.katex && typeof window.katex.renderToString === "function") {
+      try {
+        return window.katex.renderToString(expr, { displayMode: !!displayMode, throwOnError: false });
+      } catch (_e) { /* fall back seamlessly */ }
+    }
+    let html;
+    try {
+      html = renderTexNodes(expr);
+    } catch (_e) {
+      html = escHtml(expr);
+    }
+    return displayMode
+      ? '<span class="math-display">' + html + "</span>"
+      : '<span class="math-inline">' + html + "</span>";
+  }
+
+  function formatPlainSegment(seg) {
+    let h = escHtml(seg);
+    h = h.replace(/`([^`]+)`/g, "<code>$1</code>");
+    h = h.replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>");
+    h = h.replace(/\*([^*]+)\*/g, "<em>$1</em>");
+    h = h.replace(/\n/g, "<br>");
+    return h;
+  }
+
+  function renderRichText(raw) {
+    const text = String(raw == null ? "" : raw);
+    const pattern = /(\$\$[\s\S]+?\$\$|\\\[[\s\S]+?\\\]|\\\([\s\S]+?\\\)|\$(?:\\.|[^$\\])+\$)/g;
+    let last = 0;
+    let parts = [];
+    let m;
+    while ((m = pattern.exec(text)) !== null) {
+      if (m.index > last) parts.push(formatPlainSegment(text.slice(last, m.index)));
+      const tok = m[0];
+      if (tok.startsWith("$$")) parts.push(renderMathExpr(tok.slice(2, -2), true));
+      else if (tok.startsWith("\\[")) parts.push(renderMathExpr(tok.slice(2, -2), true));
+      else if (tok.startsWith("\\(")) parts.push(renderMathExpr(tok.slice(2, -2), false));
+      else parts.push(renderMathExpr(tok.slice(1, -1), false));
+      last = m.index + tok.length;
+    }
+    if (last < text.length) parts.push(formatPlainSegment(text.slice(last)));
+    return parts.join("");
+  }
+
+  /* ---------------- Deterministic Client-Side Scorer (Matches exam_runner.py) ---------------- */
+  function isEmptyAnswer(q, ans) {
+    if (ans === null || ans === undefined) return true;
+    if (q.type === "single_correct") return String(ans).trim() === "";
+    if (q.type === "multi_correct") return !Array.isArray(ans) || ans.length === 0;
+    if (q.type === "numerical") {
+      const s = String(ans).trim();
+      if (s === "" || s === "." || s === "-" || s === "+" || s === "-." || s === "+.") return true;
+      return !Number.isFinite(Number(s));
+    }
+    if (q.type === "matrix_match") {
+      if (typeof ans !== "object" || Array.isArray(ans)) return true;
+      return Object.keys(ans).every(function (k) {
+        const v = ans[k];
+        return !v || (Array.isArray(v) && v.length === 0) || (typeof v === "string" && v.trim() === "");
+      });
+    }
+    return true;
+  }
+
+  function scoreQuestionLocal(q, rawAns) {
+    const maxMarks = Number(q.marksCorrect != null ? q.marksCorrect : 4);
+    const mWrong = Number(q.marksWrong != null ? q.marksWrong : (q.type === "single_correct" ? -1 : q.type === "multi_correct" ? -2 : 0));
+    const mUnatt = Number(q.marksUnattempted != null ? q.marksUnattempted : 0);
+
+    if (isEmptyAnswer(q, rawAns)) {
+      return { status: "unattempted", marks: mUnatt, maxMarks: maxMarks, negativeLost: 0 };
+    }
+
+    if (q.type === "single_correct") {
+      const ok = String(rawAns).trim().toUpperCase() === String(q.answer).trim().toUpperCase();
+      const marks = ok ? maxMarks : mWrong;
+      return { status: ok ? "correct" : "wrong", marks: marks, maxMarks: maxMarks, negativeLost: marks < 0 ? Math.abs(marks) : 0 };
+    }
+
+    if (q.type === "multi_correct") {
+      const correctSet = new Set((q.answer || []).map(function (x) { return String(x).trim().toUpperCase(); }));
+      const chosen = Array.from(new Set((Array.isArray(rawAns) ? rawAns : [rawAns]).map(function (x) { return String(x).trim().toUpperCase(); }).filter(Boolean)));
+      const hasWrong = chosen.some(function (x) { return !correctSet.has(x); });
+      if (hasWrong) {
+        return { status: "wrong", marks: mWrong, maxMarks: maxMarks, negativeLost: mWrong < 0 ? Math.abs(mWrong) : 0 };
+      }
+      if (chosen.length === correctSet.size) {
+        return { status: "correct", marks: maxMarks, maxMarks: maxMarks, negativeLost: 0 };
+      }
+      if (q.partialMarking === false) {
+        return { status: "wrong", marks: mWrong, maxMarks: maxMarks, negativeLost: mWrong < 0 ? Math.abs(mWrong) : 0 };
+      }
+      let pts = 0;
+      const nTot = correctSet.size;
+      const nCh = chosen.length;
+      if (q.partialMarks && q.partialMarks[String(nCh)] != null) pts = Number(q.partialMarks[String(nCh)]);
+      else if (maxMarks !== 4) pts = Math.round((maxMarks * (nCh / nTot)) * 100) / 100;
+      else if (nTot >= 4 && nCh === 3) pts = 3;
+      else if (nTot >= 3 && nCh === 2) pts = 2;
+      else if (nTot >= 2 && nCh === 1) pts = 1;
+      else pts = Math.min(nCh, Math.max(0, maxMarks - 1));
+      return { status: "partial", marks: pts, maxMarks: maxMarks, negativeLost: 0 };
+    }
+
+    if (q.type === "numerical") {
+      const val = Number(String(rawAns).trim());
+      if (!Number.isFinite(val)) {
+        return { status: "unattempted", marks: mUnatt, maxMarks: maxMarks, negativeLost: 0 };
+      }
+      let ok = false;
+      if (Array.isArray(q.range) && q.range.length === 2) {
+        ok = val >= Number(q.range[0]) - 1e-9 && val <= Number(q.range[1]) + 1e-9;
+      } else {
+        const tol = q.tolerance != null ? Number(q.tolerance) : 0.01;
+        ok = Math.abs(val - Number(q.answer)) <= tol + 1e-9;
+      }
+      const marks = ok ? maxMarks : mWrong;
+      return { status: ok ? "correct" : "wrong", marks: marks, maxMarks: maxMarks, negativeLost: marks < 0 ? Math.abs(marks) : 0 };
+    }
+
+    if (q.type === "matrix_match") {
+      const exp = q.answer || {};
+      const rowKeys = Object.keys(exp);
+      let matched = 0;
+      let wrongRows = 0;
+      rowKeys.forEach(function (rk) {
+        const expArr = (Array.isArray(exp[rk]) ? exp[rk] : [exp[rk]]).map(function (c) { return String(c).trim().toUpperCase(); }).sort();
+        const rawRow = rawAns[rk];
+        const chArr = (Array.isArray(rawRow) ? rawRow : (rawRow ? [rawRow] : [])).map(function (c) { return String(c).trim().toUpperCase(); }).filter(Boolean).sort();
+        if (chArr.length === 0) return;
+        if (chArr.length === expArr.length && chArr.every(function (v, idx) { return v === expArr[idx]; })) matched++;
+        else wrongRows++;
+      });
+      if (matched === rowKeys.length && wrongRows === 0) {
+        return { status: "correct", marks: maxMarks, maxMarks: maxMarks, negativeLost: 0 };
+      }
+      if (q.partialMarking === false) {
+        return { status: "wrong", marks: mWrong, maxMarks: maxMarks, negativeLost: mWrong < 0 ? Math.abs(mWrong) : 0 };
+      }
+      const perRow = q.marksPerRow != null ? Number(q.marksPerRow) : (rowKeys.length ? maxMarks / rowKeys.length : 1);
+      const wrongPerRow = q.marksWrongPerRow != null ? Number(q.marksWrongPerRow) : mWrong;
+      const negDed = wrongPerRow < 0 ? wrongRows * wrongPerRow : 0;
+      const marks = Math.round((matched * perRow + negDed) * 100) / 100;
+      return {
+        status: matched > 0 ? "partial" : "wrong",
+        marks: marks,
+        maxMarks: maxMarks,
+        negativeLost: Math.round(Math.abs(negDed) * 100) / 100
+      };
+    }
+
+    return { status: "unattempted", marks: 0, maxMarks: maxMarks, negativeLost: 0 };
+  }
+
+  function formatAnswerDisplay(q, ans) {
+    if (isEmptyAnswer(q, ans)) return "Unattempted";
+    if (q.type === "single_correct") return String(ans).toUpperCase();
+    if (q.type === "multi_correct") return (Array.isArray(ans) ? ans : [ans]).map(function (x) { return String(x).toUpperCase(); }).sort().join(", ");
+    if (q.type === "numerical") return String(ans);
+    if (q.type === "matrix_match") {
+      return Object.keys(ans).sort().map(function (k) {
+        const vals = Array.isArray(ans[k]) ? ans[k] : [ans[k]];
+        return vals.length ? (k + " → " + vals.join(",")) : null;
+      }).filter(Boolean).join(" ; ") || "Unattempted";
+    }
+    return String(ans);
+  }
+
+  /* ---------------- Exam State & LocalStorage Persistence ---------------- */
+  const SUBJECTS = [];
+  QUESTIONS.forEach(function (q) {
+    const s = q.subject || "General";
+    if (SUBJECTS.indexOf(s) === -1) SUBJECTS.push(s);
+  });
+
+  function freshState() {
+    const responses = {};
+    QUESTIONS.forEach(function (q) {
+      responses[q.id] = {
+        answer: null,
+        status: "not_visited",
+        timeSpentSec: 0,
+        markedForReview: false,
+        visited: false
+      };
+    });
+    return {
+      startedAt: new Date().toISOString(),
+      submittedAt: null,
+      submitted: false,
+      reviewMode: false,
+      paused: false,
+      currentIndex: 0,
+      activeSubject: SUBJECTS.length > 1 ? "ALL" : (SUBJECTS[0] || "ALL"),
+      remainingSec: Math.max(60, Math.round(Number(SPEC.durationMinutes || 60) * 60)),
+      totalElapsedSec: 0,
+      responses: responses
+    };
+  }
+
+  function loadState() {
+    try {
+      const raw = localStorage.getItem(STORAGE_KEY);
+      if (!raw) return freshState();
+      const parsed = JSON.parse(raw);
+      if (!parsed || typeof parsed !== "object" || !parsed.responses) return freshState();
+      const base = freshState();
+      Object.assign(base, parsed);
+      QUESTIONS.forEach(function (q) {
+        if (!base.responses[q.id]) {
+          base.responses[q.id] = { answer: null, status: "not_visited", timeSpentSec: 0, markedForReview: false, visited: false };
+        }
+      });
+      if (base.currentIndex < 0 || base.currentIndex >= QUESTIONS.length) base.currentIndex = 0;
+      base.paused = false;
+      return base;
+    } catch (_e) {
+      return freshState();
+    }
+  }
+
+  let state = loadState();
+  // Draft answer holds in-progress edits on the currently displayed question until Save/Clear/Switch
+  let draftAnswer = null;
+
+  function cloneVal(v) {
+    return v == null ? null : JSON.parse(JSON.stringify(v));
+  }
+
+  function saveState() {
+    try {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+      const el = document.getElementById("autosaveNote");
+      if (el) {
+        const now = new Date();
+        const hh = String(now.getHours()).padStart(2, "0");
+        const mm = String(now.getMinutes()).padStart(2, "0");
+        const ss = String(now.getSeconds()).padStart(2, "0");
+        el.textContent = state.submitted ? "Attempt Submitted & Saved" : ("Auto-saved at " + hh + ":" + mm + ":" + ss);
+      }
+    } catch (_e) { /* ignore private mode quota errors */ }
+  }
+
+  function formatHMS(sec) {
+    const s = Math.max(0, Math.floor(Number(sec || 0)));
+    const h = Math.floor(s / 3600);
+    const m = Math.floor((s % 3600) / 60);
+    const r = s % 60;
+    return [h, m, r].map(function (n) { return String(n).padStart(2, "0"); }).join(":");
+  }
+
+  function formatMS(sec) {
+    const s = Math.max(0, Math.floor(Number(sec || 0)));
+    const m = Math.floor(s / 60);
+    const r = s % 60;
+    return String(m).padStart(2, "0") + ":" + String(r).padStart(2, "0");
+  }
+
+  function showToast(msg) {
+    const t = document.getElementById("toast");
+    t.textContent = msg;
+    t.classList.add("show");
+    clearTimeout(showToast._timer);
+    showToast._timer = setTimeout(function () { t.classList.remove("show"); }, 2400);
+  }
+
+  function markingLabel(q) {
+    const mc = q.marksCorrect != null ? q.marksCorrect : 4;
+    if (q.type === "multi_correct") {
+      const mw = q.marksWrong != null ? q.marksWrong : -2;
+      return q.partialMarking === false ? ("+" + mc + " / " + mw) : ("+" + mc + " / partial / " + mw);
+    }
+    if (q.type === "matrix_match") {
+      const pr = q.marksPerRow != null ? q.marksPerRow : (q.rows && q.rows.length ? mc / q.rows.length : 1);
+      const mw = q.marksWrong != null ? q.marksWrong : 0;
+      return "+" + pr + "/row (max +" + mc + ") / " + mw;
+    }
+    const mw = q.marksWrong != null ? q.marksWrong : (q.type === "single_correct" ? -1 : 0);
+    return "+" + mc + " / " + mw;
+  }
+
+  function typeLabel(t) {
+    if (t === "single_correct") return "Single Correct";
+    if (t === "multi_correct") return "One or More Correct";
+    if (t === "numerical") return "Numerical Value";
+    if (t === "matrix_match") return "Matrix Match";
+    return t;
+  }
+
+  function markVisited(idx) {
+    const q = QUESTIONS[idx];
+    if (!q) return;
+    const rec = state.responses[q.id];
+    if (!rec.visited) {
+      rec.visited = true;
+      if (rec.status === "not_visited") rec.status = "not_answered";
+    }
+  }
+
+  function syncDraftFromCurrent() {
+    const q = QUESTIONS[state.currentIndex];
+    if (!q) { draftAnswer = null; return; }
+    draftAnswer = cloneVal(state.responses[q.id].answer);
+  }
+
+  function commitCurrentDraft(mode) {
+    // mode: "save", "save_mark", "mark_only", "passive_switch"
+    if (state.submitted) return;
+    const q = QUESTIONS[state.currentIndex];
+    if (!q) return;
+    const rec = state.responses[q.id];
+    rec.visited = true;
+    const hasDraft = !isEmptyAnswer(q, draftAnswer);
+
+    if (mode === "save") {
+      rec.answer = hasDraft ? cloneVal(draftAnswer) : null;
+      rec.markedForReview = false;
+      rec.status = hasDraft ? "answered" : "not_answered";
+    } else if (mode === "save_mark") {
+      rec.answer = hasDraft ? cloneVal(draftAnswer) : null;
+      rec.markedForReview = true;
+      rec.status = hasDraft ? "answered_marked" : "marked";
+    } else if (mode === "mark_only") {
+      // NTA behavior: Mark for Review & Next saves any selection as answered_marked, else marked
+      rec.answer = hasDraft ? cloneVal(draftAnswer) : null;
+      rec.markedForReview = true;
+      rec.status = hasDraft ? "answered_marked" : "marked";
+    } else if (mode === "passive_switch") {
+      // Preserve saved answer; if nothing saved yet, ensure not_answered
+      if (rec.status === "not_visited") rec.status = "not_answered";
+    }
+  }
+
+  function navigateTo(idx, commitMode) {
+    if (idx < 0 || idx >= QUESTIONS.length) return;
+    if (commitMode) commitCurrentDraft(commitMode);
+    state.currentIndex = idx;
+    markVisited(idx);
+    syncDraftFromCurrent();
+    // If activeSubject filter excludes this question, switch subject tab to match or ALL
+    const q = QUESTIONS[idx];
+    if (state.activeSubject !== "ALL" && (q.subject || "General") !== state.activeSubject) {
+      state.activeSubject = q.subject || "General";
+    }
+    saveState();
+    renderAll();
+    document.getElementById("qScroll").scrollTop = 0;
+  }
+
+  function nextInScope(delta) {
+    const indices = getVisibleIndices();
+    const pos = indices.indexOf(state.currentIndex);
+    if (pos !== -1 && pos + delta >= 0 && pos + delta < indices.length) {
+      return indices[pos + delta];
+    }
+    const fallback = state.currentIndex + delta;
+    if (fallback >= 0 && fallback < QUESTIONS.length) return fallback;
+    return state.currentIndex;
+  }
+
+  function getVisibleIndices() {
+    if (state.activeSubject === "ALL") {
+      return QUESTIONS.map(function (_q, i) { return i; });
+    }
+    const out = [];
+    QUESTIONS.forEach(function (q, i) {
+      if ((q.subject || "General") === state.activeSubject) out.push(i);
+    });
+    return out.length ? out : QUESTIONS.map(function (_q, i) { return i; });
+  }
+
+  /* ---------------- Rendering ---------------- */
+  const IS_JEE_EXAM = /\b(?:jee|nta|iit)\b/i.test((SPEC.examType || "") + " " + (SPEC.title || ""));
+
+  function renderHeader() {
+    document.getElementById("examTitle").textContent =
+      SPEC.title || (IS_JEE_EXAM ? "JEE Timed CBT Exam" : "Timed Mastery Assessment");
+    document.getElementById("examTypeBadge").textContent =
+      SPEC.examType || (IS_JEE_EXAM ? "NTA CBT" : "Syntopik CBT");
+    const maxScore = QUESTIONS.reduce(function (acc, q) { return acc + Number(q.marksCorrect != null ? q.marksCorrect : 4); }, 0);
+    document.getElementById("examMetaLine").textContent =
+      QUESTIONS.length + " Questions · Max " + maxScore + " Marks · " + (SPEC.durationMinutes || 60) + " min";
+    updateTimerUI();
+    document.getElementById("pauseBtn").style.display = state.submitted ? "none" : "";
+    document.getElementById("topSubmitBtn").textContent = state.submitted ? "Summary & JSON" : "Submit Test";
+    document.getElementById("sideSubmitBtn").textContent = state.submitted ? "View Summary & Export JSON" : "Submit Test";
+  }
+
+  function updateTimerUI() {
+    const pill = document.getElementById("timerPill");
+    const txt = document.getElementById("timerText");
+    txt.textContent = formatHMS(state.remainingSec);
+    pill.classList.remove("warn", "danger");
+    if (!state.submitted) {
+      if (state.remainingSec <= 300) pill.classList.add("danger");
+      else if (state.remainingSec <= 900) pill.classList.add("warn");
+    }
+    const q = QUESTIONS[state.currentIndex];
+    if (q) {
+      const qSec = (state.responses[q.id] && state.responses[q.id].timeSpentSec) || 0;
+      const qp = document.getElementById("qTimerPill");
+      qp.textContent = "This Q: " + formatMS(qSec);
+      qp.classList.toggle("slow", qSec > 180);
+    }
+  }
+
+  function renderSectionTabs() {
+    const bar = document.getElementById("sectionBar");
+    bar.innerHTML = '<span class="section-label">Sections</span>';
+
+    function makeTab(id, label, idxs) {
+      const answered = idxs.filter(function (i) {
+        const st = state.responses[QUESTIONS[i].id].status;
+        return st === "answered" || st === "answered_marked";
+      }).length;
+      const btn = document.createElement("button");
+      btn.type = "button";
+      btn.className = "sec-tab" + (state.activeSubject === id ? " active" : "");
+      btn.innerHTML = escHtml(label) + '<span class="sec-count">' + answered + "/" + idxs.length + "</span>";
+      btn.addEventListener("click", function () {
+        commitCurrentDraft("passive_switch");
+        state.activeSubject = id;
+        const vis = getVisibleIndices();
+        if (vis.indexOf(state.currentIndex) === -1 && vis.length > 0) {
+          state.currentIndex = vis[0];
+          markVisited(state.currentIndex);
+          syncDraftFromCurrent();
+        }
+        saveState();
+        renderAll();
+      });
+      return btn;
+    }
+
+    if (SUBJECTS.length > 1) {
+      bar.appendChild(makeTab("ALL", "All Sections", QUESTIONS.map(function (_q, i) { return i; })));
+    }
+    SUBJECTS.forEach(function (subj) {
+      const idxs = [];
+      QUESTIONS.forEach(function (q, i) { if ((q.subject || "General") === subj) idxs.push(i); });
+      bar.appendChild(makeTab(subj, subj, idxs));
+    });
+
+    const revPill = document.createElement("span");
+    revPill.className = "review-mode-pill" + (state.submitted ? " visible" : "");
+    revPill.textContent = "Review Mode — Solutions Unlocked";
+    bar.appendChild(revPill);
+  }
+
+  function renderQuestion() {
+    const q = QUESTIONS[state.currentIndex];
+    if (!q) {
+      document.getElementById("qStem").textContent = "No questions in this exam specification.";
+      return;
+    }
+    const rec = state.responses[q.id];
+    document.getElementById("qNumTitle").textContent = "Question No. " + (state.currentIndex + 1) + " of " + QUESTIONS.length + " (" + q.id + ")";
+    document.getElementById("qTypeBadge").textContent = typeLabel(q.type);
+    document.getElementById("qMarkingBadge").textContent = markingLabel(q);
+    document.getElementById("qChapterBadge").textContent = (q.subject || "General") + (q.chapter ? " · " + q.chapter : "");
+    updateTimerUI();
+
+    document.getElementById("qStem").innerHTML = renderRichText(q.stem || "");
+
+    // Embedded figure
+    const figBox = document.getElementById("qFigureContainer");
+    figBox.innerHTML = "";
+    if (q.figureSvg || q.figureDataUri) {
+      const wrap = document.createElement("div");
+      wrap.className = "q-figure-wrap";
+      if (q.figureSvg) {
+        const holder = document.createElement("div");
+        holder.innerHTML = q.figureSvg;
+        wrap.appendChild(holder);
+      } else if (q.figureDataUri) {
+        const img = document.createElement("img");
+        img.src = q.figureDataUri;
+        img.alt = q.figureCaption || ("Figure for " + q.id);
+        wrap.appendChild(img);
+      }
+      if (q.figureCaption) {
+        const cap = document.createElement("div");
+        cap.className = "q-figure-caption";
+        cap.innerHTML = renderRichText(q.figureCaption);
+        wrap.appendChild(cap);
+      }
+      figBox.appendChild(wrap);
+    }
+
+    // Response area
+    const respArea = document.getElementById("qResponseArea");
+    respArea.innerHTML = "";
+    const disabled = state.submitted;
+    const shownAnswer = disabled ? rec.answer : draftAnswer;
+
+    if (q.type === "single_correct" || q.type === "multi_correct") {
+      const isMulti = q.type === "multi_correct";
+      const hint = document.createElement("div");
+      hint.className = "opt-hint";
+      hint.textContent = isMulti
+        ? "Select ONE OR MORE correct options (partial marking applies if no wrong option is chosen)."
+        : "Select the SINGLE most appropriate option.";
+      respArea.appendChild(hint);
+
+      const list = document.createElement("div");
+      list.className = "options-list";
+      const chosenList = isMulti
+        ? (Array.isArray(shownAnswer) ? shownAnswer : [])
+        : (shownAnswer ? [shownAnswer] : []);
+      const correctSet = new Set(isMulti ? (q.answer || []) : [q.answer]);
+
+      (q.options || []).forEach(function (opt) {
+        const card = document.createElement("div");
+        const isSel = chosenList.indexOf(opt.id) !== -1;
+        card.className = "opt-card" + (isSel ? " selected" : "");
+        if (disabled) {
+          if (correctSet.has(opt.id)) card.classList.add("rev-correct");
+          else if (isSel && !correctSet.has(opt.id)) card.classList.add("rev-wrong");
+        }
+        const ctrl = document.createElement("span");
+        ctrl.className = "opt-control" + (isMulti ? " checkbox" : "");
+        ctrl.textContent = isSel ? "✓" : "";
+        const oid = document.createElement("span");
+        oid.className = "opt-id";
+        oid.textContent = opt.id + ".";
+        const otxt = document.createElement("div");
+        otxt.className = "opt-text";
+        otxt.innerHTML = renderRichText(opt.text || "");
+        card.appendChild(ctrl);
+        card.appendChild(oid);
+        card.appendChild(otxt);
+
+        if (!disabled) {
+          card.addEventListener("click", function () {
+            if (isMulti) {
+              const arr = Array.isArray(draftAnswer) ? draftAnswer.slice() : [];
+              const pos = arr.indexOf(opt.id);
+              if (pos === -1) arr.push(opt.id);
+              else arr.splice(pos, 1);
+              arr.sort();
+              draftAnswer = arr.length ? arr : null;
+            } else {
+              draftAnswer = opt.id;
+            }
+            renderQuestion();
+          });
+        }
+        list.appendChild(card);
+      });
+      respArea.appendChild(list);
+    } else if (q.type === "numerical") {
+      const hint = document.createElement("div");
+      hint.className = "opt-hint";
+      hint.textContent = IS_JEE_EXAM
+        ? "Enter your numerical answer using the keyboard or NTA virtual keypad below."
+        : "Enter your numerical answer using the keyboard or numeric keypad below.";
+      respArea.appendChild(hint);
+
+      const wrap = document.createElement("div");
+      wrap.className = "num-wrap";
+      const inpRow = document.createElement("div");
+      inpRow.className = "num-input-row";
+      const inp = document.createElement("input");
+      inp.type = "text";
+      inp.inputMode = "decimal";
+      inp.className = "num-input";
+      inp.placeholder = "Enter numeric value (e.g. 4.5)";
+      inp.value = shownAnswer != null ? String(shownAnswer) : "";
+      inp.disabled = disabled;
+      inp.addEventListener("input", function () {
+        const cleaned = inp.value.replace(/[^0-9.+\-]/g, "");
+        if (cleaned !== inp.value) inp.value = cleaned;
+        draftAnswer = cleaned.trim() === "" ? null : cleaned;
+        updateUnsavedNotice();
+      });
+      inpRow.appendChild(inp);
+      wrap.appendChild(inpRow);
+
+      if (!disabled) {
+        const kp = document.createElement("div");
+        kp.className = "keypad";
+        const keys = [
+          { lbl: "7", v: "7" }, { lbl: "8", v: "8" }, { lbl: "9", v: "9" },
+          { lbl: "4", v: "4" }, { lbl: "5", v: "5" }, { lbl: "6", v: "6" },
+          { lbl: "1", v: "1" }, { lbl: "2", v: "2" }, { lbl: "3", v: "3" },
+          { lbl: "0", v: "0" }, { lbl: ".", v: "." }, { lbl: "-", v: "-" },
+          { lbl: "Backspace", act: "bk", cls: "action wide" },
+          { lbl: "Clear", act: "clr", cls: "clear-key" }
+        ];
+        keys.forEach(function (k) {
+          const btn = document.createElement("button");
+          btn.type = "button";
+          btn.className = "key-btn" + (k.cls ? " " + k.cls : "");
+          btn.textContent = k.lbl;
+          btn.addEventListener("click", function () {
+            let cur = inp.value || "";
+            if (k.act === "bk") cur = cur.slice(0, -1);
+            else if (k.act === "clr") cur = "";
+            else if (k.v === "-") cur = cur.startsWith("-") ? cur.slice(1) : ("-" + cur);
+            else if (k.v === ".") { if (cur.indexOf(".") === -1) cur += "."; }
+            else cur += k.v;
+            inp.value = cur;
+            draftAnswer = cur.trim() === "" ? null : cur;
+            updateUnsavedNotice();
+          });
+          kp.appendChild(btn);
+        });
+        wrap.appendChild(kp);
+      }
+      respArea.appendChild(wrap);
+    } else if (q.type === "matrix_match") {
+      const lists = document.createElement("div");
+      lists.className = "matrix-lists";
+      const c1 = document.createElement("div");
+      c1.className = "matrix-col-box";
+      c1.innerHTML = "<h4>List I (Rows)</h4>" + (q.rows || []).map(function (r) {
+        return '<div class="matrix-item"><span class="matrix-key">' + escHtml(r.id) + '.</span><span>' + renderRichText(r.text || "") + "</span></div>";
+      }).join("");
+      const c2 = document.createElement("div");
+      c2.className = "matrix-col-box";
+      c2.innerHTML = "<h4>List II (Columns)</h4>" + (q.cols || []).map(function (c) {
+        return '<div class="matrix-item"><span class="matrix-key">' + escHtml(c.id) + '.</span><span>' + renderRichText(c.text || "") + "</span></div>";
+      }).join("");
+      lists.appendChild(c1);
+      lists.appendChild(c2);
+      respArea.appendChild(lists);
+
+      const hint = document.createElement("div");
+      hint.className = "opt-hint";
+      hint.textContent = q.matrixSinglePerRow
+        ? "Select ONE matching column for each row."
+        : "Click cells to toggle matches (each row may match one or more columns).";
+      respArea.appendChild(hint);
+
+      const curMap = (shownAnswer && typeof shownAnswer === "object") ? shownAnswer : {};
+      const expMap = q.answer || {};
+      const tw = document.createElement("div");
+      tw.className = "matrix-table-wrap";
+      const tbl = document.createElement("table");
+      tbl.className = "matrix-grid";
+      const thead = document.createElement("thead");
+      const hr = document.createElement("tr");
+      hr.innerHTML = "<th>Row \\ Col</th>" + (q.cols || []).map(function (c) { return "<th>" + escHtml(c.id) + "</th>"; }).join("") + "<th>Selected</th>";
+      thead.appendChild(hr);
+      tbl.appendChild(thead);
+
+      const tbody = document.createElement("tbody");
+      (q.rows || []).forEach(function (r) {
+        const tr = document.createElement("tr");
+        const rth = document.createElement("th");
+        rth.textContent = r.id;
+        tr.appendChild(rth);
+        const selCols = Array.isArray(curMap[r.id]) ? curMap[r.id] : (curMap[r.id] ? [curMap[r.id]] : []);
+        const expCols = Array.isArray(expMap[r.id]) ? expMap[r.id] : (expMap[r.id] ? [expMap[r.id]] : []);
+
+        (q.cols || []).forEach(function (c) {
+          const td = document.createElement("td");
+          const btn = document.createElement("button");
+          btn.type = "button";
+          const isChk = selCols.indexOf(c.id) !== -1;
+          btn.className = "matrix-cell-btn" + (isChk ? " checked" : "");
+          if (disabled) {
+            const isExp = expCols.indexOf(c.id) !== -1;
+            if (isChk && isExp) btn.classList.add("rev-right");
+            else if (!isChk && isExp) btn.classList.add("rev-miss");
+            else if (isChk && !isExp) btn.classList.add("rev-extra");
+          }
+          btn.textContent = isChk ? "✓" : c.id;
+          btn.disabled = disabled;
+          if (!disabled) {
+            btn.addEventListener("click", function () {
+              const nextMap = (draftAnswer && typeof draftAnswer === "object") ? cloneVal(draftAnswer) : {};
+              const cur = Array.isArray(nextMap[r.id]) ? nextMap[r.id].slice() : [];
+              if (q.matrixSinglePerRow) {
+                nextMap[r.id] = (cur.length === 1 && cur[0] === c.id) ? [] : [c.id];
+              } else {
+                const pos = cur.indexOf(c.id);
+                if (pos === -1) cur.push(c.id);
+                else cur.splice(pos, 1);
+                cur.sort();
+                nextMap[r.id] = cur;
+              }
+              if (nextMap[r.id].length === 0) delete nextMap[r.id];
+              draftAnswer = Object.keys(nextMap).length ? nextMap : null;
+              renderQuestion();
+            });
+          }
+          td.appendChild(btn);
+          tr.appendChild(td);
+        });
+
+        const sumTd = document.createElement("td");
+        sumTd.style.fontFamily = '"SF Mono", ui-monospace, Menlo, monospace';
+        sumTd.style.fontSize = "12px";
+        sumTd.textContent = selCols.length ? selCols.join(", ") : "—";
+        tr.appendChild(sumTd);
+        tbody.appendChild(tr);
+      });
+      tbl.appendChild(tbody);
+      tw.appendChild(tbl);
+      respArea.appendChild(tw);
+    }
+
+    // Review Solution Panel (only post-submit)
+    const revBox = document.getElementById("qReviewContainer");
+    revBox.innerHTML = "";
+    if (state.submitted) {
+      const sc = scoreQuestionLocal(q, rec.answer);
+      const box = document.createElement("div");
+      box.className = "review-box verdict-" + sc.status;
+      const correctDisplay = q.type === "numerical" && Array.isArray(q.range)
+        ? (q.range[0] + " to " + q.range[1])
+        : formatAnswerDisplay(q, q.answer);
+      const marksText = (sc.marks > 0 ? "+" : "") + sc.marks + " / " + sc.maxMarks;
+      let html =
+        '<div class="review-head">' +
+          '<span class="verdict-pill ' + sc.status + '">' + escHtml(sc.status) + " (" + escHtml(marksText) + ")</span>" +
+          '<span class="badge">Time Spent: ' + formatMS(rec.timeSpentSec) + "</span>" +
+          (q.propId ? '<span class="badge">KG: ' + escHtml(q.propId) + "</span>" : "") +
+        "</div>" +
+        '<div class="review-ans-line"><strong>Your Answer:</strong> ' + escHtml(formatAnswerDisplay(q, rec.answer)) +
+        ' &nbsp;|&nbsp; <strong>Official Answer:</strong> ' + escHtml(correctDisplay) + "</div>";
+      if (q.solution) {
+        html += '<div class="review-solution"><strong>Solution:</strong><br>' + renderRichText(q.solution) + "</div>";
+      }
+      if (q.trapNote) {
+        html += '<div class="trap-callout"><strong>Exam Trap' +
+          (q.trapCategory ? " (" + escHtml(q.trapCategory) + ")" : "") +
+          ":</strong> " + renderRichText(q.trapNote) + "</div>";
+      }
+      box.innerHTML = html;
+      revBox.appendChild(box);
+    }
+
+    // Footer buttons state
+    document.getElementById("prevBtn").disabled = state.currentIndex <= 0;
+    document.getElementById("markNextBtn").disabled = disabled;
+    document.getElementById("saveMarkBtn").disabled = disabled;
+    document.getElementById("clearBtn").disabled = disabled;
+    document.getElementById("saveNextBtn").textContent = disabled
+      ? (state.currentIndex >= QUESTIONS.length - 1 ? "Last Question" : "Next →")
+      : (state.currentIndex >= QUESTIONS.length - 1 ? "Save Response" : "Save & Next →");
+    document.getElementById("saveNextBtn").disabled = disabled && state.currentIndex >= QUESTIONS.length - 1;
+    updateUnsavedNotice();
+  }
+
+  function renderPalette() {
+    const counts = { answered: 0, not_answered: 0, not_visited: 0, marked: 0, answered_marked: 0 };
+    QUESTIONS.forEach(function (q) {
+      const st = state.responses[q.id].status || "not_visited";
+      if (Object.prototype.hasOwnProperty.call(counts, st)) counts[st]++;
+      else counts.not_visited++;
+    });
+
+    document.getElementById("cntAnswered").textContent = counts.answered;
+    document.getElementById("cntNotAnswered").textContent = counts.not_answered;
+    document.getElementById("cntNotVisited").textContent = counts.not_visited;
+    document.getElementById("cntMarked").textContent = counts.marked;
+    document.getElementById("cntAnsMarked").textContent = counts.answered_marked;
+
+    const evalCount = counts.answered + counts.answered_marked;
+    document.getElementById("progressLabel").textContent = "Answered " + evalCount + " / " + QUESTIONS.length;
+    document.getElementById("progressFill").style.width = (QUESTIONS.length ? (evalCount / QUESTIONS.length) * 100 : 0) + "%";
+
+    const vis = getVisibleIndices();
+    document.getElementById("paletteSectionTitle").textContent =
+      state.activeSubject === "ALL" ? "All Sections — Palette" : (state.activeSubject + " — Palette");
+    document.getElementById("paletteSectionCount").textContent = vis.length + " Qs";
+
+    const grid = document.getElementById("paletteGrid");
+    grid.innerHTML = "";
+    vis.forEach(function (idx) {
+      const q = QUESTIONS[idx];
+      const rec = state.responses[q.id];
+      const btn = document.createElement("button");
+      btn.type = "button";
+      btn.className = "pal-btn st-" + (rec.status || "not_visited") + (idx === state.currentIndex ? " current" : "");
+      if (state.submitted) {
+        const sc = scoreQuestionLocal(q, rec.answer);
+        btn.classList.add("rev-tag");
+        btn.setAttribute("data-rev", sc.status === "correct" ? "✓" : sc.status === "partial" ? "½" : sc.status === "wrong" ? "✗" : "·");
+      }
+      btn.textContent = String(idx + 1);
+      btn.title = q.id + " (" + (q.subject || "General") + ") · " + formatMS(rec.timeSpentSec);
+      btn.addEventListener("click", function () {
+        navigateTo(idx, "passive_switch");
+      });
+      grid.appendChild(btn);
+    });
+  }
+
+  function renderAll() {
+    renderHeader();
+    renderSectionTabs();
+    renderQuestion();
+    renderPalette();
+  }
+
+  /* ---------------- Attempt Payload & Submission ---------------- */
+  function buildAttemptPayload() {
+    const cleanResponses = {};
+    QUESTIONS.forEach(function (q) {
+      const r = state.responses[q.id];
+      cleanResponses[q.id] = {
+        answer: cloneVal(r.answer),
+        status: r.status,
+        timeSpentSec: Math.round(Number(r.timeSpentSec || 0)),
+        markedForReview: !!r.markedForReview,
+        visited: !!r.visited
+      };
+    });
+    return {
+      schemaVersion: 1,
+      examSlug: SPEC.examSlug || "exam",
+      examTitle: SPEC.title || "Exam",
+      examType: SPEC.examType || (IS_JEE_EXAM ? "JEE Advanced" : "Timed Mastery"),
+      durationMinutes: Number(SPEC.durationMinutes || 60),
+      startedAt: state.startedAt,
+      submittedAt: state.submittedAt || new Date().toISOString(),
+      timeSpentSec: Math.round(Number(state.totalElapsedSec || 0)),
+      responses: cleanResponses
+    };
+  }
+
+  function computeLocalSummary() {
+    let score = 0, maxScore = 0, correct = 0, partial = 0, wrong = 0, unatt = 0, negLost = 0;
+    const bySubj = {};
+    const slow = [];
+    QUESTIONS.forEach(function (q) {
+      const rec = state.responses[q.id];
+      const sc = scoreQuestionLocal(q, rec.answer);
+      const subj = q.subject || "General";
+      if (!bySubj[subj]) {
+        bySubj[subj] = { score: 0, maxScore: 0, correct: 0, partial: 0, wrong: 0, unatt: 0, timeSec: 0 };
+      }
+      score += sc.marks;
+      maxScore += sc.maxMarks;
+      negLost += sc.negativeLost;
+      bySubj[subj].score += sc.marks;
+      bySubj[subj].maxScore += sc.maxMarks;
+      bySubj[subj].timeSec += rec.timeSpentSec || 0;
+      if (sc.status === "correct") { correct++; bySubj[subj].correct++; }
+      else if (sc.status === "partial") { partial++; bySubj[subj].partial++; }
+      else if (sc.status === "wrong") { wrong++; bySubj[subj].wrong++; }
+      else { unatt++; bySubj[subj].unatt++; }
+      if ((rec.timeSpentSec || 0) > 180) slow.push(q.id);
+    });
+    const attempted = correct + partial + wrong;
+    return {
+      score: Math.round(score * 100) / 100,
+      maxScore: Math.round(maxScore * 100) / 100,
+      pct: maxScore > 0 ? Math.round((score / maxScore) * 10000) / 100 : 0,
+      accuracy: attempted > 0 ? Math.round((correct / attempted) * 10000) / 100 : 0,
+      correct: correct, partial: partial, wrong: wrong, unatt: unatt, attempted: attempted,
+      negLost: Math.round(negLost * 100) / 100,
+      slow: slow,
+      bySubj: bySubj
+    };
+  }
+
+  function openModal(id) { document.getElementById(id).classList.add("open"); }
+  function closeModal(id) { document.getElementById(id).classList.remove("open"); }
+
+  function hasUnsavedDraftChange() {
+    if (state.submitted) return false;
+    const q = QUESTIONS[state.currentIndex];
+    if (!q) return false;
+    return JSON.stringify(draftAnswer) !== JSON.stringify(state.responses[q.id].answer);
+  }
+
+  function updateUnsavedNotice() {
+    const el = document.getElementById("autosaveNote");
+    if (!el || state.submitted) return;
+    if (hasUnsavedDraftChange()) {
+      el.textContent = "Unsaved selection — click Save & Next to record";
+      el.style.color = "var(--amber)";
+    } else {
+      el.style.color = "";
+    }
+  }
+
+  function openConfirmSubmit() {
+    if (state.submitted) {
+      openSummaryModal();
+      return;
+    }
+    if (hasUnsavedDraftChange()) {
+      const q = QUESTIONS[state.currentIndex];
+      const wasMarked = !!(q && state.responses[q.id] && state.responses[q.id].markedForReview);
+      commitCurrentDraft(wasMarked ? "save_mark" : "save");
+      saveState();
+      renderAll();
+    }
+
+    const rows = SUBJECTS.map(function (subj) {
+      let tot = 0, ans = 0, unans = 0, mrk = 0, nv = 0;
+      QUESTIONS.forEach(function (q) {
+        if ((q.subject || "General") !== subj) return;
+        tot++;
+        const st = state.responses[q.id].status;
+        if (st === "answered" || st === "answered_marked") ans++;
+        else if (st === "marked") mrk++;
+        else if (st === "not_answered") unans++;
+        else nv++;
+      });
+      return "<tr><td><strong>" + escHtml(subj) + "</strong></td><td>" + tot + "</td><td>" + ans + "</td><td>" + unans + "</td><td>" + mrk + "</td><td>" + nv + "</td></tr>";
+    }).join("");
+
+    document.getElementById("confirmModalBody").innerHTML =
+      "<p>Are you sure you want to submit this test? Once submitted, responses are locked and solutions will unlock for review.</p>" +
+      '<table class="summary-table"><thead><tr><th>Section</th><th>Total</th><th>Evaluated (Ans + Ans&amp;Mark)</th><th>Not Answered</th><th>Marked Only</th><th>Not Visited</th></tr></thead><tbody>' +
+      rows + "</tbody></table>" +
+      '<p style="margin-top:12px;color:var(--muted);font-size:12.5px;">Time remaining: <strong>' + formatHMS(state.remainingSec) + "</strong></p>";
+    openModal("confirmModal");
+  }
+
+  function finalizeSubmit(autoReason) {
+    if (hasUnsavedDraftChange()) {
+      const q = QUESTIONS[state.currentIndex];
+      const wasMarked = !!(q && state.responses[q.id] && state.responses[q.id].markedForReview);
+      commitCurrentDraft(wasMarked ? "save_mark" : "save");
+    }
+    state.submitted = true;
+    state.reviewMode = true;
+    state.paused = false;
+    state.submittedAt = new Date().toISOString();
+    document.getElementById("pauseOverlay").classList.remove("visible");
+    closeModal("confirmModal");
+    saveState();
+    renderAll();
+    openSummaryModal(autoReason);
+  }
+
+  function openSummaryModal(autoReason) {
+    const s = computeLocalSummary();
+    const subjRows = Object.keys(s.bySubj).map(function (subj) {
+      const b = s.bySubj[subj];
+      const spct = b.maxScore > 0 ? Math.round((b.score / b.maxScore) * 1000) / 10 : 0;
+      return "<tr><td><strong>" + escHtml(subj) + "</strong></td>" +
+        "<td>" + (Math.round(b.score * 100) / 100) + " / " + b.maxScore + " (" + spct + "%)</td>" +
+        "<td>" + b.correct + "</td><td>" + b.partial + "</td><td>" + b.wrong + "</td><td>" + b.unatt + "</td>" +
+        "<td>" + formatMS(b.timeSec) + "</td></tr>";
+    }).join("");
+
+    const slug = SPEC.examSlug || "exam";
+    const cliCmd = ".venv/bin/python scripts/exam_runner.py grade <spec.json> " + slug + "-attempt.json";
+    document.getElementById("summaryModalBody").innerHTML =
+      (autoReason ? '<p style="color:var(--red);font-weight:700;">' + escHtml(autoReason) + "</p>" : "") +
+      '<div class="kpi-grid">' +
+        '<div class="kpi-card"><div class="k-lbl">Score</div><div class="k-val">' + s.score + " / " + s.maxScore + "</div></div>" +
+        '<div class="kpi-card"><div class="k-lbl">Percentage</div><div class="k-val">' + s.pct + "%</div></div>" +
+        '<div class="kpi-card"><div class="k-lbl">Accuracy</div><div class="k-val">' + s.accuracy + "%</div></div>" +
+        '<div class="kpi-card"><div class="k-lbl">Attempted</div><div class="k-val">' + s.attempted + " / " + QUESTIONS.length + "</div></div>" +
+        '<div class="kpi-card"><div class="k-lbl">Neg Marks Lost</div><div class="k-val" style="color:' + (s.negLost > 0 ? "var(--red)" : "var(--green)") + '">' + (s.negLost > 0 ? ("-" + s.negLost) : "0") + "</div></div>" +
+        '<div class="kpi-card"><div class="k-lbl">Time Spent</div><div class="k-val">' + formatHMS(state.totalElapsedSec) + "</div></div>" +
+      "</div>" +
+      '<table class="summary-table"><thead><tr><th>Subject</th><th>Score</th><th>Correct</th><th>Partial</th><th>Wrong</th><th>Skipped</th><th>Time</th></tr></thead><tbody>' +
+      subjRows + "</tbody></table>" +
+      (s.slow.length ? '<p style="margin-top:12px;color:var(--amber);font-weight:650;">Slow Questions (&gt;3 min): ' + escHtml(s.slow.join(", ")) + "</p>" : "") +
+      '<p style="margin-top:12px;font-size:12.5px;color:var(--muted);">Download <code>' + escHtml(slug) + '-attempt.json</code> and grade it into your Knowledge Graph &amp; Mistake Log via:<br><code>' + escHtml(cliCmd) + "</code></p>";
+    openModal("summaryModal");
+  }
+
+  function downloadAttemptJson() {
+    const payload = buildAttemptPayload();
+    const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = (SPEC.examSlug || "exam") + "-attempt.json";
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(function () { URL.revokeObjectURL(url); }, 1000);
+    showToast("Downloaded " + a.download);
+  }
+
+  function copyAttemptJson() {
+    const text = JSON.stringify(buildAttemptPayload(), null, 2);
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(text).then(function () {
+        showToast("Attempt JSON copied to clipboard");
+      }).catch(function () {
+        fallbackCopy(text);
+      });
+    } else {
+      fallbackCopy(text);
+    }
+  }
+
+  function fallbackCopy(text) {
+    const ta = document.createElement("textarea");
+    ta.value = text;
+    ta.style.position = "fixed";
+    ta.style.opacity = "0";
+    document.body.appendChild(ta);
+    ta.select();
+    try { document.execCommand("copy"); showToast("Attempt JSON copied to clipboard"); }
+    catch (_e) { showToast("Use Download Attempt JSON instead"); }
+    ta.remove();
+  }
+
+  function openQuestionPaperModal() {
+    const html = QUESTIONS.map(function (q, idx) {
+      return '<div class="qp-card">' +
+        '<div class="qp-card-head">' +
+          "<strong>Q" + (idx + 1) + " (" + escHtml(q.id) + ") · " + escHtml(q.subject || "General") + " · " + escHtml(typeLabel(q.type)) + " [" + escHtml(markingLabel(q)) + "]</strong>" +
+          '<button type="button" class="act-btn qp-jump" data-idx="' + idx + '">Jump to Q' + (idx + 1) + "</button>" +
+        "</div>" +
+        "<div>" + renderRichText(q.stem || "") + "</div>" +
+      "</div>";
+    }).join("");
+    const body = document.getElementById("qpModalBody");
+    body.innerHTML = html;
+    body.querySelectorAll(".qp-jump").forEach(function (btn) {
+      btn.addEventListener("click", function () {
+        const i = Number(btn.getAttribute("data-idx"));
+        closeModal("qpModal");
+        navigateTo(i, "passive_switch");
+      });
+    });
+    openModal("qpModal");
+  }
+
+  function openInstructionsModal() {
+    const custom = Array.isArray(SPEC.instructions) && SPEC.instructions.length
+      ? "<ul>" + SPEC.instructions.map(function (line) { return "<li>" + renderRichText(line) + "</li>"; }).join("") + "</ul>"
+      : "";
+    if (IS_JEE_EXAM) {
+      document.getElementById("instrModalBody").innerHTML =
+        custom +
+        "<h4>Official NTA JEE CBT Palette &amp; Evaluation Rules</h4>" +
+        "<ul>" +
+          "<li><strong>Answered (Green):</strong> Response saved and will be evaluated.</li>" +
+          "<li><strong>Answered &amp; Marked for Review (Purple + Green ✓):</strong> Response saved and <strong>WILL BE CONSIDERED FOR EVALUATION</strong> in JEE Main &amp; JEE Advanced.</li>" +
+          "<li><strong>Marked for Review (Purple):</strong> No response saved; not evaluated.</li>" +
+          "<li><strong>Not Answered (Red):</strong> Visited without saving a response.</li>" +
+          "<li><strong>Not Visited (Neutral):</strong> Not yet opened.</li>" +
+        "</ul>" +
+        "<h4>JEE Advanced Multi-Correct Partial Marking</h4>" +
+        "<ul>" +
+          "<li><strong>+4</strong> if ALL correct options are chosen and ZERO incorrect options are chosen.</li>" +
+          "<li><strong>+3</strong> if all 4 options are correct, 3 chosen, and 0 wrong.</li>" +
+          "<li><strong>+2</strong> if &ge;3 options are correct, 2 chosen, and 0 wrong.</li>" +
+          "<li><strong>+1</strong> if &ge;2 options are correct, 1 chosen, and 0 wrong.</li>" +
+          "<li><strong>0</strong> if unattempted; <strong>-2</strong> if ANY incorrect option is chosen.</li>" +
+        "</ul>" +
+        "<h4>Official NTA / IIT JEE CBT Rules (2024–2026)</h4>" +
+        "<ul>" +
+          "<li><strong>No Calculator Policy:</strong> Neither JEE Main nor JEE Advanced (2024–2026) provides a calculator. Use only the on-screen virtual numeric keypad or your keyboard for Numerical questions.</li>" +
+          "<li><strong>Save Explicitly:</strong> Clicking a question number in the palette does <em>not</em> save an unsubmitted edit — use <strong>Save &amp; Next</strong> or <strong>Save &amp; Mark for Review</strong>.</li>" +
+          "<li><strong>Timer Alerts:</strong> Countdown turns amber under 15 minutes, red under 5 minutes, and auto-submits at <code>00:00:00</code>. Progress auto-saves locally in this browser.</li>" +
+        "</ul>";
+    } else {
+      document.getElementById("instrModalBody").innerHTML =
+        custom +
+        "<h4>Question Palette &amp; Evaluation Rules</h4>" +
+        "<ul>" +
+          "<li><strong>Answered (Green):</strong> Response saved and will be graded.</li>" +
+          "<li><strong>Answered &amp; Marked for Review (Purple + Green ✓):</strong> Response saved and <strong>WILL BE GRADED</strong> alongside Answered items.</li>" +
+          "<li><strong>Marked for Review (Purple):</strong> Flagged without a saved response; not graded.</li>" +
+          "<li><strong>Not Answered (Red):</strong> Visited without saving a response.</li>" +
+          "<li><strong>Not Visited (Neutral):</strong> Not yet opened.</li>" +
+        "</ul>" +
+        "<h4>Scoring &amp; Partial Credit</h4>" +
+        "<ul>" +
+          "<li>Check the marking badge at the top of each question (e.g. <code>+4 / -1</code>, <code>+4 / partial / -2</code>, or custom rubric weights).</li>" +
+          "<li>For multi-correct items with partial marking enabled, selecting a valid subset with zero wrong choices awards partial credit; any wrong choice applies the negative penalty shown.</li>" +
+        "</ul>" +
+        "<h4>Timed Assessment Controls</h4>" +
+        "<ul>" +
+          "<li><strong>Numerical Input:</strong> Enter numeric values with your keyboard or the on-screen numeric keypad.</li>" +
+          "<li><strong>Save Explicitly:</strong> Clicking a question number in the palette does <em>not</em> save an unsubmitted edit — use <strong>Save &amp; Next</strong> or <strong>Save &amp; Mark for Review</strong>.</li>" +
+          "<li><strong>Timer &amp; Auto-Save:</strong> Countdown turns amber under 15 minutes, red under 5 minutes, and auto-submits at <code>00:00:00</code>. Progress auto-saves offline in this browser.</li>" +
+        "</ul>";
+    }
+    openModal("instrModal");
+  }
+
+  /* ---------------- Theme & Event Wiring ---------------- */
+  function applyTheme(t) {
+    document.documentElement.setAttribute("data-theme", t);
+    document.getElementById("themeBtn").textContent = t === "dark" ? "Light" : "Dark";
+    try { localStorage.setItem(THEME_KEY, t); } catch (_e) {}
+  }
+
+  try {
+    const savedTheme = localStorage.getItem(THEME_KEY);
+    applyTheme(savedTheme === "dark" ? "dark" : "light");
+  } catch (_e) {
+    applyTheme("light");
+  }
+
+  document.getElementById("themeBtn").addEventListener("click", function () {
+    const cur = document.documentElement.getAttribute("data-theme");
+    applyTheme(cur === "dark" ? "light" : "dark");
+  });
+
+  document.getElementById("saveNextBtn").addEventListener("click", function () {
+    if (state.submitted) {
+      if (state.currentIndex < QUESTIONS.length - 1) navigateTo(state.currentIndex + 1, null);
+      return;
+    }
+    commitCurrentDraft("save");
+    const nxt = nextInScope(1);
+    if (nxt !== state.currentIndex) navigateTo(nxt, null);
+    else { saveState(); renderAll(); showToast("Response saved"); }
+  });
+
+  document.getElementById("saveMarkBtn").addEventListener("click", function () {
+    commitCurrentDraft("save_mark");
+    const nxt = nextInScope(1);
+    if (nxt !== state.currentIndex) navigateTo(nxt, null);
+    else { saveState(); renderAll(); showToast("Saved & marked for review"); }
+  });
+
+  document.getElementById("markNextBtn").addEventListener("click", function () {
+    commitCurrentDraft("mark_only");
+    const nxt = nextInScope(1);
+    if (nxt !== state.currentIndex) navigateTo(nxt, null);
+    else { saveState(); renderAll(); showToast("Marked for review"); }
+  });
+
+  document.getElementById("clearBtn").addEventListener("click", function () {
+    if (state.submitted) return;
+    const q = QUESTIONS[state.currentIndex];
+    draftAnswer = null;
+    const rec = state.responses[q.id];
+    rec.answer = null;
+    rec.markedForReview = false;
+    rec.status = "not_answered";
+    saveState();
+    renderAll();
+    showToast("Response cleared");
+  });
+
+  document.getElementById("prevBtn").addEventListener("click", function () {
+    const prev = nextInScope(-1);
+    if (prev !== state.currentIndex) navigateTo(prev, "passive_switch");
+  });
+
+  document.getElementById("pauseBtn").addEventListener("click", function () {
+    if (state.submitted) return;
+    state.paused = !state.paused;
+    document.getElementById("pauseBtn").textContent = state.paused ? "Resume" : "Pause";
+    document.getElementById("pauseOverlay").classList.toggle("visible", state.paused);
+  });
+
+  document.getElementById("resumeOverlayBtn").addEventListener("click", function () {
+    state.paused = false;
+    document.getElementById("pauseBtn").textContent = "Pause";
+    document.getElementById("pauseOverlay").classList.remove("visible");
+  });
+
+  document.getElementById("qpBtn").addEventListener("click", openQuestionPaperModal);
+  document.getElementById("instrBtn").addEventListener("click", openInstructionsModal);
+  document.getElementById("topSubmitBtn").addEventListener("click", openConfirmSubmit);
+  document.getElementById("sideSubmitBtn").addEventListener("click", openConfirmSubmit);
+  document.getElementById("confirmSubmitBtn").addEventListener("click", function () { finalizeSubmit(null); });
+  document.getElementById("downloadJsonBtn").addEventListener("click", downloadAttemptJson);
+  document.getElementById("copyJsonBtn").addEventListener("click", copyAttemptJson);
+  document.getElementById("reviewSolBtn").addEventListener("click", function () {
+    closeModal("summaryModal");
+    renderAll();
+  });
+
+  document.getElementById("resetBtn").addEventListener("click", function () {
+    if (!window.confirm("Reset this exam attempt and clear all saved responses and timers?")) return;
+    try { localStorage.removeItem(STORAGE_KEY); } catch (_e) {}
+    state = freshState();
+    markVisited(0);
+    syncDraftFromCurrent();
+    saveState();
+    renderAll();
+    showToast("Attempt reset");
+  });
+
+  document.querySelectorAll("[data-close]").forEach(function (btn) {
+    btn.addEventListener("click", function () { closeModal(btn.getAttribute("data-close")); });
+  });
+
+  document.querySelectorAll(".modal-backdrop").forEach(function (bd) {
+    bd.addEventListener("click", function (ev) {
+      if (ev.target === bd) bd.classList.remove("open");
+    });
+  });
+
+  /* ---------------- 1-Second Live Countdown + Per-Question Timer ---------------- */
+  let tickCount = 0;
+  setInterval(function () {
+    if (state.submitted || state.paused || QUESTIONS.length === 0) return;
+    const q = QUESTIONS[state.currentIndex];
+    if (q && state.responses[q.id]) {
+      state.responses[q.id].timeSpentSec = (state.responses[q.id].timeSpentSec || 0) + 1;
+    }
+    state.totalElapsedSec = (state.totalElapsedSec || 0) + 1;
+    state.remainingSec = Math.max(0, (state.remainingSec || 0) - 1);
+    updateTimerUI();
+    tickCount++;
+    if (tickCount % 5 === 0) saveState();
+    if (state.remainingSec <= 0) {
+      finalizeSubmit("Time expired — your exam was auto-submitted.");
+    }
+  }, 1000);
+
+  // Initial load
+  if (QUESTIONS.length > 0) {
+    markVisited(state.currentIndex);
+    syncDraftFromCurrent();
+    saveState();
+  }
+  renderAll();
+})();
+</script>
+</body>
+</html>

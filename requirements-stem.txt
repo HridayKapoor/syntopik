@@ -1,0 +1,62 @@
+# Syntopik — Optional Full STEM Verification & Media Suite
+#
+# Core Syntopik (setup_harness.py, study_doctor.py --core-only, chapter_tracker.py,
+# code_verify.py, research_scout.py, mistake_analytics.py, backup_harness.py,
+# sync-graph.mjs, tri-protocol hooks, dashboard.html, and Syntopik Studio MCP App)
+# runs on pure Python 3.12+ standard library + Node.js 20+ with ZERO pip packages.
+#
+# Install this optional suite for full PDF/OCR triage, SymPy/Pint CAS math,
+# RDKit/ChemPy chemistry, Schemdraw/Matplotlib physics diagrams, NetworkX graph
+# analytics, Manim animations, FSRS-6/Anki export, and neural audio narration:
+#
+#   uv venv --python 3.12 .venv
+#   uv pip install -r requirements-stem.txt
+#   uv pip install --no-deps chempy
+#
+# Or with standard pip:
+#   python3 -m venv .venv
+#   .venv/bin/pip install -r requirements-stem.txt
+#   .venv/bin/pip install --no-deps chempy
+#
+# IMPORTANT DEPENDENCY RULES (DO NOT IGNORE):
+# 1. Install `chempy` separately with `--no-deps` so it does NOT pull `pyodesys`
+#    and ~70 Jupyter/IPython packages. Its runtime dependencies (`quantities`,
+#    `sympy`, `scipy`, `numpy`) are already listed below.
+# 2. NEVER install `mendeleev`: it pins `pint<0.25.0`, conflicts with modern
+#    `pint`, and pulls `pandas` + `SQLAlchemy`. Syntopik uses `molmass` cleanly.
+# 3. NEVER install `manim-voiceover` or `manim-physics`: Syntopik uses
+#    `scripts/narrate_video.py` (`edge-tts` + `srt` + `ffmpeg`).
+
+# --- PDF Triage, Tables, OCR & Image Annotation ---
+pymupdf
+pymupdf4llm
+pdfplumber
+rapidocr-onnxruntime
+pillow
+
+# --- Symbolic Math, Physics, Units, Uncertainty & Plotting ---
+sympy
+scipy
+numpy
+pint
+uncertainties
+lark
+latex2sympy2-extended
+schemdraw
+matplotlib
+
+# --- Knowledge Hypergraph Analytics ---
+networkx
+
+# --- Organic & Physical Chemistry (2D/3D, Offline IUPAC, Periodic Table) ---
+rdkit
+py2opsin
+quantities
+molmass
+
+# --- Animations, Neural Narration & Spaced Repetition (FSRS-6 / Anki) ---
+manim
+edge-tts
+srt
+fsrs
+genanki

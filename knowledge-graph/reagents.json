@@ -1,0 +1,1907 @@
+{
+  "schemaVersion": 1,
+  "functionalGroups": [
+    "aldehyde",
+    "ketone",
+    "ester",
+    "carboxylic_acid",
+    "acid_chloride",
+    "amide",
+    "nitrile",
+    "alkene",
+    "alkyne",
+    "epoxide",
+    "nitro",
+    "alkyl_halide",
+    "alcohol"
+  ],
+  "reagents": [
+    {
+      "id": "nabh4",
+      "name": "Sodium Borohydride",
+      "formula": "NaBH4",
+      "aliases": [
+        "NaBH4",
+        "sodium borohydride",
+        "borohydride",
+        "NaBH4/MeOH",
+        "NaBH4/EtOH",
+        "SBH"
+      ],
+      "category": "reduction",
+      "reactivity": {
+        "aldehyde": "1° alcohol",
+        "ketone": "2° alcohol",
+        "ester": "no_reaction",
+        "carboxylic_acid": "no_reaction",
+        "acid_chloride": "1° alcohol",
+        "amide": "no_reaction",
+        "nitrile": "no_reaction",
+        "alkene": "no_reaction",
+        "alkyne": "no_reaction",
+        "epoxide": "no_reaction",
+        "nitro": "no_reaction",
+        "alkyl_halide": "no_reaction",
+        "alcohol": "no_reaction"
+      },
+      "stereochemistry": "none",
+      "stereochemistryDetail": "Hydride attacks prochiral ketones from both faces to give a racemic 2° alcohol unless a nearby chiral center biases face selectivity (Cram/Felkin-Anh).",
+      "rearrangementRisk": "none",
+      "rearrangementNote": "Nucleophilic hydride transfer proceeds directly to the carbonyl carbon with zero carbocation formation.",
+      "conditions": "MeOH or EtOH, 0–25 °C; mild aqueous workup",
+      "mechanismClass": "Mild nucleophilic hydride transfer",
+      "jeeTraps": [
+        "Leaves esters, carboxylic acids, amides, nitriles, epoxides, nitro groups, and isolated C=C bonds completely untouched (unlike LiAlH4).",
+        "DOES reduce acid chlorides (RCOCl -> RCH2OH) and imines/iminium ions (reductive amination) even though esters do not react.",
+        "With α,β-unsaturated ketones, NaBH4 can give 1,2- and 1,4-reduction mixtures unless CeCl3 (Luche reagent) is added for selective 1,2-reduction to the allylic alcohol."
+      ],
+      "example": {
+        "label": "Chemoselective ketone reduction in presence of an ester",
+        "reactantSmiles": "COC(=O)CC(=O)C",
+        "productSmiles": "COC(=O)CC(O)C",
+        "reactantName": "Methyl 3-oxobutanoate",
+        "productName": "Methyl 3-hydroxybutanoate"
+      }
+    },
+    {
+      "id": "lialh4",
+      "name": "Lithium Aluminium Hydride",
+      "formula": "LiAlH4",
+      "aliases": [
+        "LiAlH4",
+        "LAH",
+        "lithium aluminium hydride",
+        "lithium aluminum hydride",
+        "LiAlH4/ether",
+        "LiAlH4/THF"
+      ],
+      "category": "reduction",
+      "reactivity": {
+        "aldehyde": "1° alcohol",
+        "ketone": "2° alcohol",
+        "ester": "1° alcohol (acyl) + alcohol (alkoxy)",
+        "carboxylic_acid": "1° alcohol",
+        "acid_chloride": "1° alcohol",
+        "amide": "amine (C=O -> CH2, C–N bond retained)",
+        "nitrile": "1° amine (RCH2NH2)",
+        "alkene": "no_reaction",
+        "alkyne": "no_reaction",
+        "epoxide": "alcohol (SN2 attack at less hindered carbon)",
+        "nitro": "aliphatic R-NO2 -> 1° amine (R-NH2); aromatic Ar-NO2 -> azobenzene (Ar-N=N-Ar)",
+        "alkyl_halide": "1°/2° R-X -> alkane (SN2); 3° R-X -> alkene (E2)",
+        "alcohol": "acid-base quench (evolves H2; recovers alcohol on H3O+ workup)"
+      },
+      "stereochemistry": "inversion",
+      "stereochemistryDetail": "SN2 backside hydride attack gives Walden inversion on epoxides (at the less substituted C) and 1°/2° alkyl halides; prochiral carbonyls give racemic alcohols.",
+      "rearrangementRisk": "none",
+      "rearrangementNote": "Strong nucleophilic hydride transfer / SN2 displacement involves no carbocation intermediate.",
+      "conditions": "Anhydrous Et2O or THF, 0 °C to reflux, then careful H3O+ workup",
+      "mechanismClass": "Powerful nucleophilic hydride transfer",
+      "jeeTraps": [
+        "Classic JEE Advanced trap: LiAlH4 reduces aliphatic R-NO2 to R-NH2, but reduces aromatic nitrobenzene (Ph-NO2) to AZOBENZENE (Ph-N=N-Ph), NOT aniline!",
+        "Reduces amides to amines (C=O -> CH2 without C–N cleavage), whereas esters cleave into two alcohols.",
+        "Leaves isolated C=C and C≡C untouched, EXCEPT conjugated cinnamaldehyde (Ph-CH=CH-CHO) which reduces fully to 3-phenylpropan-1-ol (Ph-CH2-CH2-CH2OH)!"
+      ],
+      "example": {
+        "label": "Exhaustive reduction of both ketone and ester",
+        "reactantSmiles": "COC(=O)CC(=O)C",
+        "productSmiles": "CC(O)CCO",
+        "reactantName": "Methyl 3-oxobutanoate",
+        "productName": "Butane-1,3-diol (+ MeOH)"
+      }
+    },
+    {
+      "id": "dibal_h",
+      "name": "Diisobutylaluminium Hydride (-78 °C)",
+      "formula": "DIBAL-H (-78°C)",
+      "aliases": [
+        "DIBAL-H",
+        "DIBAL",
+        "DIBAH",
+        "i-Bu2AlH",
+        "(i-Bu)2AlH",
+        "diisobutylaluminium hydride",
+        "diisobutylaluminum hydride"
+      ],
+      "category": "reduction",
+      "reactivity": {
+        "aldehyde": "1° alcohol",
+        "ketone": "2° alcohol",
+        "ester": "aldehyde (1 equiv at -78 °C; stops at stable Al-hemiacetal)",
+        "carboxylic_acid": "1° alcohol (requires excess reagent)",
+        "acid_chloride": "aldehyde (1 equiv at -78 °C)",
+        "amide": "aldehyde (3°/Weinreb amides at -78 °C) or amine (warm/excess)",
+        "nitrile": "aldehyde (via imine salt + H3O+ hydrolysis)",
+        "alkene": "no_reaction",
+        "alkyne": "cis-(Z)-alkene (syn-hydroalumination on heating, then H2O)",
+        "epoxide": "alcohol (slow at -78 °C; electrophilic opening when warmed)",
+        "nitro": "no_reaction",
+        "alkyl_halide": "no_reaction",
+        "alcohol": "deprotonation (H2 evolved; recovers alcohol on workup)"
+      },
+      "stereochemistry": "syn",
+      "stereochemistryDetail": "Low-temperature ester/nitrile partial reduction stops cleanly at the tetrahedral Al-chelate; warming with internal alkynes gives syn-hydroalumination -> (Z)-alkene.",
+      "rearrangementRisk": "none",
+      "rearrangementNote": "Lewis-acidic Al coordination followed by intramolecular hydride transfer causes no skeletal rearrangement.",
+      "conditions": "1 equiv in dry toluene or hexane at -78 °C, then cold H3O+ quench",
+      "mechanismClass": "Bulky electrophilic hydride partial reduction",
+      "jeeTraps": [
+        "Strictly needs 1 equiv at -78 °C + cold aqueous workup to stop esters and nitriles at the aldehyde; at room temperature or with excess DIBAL-H, esters over-reduce to 1° alcohols.",
+        "Reduces BOTH esters and nitriles selectively to aldehydes without touching isolated alkenes, nitro groups, or alkyl halides.",
+        "Reduces α,β-unsaturated esters by 1,2-addition to α,β-unsaturated aldehydes (1 eq, -78 °C) or allylic alcohols (excess) while leaving the conjugated C=C intact."
+      ],
+      "example": {
+        "label": "Partial reduction of an ester to an aldehyde at -78 °C",
+        "reactantSmiles": "CCOC(=O)c1ccccc1",
+        "productSmiles": "O=Cc1ccccc1",
+        "reactantName": "Ethyl benzoate",
+        "productName": "Benzaldehyde"
+      }
+    },
+    {
+      "id": "b2h6_thf",
+      "name": "Diborane in THF",
+      "formula": "B2H6/THF",
+      "aliases": [
+        "B2H6/THF",
+        "B2H6",
+        "BH3/THF",
+        "BH3.THF",
+        "BH3·THF",
+        "diborane",
+        "borane-THF",
+        "borane"
+      ],
+      "category": "reduction",
+      "reactivity": {
+        "aldehyde": "1° alcohol",
+        "ketone": "2° alcohol",
+        "ester": "no_reaction",
+        "carboxylic_acid": "1° alcohol (FASTEST carbonyl reduction — beats esters, halides, nitro!)",
+        "acid_chloride": "no_reaction",
+        "amide": "amine (1°, 2°, 3° amides -> amines cleanly)",
+        "nitrile": "1° amine (slower than -COOH)",
+        "alkene": "organoborane (syn anti-Markovnikov hydroboration)",
+        "alkyne": "vinylborane (syn hydroboration)",
+        "epoxide": "alcohol (electrophilic ring opening)",
+        "nitro": "no_reaction",
+        "alkyl_halide": "no_reaction",
+        "alcohol": "slow H2 evolution (recovers alcohol on workup)"
+      },
+      "stereochemistry": "syn",
+      "stereochemistryDetail": "Lewis-acidic BH3 adds syn across π-bonds; chemoselective -COOH reduction preserves remote stereocenters.",
+      "rearrangementRisk": "none",
+      "rearrangementNote": "Proceeds via concerted triacyloxyborane / hydroboration intermediates without carbocation rearrangement.",
+      "conditions": "B2H6 or BH3·THF in anhydrous THF, 0–25 °C, then H3O+ workup",
+      "mechanismClass": "Electrophilic boron hydride reduction",
+      "jeeTraps": [
+        "Electrophilic reductant (opposite electronic preference to NaBH4/LiAlH4): reduces electron-rich -COOH FASTER than esters, acid chlorides, nitro groups, alkyl halides, and even ketones!",
+        "The textbook JEE reagent to reduce -COOH -> -CH2OH selectively in the presence of an ester (-COOR), -NO2, or -COCl.",
+        "Because BH3 also hydroborates C=C and C≡C bonds, alkenes are NOT spectators when using B2H6/THF!"
+      ],
+      "example": {
+        "label": "Selective reduction of -COOH while leaving -COOMe untouched",
+        "reactantSmiles": "COC(=O)c1ccc(C(=O)O)cc1",
+        "productSmiles": "COC(=O)c1ccc(CO)cc1",
+        "reactantName": "4-(Methoxycarbonyl)benzoic acid",
+        "productName": "Methyl 4-(hydroxymethyl)benzoate"
+      }
+    },
+    {
+      "id": "h2_pd_c",
+      "name": "Catalytic Hydrogenation (H2 / Pd-C)",
+      "formula": "H2/Pd-C",
+      "aliases": [
+        "H2/Pd-C",
+        "H2/Pd",
+        "H2/Pt",
+        "H2/Ni",
+        "Pd/C",
+        "catalytic hydrogenation",
+        "Raney Ni"
+      ],
+      "category": "reduction",
+      "reactivity": {
+        "aldehyde": "1° alcohol (slow at 1 atm; faster with PtO2/Raney Ni)",
+        "ketone": "2° alcohol (slow at 1 atm; faster with PtO2/Raney Ni)",
+        "ester": "no_reaction",
+        "carboxylic_acid": "no_reaction",
+        "acid_chloride": "1° alcohol (over-reduces unless poisoned as Rosenmund)",
+        "amide": "no_reaction",
+        "nitrile": "1° amine (with Raney Ni or high-pressure Pd-C)",
+        "alkene": "alkane (rapid syn-addition of H2)",
+        "alkyne": "alkane (complete reduction; does not stop at alkene)",
+        "epoxide": "no_reaction",
+        "nitro": "1° amine (Ar-NO2 -> Ar-NH2 cleanly at 1 atm)",
+        "alkyl_halide": "no_reaction",
+        "alcohol": "no_reaction"
+      },
+      "stereochemistry": "syn",
+      "stereochemistryDetail": "Heterogeneous adsorption on the Pd surface delivers both H atoms to the same (less sterically hindered) face of C=C (strict syn-addition).",
+      "rearrangementRisk": "none",
+      "rearrangementNote": "Surface-mediated radical/hydride transfer proceeds without carbocation rearrangement.",
+      "conditions": "H2 (1 atm), 5–10% Pd/C in EtOH, MeOH, or EtOAc, 25 °C",
+      "mechanismClass": "Heterogeneous catalytic syn-hydrogenation",
+      "jeeTraps": [
+        "1,2-Dimethylcyclohexene + H2/Pd-C yields exclusively cis-1,2-dimethylcyclohexane (meso, optically inactive) via syn-addition.",
+        "Selectively reduces C=C, C≡C, and Ar-NO2 at 1 atm while leaving benzene rings, esters, carboxylic acids, and amides untouched.",
+        "Also cleaves benzyl ethers (R-OBn -> R-OH + PhCH3) and benzyl esters by hydrogenolysis — a frequent JEE multi-step protection/deprotection trap."
+      ],
+      "example": {
+        "label": "Syn-hydrogenation of 1,2-dimethylcyclohexene to meso cis-isomer",
+        "reactantSmiles": "CC1=C(C)CCCC1",
+        "productSmiles": "C[C@@H]1CCCC[C@@H]1C",
+        "reactantName": "1,2-Dimethylcyclohexene",
+        "productName": "cis-1,2-Dimethylcyclohexane (meso)"
+      }
+    },
+    {
+      "id": "lindlar",
+      "name": "Lindlar's Catalyst",
+      "formula": "H2/Lindlar",
+      "aliases": [
+        "H2/Lindlar",
+        "Lindlar",
+        "Lindlar's catalyst",
+        "Pd/CaCO3",
+        "Pd-CaCO3/Pb(OAc)2",
+        "P-2 Ni",
+        "Ni2B"
+      ],
+      "category": "reduction",
+      "reactivity": {
+        "aldehyde": "no_reaction",
+        "ketone": "no_reaction",
+        "ester": "no_reaction",
+        "carboxylic_acid": "no_reaction",
+        "acid_chloride": "no_reaction",
+        "amide": "no_reaction",
+        "nitrile": "no_reaction",
+        "alkene": "no_reaction",
+        "alkyne": "cis-(Z)-alkene (syn-addition of 1 equiv H2; stops cleanly at alkene)",
+        "epoxide": "no_reaction",
+        "nitro": "no_reaction",
+        "alkyl_halide": "no_reaction",
+        "alcohol": "no_reaction"
+      },
+      "stereochemistry": "Z-selective",
+      "stereochemistryDetail": "Poisoned Pd/CaCO3 surface delivers both H atoms syn across an internal alkyne to produce the cis/(Z)-alkene exclusively.",
+      "rearrangementRisk": "none",
+      "rearrangementNote": "Heterogeneous surface syn-addition; zero rearrangement.",
+      "conditions": "H2 (1 atm), Pd/CaCO3 poisoned with Pb(OAc)2 & quinoline, 25 °C",
+      "mechanismClass": "Poisoned heterogeneous syn-semi-hydrogenation",
+      "jeeTraps": [
+        "Poisoning with Pb(OAc)2 and quinoline lowers surface activity so the alkene desorbs before further reduction to an alkane.",
+        "Always check whether the alkyne is internal or terminal: internal alkyne -> (Z)-alkene, whereas terminal alkyne -> 1-alkene (no cis/trans isomerism).",
+        "Classic multi-step JEE chain: internal alkyne + H2/Lindlar -> cis-alkene; then + Br2/CCl4 (anti) -> racemic dibromide (CAR), OR + OsO4 (syn) -> meso diol!"
+      ],
+      "example": {
+        "label": "Syn semi-hydrogenation of an internal alkyne to (Z)-alkene",
+        "reactantSmiles": "CC#CC",
+        "productSmiles": "C/C=C\\C",
+        "reactantName": "But-2-yne",
+        "productName": "(Z)-But-2-ene"
+      }
+    },
+    {
+      "id": "birch_alkyne",
+      "name": "Dissolving Metal Reduction (Na / liq. NH3)",
+      "formula": "Na/liq. NH3",
+      "aliases": [
+        "Na/liq. NH3",
+        "Na/NH3",
+        "Birch",
+        "Birch reduction",
+        "Li/NH3",
+        "dissolving metal"
+      ],
+      "category": "reduction",
+      "reactivity": {
+        "aldehyde": "no_reaction",
+        "ketone": "2° alcohol / pinacol (only if protic alcohol co-solvent added)",
+        "ester": "no_reaction",
+        "carboxylic_acid": "deprotonation (note: benzoic acid undergoes aromatic Birch ring reduction to 1,4-cyclohexadiene)",
+        "acid_chloride": "no_reaction",
+        "amide": "no_reaction",
+        "nitrile": "no_reaction",
+        "alkene": "no_reaction",
+        "alkyne": "internal alkyne -> trans-(E)-alkene (anti-addition); terminal alkyne -> sodium acetylide (NO reduction!)",
+        "epoxide": "no_reaction",
+        "nitro": "no_reaction",
+        "alkyl_halide": "alkane (reductive dehalogenation / coupling)",
+        "alcohol": "deprotonation (acts as proton source in Birch)"
+      },
+      "stereochemistry": "E-selective",
+      "stereochemistryDetail": "Single-electron transfer forms a trans-vinyl radical anion (minimizing steric/lone-pair repulsion), protonated sequentially to give the trans/(E)-alkene.",
+      "rearrangementRisk": "none",
+      "rearrangementNote": "Stepwise radical-anion / vinyl-anion protonation involves zero carbocation rearrangement.",
+      "conditions": "Na or Li metal in liquid NH3 at -33 °C (add EtOH for aromatic Birch)",
+      "mechanismClass": "Single-electron transfer (SET) dissolving metal anti-reduction",
+      "jeeTraps": [
+        "Terminal alkynes (R-C≡CH) are NOT reduced to alkenes by Na/liq. NH3 — the acidic terminal H is deprotonated immediately to R-C≡C⁻Na⁺ + 1/2 H2!",
+        "Stereochemical opposite of H2/Lindlar: internal alkyne -> (E)/trans-alkene, which then gives MESO dibromide with Br2/CCl4 (TAM) and RACEMIC diol with OsO4!",
+        "Aromatic Birch trap (Na/liq. NH3 + EtOH): electron-donating groups (-OMe, -Me) remain on the C=C of the 1,4-diene, whereas electron-withdrawing groups (-COOH) sit on the reduced sp3 carbon."
+      ],
+      "example": {
+        "label": "Anti semi-reduction of an internal alkyne to (E)-alkene",
+        "reactantSmiles": "CC#CC",
+        "productSmiles": "C/C=C/C",
+        "reactantName": "But-2-yne",
+        "productName": "(E)-But-2-ene"
+      }
+    },
+    {
+      "id": "clemmensen",
+      "name": "Clemmensen Reduction",
+      "formula": "Zn-Hg/conc. HCl",
+      "aliases": [
+        "Zn-Hg/conc. HCl",
+        "Zn-Hg/HCl",
+        "Zn(Hg)/HCl",
+        "Clemmensen",
+        "Clemmensen reduction"
+      ],
+      "category": "reduction",
+      "reactivity": {
+        "aldehyde": "alkane (R-CHO -> R-CH3)",
+        "ketone": "alkane (R-CO-R' -> R-CH2-R')",
+        "ester": "no_reaction",
+        "carboxylic_acid": "no_reaction",
+        "acid_chloride": "no_reaction",
+        "amide": "no_reaction",
+        "nitrile": "no_reaction",
+        "alkene": "no_reaction",
+        "alkyne": "no_reaction",
+        "epoxide": "ring opening (acid-sensitive — cleaved by conc. HCl)",
+        "nitro": "1° amine (Zn/HCl reduces Ar-NO2 -> Ar-NH2)",
+        "alkyl_halide": "no_reaction",
+        "alcohol": "substitution/dehydration (acid-sensitive: R-OH -> R-Cl or alkene in conc. HCl!)"
+      },
+      "stereochemistry": "none",
+      "stereochemistryDetail": "Deoxygenates C=O completely to -CH2-; acid-sensitive chiral alcohols or epoxides elsewhere in the molecule are destroyed/racemized.",
+      "rearrangementRisk": "low",
+      "rearrangementNote": "Deoxygenation itself does not rearrange, but co-existing acid-sensitive alcohols/alkenes/epoxides undergo carbocation dehydration or HCl addition in conc. HCl.",
+      "conditions": "Zinc amalgam (Zn-Hg), conc. HCl, reflux",
+      "mechanismClass": "Acidic metal-surface carbonyl deoxygenation",
+      "jeeTraps": [
+        "NEVER use Clemmensen when acid-sensitive groups (-OH, acetal/ketal, epoxide, sensitive C=C) are present — conc. HCl converts -OH into -Cl or dehydrates it! Choose Wolff-Kishner instead.",
+        "Preferred over Wolff-Kishner when base-sensitive groups (alkyl halides, esters) are present because conc. HCl will not trigger E2 elimination.",
+        "Zn/conc. HCl simultaneously reduces aromatic -NO2 to -NH2 (as -NH3+Cl-) — a sneaky JEE multi-group trap!"
+      ],
+      "example": {
+        "label": "Acidic deoxygenation of aryl ketone to alkylbenzene",
+        "reactantSmiles": "CC(=O)c1ccccc1",
+        "productSmiles": "CCc1ccccc1",
+        "reactantName": "Acetophenone",
+        "productName": "Ethylbenzene"
+      }
+    },
+    {
+      "id": "wolff_kishner",
+      "name": "Wolff-Kishner Reduction",
+      "formula": "NH2NH2/KOH, glycol",
+      "aliases": [
+        "NH2NH2/KOH, glycol",
+        "NH2NH2/KOH",
+        "N2H4/KOH",
+        "Wolff-Kishner",
+        "Wolff Kishner",
+        "Huang-Minlon"
+      ],
+      "category": "reduction",
+      "reactivity": {
+        "aldehyde": "alkane (R-CHO -> R-CH3)",
+        "ketone": "alkane (R-CO-R' -> R-CH2-R')",
+        "ester": "saponification (hydrolyzed by hot KOH to carboxylate + alcohol)",
+        "carboxylic_acid": "deprotonation (recovers -COOH on acid workup)",
+        "acid_chloride": "hydrolysis / acyl hydrazide",
+        "amide": "slow hydrolysis in hot KOH",
+        "nitrile": "slow hydrolysis to carboxylate in hot KOH",
+        "alkene": "no_reaction",
+        "alkyne": "no_reaction",
+        "epoxide": "nucleophilic ring opening",
+        "nitro": "no_reaction",
+        "alkyl_halide": "alkene (base-sensitive: undergoes E2 elimination in hot KOH!)",
+        "alcohol": "no_reaction"
+      },
+      "stereochemistry": "none",
+      "stereochemistryDetail": "Converts C=O to -CH2- via hydrazone deprotonation and N2 loss; strongly basic heat can epimerize enolizable α-stereocenters.",
+      "rearrangementRisk": "none",
+      "rearrangementNote": "Anionic hydrazone decomposition avoids carbocation rearrangements completely.",
+      "conditions": "NH2NH2·H2O, KOH, ethylene glycol (or diethylene glycol), 180–200 °C",
+      "mechanismClass": "Basic hydrazone deoxygenation (N2 extrusion)",
+      "jeeTraps": [
+        "Go-to choice when acid-sensitive groups (-OH, acetal, isolated alkene) are present, because alcohols survive strongly basic KOH untouched (unlike Clemmensen!).",
+        "NEVER use Wolff-Kishner on substrates carrying base-sensitive alkyl halides (undergo E2 elimination!) or esters (saponify!) — use Clemmensen or neutral Mozingo (HSCH2CH2SH + Raney Ni).",
+        "If BOTH acid-sensitive (-OH) and base-sensitive (-Br) groups exist in one substrate, neither Clemmensen nor Wolff-Kishner is safe — use Mozingo thioacetal + Raney Ni!"
+      ],
+      "example": {
+        "label": "Basic carbonyl deoxygenation preserving an acid-sensitive alcohol",
+        "reactantSmiles": "CC(=O)CCO",
+        "productSmiles": "CCCCO",
+        "reactantName": "4-Hydroxybutan-2-one",
+        "productName": "Butan-1-ol"
+      }
+    },
+    {
+      "id": "rosenmund",
+      "name": "Rosenmund Reduction",
+      "formula": "H2/Pd-BaSO4",
+      "aliases": [
+        "H2/Pd-BaSO4",
+        "Pd/BaSO4",
+        "Rosenmund",
+        "Rosenmund reduction",
+        "H2/Pd-BaSO4, S",
+        "H2/Pd-BaSO4, quinoline"
+      ],
+      "category": "reduction",
+      "reactivity": {
+        "aldehyde": "no_reaction",
+        "ketone": "no_reaction",
+        "ester": "no_reaction",
+        "carboxylic_acid": "no_reaction",
+        "acid_chloride": "aldehyde (R-COCl -> R-CHO; stops cleanly at aldehyde)",
+        "amide": "no_reaction",
+        "nitrile": "no_reaction",
+        "alkene": "alkane (partial/slow depending on poisoning)",
+        "alkyne": "cis-alkene",
+        "epoxide": "no_reaction",
+        "nitro": "no_reaction",
+        "alkyl_halide": "no_reaction",
+        "alcohol": "no_reaction"
+      },
+      "stereochemistry": "none",
+      "stereochemistryDetail": "Selective hydrogenolysis of the C–Cl bond in acyl chlorides to yield aldehydes cleanly.",
+      "rearrangementRisk": "none",
+      "rearrangementNote": "Heterogeneous metal-catalyzed acyl-chloride reduction has no skeletal rearrangement.",
+      "conditions": "H2, Pd supported on BaSO4 poisoned with S or quinoline in boiling xylene",
+      "mechanismClass": "Poisoned catalytic acyl-chloride hydrogenolysis",
+      "jeeTraps": [
+        "CANNOT prepare formaldehyde (HCHO) because formyl chloride (HCOCl) is unstable at room temperature!",
+        "CANNOT prepare ketones — Rosenmund reduces ONLY acid chlorides (RCOCl) to aldehydes (RCHO).",
+        "If BaSO4/S/quinoline poison is omitted, H2/Pd over-reduces the aldehyde straight to a 1° alcohol."
+      ],
+      "example": {
+        "label": "Partial reduction of an acyl chloride to an aldehyde",
+        "reactantSmiles": "O=C(Cl)c1ccccc1",
+        "productSmiles": "O=Cc1ccccc1",
+        "reactantName": "Benzoyl chloride",
+        "productName": "Benzaldehyde"
+      }
+    },
+    {
+      "id": "stephen",
+      "name": "Stephen Reduction",
+      "formula": "SnCl2/HCl",
+      "aliases": [
+        "SnCl2/HCl",
+        "Stephen",
+        "Stephen reduction",
+        "SnCl2/HCl then H3O+",
+        "stannous chloride"
+      ],
+      "category": "reduction",
+      "reactivity": {
+        "aldehyde": "no_reaction",
+        "ketone": "no_reaction",
+        "ester": "no_reaction",
+        "carboxylic_acid": "no_reaction",
+        "acid_chloride": "no_reaction",
+        "amide": "no_reaction",
+        "nitrile": "aldehyde (via aldimine stannichloride R-CH=NH·HCl then H3O+)",
+        "alkene": "no_reaction",
+        "alkyne": "no_reaction",
+        "epoxide": "ring opening (acidic HCl medium)",
+        "nitro": "1° amine (SnCl2/HCl reduces Ar-NO2 -> Ar-NH2)",
+        "alkyl_halide": "no_reaction",
+        "alcohol": "no_reaction"
+      },
+      "stereochemistry": "none",
+      "stereochemistryDetail": "Reduces linear -C≡N to an iminium salt, hydrolyzed to -CHO.",
+      "rearrangementRisk": "none",
+      "rearrangementNote": "Two-electron reduction of nitrile followed by hydrolysis causes no rearrangement.",
+      "conditions": "Anhydrous SnCl2, dry HCl gas in Et2O, then H3O+ / steam hydrolysis",
+      "mechanismClass": "Reductive nitrile-to-imine hydrolysis",
+      "jeeTraps": [
+        "Reduces ONLY nitriles (R-C≡N -> R-CHO); unlike DIBAL-H, Stephen reagent does NOT reduce esters to aldehydes!",
+        "SnCl2/HCl ALSO reduces aromatic nitro groups (Ar-NO2 -> Ar-NH2) — watch for competing reduction in nitro-benzonitriles.",
+        "Ketones cannot be prepared by Stephen reduction (use R-CN + R'MgX then H3O+ to make ketones from nitriles)."
+      ],
+      "example": {
+        "label": "Nitrile to aldehyde reduction via aldimine hydrolysis",
+        "reactantSmiles": "N#Cc1ccccc1",
+        "productSmiles": "O=Cc1ccccc1",
+        "reactantName": "Benzonitrile",
+        "productName": "Benzaldehyde"
+      }
+    },
+    {
+      "id": "pcc",
+      "name": "Pyridinium Chlorochromate (PCC)",
+      "formula": "PCC/CH2Cl2",
+      "aliases": [
+        "PCC/CH2Cl2",
+        "PCC",
+        "PCC/DCM",
+        "pyridinium chlorochromate",
+        "Corey's reagent",
+        "PDC"
+      ],
+      "category": "oxidation",
+      "reactivity": {
+        "aldehyde": "no_reaction",
+        "ketone": "no_reaction",
+        "ester": "no_reaction",
+        "carboxylic_acid": "no_reaction",
+        "acid_chloride": "no_reaction",
+        "amide": "no_reaction",
+        "nitrile": "no_reaction",
+        "alkene": "no_reaction",
+        "alkyne": "no_reaction",
+        "epoxide": "no_reaction",
+        "nitro": "no_reaction",
+        "alkyl_halide": "no_reaction",
+        "alcohol": "1° alcohol -> aldehyde; 2° alcohol -> ketone; 3° alcohol -> no_reaction"
+      },
+      "stereochemistry": "none",
+      "stereochemistryDetail": "Mild anhydrous oxidation preserves double-bond (E)/(Z) geometry and remote stereocenters.",
+      "rearrangementRisk": "low",
+      "rearrangementNote": "Standard 1°/2° alcohols oxidize with zero rearrangement; mildly acidic PCC can rearrange tertiary allylic alcohols (Babler oxidation).",
+      "conditions": "C5H5NH+CrO3Cl- in strictly anhydrous CH2Cl2, 25 °C",
+      "mechanismClass": "Anhydrous Cr(VI) chromate-ester β-elimination",
+      "jeeTraps": [
+        "Stops 1° alcohols cleanly at the ALDEHYDE strictly because CH2Cl2 is anhydrous — water would hydrate RCHO to RCH(OH)2 and drive over-oxidation to RCOOH!",
+        "Oxidizes BOTH saturated aliphatic and allylic/benzylic 1° & 2° alcohols (unlike MnO2, which ignores saturated alcohols).",
+        "3° alcohols give NO reaction because they lack an α-C–H on the carbinol carbon."
+      ],
+      "example": {
+        "label": "Mild oxidation of 1° allylic alcohol to α,β-unsaturated aldehyde",
+        "reactantSmiles": "C/C=C/CO",
+        "productSmiles": "C/C=C/C=O",
+        "reactantName": "(E)-But-2-en-1-ol",
+        "productName": "(E)-But-2-enal"
+      }
+    },
+    {
+      "id": "jones",
+      "name": "Jones Reagent (CrO3 / aq. H2SO4)",
+      "formula": "CrO3/H2SO4",
+      "aliases": [
+        "CrO3/H2SO4",
+        "Jones",
+        "Jones reagent",
+        "CrO3/H2SO4/acetone",
+        "K2Cr2O7/H2SO4",
+        "chromic acid",
+        "H2CrO4"
+      ],
+      "category": "oxidation",
+      "reactivity": {
+        "aldehyde": "carboxylic acid (via gem-diol hydrate in aq. acid)",
+        "ketone": "no_reaction",
+        "ester": "no_reaction",
+        "carboxylic_acid": "no_reaction",
+        "acid_chloride": "no_reaction",
+        "amide": "no_reaction",
+        "nitrile": "no_reaction",
+        "alkene": "no_reaction",
+        "alkyne": "no_reaction",
+        "epoxide": "ring opening (strongly acidic aqueous medium)",
+        "nitro": "no_reaction",
+        "alkyl_halide": "no_reaction",
+        "alcohol": "1° alcohol -> carboxylic acid; 2° alcohol -> ketone; 3° alcohol -> no_reaction"
+      },
+      "stereochemistry": "none",
+      "stereochemistryDetail": "Oxidizes 1°/2° carbinol centers while leaving isolated C=C geometry and remote stereocenters intact at 0–25 °C.",
+      "rearrangementRisk": "low",
+      "rearrangementNote": "Alcohol oxidation itself does not rearrange, though strongly acidic aq. H2SO4 can hydrolyze acetals or dehydrate acid-labile 3° alcohols.",
+      "conditions": "CrO3, aq. H2SO4, acetone, 0–25 °C (orange Cr6+ -> green Cr3+)",
+      "mechanismClass": "Aqueous Cr(VI) strong oxidation",
+      "jeeTraps": [
+        "Water in aq. H2SO4 hydrates intermediate aldehydes to gem-diols RCH(OH)2, driving 1° alcohols all the way to CARBOXYLIC ACIDS (unlike anhydrous PCC!).",
+        "Unlike hot acidic KMnO4, cold Jones reagent in acetone leaves isolated C=C double bonds intact.",
+        "2° alcohols stop cleanly at ketones (ketones lack an α-C–H on the carbonyl carbon and resist chromic acid oxidation)."
+      ],
+      "example": {
+        "label": "Strong oxidation of 1° alcohol to carboxylic acid leaving C=C intact",
+        "reactantSmiles": "C/C=C/CO",
+        "productSmiles": "C/C=C/C(=O)O",
+        "reactantName": "(E)-But-2-en-1-ol",
+        "productName": "(E)-But-2-enoic acid"
+      }
+    },
+    {
+      "id": "kmno4_cold",
+      "name": "Cold Dilute Alkaline KMnO4 (Baeyer's Reagent)",
+      "formula": "Cold dil. alk. KMnO4",
+      "aliases": [
+        "Cold dil. alk. KMnO4",
+        "Baeyer",
+        "Baeyer's reagent",
+        "Baeyer reagent",
+        "cold KMnO4",
+        "dilute KMnO4",
+        "alkaline KMnO4"
+      ],
+      "category": "oxidation",
+      "reactivity": {
+        "aldehyde": "carboxylic acid (as carboxylate salt)",
+        "ketone": "no_reaction",
+        "ester": "no_reaction",
+        "carboxylic_acid": "no_reaction",
+        "acid_chloride": "no_reaction",
+        "amide": "no_reaction",
+        "nitrile": "no_reaction",
+        "alkene": "cis/syn-1,2-diol (purple KMnO4 -> brown MnO2 ppt)",
+        "alkyne": "1,2-diketone (mild/neutral; cleaves if prolonged)",
+        "epoxide": "no_reaction",
+        "nitro": "no_reaction",
+        "alkyl_halide": "no_reaction",
+        "alcohol": "no_reaction"
+      },
+      "stereochemistry": "syn",
+      "stereochemistryDetail": "Concerted [3+2] cycloaddition forms a cyclic manganate(V) ester delivering both -OH groups SYN (cis-2-butene -> meso diol; trans-2-butene -> racemic ± diol).",
+      "rearrangementRisk": "none",
+      "rearrangementNote": "Concerted cyclic manganate ester formation involves zero carbocation rearrangement.",
+      "conditions": "Cold (0–5 °C), dilute (1%) alkaline KMnO4 / H2O",
+      "mechanismClass": "Concerted syn-dihydroxylation ([3+2] cycloaddition)",
+      "jeeTraps": [
+        "CIS + SYN = MESO (cis-2-butene -> meso-butane-2,3-diol, 1 optically inactive isomer); TRANS + SYN = RACEMIC (trans-2-butene -> (±)-pair)!",
+        "Baeyer's unsaturation test (purple -> brown MnO2 ppt) is positive for alkenes & alkynes, NEGATIVE for benzene rings.",
+        "Must stay cold and dilute — warming or acidifying cleaves the vicinal diol straight into ketones/carboxylic acids/CO2!"
+      ],
+      "example": {
+        "label": "Syn-dihydroxylation: (Z)-but-2-ene -> meso-butane-2,3-diol",
+        "reactantSmiles": "C/C=C\\C",
+        "productSmiles": "C[C@H](O)[C@@H](C)O",
+        "reactantName": "(Z)-But-2-ene",
+        "productName": "meso-Butane-2,3-diol"
+      }
+    },
+    {
+      "id": "kmno4_hot",
+      "name": "Hot Acidic KMnO4",
+      "formula": "Hot acidic KMnO4",
+      "aliases": [
+        "Hot acidic KMnO4",
+        "hot KMnO4",
+        "KMnO4/H+",
+        "KMnO4/H+/heat",
+        "KMnO4/H2SO4",
+        "acidic KMnO4"
+      ],
+      "category": "oxidation",
+      "reactivity": {
+        "aldehyde": "carboxylic acid",
+        "ketone": "no_reaction",
+        "ester": "hydrolysis / slow oxidation",
+        "carboxylic_acid": "no_reaction",
+        "acid_chloride": "hydrolysis",
+        "amide": "hydrolysis",
+        "nitrile": "no_reaction",
+        "alkene": "oxidative cleavage: =CH2 -> CO2; =CHR -> RCOOH; =CR2 -> R2C=O",
+        "alkyne": "oxidative cleavage: internal -> 2 RCOOH; terminal -> RCOOH + CO2",
+        "epoxide": "ring opening + oxidative cleavage",
+        "nitro": "no_reaction",
+        "alkyl_halide": "no_reaction",
+        "alcohol": "1° alcohol -> carboxylic acid; 2° alcohol -> ketone; 3° alcohol -> no_reaction"
+      },
+      "stereochemistry": "none",
+      "stereochemistryDetail": "Complete C=C / C≡C cleavage destroys alkene stereochemistry.",
+      "rearrangementRisk": "none",
+      "rearrangementNote": "Oxidative cleavage breaks the π and σ C–C bonds directly without carbocation shifts.",
+      "conditions": "Conc. KMnO4, H2SO4 (or KOH then H3O+), heat / reflux",
+      "mechanismClass": "Vigorous oxidative C=C / C≡C / benzylic cleavage",
+      "jeeTraps": [
+        "Terminal =CH2 oxidizes all the way to CO2 + H2O (NOT formaldehyde or formic acid, because HCOOH oxidizes further to CO2!).",
+        "Benzylic oxidation trap: ANY alkylbenzene with ≥1 benzylic C–H (toluene, ethylbenzene, cumene) gives benzoic acid (Ph-COOH), while tert-butylbenzene (0 benzylic H!) gives NO reaction!",
+        "Produces carboxylic acids where reductive ozonolysis (O3/Zn) stops at aldehydes — cleavage products match O3/H2O2."
+      ],
+      "example": {
+        "label": "Oxidative C=C cleavage to carboxylic acid + ketone",
+        "reactantSmiles": "CC=C(C)C",
+        "productSmiles": "CC(=O)O.CC(=O)C",
+        "reactantName": "2-Methylbut-2-ene",
+        "productName": "Acetic acid + Acetone"
+      }
+    },
+    {
+      "id": "oso4",
+      "name": "Osmium Tetroxide Dihydroxylation",
+      "formula": "OsO4/NaHSO3",
+      "aliases": [
+        "OsO4/NaHSO3",
+        "OsO4",
+        "OsO4/NMO",
+        "OsO4/H2O",
+        "osmium tetroxide",
+        "Upjohn"
+      ],
+      "category": "oxidation",
+      "reactivity": {
+        "aldehyde": "no_reaction",
+        "ketone": "no_reaction",
+        "ester": "no_reaction",
+        "carboxylic_acid": "no_reaction",
+        "acid_chloride": "no_reaction",
+        "amide": "no_reaction",
+        "nitrile": "no_reaction",
+        "alkene": "cis/syn-1,2-diol (clean, high yield, no over-oxidation)",
+        "alkyne": "1,2-diketone (slow)",
+        "epoxide": "no_reaction",
+        "nitro": "no_reaction",
+        "alkyl_halide": "no_reaction",
+        "alcohol": "no_reaction"
+      },
+      "stereochemistry": "syn",
+      "stereochemistryDetail": "Concerted cyclic osmate ester guarantees 100% syn-dihydroxylation (cyclohexene -> cis-1,2-diol; cis-2-butene -> meso; trans-2-butene -> racemic).",
+      "rearrangementRisk": "none",
+      "rearrangementNote": "Concerted [3+2] cycloaddition has zero carbocation character.",
+      "conditions": "OsO4 (stoichiometric or catalytic + NMO), then aq. NaHSO3 / Na2SO3",
+      "mechanismClass": "Concerted syn-dihydroxylation via osmate ester",
+      "jeeTraps": [
+        "Exact same syn-stereochemistry as cold dil. KMnO4, but much milder and leaves aldehydes and alcohols untouched with zero C–C over-oxidation.",
+        "Opposite stereochemistry to mCPBA followed by H3O+ (which gives ANTI/trans-1,2-diol) and Br2/CCl4 (which is anti-addition)!",
+        "OsO4 + NaIO4 (Lemieux-Johnson) cleaves alkenes cleanly to aldehydes/ketones — exact same products as reductive ozonolysis (O3/Zn)!"
+      ],
+      "example": {
+        "label": "Clean syn-dihydroxylation of cyclohexene to cis-1,2-diol",
+        "reactantSmiles": "C1=CCCCC1",
+        "productSmiles": "O[C@@H]1CCCC[C@@H]1O",
+        "reactantName": "Cyclohexene",
+        "productName": "cis-Cyclohexane-1,2-diol (meso)"
+      }
+    },
+    {
+      "id": "o3_reductive",
+      "name": "Reductive Ozonolysis (O3 then Zn/H2O)",
+      "formula": "O3 then Zn/H2O",
+      "aliases": [
+        "O3 then Zn/H2O",
+        "O3/Zn",
+        "O3/Zn-H2O",
+        "O3/Me2S",
+        "O3/DMS",
+        "reductive ozonolysis"
+      ],
+      "category": "oxidation",
+      "reactivity": {
+        "aldehyde": "no_reaction",
+        "ketone": "no_reaction",
+        "ester": "no_reaction",
+        "carboxylic_acid": "no_reaction",
+        "acid_chloride": "no_reaction",
+        "amide": "no_reaction",
+        "nitrile": "no_reaction",
+        "alkene": "cleavage to aldehydes & ketones (=CH2 -> HCHO; =CHR -> RCHO; =CR2 -> R2C=O)",
+        "alkyne": "1,2-diketone (mild Zn/H2O; partial cleavage to acids if prolonged)",
+        "epoxide": "no_reaction",
+        "nitro": "no_reaction",
+        "alkyl_halide": "no_reaction",
+        "alcohol": "no_reaction"
+      },
+      "stereochemistry": "none",
+      "stereochemistryDetail": "Cleaves C=C completely via molozonide -> ozonide; Zn/H2O or Me2S quenches H2O2 so aldehydes do NOT over-oxidize.",
+      "rearrangementRisk": "none",
+      "rearrangementNote": "Concerted Criegee 1,3-dipolar cycloaddition/cycloreversion does not rearrange carbon skeletons.",
+      "conditions": "1) O3, CH2Cl2 at -78 °C; 2) Zn/H2O (or Me2S / PPh3)",
+      "mechanismClass": "Reductive Criegee ozonolysis",
+      "jeeTraps": [
+        "Zn/H2O or Me2S destroys H2O2 so aldehydes survive intact — even terminal =CH2 stops at formaldehyde (HCHO), NOT CO2!",
+        "JEE counting classic: reductive ozonolysis of o-xylene gives glyoxal : methylglyoxal : diacetyl in a 3 : 2 : 1 molar ratio (proving Kekulé resonance equivalence).",
+        "Switching workup to NaBH4 reduces the ozonide directly to alcohols (1° from =CHR, 2° from =CR2)!"
+      ],
+      "example": {
+        "label": "Reductive cleavage stopping cleanly at aldehyde + ketone",
+        "reactantSmiles": "CC=C(C)C",
+        "productSmiles": "CC=O.CC(=O)C",
+        "reactantName": "2-Methylbut-2-ene",
+        "productName": "Acetaldehyde + Acetone"
+      }
+    },
+    {
+      "id": "o3_oxidative",
+      "name": "Oxidative Ozonolysis (O3 then H2O2)",
+      "formula": "O3 then H2O2",
+      "aliases": [
+        "O3 then H2O2",
+        "O3/H2O2",
+        "O3/H2O",
+        "oxidative ozonolysis"
+      ],
+      "category": "oxidation",
+      "reactivity": {
+        "aldehyde": "carboxylic acid (oxidized by H2O2)",
+        "ketone": "no_reaction",
+        "ester": "no_reaction",
+        "carboxylic_acid": "no_reaction",
+        "acid_chloride": "no_reaction",
+        "amide": "no_reaction",
+        "nitrile": "no_reaction",
+        "alkene": "cleavage to carboxylic acids & ketones (=CH2 -> CO2; =CHR -> RCOOH; =CR2 -> R2C=O)",
+        "alkyne": "cleavage to carboxylic acids (internal -> 2 RCOOH; terminal -> RCOOH + CO2)",
+        "epoxide": "no_reaction",
+        "nitro": "no_reaction",
+        "alkyl_halide": "no_reaction",
+        "alcohol": "no_reaction"
+      },
+      "stereochemistry": "none",
+      "stereochemistryDetail": "Oxidative workup breaks the ozonide and oxidizes every C–H carbonyl fragment all the way to -COOH / CO2.",
+      "rearrangementRisk": "none",
+      "rearrangementNote": "Criegee ozonolysis with oxidative workup involves zero carbocation rearrangement.",
+      "conditions": "1) O3, CH2Cl2 at -78 °C; 2) H2O2 / H2O (or plain H2O without Zn!)",
+      "mechanismClass": "Oxidative Criegee ozonolysis",
+      "jeeTraps": [
+        "Huge JEE trap: O3 followed by plain H2O (WITHOUT Zn or Me2S!) generates H2O2 in situ, so it IS oxidative ozonolysis and turns aldehydes into carboxylic acids!",
+        "Terminal =CH2 oxidizes via HCOOH to CO2 + H2O, while =CHR yields RCOOH and =CR2 stops at a ketone.",
+        "Internal alkynes cleave cleanly into two carboxylic acids (R-COOH + R'-COOH), matching hot acidic KMnO4."
+      ],
+      "example": {
+        "label": "Oxidative cleavage converting =CHR fragment to carboxylic acid",
+        "reactantSmiles": "CC=C(C)C",
+        "productSmiles": "CC(=O)O.CC(=O)C",
+        "reactantName": "2-Methylbut-2-ene",
+        "productName": "Acetic acid + Acetone"
+      }
+    },
+    {
+      "id": "mno2",
+      "name": "Activated Manganese Dioxide",
+      "formula": "MnO2",
+      "aliases": [
+        "MnO2",
+        "activated MnO2",
+        "MnO2/CH2Cl2",
+        "manganese dioxide"
+      ],
+      "category": "oxidation",
+      "reactivity": {
+        "aldehyde": "no_reaction",
+        "ketone": "no_reaction",
+        "ester": "no_reaction",
+        "carboxylic_acid": "no_reaction",
+        "acid_chloride": "no_reaction",
+        "amide": "no_reaction",
+        "nitrile": "no_reaction",
+        "alkene": "no_reaction",
+        "alkyne": "no_reaction",
+        "epoxide": "no_reaction",
+        "nitro": "no_reaction",
+        "alkyl_halide": "no_reaction",
+        "alcohol": "allylic / benzylic / propargylic 1° -> aldehyde, 2° -> ketone; saturated aliphatic alcohols -> NO REACTION!"
+      },
+      "stereochemistry": "none",
+      "stereochemistryDetail": "Mild neutral surface oxidation preserves double-bond (E)/(Z) stereochemistry and remote chiral centers.",
+      "rearrangementRisk": "none",
+      "rearrangementNote": "Resonance-stabilized allylic/benzylic radical surface step causes no skeletal rearrangement.",
+      "conditions": "Activated MnO2 (excess) in CH2Cl2, CHCl3, or hexane, 25 °C",
+      "mechanismClass": "Chemoselective allylic/benzylic heterogeneous oxidation",
+      "jeeTraps": [
+        "Oxidizes ONLY allylic, benzylic, and propargylic 1°/2° alcohols — completely ignores saturated aliphatic 1° and 2° alcohols in the same molecule (unlike PCC/Jones)!",
+        "Stops allylic/benzylic 1° alcohols cleanly at the aldehyde without over-oxidation to -COOH and without cis/trans isomerization.",
+        "3° allylic/benzylic alcohols do NOT react (no α-H on carbinol carbon)."
+      ],
+      "example": {
+        "label": "Chemoselective oxidation of benzylic -OH over saturated 1° -OH",
+        "reactantSmiles": "OCCC(O)c1ccccc1",
+        "productSmiles": "O=C(CCO)c1ccccc1",
+        "reactantName": "1-Phenylpropane-1,3-diol",
+        "productName": "3-Hydroxy-1-phenylpropan-1-one"
+      }
+    },
+    {
+      "id": "hio4",
+      "name": "Periodic Acid (Malaprade Cleavage)",
+      "formula": "HIO4",
+      "aliases": [
+        "HIO4",
+        "NaIO4",
+        "periodic acid",
+        "Malaprade",
+        "Pb(OAc)4"
+      ],
+      "category": "oxidation",
+      "reactivity": {
+        "aldehyde": "no_reaction",
+        "ketone": "no_reaction",
+        "ester": "no_reaction",
+        "carboxylic_acid": "no_reaction",
+        "acid_chloride": "no_reaction",
+        "amide": "no_reaction",
+        "nitrile": "no_reaction",
+        "alkene": "no_reaction",
+        "alkyne": "no_reaction",
+        "epoxide": "no_reaction",
+        "nitro": "no_reaction",
+        "alkyl_halide": "no_reaction",
+        "alcohol": "vicinal 1,2-diols, α-hydroxy carbonyls, 1,2-diketones & 1,2-amino alcohols -> C–C cleavage; isolated alcohols & 1,3-diols -> no_reaction"
+      },
+      "stereochemistry": "syn",
+      "stereochemistryDetail": "Requires formation of a 5-membered cyclic periodate ester: cis-1,2-diols cleave rapidly while rigid trans-diaxial cyclic 1,2-diols fail to react.",
+      "rearrangementRisk": "none",
+      "rearrangementNote": "Concerted cyclic periodate ester cleavage breaks the C–C bond directly.",
+      "conditions": "HIO4 or NaIO4 in H2O / aq. MeOH, 25 °C",
+      "mechanismClass": "Cyclic periodate vicinal oxidative cleavage",
+      "jeeTraps": [
+        "Each cleaved C–C bond consumes 1 equiv HIO4 and adds +1 OH equivalent to each end: terminal -CH2OH -> HCHO; internal -CH(OH)- (cleaved twice) -> HCOOH; -CH(OH)R -> RCHO; -C(OH)R2 -> R2C=O; -CHO -> HCOOH; -COR -> RCOOH!",
+        "Classic JEE stoichiometry: glycerol consumes 2 HIO4 (-> 2 HCHO + 1 HCOOH); open-chain D-glucose consumes 5 HIO4 (-> 5 HCOOH + 1 HCHO).",
+        "Simple mono-alcohols, 1,3-diols, and rigid trans-diaxial cyclic 1,2-diols cannot form the cyclic periodate ester and do NOT cleave!"
+      ],
+      "example": {
+        "label": "Malaprade cleavage of glycerol (2 equiv HIO4)",
+        "reactantSmiles": "OCC(O)CO",
+        "productSmiles": "C=O.O=CO.C=O",
+        "reactantName": "Glycerol",
+        "productName": "2 Formaldehyde + Formic acid"
+      }
+    },
+    {
+      "id": "tollens",
+      "name": "Tollens' Reagent (Ammoniacal AgNO3)",
+      "formula": "[Ag(NH3)2]+",
+      "aliases": [
+        "[Ag(NH3)2]+",
+        "Tollens",
+        "Tollens' reagent",
+        "Tollens reagent",
+        "ammoniacal AgNO3",
+        "Ag(NH3)2+",
+        "silver mirror"
+      ],
+      "category": "oxidation",
+      "reactivity": {
+        "aldehyde": "carboxylate salt + Ag(s) silver mirror (BOTH aliphatic AND aromatic aldehydes!)",
+        "ketone": "no_reaction",
+        "ester": "no_reaction",
+        "carboxylic_acid": "no_reaction",
+        "acid_chloride": "no_reaction",
+        "amide": "no_reaction",
+        "nitrile": "no_reaction",
+        "alkene": "no_reaction",
+        "alkyne": "terminal alkyne -> white ppt of silver acetylide (R-C≡C-Ag, acid-base, not redox!)",
+        "epoxide": "no_reaction",
+        "nitro": "no_reaction",
+        "alkyl_halide": "no_reaction",
+        "alcohol": "no_reaction"
+      },
+      "stereochemistry": "none",
+      "stereochemistryDetail": "Mild oxidation of -CHO to -COO- leaves double bonds and remote stereocenters intact.",
+      "rearrangementRisk": "none",
+      "rearrangementNote": "Mild single-electron Ag(I) oxidation involves no skeletal rearrangement.",
+      "conditions": "Freshly prepared [Ag(NH3)2]+OH- (aq. AgNO3 + NH4OH), warm gently",
+      "mechanismClass": "Mild Ag(I) selective aldehyde oxidation",
+      "jeeTraps": [
+        "Positive for BOTH aliphatic AND aromatic aldehydes (e.g. benzaldehyde), distinguishing it from Fehling's which fails on aromatic aldehydes!",
+        "JEE classic positive exceptions (not ordinary aldehydes): formic acid (HCOOH -> CO2 + Ag), α-hydroxy ketones (fructose & benzoin via enediol), reducing sugars/hemiacetals (glucose, maltose, lactose), and PhNHOH! Sucrose (acetal) is NEGATIVE.",
+        "Terminal alkynes react with ammoniacal AgNO3 to form a WHITE precipitate (R-C≡C-Ag), NOT a silver mirror!"
+      ],
+      "example": {
+        "label": "Silver mirror oxidation of an aromatic aldehyde",
+        "reactantSmiles": "O=Cc1ccccc1",
+        "productSmiles": "O=C([O-])c1ccccc1",
+        "reactantName": "Benzaldehyde",
+        "productName": "Benzoate ion (+ Ag mirror)"
+      }
+    },
+    {
+      "id": "fehling",
+      "name": "Fehling's Solution (Alkaline Cu2+ Tartrate)",
+      "formula": "Fehling's",
+      "aliases": [
+        "Fehling's",
+        "Fehling",
+        "Fehlings",
+        "Fehling solution",
+        "Cu2+/tartrate/OH-",
+        "Benedict's",
+        "Benedict"
+      ],
+      "category": "oxidation",
+      "reactivity": {
+        "aldehyde": "aliphatic aldehyde -> carboxylate + brick-red Cu2O ppt; AROMATIC aldehyde -> NO REACTION!",
+        "ketone": "no_reaction",
+        "ester": "no_reaction",
+        "carboxylic_acid": "no_reaction",
+        "acid_chloride": "no_reaction",
+        "amide": "no_reaction",
+        "nitrile": "no_reaction",
+        "alkene": "no_reaction",
+        "alkyne": "no_reaction",
+        "epoxide": "no_reaction",
+        "nitro": "no_reaction",
+        "alkyl_halide": "no_reaction",
+        "alcohol": "no_reaction"
+      },
+      "stereochemistry": "none",
+      "stereochemistryDetail": "Weak alkaline Cu(II) oxidant selectively converts aliphatic -CHO to -COO-.",
+      "rearrangementRisk": "none",
+      "rearrangementNote": "Direct oxidation of aliphatic aldehyde; note sugars undergo alkaline enediol tautomerism.",
+      "conditions": "Fehling A (aq. CuSO4) + Fehling B (alkaline Na/K tartrate, Rochelle salt), heat",
+      "mechanismClass": "Weak Cu(II) aliphatic-aldehyde-selective oxidation",
+      "jeeTraps": [
+        "THE canonical JEE test separating aliphatic aldehydes (POSITIVE -> red-brown Cu2O ppt) from aromatic aldehydes like benzaldehyde (NEGATIVE, resonance-stabilized -CHO)!",
+        "Fructose (ketose) gives a POSITIVE Fehling's test via alkaline enediol isomerization to glucose/mannose, while sucrose (locked glycosidic acetal) is NEGATIVE.",
+        "Benzoin (Ph-CH(OH)-CO-Ph) gives POSITIVE Tollens' test but NEGATIVE Fehling's test — a favorite JEE Advanced discrimination question!"
+      ],
+      "example": {
+        "label": "Brick-red Cu2O oxidation of an aliphatic aldehyde",
+        "reactantSmiles": "CC=O",
+        "productSmiles": "CC(=O)[O-]",
+        "reactantName": "Acetaldehyde",
+        "productName": "Acetate ion (+ Cu2O ppt)"
+      }
+    },
+    {
+      "id": "mcpba",
+      "name": "meta-Chloroperoxybenzoic Acid (mCPBA)",
+      "formula": "mCPBA",
+      "aliases": [
+        "mCPBA",
+        "m-CPBA",
+        "RCO3H",
+        "peracid",
+        "peroxyacid",
+        "Baeyer-Villiger",
+        "Prilezhaev"
+      ],
+      "category": "oxidation",
+      "reactivity": {
+        "aldehyde": "carboxylic acid (Baeyer-Villiger H-migration)",
+        "ketone": "ester / cyclic ketone -> lactone (Baeyer-Villiger; migratory aptitude: H > 3° > 2° ≈ Ph > 1° > Me)",
+        "ester": "no_reaction",
+        "carboxylic_acid": "no_reaction",
+        "acid_chloride": "no_reaction",
+        "amide": "no_reaction",
+        "nitrile": "no_reaction",
+        "alkene": "epoxide (concerted syn-epoxidation; faster on MORE substituted electron-rich C=C!)",
+        "alkyne": "no_reaction",
+        "epoxide": "no_reaction",
+        "nitro": "no_reaction",
+        "alkyl_halide": "no_reaction",
+        "alcohol": "no_reaction"
+      },
+      "stereochemistry": "syn",
+      "stereochemistryDetail": "Concerted butterfly TS gives 100% stereospecific syn-epoxidation (cis-alkene -> cis-epoxide, trans -> trans); Baeyer-Villiger proceeds with 100% RETENTION at the migrating chiral carbon.",
+      "rearrangementRisk": "none",
+      "rearrangementNote": "Epoxidation has zero rearrangement; Baeyer-Villiger is a concerted stereoretentive 1,2-shift to electron-deficient O.",
+      "conditions": "mCPBA in CH2Cl2 or CHCl3, 0–25 °C",
+      "mechanismClass": "Electrophilic concerted epoxidation / Baeyer-Villiger oxidation",
+      "jeeTraps": [
+        "Electrophilic reagent: in a non-conjugated diene, mCPBA selectively epoxidizes the MORE substituted (more electron-rich) C=C double bond!",
+        "mCPBA followed by H3O+ (or OH-/H2O) achieves overall ANTI-dihydroxylation (trans-1,2-diol), directly opposite to OsO4/cold KMnO4 syn-dihydroxylation!",
+        "Baeyer-Villiger O-insertion follows electron-rich migratory aptitude (H > 3° > cyclohexyl > 2° ≈ Ph > 1° > Me) with strict RETENTION of configuration at a chiral migrating group."
+      ],
+      "example": {
+        "label": "Stereospecific syn-epoxidation of (Z)-but-2-ene",
+        "reactantSmiles": "C/C=C\\C",
+        "productSmiles": "C[C@@H]1O[C@@H]1C",
+        "reactantName": "(Z)-But-2-ene",
+        "productName": "cis-2,3-Dimethyloxirane (meso)"
+      }
+    },
+    {
+      "id": "seo2",
+      "name": "Selenium Dioxide (Riley Oxidation)",
+      "formula": "SeO2",
+      "aliases": [
+        "SeO2",
+        "selenium dioxide",
+        "Riley",
+        "Riley oxidation"
+      ],
+      "category": "oxidation",
+      "reactivity": {
+        "aldehyde": "α-dicarbonyl / glyoxal (oxidizes active α-CH2/CH3 next to -CHO to C=O)",
+        "ketone": "1,2-diketone (oxidizes active α-CH2/CH3 next to C=O to C=O)",
+        "ester": "no_reaction",
+        "carboxylic_acid": "no_reaction",
+        "acid_chloride": "no_reaction",
+        "amide": "no_reaction",
+        "nitrile": "no_reaction",
+        "alkene": "allylic alcohol (oxidizes allylic C–H without cleaving C=C; CH2 > CH3 > CH)",
+        "alkyne": "propargylic alcohol / 1,2-diketone",
+        "epoxide": "no_reaction",
+        "nitro": "no_reaction",
+        "alkyl_halide": "no_reaction",
+        "alcohol": "no_reaction"
+      },
+      "stereochemistry": "E-selective",
+      "stereochemistryDetail": "Allylic oxidation via ene + [2,3]-sigmatropic rearrangement selectively oxidizes the (E)-methyl on trisubstituted alkenes to give the (E)-allylic alcohol.",
+      "rearrangementRisk": "none",
+      "rearrangementNote": "Concerted ene + [2,3]-sigmatropic shift restores the original double-bond position with no carbocation shift.",
+      "conditions": "SeO2 in EtOH/H2O, AcOH, or 1,4-dioxane, reflux",
+      "mechanismClass": "Active-methylene & allylic C–H Riley oxidation",
+      "jeeTraps": [
+        "Oxidizes the α-CH2 (or α-CH3) adjacent to an aldehyde or ketone directly into C=O (acetaldehyde -> glyoxal; acetone -> methylglyoxal; cyclohexanone -> cyclohexane-1,2-dione).",
+        "On unsymmetrical ketones, oxidizes the LESS sterically hindered α-CH2 preferentially over -CH3 (CH2 > CH3 > CH).",
+        "Does NOT cleave C=C bonds (unlike O3 or hot KMnO4) — converts alkenes cleanly to allylic alcohols!"
+      ],
+      "example": {
+        "label": "Riley α-oxidation of cyclohexanone to 1,2-diketone",
+        "reactantSmiles": "O=C1CCCCC1",
+        "productSmiles": "O=C1C(=O)CCCC1",
+        "reactantName": "Cyclohexanone",
+        "productName": "Cyclohexane-1,2-dione"
+      }
+    },
+    {
+      "id": "hbr_ionic",
+      "name": "Hydrobromic Acid (Ionic / Dark)",
+      "formula": "HBr",
+      "aliases": [
+        "HBr",
+        "HBr ionic",
+        "HBr (dark)",
+        "HBr/CCl4",
+        "Markovnikov HBr",
+        "HX"
+      ],
+      "category": "addition",
+      "reactivity": {
+        "aldehyde": "no_reaction",
+        "ketone": "no_reaction",
+        "ester": "no_reaction",
+        "carboxylic_acid": "no_reaction",
+        "acid_chloride": "no_reaction",
+        "amide": "no_reaction",
+        "nitrile": "no_reaction",
+        "alkene": "Markovnikov alkyl bromide (via carbocation — HIGH rearrangement risk!)",
+        "alkyne": "Markovnikov vinyl bromide (1 eq) -> gem-dibromide (2 eq)",
+        "epoxide": "bromohydrin (acid-catalyzed attack at MORE substituted carbon)",
+        "nitro": "no_reaction",
+        "alkyl_halide": "no_reaction",
+        "alcohol": "alkyl bromide (1° SN2; 2°/3° SN1 with rearrangement)"
+      },
+      "stereochemistry": "racemization",
+      "stereochemistryDetail": "Planar sp2 carbocation intermediate suffers nucleophilic Br- attack from both faces -> non-stereospecific syn + anti (racemic) mixture.",
+      "rearrangementRisk": "high",
+      "rearrangementNote": "Free carbocation intermediate readily undergoes 1,2-hydride shift, 1,2-methyl shift, or ring expansion before Br- traps it!",
+      "conditions": "HBr in CCl4, AcOH, or dark/peroxide-free conditions",
+      "mechanismClass": "Electrophilic carbocation addition (Markovnikov)",
+      "jeeTraps": [
+        "3-Methylbut-1-ene + HBr gives 2-bromo-2-methylbutane (via 2° -> 3° 1,2-hydride shift) as MAJOR product, NOT 2-bromo-3-methylbutane!",
+        "Watch for ring expansion on vinylcyclobutane / vinylcyclopentane derivatives whenever a 2° carbocation sits adjacent to a strained 4- or 5-membered ring.",
+        "Acid-catalyzed epoxide opening with HBr puts Br at the MORE substituted carbon (SN1-like TS), opposite to basic Nu-/RMgX opening!"
+      ],
+      "example": {
+        "label": "Markovnikov addition WITH 1,2-hydride shift carbocation rearrangement",
+        "reactantSmiles": "CC(C)C=C",
+        "productSmiles": "CCC(C)(C)Br",
+        "reactantName": "3-Methylbut-1-ene",
+        "productName": "2-Bromo-2-methylbutane (rearranged)"
+      }
+    },
+    {
+      "id": "hbr_peroxide",
+      "name": "HBr with Peroxide (Kharasch Effect)",
+      "formula": "HBr/ROOR",
+      "aliases": [
+        "HBr/ROOR",
+        "HBr/peroxide",
+        "HBr/H2O2",
+        "HBr/R2O2",
+        "Kharasch",
+        "peroxide effect",
+        "anti-Markovnikov HBr"
+      ],
+      "category": "addition",
+      "reactivity": {
+        "aldehyde": "no_reaction",
+        "ketone": "no_reaction",
+        "ester": "no_reaction",
+        "carboxylic_acid": "no_reaction",
+        "acid_chloride": "no_reaction",
+        "amide": "no_reaction",
+        "nitrile": "no_reaction",
+        "alkene": "anti-Markovnikov alkyl bromide (via radical chain; ZERO rearrangement!)",
+        "alkyne": "anti-Markovnikov vinyl bromide (1 eq) -> vicinal 1,2-dibromide (2 eq)",
+        "epoxide": "bromohydrin (acid-catalyzed attack at MORE substituted carbon)",
+        "nitro": "no_reaction",
+        "alkyl_halide": "no_reaction",
+        "alcohol": "no_reaction"
+      },
+      "stereochemistry": "racemization",
+      "stereochemistryDetail": "Planar carbon free-radical intermediate gives non-stereospecific syn + anti (racemic) addition.",
+      "rearrangementRisk": "none",
+      "rearrangementNote": "Free radicals do NOT undergo 1,2-hydride or 1,2-methyl shifts — carbon skeleton remains 100% intact!",
+      "conditions": "HBr + organic peroxide (ROOR / BPO) or hν",
+      "mechanismClass": "Free-radical chain anti-Markovnikov addition",
+      "jeeTraps": [
+        "WORKS ONLY FOR HBr! HCl/ROOR (H-abstraction endothermic) and HI/ROOR (I• addition endothermic) BOTH still give ionic MARKOVNIKOV products!",
+        "ZERO carbocation rearrangement because the intermediate is a carbon radical (3-methylbut-1-ene -> 1-bromo-3-methylbutane cleanly).",
+        "Br• adds FIRST to the LESS substituted alkene carbon specifically to form the MORE stable carbon radical (3° > 2° > 1°)."
+      ],
+      "example": {
+        "label": "Anti-Markovnikov radical addition with ZERO rearrangement",
+        "reactantSmiles": "CC(C)C=C",
+        "productSmiles": "CC(C)CCBr",
+        "reactantName": "3-Methylbut-1-ene",
+        "productName": "1-Bromo-3-methylbutane"
+      }
+    },
+    {
+      "id": "acid_hydration",
+      "name": "Acid-Catalyzed Hydration (dil. H2SO4 / H2O)",
+      "formula": "H3O+",
+      "aliases": [
+        "H3O+",
+        "H2O/H+",
+        "dil. H2SO4",
+        "H2SO4/H2O",
+        "acid hydration",
+        "acid-catalyzed hydration"
+      ],
+      "category": "addition",
+      "reactivity": {
+        "aldehyde": "gem-diol hydrate (reversible equilibrium)",
+        "ketone": "gem-diol hydrate (minor equilibrium)",
+        "ester": "carboxylic acid + alcohol (reversible hydrolysis on heating)",
+        "carboxylic_acid": "no_reaction",
+        "acid_chloride": "carboxylic acid (rapid hydrolysis)",
+        "amide": "carboxylic acid + NH4+ (prolonged heating)",
+        "nitrile": "amide -> carboxylic acid (heating)",
+        "alkene": "Markovnikov alcohol via carbocation (HIGH rearrangement risk!)",
+        "alkyne": "Markovnikov ketone (requires HgSO4/H2SO4; ethyne -> acetaldehyde)",
+        "epoxide": "trans/anti-1,2-diol (attack at more substituted carbon)",
+        "nitro": "no_reaction",
+        "alkyl_halide": "no_reaction",
+        "alcohol": "no_reaction"
+      },
+      "stereochemistry": "racemization",
+      "stereochemistryDetail": "Planar carbocation gives non-stereospecific racemic alcohol on alkenes; protonated epoxides open with anti-stereochemistry.",
+      "rearrangementRisk": "high",
+      "rearrangementNote": "Free carbocation intermediate readily undergoes 1,2-hydride shift, 1,2-methyl shift, and ring expansion (e.g. 3,3-dimethylbut-1-ene -> 2,3-dimethylbutan-2-ol).",
+      "conditions": "Dilute aq. H2SO4 (or H3PO4), moderate heat",
+      "mechanismClass": "Electrophilic carbocation hydration",
+      "jeeTraps": [
+        "3,3-Dimethylbut-1-ene + H3O+ rearranges via 1,2-methyl shift to 2,3-dimethylbutan-2-ol (3° alcohol) — unlike oxymercuration which gives unrearranged 3,3-dimethylbutan-2-ol!",
+        "Alkynes require HgSO4/H2SO4 (Kucherov hydration): ethyne is the ONLY alkyne giving an aldehyde (CH3CHO); all higher alkynes give ketones.",
+        "Equilibrium trap: dilute H2SO4 hydrates alkenes to alcohols, while conc. H2SO4 + heat dehydrates alcohols to Zaitsev alkenes!"
+      ],
+      "example": {
+        "label": "Carbocation hydration WITH 1,2-methyl shift rearrangement",
+        "reactantSmiles": "CC(C)(C)C=C",
+        "productSmiles": "CC(C)C(C)(C)O",
+        "reactantName": "3,3-Dimethylbut-1-ene",
+        "productName": "2,3-Dimethylbutan-2-ol (rearranged)"
+      }
+    },
+    {
+      "id": "oxymercuration",
+      "name": "Oxymercuration-Demercuration",
+      "formula": "Hg(OAc)2/H2O then NaBH4",
+      "aliases": [
+        "Hg(OAc)2/H2O then NaBH4",
+        "OMDM",
+        "oxymercuration",
+        "oxymercuration-demercuration",
+        "Hg(OAc)2/NaBH4",
+        "Hg(OAc)2"
+      ],
+      "category": "addition",
+      "reactivity": {
+        "aldehyde": "no_reaction",
+        "ketone": "no_reaction",
+        "ester": "no_reaction",
+        "carboxylic_acid": "no_reaction",
+        "acid_chloride": "no_reaction",
+        "amide": "no_reaction",
+        "nitrile": "no_reaction",
+        "alkene": "Markovnikov alcohol WITHOUT carbocation rearrangement!",
+        "alkyne": "Markovnikov ketone (Hg2+-assisted hydration)",
+        "epoxide": "no_reaction",
+        "nitro": "no_reaction",
+        "alkyl_halide": "no_reaction",
+        "alcohol": "no_reaction"
+      },
+      "stereochemistry": "none",
+      "stereochemistryDetail": "Step 1 (oxymercuration via bridged mercurinium ion) is anti-addition, but Step 2 (NaBH4 radical demercuration) scrambles C–Hg stereochemistry -> overall non-stereospecific (syn + anti) mixture.",
+      "rearrangementRisk": "none",
+      "rearrangementNote": "Bridged cyclic mercurinium ion prevents free carbocation formation — ZERO 1,2-hydride/methyl shifts or ring expansions!",
+      "conditions": "1) Hg(OAc)2, THF/H2O; 2) NaBH4, aq. NaOH",
+      "mechanismClass": "Bridged mercurinium Markovnikov hydration (no rearrangement)",
+      "jeeTraps": [
+        "Delivers the UNREARRANGED Markovnikov alcohol (3,3-dimethylbut-1-ene -> 3,3-dimethylbutan-2-ol), contrasting sharply with H3O+!",
+        "Replacing H2O with an alcohol solvent (MeOH/EtOH) performs alkoxymercuration-demercuration to give the unrearranged Markovnikov ETHER!",
+        "Overall addition is NOT purely anti because NaBH4 demercuration goes via a free radical; using NaBD4 places D at the LESS substituted carbon (and NaBH4 will reduce any ketone/aldehyde also present!)."
+      ],
+      "example": {
+        "label": "Unrearranged Markovnikov hydration via cyclic mercurinium ion",
+        "reactantSmiles": "CC(C)(C)C=C",
+        "productSmiles": "CC(C)(C)C(O)C",
+        "reactantName": "3,3-Dimethylbut-1-ene",
+        "productName": "3,3-Dimethylbutan-2-ol"
+      }
+    },
+    {
+      "id": "hydroboration",
+      "name": "Hydroboration-Oxidation",
+      "formula": "BH3·THF then H2O2/OH-",
+      "aliases": [
+        "BH3·THF then H2O2/OH-",
+        "BH3/THF then H2O2/OH-",
+        "HBO",
+        "hydroboration",
+        "hydroboration-oxidation",
+        "B2H6/THF then H2O2/OH-"
+      ],
+      "category": "addition",
+      "reactivity": {
+        "aldehyde": "1° alcohol (BH3 reduces carbonyls)",
+        "ketone": "2° alcohol (BH3 reduces carbonyls)",
+        "ester": "no_reaction",
+        "carboxylic_acid": "1° alcohol (BH3 reduces -COOH rapidly)",
+        "acid_chloride": "no_reaction",
+        "amide": "amine",
+        "nitrile": "1° amine",
+        "alkene": "anti-Markovnikov alcohol via strict SYN-addition with ZERO rearrangement!",
+        "alkyne": "terminal alkyne -> aldehyde; internal alkyne -> ketone (via anti-Markovnikov enol)",
+        "epoxide": "alcohol",
+        "nitro": "no_reaction",
+        "alkyl_halide": "no_reaction",
+        "alcohol": "no_reaction"
+      },
+      "stereochemistry": "syn",
+      "stereochemistryDetail": "Concerted 4-center syn-hydroboration + H2O2/OH- oxidation with 100% RETENTION at the C–B bond installs H and OH strictly SYN (e.g. 1-methylcyclohexene -> trans-2-methylcyclohexanol!).",
+      "rearrangementRisk": "none",
+      "rearrangementNote": "Concerted 4-membered transition state produces zero carbocation and zero skeletal rearrangement.",
+      "conditions": "1) BH3·THF (or 9-BBN / Sia2BH); 2) H2O2, aq. NaOH",
+      "mechanismClass": "Concerted syn anti-Markovnikov hydroboration-oxidation",
+      "jeeTraps": [
+        "1-Methylcyclohexene + BH3·THF then H2O2/OH- yields TRANS-2-methylcyclohexanol (±) because H and OH add SYN, placing -CH3 and -OH trans to each other!",
+        "Terminal alkynes + hydroboration-oxidation (especially bulky Sia2BH / 9-BBN) give ALDEHYDES (opposite of HgSO4/H2SO4 which gives methyl ketones!).",
+        "Deuterium trap: BD3·THF then H2O2/OH- puts D on the MORE substituted carbon and -OH on the LESS substituted carbon (syn); BH3 then CH3COOD puts D on the LESS substituted carbon (alkane)!"
+      ],
+      "example": {
+        "label": "Anti-Markovnikov syn-hydration with zero rearrangement",
+        "reactantSmiles": "CC(C)(C)C=C",
+        "productSmiles": "CC(C)(C)CCO",
+        "reactantName": "3,3-Dimethylbut-1-ene",
+        "productName": "3,3-Dimethylbutan-1-ol"
+      }
+    },
+    {
+      "id": "br2_ccl4",
+      "name": "Bromine in Carbon Tetrachloride",
+      "formula": "Br2/CCl4",
+      "aliases": [
+        "Br2/CCl4",
+        "Br2/CH2Cl2",
+        "bromination",
+        "bromine water",
+        "X2/CCl4"
+      ],
+      "category": "addition",
+      "reactivity": {
+        "aldehyde": "no_reaction",
+        "ketone": "no_reaction",
+        "ester": "no_reaction",
+        "carboxylic_acid": "no_reaction",
+        "acid_chloride": "no_reaction",
+        "amide": "no_reaction",
+        "nitrile": "no_reaction",
+        "alkene": "trans/anti-vicinal dibromide (red-brown Br2 decolorizes; via cyclic bromonium ion)",
+        "alkyne": "trans-(E)-1,2-dibromoalkene (1 eq) -> 1,1,2,2-tetrabromoalkane (2 eq)",
+        "epoxide": "no_reaction",
+        "nitro": "no_reaction",
+        "alkyl_halide": "no_reaction",
+        "alcohol": "no_reaction"
+      },
+      "stereochemistry": "anti",
+      "stereochemistryDetail": "Cyclic bromonium ion forces strict backside ANTI-addition of Br- (CAR/TAM: cis-2-butene -> racemic ± pair; trans-2-butene -> meso-2,3-dibromobutane).",
+      "rearrangementRisk": "none",
+      "rearrangementNote": "Bridged 3-membered bromonium ion prevents carbocation rearrangement (rare exceptions only for strongly aryl-stabilized styrenes).",
+      "conditions": "Br2 in inert anhydrous CCl4 or CH2Cl2, dark, 0–25 °C",
+      "mechanismClass": "Cyclic bromonium electrophilic anti-addition",
+      "jeeTraps": [
+        "CAR / TAM rule (opposite of OsO4/cold KMnO4): trans-2-butene + Br2/CCl4 (anti) -> MESO-2,3-dibromobutane, while cis-2-butene -> RACEMIC (±) pair!",
+        "Switching solvent to water (Br2/H2O) traps the bromonium ion with H2O at the MORE substituted carbon -> anti-bromohydrin (Br on less substituted C, OH on more substituted C).",
+        "Decolorizes reddish-brown Br2 for alkenes/alkynes, NOT benzene (needs FeBr3 Lewis acid)."
+      ],
+      "example": {
+        "label": "Anti-addition (TAM): (E)-but-2-ene -> meso-2,3-dibromobutane",
+        "reactantSmiles": "C/C=C/C",
+        "productSmiles": "C[C@H](Br)[C@@H](C)Br",
+        "reactantName": "(E)-But-2-ene",
+        "productName": "meso-2,3-Dibromobutane"
+      }
+    },
+    {
+      "id": "sn1",
+      "name": "SN1 Unimolecular Nucleophilic Substitution",
+      "formula": "SN1 (Polar Protic, Weak Nu)",
+      "aliases": [
+        "SN1",
+        "S_N1",
+        "solvolysis",
+        "AgNO3/EtOH",
+        "H2O/EtOH",
+        "unimolecular substitution"
+      ],
+      "category": "substitution_elimination",
+      "reactivity": {
+        "aldehyde": "no_reaction",
+        "ketone": "no_reaction",
+        "ester": "no_reaction",
+        "carboxylic_acid": "no_reaction",
+        "acid_chloride": "solvolysis (fast acyl substitution)",
+        "amide": "no_reaction",
+        "nitrile": "no_reaction",
+        "alkene": "no_reaction",
+        "alkyne": "no_reaction",
+        "epoxide": "acid-catalyzed ring opening at MORE substituted carbon",
+        "nitro": "no_reaction",
+        "alkyl_halide": "3° / benzylic / allylic R-X -> substitution (rate = k[RX]; competes with E1)",
+        "alcohol": "3° / benzylic / allylic R-OH + HX -> R-X (via carbocation with rearrangement!)"
+      },
+      "stereochemistry": "racemization",
+      "stereochemistryDetail": "Planar sp2 carbocation produces racemization with slight excess of inversion (~55:45) due to intimate ion-pair shielding by departing X-.",
+      "rearrangementRisk": "high",
+      "rearrangementNote": "Free carbocation intermediate undergoes fast 1,2-hydride/methyl shifts and ring expansion (e.g. neopentyl bromide + AgNO3/EtOH rearranges completely to tert-amyl ether!).",
+      "conditions": "Polar protic solvent (H2O, EtOH, AcOH), weak nucleophile / heat (or AgNO3 catalyst)",
+      "mechanismClass": "Two-step carbocation unimolecular substitution (rate = k[RX])",
+      "jeeTraps": [
+        "Rate is independent of [Nu]; substrate reactivity: benzyl/allyl ≈ 3° > 2° >> 1° > CH3, and bridgehead halides (1-bromonorbornane) are COMPLETELY UNREACTIVE (Bredt's rule — cannot flatten!).",
+        "JEE Advanced stereo nuance: SN1 gives racemization with SLIGHT EXCESS OF INVERSION (not exact 50:50) because the leaving anion shields the front face in the tight ion pair.",
+        "AgNO3/EtOH pulls off X- as insoluble AgX, forcing SN1 carbocation rearrangement even on 1° neopentyl bromide!"
+      ],
+      "example": {
+        "label": "Solvolysis of chiral 3° bromide with racemization",
+        "reactantSmiles": "CCC[C@](C)(Br)CC",
+        "productSmiles": "CCCC(C)(O)CC",
+        "reactantName": "(R)-3-Bromo-3-methylhexane",
+        "productName": "(±)-3-Methylhexan-3-ol (racemic)"
+      }
+    },
+    {
+      "id": "sn2",
+      "name": "SN2 Bimolecular Nucleophilic Substitution",
+      "formula": "SN2 (Polar Aprotic, Strong Nu)",
+      "aliases": [
+        "SN2",
+        "S_N2",
+        "NaCN/DMSO",
+        "NaI/acetone",
+        "Finkelstein",
+        "Williamson",
+        "bimolecular substitution"
+      ],
+      "category": "substitution_elimination",
+      "reactivity": {
+        "aldehyde": "no_reaction",
+        "ketone": "no_reaction",
+        "ester": "no_reaction",
+        "carboxylic_acid": "deprotonation",
+        "acid_chloride": "acyl substitution",
+        "amide": "no_reaction",
+        "nitrile": "no_reaction",
+        "alkene": "no_reaction",
+        "alkyne": "no_reaction",
+        "epoxide": "ring opening at LESS hindered carbon with inversion",
+        "nitro": "no_reaction",
+        "alkyl_halide": "CH3 > 1° > 2° R-X -> substituted product (3° R-X: NO SN2 -> E2!); rate = k[RX][Nu]",
+        "alcohol": "no_reaction"
+      },
+      "stereochemistry": "inversion",
+      "stereochemistryDetail": "Concerted 180° backside attack through a pentacoordinate transition state yields 100% Walden inversion.",
+      "rearrangementRisk": "none",
+      "rearrangementNote": "Single concerted step — zero carbocation formation and zero skeletal rearrangement.",
+      "conditions": "Polar aprotic solvent (DMSO, DMF, acetone, MeCN), strong unhindered nucleophile (CN-, I-, RS-, N3-)",
+      "mechanismClass": "Concerted backside bimolecular substitution (rate = k[RX][Nu])",
+      "jeeTraps": [
+        "Solvent nucleophilicity flip: in polar APROTIC solvents (DMSO/DMF) halide reactivity is F- > Cl- > Br- > I-, whereas in polar PROTIC solvents (H2O/EtOH) it reverses to I- > Br- > Cl- > F-!",
+        "Neopentyl bromide ((CH3)3C-CH2Br) is a 1° halide yet is ~100,000× slower in SN2 than ethyl bromide due to massive β-branching steric hindrance.",
+        "Walden inversion always flips 3D configuration, BUT the CIP (R)/(S) label can stay the same if the incoming nucleophile alters priority numbering — always recompute CIP!"
+      ],
+      "example": {
+        "label": "Backside SN2 displacement with 100% Walden inversion (R -> S)",
+        "reactantSmiles": "CC[C@@H](C)Br",
+        "productSmiles": "CC[C@H](C)C#N",
+        "reactantName": "(R)-2-Bromobutane",
+        "productName": "(S)-2-Methylbutanenitrile"
+      }
+    },
+    {
+      "id": "e2_zaitsev",
+      "name": "Zaitsev E2 Elimination (Small Strong Base)",
+      "formula": "EtO-/EtOH",
+      "aliases": [
+        "EtO-/EtOH",
+        "NaOEt/EtOH",
+        "alc. KOH",
+        "KOH/EtOH",
+        "E2 Zaitsev",
+        "Zaitsev",
+        "Saytzeff"
+      ],
+      "category": "substitution_elimination",
+      "reactivity": {
+        "aldehyde": "aldol condensation (if α-H present)",
+        "ketone": "aldol condensation (if α-H present)",
+        "ester": "transesterification / Claisen condensation",
+        "carboxylic_acid": "deprotonation",
+        "acid_chloride": "ethyl ester",
+        "amide": "no_reaction",
+        "nitrile": "no_reaction",
+        "alkene": "no_reaction",
+        "alkyne": "no_reaction",
+        "epoxide": "ring opening at less hindered carbon",
+        "nitro": "α-deprotonation (if α-H)",
+        "alkyl_halide": "more substituted (Zaitsev) trans-alkene (2°/3° R-X; 1° R-X prefers SN2 ether)",
+        "alcohol": "no_reaction"
+      },
+      "stereochemistry": "anti",
+      "stereochemistryDetail": "Strict anti-periplanar (180° dihedral) elimination of β-H and leaving group; cyclohexyl halides MUST adopt a diaxial (trans-diaxial) chair conformation.",
+      "rearrangementRisk": "none",
+      "rearrangementNote": "Concerted one-step β-elimination — zero carbocation rearrangement.",
+      "conditions": "NaOEt/EtOH or alc. KOH (small unhindered strong base), heat",
+      "mechanismClass": "Concerted anti-periplanar Zaitsev E2 elimination",
+      "jeeTraps": [
+        "Anti-periplanar ring trap: trans-1-bromo-2-methylcyclohexane cannot place Br and C2-H trans-diaxial simultaneously, so it eliminates exclusively toward C6 -> 3-methylcyclohexene (Hofmann-like!) even with EtO-!",
+        "Poor leaving groups (-F, -NR3+, -SR2+) give the HOFMANN (less substituted) alkene even with small EtO- because the transition state becomes carbanion-like (E1cb-like)!",
+        "Shows a large primary kinetic isotope effect (k_H / k_D ≈ 3–7) since C–H cleavage is rate-determining."
+      ],
+      "example": {
+        "label": "Zaitsev elimination to the more substituted internal alkene",
+        "reactantSmiles": "CCC(C)(C)Br",
+        "productSmiles": "CC=C(C)C",
+        "reactantName": "2-Bromo-2-methylbutane",
+        "productName": "2-Methylbut-2-ene (Zaitsev)"
+      }
+    },
+    {
+      "id": "e2_hofmann",
+      "name": "Hofmann E2 Elimination (Bulky Strong Base)",
+      "formula": "t-BuO-/t-BuOH",
+      "aliases": [
+        "t-BuO-/t-BuOH",
+        "t-BuOK",
+        "KOtBu",
+        "tBuOK",
+        "E2 Hofmann",
+        "Hofmann",
+        "bulky base"
+      ],
+      "category": "substitution_elimination",
+      "reactivity": {
+        "aldehyde": "aldol condensation (sterically slowed)",
+        "ketone": "kinetic enolate / aldol",
+        "ester": "no_reaction",
+        "carboxylic_acid": "deprotonation",
+        "acid_chloride": "tert-butyl ester",
+        "amide": "no_reaction",
+        "nitrile": "no_reaction",
+        "alkene": "no_reaction",
+        "alkyne": "no_reaction",
+        "epoxide": "slow opening at least hindered carbon",
+        "nitro": "α-deprotonation",
+        "alkyl_halide": "less substituted (Hofmann) alkene (1°/2°/3° R-X; suppresses SN2 even on 1° halides!)",
+        "alcohol": "no_reaction"
+      },
+      "stereochemistry": "anti",
+      "stereochemistryDetail": "Concerted anti-periplanar β-elimination dominated by steric accessibility of the least hindered β-hydrogen.",
+      "rearrangementRisk": "none",
+      "rearrangementNote": "Single concerted E2 step — zero carbocation rearrangement.",
+      "conditions": "t-BuOK in t-BuOH (or bulky DBU / Et3N), heat",
+      "mechanismClass": "Sterically controlled anti-periplanar Hofmann E2 elimination",
+      "jeeTraps": [
+        "Steric bulk of t-BuO- selects the most accessible 1° β-H, flipping regioselectivity from Zaitsev (2-methylbut-2-ene) to Hofmann (2-methylbut-1-ene)!",
+        "Forces E2 elimination even on 1° alkyl halides (e.g. 1-bromobutane -> 1-butene) where small EtO- would instead perform Williamson SN2!",
+        "Conjugation exception: if elimination produces a conjugated styrene/diene, resonance stabilization can still override bulky-base Hofmann preference."
+      ],
+      "example": {
+        "label": "Hofmann elimination to the less substituted terminal alkene",
+        "reactantSmiles": "CCC(C)(C)Br",
+        "productSmiles": "CCC(=C)C",
+        "reactantName": "2-Bromo-2-methylbutane",
+        "productName": "2-Methylbut-1-ene (Hofmann)"
+      }
+    },
+    {
+      "id": "socl2_py",
+      "name": "Thionyl Chloride with Pyridine (Darzens SN2)",
+      "formula": "SOCl2/Pyridine",
+      "aliases": [
+        "SOCl2/Pyridine",
+        "SOCl2/Py",
+        "Darzens",
+        "SOCl2 + pyridine",
+        "thionyl chloride pyridine"
+      ],
+      "category": "substitution_elimination",
+      "reactivity": {
+        "aldehyde": "no_reaction",
+        "ketone": "no_reaction",
+        "ester": "no_reaction",
+        "carboxylic_acid": "acid chloride (R-COOH -> R-COCl)",
+        "acid_chloride": "no_reaction",
+        "amide": "nitrile (1° amide dehydration)",
+        "nitrile": "no_reaction",
+        "alkene": "no_reaction",
+        "alkyne": "no_reaction",
+        "epoxide": "no_reaction",
+        "nitro": "no_reaction",
+        "alkyl_halide": "no_reaction",
+        "alcohol": "alkyl chloride with COMPLETE INVERSION of configuration (SN2 via free Cl-)"
+      },
+      "stereochemistry": "inversion",
+      "stereochemistryDetail": "Pyridine scavenges HCl to liberate nucleophilic Cl-, which displaces the chlorosulfite (-OSOCl) via backside SN2 -> 100% INVERSION.",
+      "rearrangementRisk": "none",
+      "rearrangementNote": "Concerted SN2 displacement on the alkyl chlorosulfite avoids carbocation rearrangements.",
+      "conditions": "SOCl2, pyridine (1 equiv), dry ether/CH2Cl2, 0–25 °C",
+      "mechanismClass": "SN2 backside displacement on alkyl chlorosulfite",
+      "jeeTraps": [
+        "THE #1 JEE chlorination stereochemistry trap: adding Pyridine switches SOCl2 from SNi (RETENTION) to SN2 (INVERSION) because pyridine generates free external Cl-!",
+        "Converts 1° and 2° alcohols cleanly into R-Cl WITHOUT carbocation rearrangement (unlike HCl/ZnCl2 Lucas reagent).",
+        "Also converts carboxylic acids cleanly into acid chlorides (RCOCl) and dehydrates 1° amides to nitriles."
+      ],
+      "example": {
+        "label": "Chlorination of chiral 2° alcohol with complete INVERSION (S -> R)",
+        "reactantSmiles": "CC[C@H](C)O",
+        "productSmiles": "CC[C@@H](C)Cl",
+        "reactantName": "(S)-Butan-2-ol",
+        "productName": "(R)-2-Chlorobutane (inversion)"
+      }
+    },
+    {
+      "id": "socl2_sni",
+      "name": "Thionyl Chloride Neat (SNi Retention)",
+      "formula": "SOCl2 neat (SNi)",
+      "aliases": [
+        "SOCl2 neat (SNi)",
+        "SOCl2 neat",
+        "SOCl2",
+        "SNi",
+        "S_Ni",
+        "SOCl2/ether",
+        "SOCl2/dioxane",
+        "thionyl chloride"
+      ],
+      "category": "substitution_elimination",
+      "reactivity": {
+        "aldehyde": "no_reaction",
+        "ketone": "no_reaction",
+        "ester": "no_reaction",
+        "carboxylic_acid": "acid chloride (R-COOH -> R-COCl)",
+        "acid_chloride": "no_reaction",
+        "amide": "nitrile (1° amide dehydration)",
+        "nitrile": "no_reaction",
+        "alkene": "no_reaction",
+        "alkyne": "no_reaction",
+        "epoxide": "no_reaction",
+        "nitro": "no_reaction",
+        "alkyl_halide": "no_reaction",
+        "alcohol": "alkyl chloride with RETENTION of configuration (SNi internal front-side delivery)"
+      },
+      "stereochemistry": "retention",
+      "stereochemistryDetail": "Internal nucleophilic substitution (SNi): the alkyl chlorosulfite (R-O-SOCl) collapses via a tight intimate ion pair delivering Cl- from the SAME face -> RETENTION.",
+      "rearrangementRisk": "none",
+      "rearrangementNote": "Tight intimate ion-pair collapse suppresses free carbocation shifts on standard 2° alcohols.",
+      "conditions": "Neat SOCl2 (or in Et2O / 1,4-dioxane), gentle warming; SO2↑ + HCl↑ escape as gases",
+      "mechanismClass": "Internal nucleophilic substitution (SNi) via intimate ion pair",
+      "jeeTraps": [
+        "Neat SOCl2 (no pyridine!) gives RETENTION via SNi, directly opposite to SOCl2/Pyridine which gives INVERSION via SN2!",
+        "Solvent trap: in 1,4-dioxane, solvent neighboring-group participation causes double inversion -> still overall RETENTION!",
+        "PCl5, PCl3, and PBr3 with chiral 2° alcohols ALWAYS give INVERSION (SN2), never SNi retention."
+      ],
+      "example": {
+        "label": "SNi chlorination of chiral 2° alcohol with RETENTION (S -> S)",
+        "reactantSmiles": "CC[C@H](C)O",
+        "productSmiles": "CC[C@H](C)Cl",
+        "reactantName": "(S)-Butan-2-ol",
+        "productName": "(S)-2-Chlorobutane (retention)"
+      }
+    },
+    {
+      "id": "grignard",
+      "name": "Grignard Reagent (RMgX)",
+      "formula": "RMgX",
+      "aliases": [
+        "RMgX",
+        "RMgBr",
+        "MeMgBr",
+        "PhMgBr",
+        "Grignard",
+        "Grignard reagent"
+      ],
+      "category": "carbonyl_cc",
+      "reactivity": {
+        "aldehyde": "HCHO -> 1° alcohol; other R'CHO -> 2° alcohol",
+        "ketone": "3° alcohol (1,2-addition even on unhindered α,β-unsaturated ketones)",
+        "ester": "3° alcohol (adds 2 equiv RMgX via ketone; formate ester -> 2° alcohol)",
+        "carboxylic_acid": "acid-base quench ONLY (forms R-H alkane + R'COOMgX; consumes RMgX!)",
+        "acid_chloride": "3° alcohol (adds 2 equiv RMgX — does NOT stop at ketone!)",
+        "amide": "acid-base quench (1°/2° amide) or sluggish (3° amide; Weinreb amide stops at ketone)",
+        "nitrile": "ketone (adds 1 equiv -> imine salt -> H3O+ gives R'-CO-R)",
+        "alkene": "no_reaction",
+        "alkyne": "terminal alkyne -> acid-base quench (R-H + R'-C≡C-MgX); internal -> no_reaction",
+        "epoxide": "alcohol (+2 C with ethylene oxide; SN2 attack at LESS hindered carbon)",
+        "nitro": "incompatible (complex reduction/quench)",
+        "alkyl_halide": "no_reaction",
+        "alcohol": "acid-base quench ONLY (forms R-H alkane + R'OMgX — Zerewitinoff active-H trap!)"
+      },
+      "stereochemistry": "inversion",
+      "stereochemistryDetail": "SN2 backside ring opening of epoxides gives inversion at the less hindered carbon; carbonyl additions give racemic alcohols unless Cram/Felkin-Anh biased.",
+      "rearrangementRisk": "none",
+      "rearrangementNote": "Carbanion-like nucleophilic addition / SN2 involves zero carbocation rearrangement.",
+      "conditions": "Anhydrous Et2O or THF, 0–25 °C (strictly moisture/O2-free), then H3O+ workup",
+      "mechanismClass": "Hard carbanion nucleophilic addition (1,2-selective)",
+      "jeeTraps": [
+        "Zerewitinoff active-H trap: ANY protic H (-OH, -COOH, -NH, -SH, terminal -C≡CH, H2O) instantaneously protonates RMgX to alkane R-H before carbonyl attack!",
+        "Esters and acid chlorides consume 2 equiv RMgX to yield 3° alcohols — cannot stop at a ketone (use Gilman R2CuLi or R2Cd for RCOCl -> ketone!).",
+        "On α,β-unsaturated ketones, hard RMgX prefers direct 1,2-addition to C=O, whereas soft Gilman R2CuLi gives 1,4-conjugate (Michael) addition."
+      ],
+      "example": {
+        "label": "Double addition of MeMgBr to benzoyl chloride -> 3° alcohol",
+        "reactantSmiles": "O=C(Cl)c1ccccc1",
+        "productSmiles": "CC(C)(O)c1ccccc1",
+        "reactantName": "Benzoyl chloride",
+        "productName": "2-Phenylpropan-2-ol (with 2 eq MeMgBr)"
+      }
+    },
+    {
+      "id": "gilman",
+      "name": "Gilman Reagent (Lithium Dialkylcuprate)",
+      "formula": "R2CuLi",
+      "aliases": [
+        "R2CuLi",
+        "Me2CuLi",
+        "Gilman",
+        "Gilman reagent",
+        "organocuprate",
+        "Corey-House"
+      ],
+      "category": "carbonyl_cc",
+      "reactivity": {
+        "aldehyde": "2° alcohol (sluggish at -78 °C; much less reactive than RMgX)",
+        "ketone": "no_reaction (saturated ketones untouched; α,β-unsaturated ketones -> 1,4-Michael addition!)",
+        "ester": "no_reaction",
+        "carboxylic_acid": "acid-base quench",
+        "acid_chloride": "ketone (STOPS CLEANLY at ketone without 2nd addition!)",
+        "amide": "no_reaction",
+        "nitrile": "no_reaction",
+        "alkene": "no_reaction",
+        "alkyne": "no_reaction",
+        "epoxide": "alcohol (SN2 opening at LESS hindered carbon)",
+        "nitro": "no_reaction",
+        "alkyl_halide": "alkane (Corey-House coupling with 1°/2° alkyl, vinyl, and aryl halides!)",
+        "alcohol": "acid-base quench"
+      },
+      "stereochemistry": "inversion",
+      "stereochemistryDetail": "Corey-House coupling on chiral 2° halides/tosylates proceeds with inversion; vinyl halides couple with RETENTION of E/Z geometry; epoxides open with SN2 inversion.",
+      "rearrangementRisk": "none",
+      "rearrangementNote": "Oxidative-addition / reductive-elimination organocopper pathway avoids carbocation rearrangement.",
+      "conditions": "R2CuLi (from 2 RLi + CuI) in dry Et2O or THF, -78 °C to 0 °C, then H3O+",
+      "mechanismClass": "Soft organocopper acyl substitution / 1,4-conjugate / Corey-House coupling",
+      "jeeTraps": [
+        "Converts acid chlorides (RCOCl) cleanly into KETONES and stops there because soft R2CuLi does NOT react with saturated ketones or esters!",
+        "On α,β-unsaturated ketones (enones), R2CuLi delivers exclusive 1,4-conjugate (Michael) addition — the exact regioselective complement to Grignard 1,2-addition!",
+        "Corey-House synthesis couples R2CuLi with 1° alkyl, vinyl (with E/Z retention), and aryl halides cleanly (unlike Wurtz coupling, works for unsymmetrical alkanes!)."
+      ],
+      "example": {
+        "label": "Chemoselective conversion of benzoyl chloride to ketone (stops cleanly)",
+        "reactantSmiles": "O=C(Cl)c1ccccc1",
+        "productSmiles": "CC(=O)c1ccccc1",
+        "reactantName": "Benzoyl chloride",
+        "productName": "Acetophenone (with Me2CuLi)"
+      }
+    },
+    {
+      "id": "haloform",
+      "name": "Haloform / Iodoform Reaction",
+      "formula": "I2/NaOH",
+      "aliases": [
+        "I2/NaOH",
+        "iodoform",
+        "haloform",
+        "X2/NaOH",
+        "NaOI",
+        "NaOCl",
+        "Cl2/NaOH",
+        "Br2/NaOH"
+      ],
+      "category": "carbonyl_cc",
+      "reactivity": {
+        "aldehyde": "acetaldehyde (CH3CHO) ONLY -> CHI3 (yellow ppt) + HCOO-; other aldehydes -> no_reaction",
+        "ketone": "methyl ketones (R-CO-CH3) -> CHI3 (yellow ppt) + R-COO-; non-methyl ketones -> no_reaction",
+        "ester": "no_reaction",
+        "carboxylic_acid": "no_reaction",
+        "acid_chloride": "hydrolysis to carboxylate (NEGATIVE for haloform)",
+        "amide": "no_reaction",
+        "nitrile": "no_reaction",
+        "alkene": "no_reaction",
+        "alkyne": "no_reaction",
+        "epoxide": "no_reaction",
+        "nitro": "no_reaction",
+        "alkyl_halide": "no_reaction",
+        "alcohol": "ethanol (CH3CH2OH) & 2°-methyl alcohols (R-CH(OH)-CH3) -> oxidized in situ -> CHI3 + R-COO-"
+      },
+      "stereochemistry": "none",
+      "stereochemistryDetail": "Oxidative C–C cleavage removes the terminal methyl carbon as CHI3 (yellow antiseptic-smelling precipitate), shortening the carbon chain by 1 carbon.",
+      "rearrangementRisk": "none",
+      "rearrangementNote": "Base-catalyzed α-trihalogenation followed by acyl cleavage involves zero skeletal rearrangement.",
+      "conditions": "I2 + aq. NaOH (or NaOI / NaOCl), warm",
+      "mechanismClass": "Base-promoted α-trihalogenation & oxidative acyl cleavage",
+      "jeeTraps": [
+        "Positive ONLY for CH3-C(=O)-R (R = H, alkyl, aryl) AND alcohols oxidizable to it: ethanol (CH3CH2OH) and R-CH(OH)-CH3 — methanol and propan-1-ol are NEGATIVE!",
+        "Acid derivatives with a CH3-CO- fragment (CH3COOH, CH3COOEt, CH3CONH2, CH3COCl) give NEGATIVE haloform test because leaving-group / resonance interaction prevents tri-iodination!",
+        "With Br2/NaOH on a 1° amide (RCONH2), the reaction is Hofmann bromamide degradation (-> RNH2 with 1 less carbon), NOT haloform!"
+      ],
+      "example": {
+        "label": "Iodoform cleavage of a methyl ketone to benzoate + yellow CHI3",
+        "reactantSmiles": "CC(=O)c1ccccc1",
+        "productSmiles": "O=C([O-])c1ccccc1.IC(I)I",
+        "reactantName": "Acetophenone",
+        "productName": "Benzoate ion + Iodoform (CHI3)"
+      }
+    },
+    {
+      "id": "cannizzaro",
+      "name": "Cannizzaro Reaction (conc. NaOH)",
+      "formula": "conc. NaOH",
+      "aliases": [
+        "conc. NaOH",
+        "Cannizzaro",
+        "Cannizzaro reaction",
+        "50% NaOH",
+        "conc. KOH",
+        "crossed Cannizzaro"
+      ],
+      "category": "carbonyl_cc",
+      "reactivity": {
+        "aldehyde": "aldehydes with NO α-H (HCHO, PhCHO, Me3C-CHO) -> 1:1 alcohol + carboxylate; aldehydes WITH α-H -> Aldol instead!",
+        "ketone": "no_reaction",
+        "ester": "saponification (carboxylate + alcohol)",
+        "carboxylic_acid": "deprotonation to carboxylate",
+        "acid_chloride": "hydrolysis to carboxylate",
+        "amide": "slow hydrolysis on heating",
+        "nitrile": "slow hydrolysis on heating",
+        "alkene": "no_reaction",
+        "alkyne": "no_reaction",
+        "epoxide": "nucleophilic ring opening at less hindered carbon",
+        "nitro": "no_reaction",
+        "alkyl_halide": "E2 elimination / SN2 hydrolysis",
+        "alcohol": "no_reaction"
+      },
+      "stereochemistry": "none",
+      "stereochemistryDetail": "Rate-determining direct intermolecular hydride (H-) transfer between two aldehyde molecules; running in D2O incorporates ZERO deuterium on the reduced C–H bond.",
+      "rearrangementRisk": "none",
+      "rearrangementNote": "Direct hydride transfer to a second carbonyl carbon involves zero carbocation rearrangement.",
+      "conditions": "Conc. (50%) aq. NaOH or KOH, 25–100 °C",
+      "mechanismClass": "Base-promoted aldehyde disproportionation (direct H- transfer)",
+      "jeeTraps": [
+        "Requires an aldehyde with ZERO α-hydrogens (HCHO, ArCHO, Me3C-CHO); aldehydes with α-H undergo ALDOL condensation instead (famous exception: isobutyraldehyde (CH3)2CHCHO gives Cannizzaro at high T!).",
+        "Crossed Cannizzaro with HCHO: formaldehyde is ALWAYS oxidized to HCOO- and the other aldehyde (e.g. PhCHO) is ALWAYS reduced to alcohol (PhCH2OH), because HCHO is more electrophilic!",
+        "Intramolecular Cannizzaro on phenylglyoxal (Ph-CO-CHO) gives mandelate (Ph-CH(OH)-COO-) because OH- attacks the more electrophilic -CHO and transfers H- to the ketone!"
+      ],
+      "example": {
+        "label": "Disproportionation of benzaldehyde (no α-H) -> benzoate + benzyl alcohol",
+        "reactantSmiles": "O=Cc1ccccc1",
+        "productSmiles": "O=C([O-])c1ccccc1.OCc1ccccc1",
+        "reactantName": "Benzaldehyde",
+        "productName": "Benzoate ion + Benzyl alcohol"
+      }
+    }
+  ]
+}

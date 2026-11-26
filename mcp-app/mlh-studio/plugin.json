@@ -1,0 +1,12 @@
+{
+  "name": "syntopik-studio",
+  "displayName": "Syntopik Studio",
+  "description": "Calm inline quiz cards, hidden-solution practice cards, and live side-pane Study Studio (Autopilot, Plan DAG, Knowledge Graph, zero-token FSRS-6 Flashcards, Mistake Traps) for Syntopik.",
+  "version": "2.0.0",
+  "logo": "assets/logo.svg",
+  "suggestedPrompts": [
+    "Open Syntopik Studio and review my due FSRS-6 flashcards",
+    "Probe my frontier on Distributed Consensus and build a lesson DAG",
+    "Run an interleaved practice drill with verified solutions"
+  ]
+}
