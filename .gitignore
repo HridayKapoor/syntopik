@@ -27,8 +27,14 @@ knowledge-graph/forks.jsonl
 knowledge-graph/arenas.jsonl
 knowledge-graph/decisions.jsonl
 knowledge-graph/blitz-sessions.json
+knowledge-graph/learner-profile.json
+knowledge-graph/whiteboard-session.json
+knowledge-graph/derivations.jsonl
+knowledge-graph/evidence-ledger.jsonl
+knowledge-graph/viva-sessions.jsonl
 knowledge-graph/review-queue.md
 knowledge-graph/graph-data.js
+exports/
 chapters/*
 !chapters/.gitkeep
 exams/*
@@ -46,6 +52,7 @@ animations/*
 !animations/sample_*.py
 *-backup-*.tar.gz
 *.syntopik-pack.zip
+!packs/*.syntopik-pack.zip
 .syntopik/
 dist/
 *.egg-info/

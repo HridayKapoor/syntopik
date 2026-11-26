@@ -6,7 +6,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "R=\"${CLAUDE_PLUGIN_ROOT}\"; node \"${R:-${CLAUDE_PROJECT_DIR:-.}}/.agents/hooks/session-start.mjs\"",
+            "command": "node \"${CLAUDE_PLUGIN_ROOT}/.agents/hooks/session-start.mjs\"",
             "timeout": 10
           }
         ]
@@ -18,7 +18,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "R=\"${CLAUDE_PLUGIN_ROOT}\"; node \"${R:-${CLAUDE_PROJECT_DIR:-.}}/.agents/hooks/post-graph-sync.mjs\"",
+            "command": "node \"${CLAUDE_PLUGIN_ROOT}/.agents/hooks/post-graph-sync.mjs\"",
             "timeout": 10
           }
         ]

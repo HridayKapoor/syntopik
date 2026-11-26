@@ -1,11 +1,12 @@
 #!/usr/bin/env node
 /**
- * Syntopik v2.0 Unified CLI (Zero-Dependency Node ESM Wrapper)
+ * Syntopik v3.0 Unified CLI (Zero-Dependency Node ESM Wrapper)
  *
  * Natively handles:
- *   init, attach, sync, mcp, --help, --version
+ *   init, attach, sync, mcp, hook, --help, --version
  * Cleanly delegates to Python (.venv -> python3 -> python):
- *   serve, import, review, triage, pack, doctor, export, connect, run
+ *   serve, import, review, triage, pack, doctor, export, connect, run,
+ *   next, profile, drop, demo, debrief, mode, sunset, pace, board, bench
  */
 
 import { spawnSync } from "node:child_process";
@@ -30,9 +31,9 @@ const PACKAGE_ROOT = path.resolve(__dirname, "..");
 const VERSION = (() => {
 	try {
 		const pkg = JSON.parse(readFileSync(path.join(PACKAGE_ROOT, "package.json"), "utf8"));
-		return pkg.version || "2.0.0";
+		return pkg.version || "3.0.0";
 	} catch {
-		return "2.0.0";
+		return "3.0.0";
 	}
 })();
 
@@ -51,6 +52,11 @@ const LEDGER_FILES = [
 	"mistakes.jsonl",
 	"exam-attempts.jsonl",
 	"harness-log.jsonl",
+	"revlog.jsonl",
+	"reading-queue.jsonl",
+	"derivations.jsonl",
+	"evidence-ledger.jsonl",
+	"viva-sessions.jsonl",
 ];
 
 const STARTER_REVIEW_QUEUE = `# Spaced Review & Weak-Edge Queue
@@ -79,6 +85,8 @@ const ALL_HARNESSES = [
 	"gemini",
 ];
 
+const DEFAULT_FALLBACK_HARNESSES = ["claude", "codex", "cursor"];
+
 const HELP_TEXT = `Syntopik v${VERSION} — Universal AI Deep-Mastery OS
 
 Usage:
@@ -94,24 +102,46 @@ Native Node Commands (zero Python required):
       Rebuild knowledge-graph/graph-data.js (schemaVersion 4).
   mcp [--workspace <dir>]
       Run the SEP-1865 Syntopik Studio MCP App over stdio.
+  hook <session-start|post-graph-sync> [--workspace <dir>]
+      Run a Syntopik lifecycle hook portably (used by _npx-safe & Windows-safe configs).
 
 Full Studio & Engine Commands (Python 3.12+ stdlib):
+  next [--energy low|normal|deep] [--domain <name>] [--json]
+      Plan the single optimal next pedagogical move (Brainstem).
+  profile [status|calibrate|policy|override|reset] [--json]
+      Inspect, calibrate, override, or reset the Adaptive Learner Profile.
+  drop <inputs...> [--slug <slug>] [--title <title>] [--json]
+      Drop mixed sources (PDF, URL, YouTube, repo, notes) with Teacher-First classification.
+  demo [--pack raft-consensus|shm-physics|transformers-attention|all] [--open] [--port 4173] [--json]
+      Load bundled zero-PII starter packs into a clean demo workspace.
   serve [--port 4173] [--host 127.0.0.1] [--lan] [--open] [--workspace <dir>]
       Launch the 2-way local Studio web server (127.0.0.1, optional --lan Pocket QR).
-  import <target> [--kind auto|youtube|arxiv|repo|url|notes] [--slug <slug>] [--register-tracker]
+  import <target> [--kind auto|youtube|arxiv|repo|url|notes] [--slug|--chapter <slug>] [--register-tracker]
       Ingest PDFs, YouTube captions, arXiv papers, GitHub repos, or web articles.
-  review [--web] [--limit 25] [--compress] [--bury-siblings]
-      Run FIRe-compressed FSRS-6 due review or open Studio Flashcards.
-  triage [--hours 48] [--sleep-hours 7] [--chapter <slug>] [--crib-sheet]
+  review [--web] [--tui] [--recover --daily-cap 15] [--resume] [--energy low|normal|deep] [--limit 25]
+      Run FIRe-compressed FSRS-6 review, TUI loop, calm recovery, re-entry, or Studio Flashcards.
+  triage [--hours 48 | --exam-in 48h] [--sleep-hours 7] [--chapter <slug>] [--crib-sheet]
       Generate a Pareto 48h exam triage plan and optional 1-page Anti-Mastery crib sheet.
+  debrief [--ref HEAD~1..HEAD] [--dry-run] [--json]
+      Crystallize git diff bugs/invariants into Forks, Arenas, and KG propositions.
+  mode [mentor|study] [--off] [--json]
+      Toggle Anti-Vibe-Coding Work Mentor mode vs Study mode.
+  sunset <slug> [--apply] [--json]
+      Archive a finished chapter pack, keep core axioms at R=0.80, and retire leaves.
+  pace [--rebalance] [--ics <path>] [--json]
+      Run the multi-course buffer-protected Auto-Pacer with optional .ics export.
+  board [status|push|pin|clear] [--json]
+      Inspect or push frames/pins to the live AI-to-Whiteboard SSE bus.
+  bench [--days 60] [--seed 42] [--svg] [--check] [--json]
+      Run the deterministic 60-day multi-persona Syntopik-Eval cognitive benchmark.
   pack <export|import|inspect|verify> [...]
       Create, verify, or import zero-PII portable Study Packs (.syntopik-pack.zip).
-  export <obsidian|pocket|anki|pack> [...]
-      Export to Obsidian vault, offline Pocket HTML deck, Anki .apkg, or Study Pack.
+  export <obsidian|pocket|anki|pack|json|dossier> [--out|--vault <path>] [--pocket] [...]
+      Export to Obsidian vault, offline Pocket HTML deck, Anki .apkg, Study Pack, JSON, or Mastery Dossier.
   connect <harness> [--bundle studio|full]
       Install or print global plugin/extension configuration for a harness.
-  doctor [--core-only] [--json]
-      Run workspace, runtime, and packaging health diagnostics.
+  doctor [--core-only] [--fix] [--json]
+      Run workspace, runtime, and packaging health diagnostics (optional non-destructive --fix).
   run <engine> [args...]
       Execute any bundled Syntopik engine script cleanly from any directory.
 
@@ -119,6 +149,10 @@ Options:
   -h, --help       Show this help message
   -v, --version    Print version
 `;
+
+function isEphemeralNpxRoot(rootDir = PACKAGE_ROOT) {
+	return /[\\/]_npx[\\/]/i.test(String(rootDir || ""));
+}
 
 function parseFlag(argv, flag) {
 	for (let i = 0; i < argv.length; i++) {
@@ -150,6 +184,31 @@ function positionalArgs(argv, valueFlags) {
 		out.push(tok);
 	}
 	return out;
+}
+
+function isDir(p) {
+	try {
+		return existsSync(p) && statSync(p).isDirectory();
+	} catch {
+		return false;
+	}
+}
+
+function isFile(p) {
+	try {
+		return existsSync(p) && statSync(p).isFile();
+	} catch {
+		return false;
+	}
+}
+
+function resolveAttachedWorkspace(cwdDir) {
+	const abs = path.resolve(cwdDir);
+	const dotSyntKg = path.join(abs, ".syntopik", "knowledge-graph");
+	if (isDir(dotSyntKg)) return path.join(abs, ".syntopik");
+	if (isDir(path.join(abs, "knowledge-graph"))) return abs;
+	if (isDir(path.join(abs, ".syntopik"))) return path.join(abs, ".syntopik");
+	return null;
 }
 
 function ensureLearnerWorkspace(wsDir) {
@@ -287,21 +346,106 @@ function writeJsonMerged(filePath, mutator) {
 	return { existed };
 }
 
-function linkOrCopySkills(srcSkills, destSkills, forceCopy) {
-	if (existsSync(destSkills)) {
+function linkOrCopyDir(srcDir, destDir, forceCopy) {
+	if (existsSync(destDir)) {
 		return { action: "preserved", created: false };
 	}
-	mkdirSync(path.dirname(destSkills), { recursive: true });
+	const absSrc = path.resolve(srcDir);
+	mkdirSync(path.dirname(destDir), { recursive: true });
 	if (!forceCopy) {
 		try {
-			symlinkSync(srcSkills, destSkills, process.platform === "win32" ? "junction" : "dir");
-			return { action: "symlinked", created: true };
+			// Always use an absolute target path so Windows NTFS junctions succeed cleanly.
+			symlinkSync(absSrc, destDir, process.platform === "win32" ? "junction" : "dir");
+			return { action: process.platform === "win32" ? "junction" : "symlinked", created: true };
 		} catch {
-			// Fall back to directory copy on symlink-restricted environments
+			// Fall back to recursive copy on symlink-restricted environments
 		}
 	}
-	cpSync(srcSkills, destSkills, { recursive: true });
+	cpSync(absSrc, destDir, { recursive: true });
 	return { action: "copied", created: true };
+}
+
+function detectInstalledHarnesses(targetDir) {
+	const homeDir = os.homedir();
+	const hasAgyHome = isDir(path.join(homeDir, ".gemini", "antigravity"));
+	const checks = [
+		["claude", existsSync(path.join(targetDir, ".claude")) || isDir(path.join(homeDir, ".claude"))],
+		["codex", existsSync(path.join(targetDir, ".codex")) || isDir(path.join(homeDir, ".codex"))],
+		["cursor", existsSync(path.join(targetDir, ".cursor")) || isDir(path.join(homeDir, ".cursor"))],
+		[
+			"windsurf",
+			existsSync(path.join(targetDir, ".windsurf")) ||
+				isDir(path.join(homeDir, ".windsurf")) ||
+				isDir(path.join(homeDir, ".codeium", "windsurf")),
+		],
+		[
+			"antigravity",
+			isFile(path.join(targetDir, ".agents", "hooks.json")) ||
+				isFile(path.join(targetDir, "GEMINI.md")) ||
+				hasAgyHome,
+		],
+		[
+			"gemini",
+			existsSync(path.join(targetDir, ".gemini")) ||
+				isFile(path.join(homeDir, ".gemini", "settings.json")) ||
+				isDir(path.join(homeDir, ".gemini", "extensions")) ||
+				(isDir(path.join(homeDir, ".gemini")) && !hasAgyHome),
+		],
+		[
+			"copilot",
+			existsSync(path.join(targetDir, ".vscode")) ||
+				existsSync(path.join(targetDir, ".github", "instructions")),
+		],
+		[
+			"opencode",
+			isFile(path.join(targetDir, "opencode.json")) ||
+				isDir(path.join(homeDir, ".config", "opencode")),
+		],
+	];
+
+	const detected = checks.filter(([, present]) => present).map(([name]) => name);
+	return detected.length > 0 ? detected : [...DEFAULT_FALLBACK_HARNESSES];
+}
+
+function hookListHasCommand(hookList, commandStr) {
+	if (!Array.isArray(hookList)) return false;
+	for (const group of hookList) {
+		if (!group || typeof group !== "object") continue;
+		if (group.command === commandStr) return true;
+		if (Array.isArray(group.hooks)) {
+			for (const h of group.hooks) {
+				if (h && typeof h === "object" && h.command === commandStr) return true;
+			}
+		}
+	}
+	return false;
+}
+
+function appendDedupHook(hookList, entry, commandStr) {
+	if (!hookListHasCommand(hookList, commandStr)) {
+		hookList.push(entry);
+	}
+}
+
+function inspectAntigravityPlugin() {
+	const pluginsRoot = path.join(os.homedir(), ".gemini", "config", "plugins");
+	for (const name of ["syntopik", "syntopik-studio", "mlh-studio"]) {
+		const pdir = path.join(pluginsRoot, name);
+		if (isFile(path.join(pdir, "plugin.json"))) {
+			return {
+				installed: true,
+				pluginName: name,
+				pluginDir: pdir,
+				hasDistServer: isFile(path.join(pdir, "dist", "server.mjs")),
+			};
+		}
+	}
+	return {
+		installed: false,
+		pluginName: null,
+		pluginDir: path.join(pluginsRoot, "syntopik"),
+		hasDistServer: false,
+	};
 }
 
 function runAttachNative(argv) {
@@ -309,7 +453,7 @@ function runAttachNative(argv) {
 	const targetDir = path.resolve(pos[0] || ".");
 	const harnessRaw = (parseFlag(argv, "--harness") || "auto").toLowerCase();
 	const vaultMode = (parseFlag(argv, "--vault") || "global").toLowerCase();
-	const copySkills = hasFlag(argv, "--copy-skills");
+	const copySkillsFlag = hasFlag(argv, "--copy-skills");
 	const asJson = hasFlag(argv, "--json");
 
 	if (!["global", "local"].includes(vaultMode)) {
@@ -332,17 +476,35 @@ function runAttachNative(argv) {
 	const vaultInit = ensureLearnerWorkspace(vaultPath);
 
 	const selected =
-		harnessRaw === "all" || harnessRaw === "auto"
+		harnessRaw === "all"
 			? [...ALL_HARNESSES]
-			: [harnessRaw];
+			: harnessRaw === "auto"
+				? detectInstalledHarnesses(targetDir)
+				: [harnessRaw];
 
-	const serverMjs = path.join(PACKAGE_ROOT, "mcp-app", "mlh-studio", "dist", "server.mjs");
-	const srcSkills = path.join(PACKAGE_ROOT, ".agents", "skills");
-	const hooksDir = path.join(PACKAGE_ROOT, ".agents", "hooks");
+	const ephemeralNpx = isEphemeralNpxRoot(PACKAGE_ROOT);
+	const effectiveCopySkills = copySkillsFlag || ephemeralNpx;
+
+	const serverMjs = path.resolve(PACKAGE_ROOT, "mcp-app", "mlh-studio", "dist", "server.mjs");
+	const srcSkills = path.resolve(PACKAGE_ROOT, ".agents", "skills");
+	const hooksDir = path.resolve(PACKAGE_ROOT, ".agents", "hooks");
+
+	// Never bake ephemeral ~/.npm/_npx/<hash>/ paths into repo configs!
+	const mcpCommand = ephemeralNpx ? "npx" : "node";
+	const mcpArgs = ephemeralNpx
+		? ["-y", "syntopik", "mcp", `--workspace=${vaultPath}`]
+		: [serverMjs, `--workspace=${vaultPath}`];
+	const sessionHookCmd = ephemeralNpx
+		? `npx -y syntopik hook session-start --workspace "${vaultPath}"`
+		: `node "${path.join(hooksDir, "session-start.mjs")}" --workspace "${vaultPath}"`;
+	const postHookCmd = ephemeralNpx
+		? `npx -y syntopik hook post-graph-sync --workspace "${vaultPath}"`
+		: `node "${path.join(hooksDir, "post-graph-sync.mjs")}" --workspace "${vaultPath}"`;
 
 	const excludeEntries = [".syntopik/"];
 	const written = [];
 	const preserved = [];
+	const notes = [];
 
 	// Never touch existing host AGENTS.md or CLAUDE.md
 	for (const hostDoc of ["AGENTS.md", "CLAUDE.md"]) {
@@ -351,10 +513,10 @@ function runAttachNative(argv) {
 		}
 	}
 
-	// Link/copy canonical .agents/skills
+	// Link/copy canonical .agents/skills (always copy when running from ephemeral _npx)
 	if (existsSync(srcSkills)) {
 		const destSkills = path.join(targetDir, ".agents", "skills");
-		const skRes = linkOrCopySkills(srcSkills, destSkills, copySkills);
+		const skRes = linkOrCopyDir(srcSkills, destSkills, effectiveCopySkills);
 		if (skRes.created) {
 			written.push(`.agents/skills (${skRes.action})`);
 			excludeEntries.push(".agents/skills", ".agents/skills/");
@@ -365,12 +527,13 @@ function runAttachNative(argv) {
 
 	const mcpStdioEntry = {
 		type: "stdio",
-		command: "node",
-		args: [serverMjs, `--workspace=${vaultPath}`],
+		command: mcpCommand,
+		args: [...mcpArgs],
 	};
 
 	if (selected.includes("cursor")) {
 		const rulePath = path.join(targetDir, ".cursor", "rules", "syntopik.mdc");
+		const existedRule = existsSync(rulePath);
 		mkdirSync(path.dirname(rulePath), { recursive: true });
 		writeFileSync(
 			rulePath,
@@ -378,14 +541,14 @@ function runAttachNative(argv) {
 			"utf8",
 		);
 		written.push(".cursor/rules/syntopik.mdc");
-		excludeEntries.push(".cursor/rules/syntopik.mdc");
+		if (!existedRule) excludeEntries.push(".cursor/rules/syntopik.mdc");
 
 		const cursorMcp = path.join(targetDir, ".cursor", "mcp.json");
 		const { existed } = writeJsonMerged(cursorMcp, (doc) => {
 			if (!doc.mcpServers || typeof doc.mcpServers !== "object") doc.mcpServers = {};
 			doc.mcpServers["syntopik-studio"] = {
-				command: "node",
-				args: [serverMjs, `--workspace=${vaultPath}`],
+				command: mcpCommand,
+				args: [...mcpArgs],
 			};
 		});
 		written.push(".cursor/mcp.json");
@@ -394,6 +557,7 @@ function runAttachNative(argv) {
 
 	if (selected.includes("windsurf")) {
 		const wsRule = path.join(targetDir, ".windsurf", "rules", "syntopik.md");
+		const existedWs = existsSync(wsRule);
 		mkdirSync(path.dirname(wsRule), { recursive: true });
 		writeFileSync(
 			wsRule,
@@ -401,11 +565,12 @@ function runAttachNative(argv) {
 			"utf8",
 		);
 		written.push(".windsurf/rules/syntopik.md");
-		excludeEntries.push(".windsurf/rules/syntopik.md");
+		if (!existedWs) excludeEntries.push(".windsurf/rules/syntopik.md");
 	}
 
 	if (selected.includes("copilot")) {
 		const ghInst = path.join(targetDir, ".github", "instructions", "syntopik.instructions.md");
+		const existedGh = existsSync(ghInst);
 		mkdirSync(path.dirname(ghInst), { recursive: true });
 		writeFileSync(
 			ghInst,
@@ -413,15 +578,15 @@ function runAttachNative(argv) {
 			"utf8",
 		);
 		written.push(".github/instructions/syntopik.instructions.md");
-		excludeEntries.push(".github/instructions/syntopik.instructions.md");
+		if (!existedGh) excludeEntries.push(".github/instructions/syntopik.instructions.md");
 
 		const vscodeMcp = path.join(targetDir, ".vscode", "mcp.json");
 		const { existed } = writeJsonMerged(vscodeMcp, (doc) => {
 			if (!doc.servers || typeof doc.servers !== "object") doc.servers = {};
 			doc.servers["syntopik-studio"] = {
 				type: "stdio",
-				command: "node",
-				args: [serverMjs, `--workspace=${vaultPath}`],
+				command: mcpCommand,
+				args: [...mcpArgs],
 				cwd: "${workspaceFolder}",
 			};
 		});
@@ -435,7 +600,7 @@ function runAttachNative(argv) {
 			if (!doc.mcp || typeof doc.mcp !== "object") doc.mcp = {};
 			doc.mcp["syntopik-studio"] = {
 				type: "local",
-				command: ["node", serverMjs, `--workspace=${vaultPath}`],
+				command: [mcpCommand, ...mcpArgs],
 				environment: { SYNT_WORKSPACE: vaultPath },
 				enabled: true,
 			};
@@ -450,12 +615,12 @@ function runAttachNative(argv) {
 		const prev = existed ? readFileSync(codexToml, "utf8") : "";
 		if (!prev.includes("[mcp_servers.syntopik-studio]")) {
 			mkdirSync(path.dirname(codexToml), { recursive: true });
-			const escapedServer = serverMjs.replace(/\\/gu, "\\\\").replace(/"/gu, '\\"');
-			const escapedWs = vaultPath.replace(/\\/gu, "\\\\").replace(/"/gu, '\\"');
+			const esc = (s) => String(s).replace(/\\/gu, "\\\\").replace(/"/gu, '\\"');
+			const argsList = mcpArgs.map((a) => `"${esc(a)}"`).join(", ");
 			const snippet = [
 				"[mcp_servers.syntopik-studio]",
-				'command = "node"',
-				`args = ["${escapedServer}", "--workspace=${escapedWs}"]`,
+				`command = "${esc(mcpCommand)}"`,
+				`args = [${argsList}]`,
 				"startup_timeout_sec = 10",
 				"tool_timeout_sec = 60",
 			].join("\n");
@@ -478,49 +643,99 @@ function runAttachNative(argv) {
 		const claudeSettings = path.join(targetDir, ".claude", "settings.json");
 		const setRes = writeJsonMerged(claudeSettings, (doc) => {
 			if (!doc.hooks || typeof doc.hooks !== "object") doc.hooks = {};
-			if (!Array.isArray(doc.hooks.SessionStart)) {
-				doc.hooks.SessionStart = [
-					{
-						hooks: [
-							{
-								type: "command",
-								command: `SYNT_WORKSPACE="${vaultPath}" node "${path.join(hooksDir, "session-start.mjs")}"`,
-								timeout: 10,
-							},
-						],
-					},
-				];
-			}
-			if (!Array.isArray(doc.hooks.PostToolUse)) {
-				doc.hooks.PostToolUse = [
-					{
-						matcher: "Write|Edit|MultiEdit|NotebookEdit|Bash",
-						hooks: [
-							{
-								type: "command",
-								command: `SYNT_WORKSPACE="${vaultPath}" node "${path.join(hooksDir, "post-graph-sync.mjs")}"`,
-								timeout: 10,
-							},
-						],
-					},
-				];
-			}
+			if (!Array.isArray(doc.hooks.SessionStart)) doc.hooks.SessionStart = [];
+			if (!Array.isArray(doc.hooks.PostToolUse)) doc.hooks.PostToolUse = [];
+
+			appendDedupHook(
+				doc.hooks.SessionStart,
+				{
+					hooks: [
+						{
+							type: "command",
+							command: sessionHookCmd,
+							timeout: 10,
+						},
+					],
+				},
+				sessionHookCmd,
+			);
+			appendDedupHook(
+				doc.hooks.PostToolUse,
+				{
+					matcher: "Write|Edit|MultiEdit|NotebookEdit|Bash",
+					hooks: [
+						{
+							type: "command",
+							command: postHookCmd,
+							timeout: 10,
+						},
+					],
+				},
+				postHookCmd,
+			);
 		});
 		written.push(".claude/settings.json");
 		if (!setRes.existed) excludeEntries.push(".claude/settings.json");
 
 		const claudeSkills = path.join(targetDir, ".claude", "skills");
 		const agentsSkillsDest = path.join(targetDir, ".agents", "skills");
-		if (!existsSync(claudeSkills) && existsSync(agentsSkillsDest)) {
-			const relTarget = path.relative(path.dirname(claudeSkills), agentsSkillsDest);
-			try {
-				symlinkSync(relTarget, claudeSkills, process.platform === "win32" ? "junction" : "dir");
-				written.push(".claude/skills (symlinked)");
-				excludeEntries.push(".claude/skills");
-			} catch {
-				// Optional on restricted symlink filesystems
+		if (existsSync(agentsSkillsDest)) {
+			const cRes = linkOrCopyDir(path.resolve(agentsSkillsDest), claudeSkills, effectiveCopySkills);
+			if (cRes.created) {
+				written.push(`.claude/skills (${cRes.action})`);
+				excludeEntries.push(".claude/skills", ".claude/skills/");
+			} else {
+				preserved.push(".claude/skills");
 			}
 		}
+	}
+
+	let antigravityInfo = null;
+	if (selected.includes("antigravity")) {
+		const agyHooks = path.join(targetDir, ".agents", "hooks.json");
+		const agyRes = writeJsonMerged(agyHooks, (doc) => {
+			if (!doc["study-session-context"] || typeof doc["study-session-context"] !== "object") {
+				doc["study-session-context"] = {};
+			}
+			if (!Array.isArray(doc["study-session-context"].SessionStart)) {
+				doc["study-session-context"].SessionStart = [];
+			}
+			appendDedupHook(
+				doc["study-session-context"].SessionStart,
+				{ type: "command", command: sessionHookCmd, timeout: 10 },
+				sessionHookCmd,
+			);
+
+			if (!doc["knowledge-graph-autosync"] || typeof doc["knowledge-graph-autosync"] !== "object") {
+				doc["knowledge-graph-autosync"] = {};
+			}
+			if (!Array.isArray(doc["knowledge-graph-autosync"].PostToolUse)) {
+				doc["knowledge-graph-autosync"].PostToolUse = [];
+			}
+			appendDedupHook(
+				doc["knowledge-graph-autosync"].PostToolUse,
+				{
+					matcher:
+						"write_file|edit_file|replace_file_content|multi_replace_file_content|write_to_file|run_command",
+					type: "command",
+					command: postHookCmd,
+					timeout: 10,
+				},
+				postHookCmd,
+			);
+		});
+		written.push(".agents/hooks.json");
+		if (!agyRes.existed) excludeEntries.push(".agents/hooks.json");
+
+		antigravityInfo = {
+			...inspectAntigravityPlugin(),
+			workspaceHooks: ".agents/hooks.json",
+		};
+		notes.push(
+			antigravityInfo.installed
+				? `Antigravity plugin detected (${antigravityInfo.pluginName}); workspace hooks wired in .agents/hooks.json.`
+				: "Antigravity workspace hooks wired in .agents/hooks.json (host AGENTS.md preserved). Run `syntopik connect antigravity` for global Studio MCP.",
+		);
 	}
 
 	if (selected.includes("gemini")) {
@@ -528,8 +743,8 @@ function runAttachNative(argv) {
 		const gemRes = writeJsonMerged(gemSettings, (doc) => {
 			if (!doc.mcpServers || typeof doc.mcpServers !== "object") doc.mcpServers = {};
 			doc.mcpServers["syntopik-studio"] = {
-				command: "node",
-				args: [serverMjs, `--workspace=${vaultPath}`],
+				command: mcpCommand,
+				args: [...mcpArgs],
 			};
 		});
 		written.push(".gemini/settings.json");
@@ -543,11 +758,14 @@ function runAttachNative(argv) {
 		vaultMode,
 		vaultPath,
 		harnesses: selected,
+		ephemeralNpx,
 		written,
 		preserved,
+		notes,
 		gitExclude,
 		vaultInit,
 	};
+	if (antigravityInfo) report.antigravity = antigravityInfo;
 
 	if (asJson) {
 		console.log(JSON.stringify(report, null, 2));
@@ -557,11 +775,46 @@ function runAttachNative(argv) {
 		console.log(`  Harnesses  : ${selected.join(", ")}`);
 		console.log(`  Written    : ${written.length} adapter(s)`);
 		if (preserved.length) console.log(`  Preserved  : ${preserved.join(", ")}`);
+		for (const note of notes) console.log(`  Note       : ${note}`);
 		if (gitExclude.updated) {
 			console.log(`  Git Ignore : updated ${gitExclude.path} (zero diff to .gitignore)`);
 		}
 	}
 	return 0;
+}
+
+function runHookNative(argv) {
+	const hookName = (argv[0] || "").trim().toLowerCase();
+	const hookFiles = {
+		"session-start": "session-start.mjs",
+		"post-graph-sync": "post-graph-sync.mjs",
+	};
+	const scriptFile = hookFiles[hookName];
+	if (!scriptFile) {
+		console.error("Usage: syntopik hook <session-start|post-graph-sync> [--workspace <dir>]");
+		return 2;
+	}
+
+	const rest = argv.slice(1);
+	const wsFlag = parseFlag(rest, "--workspace");
+	const hookScript = path.join(PACKAGE_ROOT, ".agents", "hooks", scriptFile);
+	if (!existsSync(hookScript)) {
+		console.error(`Hook script not found: ${hookScript}`);
+		return 1;
+	}
+
+	const env = { ...process.env };
+	if (wsFlag && wsFlag.trim()) {
+		const resolvedFlag = path.resolve(wsFlag.trim());
+		const attached = resolveAttachedWorkspace(resolvedFlag);
+		env.SYNT_WORKSPACE = attached || resolvedFlag;
+	}
+
+	const res = spawnSync(process.execPath, [hookScript, ...rest], {
+		stdio: "inherit",
+		env,
+	});
+	return typeof res.status === "number" ? res.status : 1;
 }
 
 function findPython() {
@@ -633,11 +886,9 @@ function main() {
 		const hasWsFlag = Boolean(parseFlag(rest, "--workspace"));
 		const hasWsEnv = Boolean(process.env.SYNT_WORKSPACE || process.env.MLH_WORKSPACE);
 		if (!hasWsFlag && !hasWsEnv) {
-			const cwd = process.cwd();
-			if (existsSync(path.join(cwd, "knowledge-graph"))) {
-				syncArgs.unshift("--workspace", cwd);
-			} else if (existsSync(path.join(cwd, ".syntopik", "knowledge-graph"))) {
-				syncArgs.unshift("--workspace", path.join(cwd, ".syntopik"));
+			const resolved = resolveAttachedWorkspace(process.cwd());
+			if (resolved) {
+				syncArgs.unshift("--workspace", resolved);
 			}
 		}
 		const res = spawnSync(process.execPath, [syncScript, ...syncArgs], { stdio: "inherit" });
@@ -652,6 +903,10 @@ function main() {
 		}
 		const res = spawnSync(process.execPath, [serverMjs, ...rest], { stdio: "inherit" });
 		return typeof res.status === "number" ? res.status : 1;
+	}
+
+	if (cmd === "hook") {
+		return runHookNative(rest);
 	}
 
 	if (cmd === "init") {

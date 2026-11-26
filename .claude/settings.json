@@ -5,7 +5,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "node \"${CLAUDE_PROJECT_DIR:-.}/.agents/hooks/session-start.mjs\"",
+            "command": "node .agents/hooks/session-start.mjs",
             "timeout": 10
           }
         ]
@@ -17,7 +17,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "node \"${CLAUDE_PROJECT_DIR:-.}/.agents/hooks/post-graph-sync.mjs\"",
+            "command": "node .agents/hooks/post-graph-sync.mjs",
             "timeout": 10
           }
         ]

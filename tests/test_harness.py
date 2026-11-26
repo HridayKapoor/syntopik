@@ -149,9 +149,10 @@ class TestSyntaxAndCLI(unittest.TestCase):
         py_files = (
             sorted((ROOT / "syntopik").glob("*.py"))
             + sorted(SCRIPTS_DIR.glob("*.py"))
+            + sorted((ROOT / "benchmarks").glob("*.py"))
             + sorted((ROOT / "tests").glob("*.py"))
         )
-        self.assertGreaterEqual(len(py_files), 43, "Expected at least 43 Python files across syntopik/, scripts/, tests/")
+        self.assertGreaterEqual(len(py_files), 50, "Expected at least 50 Python files across syntopik/, scripts/, benchmarks/, tests/")
         with tempfile.TemporaryDirectory(prefix="mlh-pycompile-") as tmp:
             tmp_dir = Path(tmp)
             for idx, py_path in enumerate(py_files):
@@ -210,6 +211,10 @@ class TestSyntaxAndCLI(unittest.TestCase):
             "fork_replay.py",
             "falsify_arena.py",
             "decision_blitz.py",
+            "learner_profile.py",
+            "derivation_forge.py",
+            "viva_chamber.py",
+            "build_starter_packs.py",
         ]
 
         def _check_help(name: str) -> tuple[str, int, str, str]:
@@ -686,7 +691,7 @@ class TestHooksSkillsBudget(unittest.TestCase):
 
     def test_all_skills_valid_frontmatter(self) -> None:
         skill_files = sorted(SKILLS_DIR.glob("*/SKILL.md"))
-        self.assertGreaterEqual(len(skill_files), 17)
+        self.assertEqual(len(skill_files), 17, f"Expected exact 17 skills, found {len(skill_files)}")
         for sk in skill_files:
             with self.subTest(skill=sk.parent.name):
                 text = sk.read_text(encoding="utf-8")
@@ -721,8 +726,8 @@ class TestHooksSkillsBudget(unittest.TestCase):
                 total_bytes += len(raw)
         self.assertLessEqual(
             total_bytes,
-            7500,
-            f"Combined GEMINI.md + AGENTS.md ({total_bytes} B) exceeds v2.0 7,500 B ceiling",
+            9500,
+            f"Combined GEMINI.md + AGENTS.md ({total_bytes} B) exceeds v3.0 9,500 B unified ceiling",
         )
 
 
@@ -1835,10 +1840,10 @@ class TestMcpAppStudio(unittest.TestCase):
             # 1. initialize
             self.assertIn("serverInfo", by_id[1]["result"])
 
-            # 2. tools/list: exact 17 tools (9 model-visible: 6 UI synt_*/mlh_* + 3 ambient headless; 8 visibility:["app"])
+            # 2. tools/list: exact 21 tools (11 model-visible: 6 UI synt_*/mlh_* + 5 ambient headless; 10 visibility:["app"])
             tools = by_id[2]["result"]["tools"]
             tools_by_name = {tl["name"]: tl for tl in tools}
-            self.assertEqual(len(tools), 17)
+            self.assertEqual(len(tools), 21)
             model_tools = [tl for tl in tools if "app" not in tl.get("_meta", {}).get("ui", {}).get("visibility", [])]
             app_tools = [tl for tl in tools if tl.get("_meta", {}).get("ui", {}).get("visibility") == ["app"]]
             self.assertEqual(
@@ -1847,6 +1852,8 @@ class TestMcpAppStudio(unittest.TestCase):
                     "synt_quiz_card",
                     "synt_practice_card",
                     "synt_lesson_studio",
+                    "synt_next_move",
+                    "synt_whiteboard_step",
                     "synt_capture_concept",
                     "synt_get_frontier",
                     "synt_log_review",
@@ -1862,10 +1869,12 @@ class TestMcpAppStudio(unittest.TestCase):
                     "synt_app_rate_flashcard",
                     "synt_app_save_sketch",
                     "synt_app_card_state",
+                    "synt_app_update_profile",
                     "mlh_app_load_state",
                     "mlh_app_rate_flashcard",
                     "mlh_app_save_sketch",
                     "mlh_app_card_state",
+                    "mlh_app_update_profile",
                 },
             )
 
@@ -2501,7 +2510,8 @@ class TestSelfImproveAndDoctor(unittest.TestCase):
         self.assertGreaterEqual(checks_by_name["Project Skills (.agents/skills)"]["count"], 17)
 
         # Bare system python3 --core-only mode (zero third-party .venv packages required)
-        bare_py = shutil.which("python3") or sys.executable
+        # On Windows avoid Microsoft Store python3.exe stub; use sys.executable directly.
+        bare_py = sys.executable if os.name == "nt" else (shutil.which("python3") or sys.executable)
         core_proc = run_cli([bare_py, "-B", str(SCRIPTS_DIR / "study_doctor.py"), "--core-only", "--json"])
         self.assertEqual(core_proc.returncode, 0, f"study_doctor --core-only failed: {core_proc.stderr}\n{core_proc.stdout}")
         core_report = json.loads(core_proc.stdout)
@@ -3612,14 +3622,14 @@ class TestGitHubHygieneAndPortability(unittest.TestCase):
         self.assertEqual(personal_leaks, [], f"Personal path leak found in tracked/non-ignored files: {personal_leaks}")
         self.assertEqual(config_node_leaks, [], f"Hardcoded Homebrew node path found in config/doc/JS files: {config_node_leaks}")
 
-        # Always-on rule budget: GEMINI.md + AGENTS.md <= 7,500 B (v2.0 diet)
+        # Always-on rule budget: GEMINI.md + AGENTS.md <= 9,500 B (v3.0 unified ceiling)
         agents_bytes = (ROOT / "AGENTS.md").read_bytes()
         gemini_bytes = (ROOT / "GEMINI.md").read_bytes()
         combined_rules = len(agents_bytes) + len(gemini_bytes)
         self.assertLessEqual(
             combined_rules,
-            7500,
-            f"Combined GEMINI.md + AGENTS.md ({combined_rules} B) exceeds v2.0 7,500 B ceiling",
+            9500,
+            f"Combined GEMINI.md + AGENTS.md ({combined_rules} B) exceeds v3.0 9,500 B unified ceiling",
         )
 
         # CLAUDE.md starts with @AGENTS.md and has no YAML frontmatter
@@ -4414,11 +4424,11 @@ class TestUniversalIngestObsidianAndPedagogy(unittest.TestCase):
     def test_pedagogy_eval_bench_lint_and_check_card(self) -> None:
         pe = load_script_module("pedagogy_eval.py")
 
-        # 1. Built-in 15-scenario golden benchmark passes 15/15
+        # 1. Built-in 40-scenario TutorBench v3.0 golden benchmark passes 40/40
         bench = pe.run_benchmark()
         self.assertTrue(bench["ok"])
-        self.assertEqual(bench["total"], 15)
-        self.assertEqual(bench["passed"], 15)
+        self.assertEqual(bench["total"], 40)
+        self.assertEqual(bench["passed"], 40)
 
         # 2. `lint` catches sycophancy & >160w prose, passes calm concise turn
         syco = pe.lint_turn("Great question! You nailed it! Predict the equilibrium shift.")
@@ -5066,7 +5076,7 @@ class TestLocalStudioServerLive(unittest.TestCase):
                 self.assertEqual(st_state, 200)
                 state_obj = json.loads(raw_state)
                 self.assertTrue(state_obj["ok"])
-                self.assertEqual(state_obj["hub"]["schemaVersion"], 4)
+                self.assertEqual(state_obj["hub"]["schemaVersion"], 5)
                 self.assertGreaterEqual(state_obj["arenasCount"], 1)
 
                 # (d) SSE /api/events receives ready -> then changed upon POST /api/review
@@ -5310,7 +5320,7 @@ class TestPackagingAttachAndAmbientMcp(unittest.TestCase):
         # 1. Validate pyproject.toml (zero required deps, Python >=3.12, hatchling force-include)
         pyp = tomllib.loads((ROOT / "pyproject.toml").read_text(encoding="utf-8"))
         self.assertEqual(pyp["project"]["name"], "syntopik")
-        self.assertEqual(pyp["project"]["version"], "2.0.0")
+        self.assertEqual(pyp["project"]["version"], "3.0.0")
         self.assertEqual(pyp["project"]["dependencies"], [])
         self.assertEqual(pyp["project"]["scripts"]["syntopik"], "syntopik.cli:main")
         force_inc = pyp["tool"]["hatch"]["build"]["targets"]["wheel"]["force-include"]
@@ -5319,7 +5329,7 @@ class TestPackagingAttachAndAmbientMcp(unittest.TestCase):
         # 2. Validate package.json + bin/syntopik.mjs --help / --version
         pkg = json.loads((ROOT / "package.json").read_text(encoding="utf-8"))
         self.assertEqual(pkg["name"], "syntopik")
-        self.assertEqual(pkg["version"], "2.0.0")
+        self.assertEqual(pkg["version"], "3.0.0")
         self.assertEqual(pkg["dependencies"], {})
         self.assertEqual(pkg["bin"]["syntopik"], "./bin/syntopik.mjs")
 
@@ -5328,7 +5338,7 @@ class TestPackagingAttachAndAmbientMcp(unittest.TestCase):
         self.assertIn("syntopik", h_proc.stdout.lower())
         v_proc = run_cli(["node", str(ROOT / "bin" / "syntopik.mjs"), "--version"])
         self.assertEqual(v_proc.returncode, 0, v_proc.stderr)
-        self.assertIn("2.0.0", v_proc.stdout)
+        self.assertIn("3.0.0", v_proc.stdout)
 
         # 3. Validate .claude-plugin/{marketplace,plugin,hooks}.json & gemini-extension.json
         cp_mkt = json.loads((ROOT / ".claude-plugin" / "marketplace.json").read_text(encoding="utf-8"))
@@ -5337,7 +5347,7 @@ class TestPackagingAttachAndAmbientMcp(unittest.TestCase):
         gem_ext = json.loads((ROOT / "gemini-extension.json").read_text(encoding="utf-8"))
 
         self.assertEqual(cp_mkt["name"], "syntopik")
-        self.assertEqual(cp_plg["version"], "2.0.0")
+        self.assertEqual(cp_plg["version"], "3.0.0")
         self.assertTrue(cp_plg["skills"].startswith("./"))
         self.assertIn("SessionStart", cp_hks["hooks"])
         self.assertIn("PostToolUse", cp_hks["hooks"])
@@ -5557,11 +5567,17 @@ class TestPackagingAttachAndAmbientMcp(unittest.TestCase):
                 if "id" in m
             }
 
-            # 1. Exact 17 tools & single com.google.antigravity/ui entrypoint ONLY on synt_lesson_studio
+            # 1. Exact 21 tools & single com.google.antigravity/ui entrypoint ONLY on synt_lesson_studio
             tools = by_id[2]["result"]["tools"]
-            self.assertEqual(len(tools), 17)
+            self.assertEqual(len(tools), 21)
             tool_names = {tl["name"] for tl in tools}
-            for ambient in ("synt_capture_concept", "synt_get_frontier", "synt_log_review"):
+            for ambient in (
+                "synt_capture_concept",
+                "synt_get_frontier",
+                "synt_log_review",
+                "synt_next_move",
+                "synt_whiteboard_step",
+            ):
                 self.assertIn(ambient, tool_names)
             ep_tools = [
                 tl["name"]
@@ -5612,11 +5628,11 @@ class TestV2ContextDietAndHygiene(unittest.TestCase):
     """28. Syntopik v2.0 Context-Budget Diet, 17-Skill YAML Budget, Zero Leaks/Pycache & Live SHM Integrity."""
 
     def test_v2_context_diet_skills_hygiene_no_pycache_and_shm_intact(self) -> None:
-        # 1. Combined AGENTS.md + GEMINI.md <= 7,500 B (v2.0 Context-Budget Diet)
+        # 1. Combined AGENTS.md + GEMINI.md <= 9,500 B (v3.0 unified ceiling)
         agents_raw = (ROOT / "AGENTS.md").read_bytes()
         gemini_raw = (ROOT / "GEMINI.md").read_bytes()
         combined = len(agents_raw) + len(gemini_raw)
-        self.assertLessEqual(combined, 7500, f"AGENTS.md + GEMINI.md ({combined} B) exceeds 7,500 B v2.0 budget")
+        self.assertLessEqual(combined, 9500, f"AGENTS.md + GEMINI.md ({combined} B) exceeds 9,500 B v3.0 unified ceiling")
         self.assertFalse(agents_raw.decode("utf-8").lstrip().startswith("---"))
         self.assertFalse(gemini_raw.decode("utf-8").lstrip().startswith("---"))
 
@@ -5705,6 +5721,1943 @@ class TestV2ContextDietAndHygiene(unittest.TestCase):
                 ):
                     dp_dir = shm_extracted / dname
                     self.assertTrue(dp_dir.is_dir() and any(dp_dir.iterdir()), f"Live SHM extracted dir missing: {dp_dir}")
+
+
+class TestLearnerPsychologyAndBrainstem(unittest.TestCase):
+    """29. Syntopik v3.0 3-Cadence Learner Psychology, Causal Root-Cause, 4-Tier Evidence, Brainstem & Zero-PII Packs."""
+
+    def test_tier1_tier2_tier3_all_six_affects_expertise_reversal_and_overrides(self) -> None:
+        import syntopik.learner_model as lm
+
+        with tempfile.TemporaryDirectory(prefix="synt-v3-psych-") as tmp:
+            kg = Path(tmp) / "knowledge-graph"
+            kg.mkdir(parents=True)
+
+            # 1. Tier-1 Onboarding Calibration: zero VARK, prior decay 6/(6+N), prose cap <= 155w
+            prof = lm.load_profile(kg)
+            self.assertNotIn("vark", json.dumps(prof).lower())
+            self.assertNotIn("learningStyle", json.dumps(prof))
+
+            prof = lm.apply_tier1_calibration(
+                prof,
+                entry_ramp="intuition_first",
+                challenge_appetite="adversarial",
+                domain_fluency={"Physics": 1, "Computer Science": 3},
+                session_minutes=30,
+                prose_density="rich",
+                micro_task_results=[
+                    {"correct": False, "confidence": 0.90, "duration_ms": 14000},
+                    {"correct": False, "confidence": 0.85, "duration_ms": 16000},
+                ],
+            )
+            lm.save_profile(kg, prof)
+            self.assertNotIn("vark", json.dumps(prof).lower())
+            self.assertTrue(prof["calibration"]["completed"])
+            self.assertEqual(prof["calibration"]["targetSuccessRate"], 0.78)
+            self.assertLessEqual(prof["calibration"]["maxProseWordsPrior"], 155)
+            self.assertEqual(prof["calibration"]["maxProseWordsPrior"], 155)
+            self.assertEqual(prof["calibration"]["calibrationPrior"], "overconfident")
+            self.assertAlmostEqual(prof["globalStats"]["priorWeight"], 1.0, places=4)
+            self.assertEqual(prof["domains"]["Physics"]["elo"], 1350.0)
+            self.assertEqual(prof["domains"]["Computer Science"]["elo"], 1750.0)
+
+            # 2. Tier-2 Adaptive Placement: KG `solid` bypass (R >= 0.80), Pelanek Elo & 2-probe early stops
+            kg_props = [
+                {"id": "p-solid-high", "status": "solid", "bktMastery": 0.92, "retrievability": 0.91},
+                {"id": "p-weak-1", "status": "shaky", "bktMastery": 0.40},
+                {"id": "p-weak-2", "status": "planned"},
+                {"id": "p-adv-1", "status": "planned"},
+            ]
+            cands = [
+                {"id": "p-solid-high", "difficulty": 1350},
+                {"id": "p-weak-1", "difficulty": 1200},
+                {"id": "p-weak-2", "difficulty": 1400},
+                {"id": "p-adv-1", "difficulty": 1750},
+            ]
+            sel = lm.select_next_placement_probe(prof, "Physics", "shm", cands, kg_props=kg_props, chains=[])
+            self.assertFalse(sel["done"])
+            self.assertIn("p-solid-high", sel["bypassedIds"])
+            self.assertNotEqual(sel["probe"]["id"], "p-solid-high")
+
+            # Lucky guess & hypercorrection scoring + 2-probe early stop (both_basics_failed)
+            p_nov = lm.load_profile(kg)
+            r1 = lm.score_placement_probe(
+                p_nov, "Physics", "chap-fail", difficulty=1150, correct=False, confidence=0.85, duration_ms=15000, probe_index=1
+            )
+            self.assertTrue(r1["hypercorrection"])
+            self.assertLess(r1["newTheta"], r1["oldTheta"])
+            self.assertFalse(r1["done"])
+            r2 = lm.score_placement_probe(
+                p_nov, "Physics", "chap-fail", difficulty=1200, correct=False, confidence=0.60, duration_ms=18000, probe_index=2
+            )
+            self.assertTrue(r2["done"])
+            self.assertTrue(r2["earlyStop"])
+            self.assertEqual(r2["earlyStopReason"], "both_basics_failed")
+
+            # 2-probe early stop (both_advanced_aced)
+            p_adv = lm.load_profile(kg)
+            a1 = lm.score_placement_probe(
+                p_adv, "Computer Science", "chap-ace", difficulty=1750, correct=True, confidence=0.90, duration_ms=25000, probe_index=1
+            )
+            self.assertGreater(a1["newTheta"], a1["oldTheta"])
+            a2 = lm.score_placement_probe(
+                p_adv, "Computer Science", "chap-ace", difficulty=1800, correct=True, confidence=0.92, duration_ms=22000, probe_index=2
+            )
+            self.assertTrue(a2["done"])
+            self.assertTrue(a2["earlyStop"])
+            self.assertEqual(a2["earlyStopReason"], "both_advanced_aced")
+
+            # 3. All 6 sensor-free affective states via classify_affective_state
+            base_t = datetime(2026, 11, 26, 10, 0, 0, tzinfo=timezone.utc)
+            def _mk_ev(mins: float, ok: bool, lat: float = 1.0, hints: int = 0, skipped: bool = False) -> dict[str, Any]:
+                return {
+                    "ts": (base_t + timedelta(minutes=mins)).isoformat().replace("+00:00", "Z"),
+                    "correct": ok,
+                    "latencyRatio": lat,
+                    "hintsUsed": hints,
+                    "skipped": skipped,
+                    "durationMs": int(20000 * lat),
+                }
+
+            st_flow = lm.classify_affective_state(
+                [_mk_ev(0, True, 1.0, 0), _mk_ev(2, True, 0.95, 0), _mk_ev(4, False, 1.05, 1), _mk_ev(6, True, 1.0, 0)],
+                session_target_min=30,
+            )
+            self.assertEqual(st_flow["state"], "flow")
+
+            st_pc = lm.classify_affective_state(
+                [_mk_ev(0, True, 1.4, 1), _mk_ev(3, False, 1.6, 1), _mk_ev(6, True, 1.5, 0)],
+                session_target_min=30,
+            )
+            self.assertEqual(st_pc["state"], "productive_confusion")
+
+            st_ov = lm.classify_affective_state(
+                [_mk_ev(0, True, 1.2, 1), _mk_ev(3, False, 2.2, 3), _mk_ev(6, False, 2.5, 3), _mk_ev(9, False, 2.4, 3)],
+                session_target_min=30,
+            )
+            self.assertEqual(st_ov["state"], "overloaded_frustrated")
+
+            st_bo = lm.classify_affective_state(
+                [_mk_ev(i * 2, True, 0.50, 0) for i in range(5)],
+                session_target_min=30,
+            )
+            self.assertEqual(st_bo["state"], "bored_underchallenged")
+
+            st_gm = lm.classify_affective_state(
+                [_mk_ev(0, False, 0.20, 0), _mk_ev(1, False, 0.22, 0), _mk_ev(2, True, 0.25, 3)],
+                session_target_min=30,
+            )
+            self.assertEqual(st_gm["state"], "gaming_rushing")
+
+            st_ft = lm.classify_affective_state(
+                [
+                    _mk_ev(0, True, 0.9, 0),
+                    _mk_ev(10, True, 0.9, 0),
+                    _mk_ev(20, True, 1.0, 0),
+                    _mk_ev(32, False, 1.9, 1),
+                    _mk_ev(42, False, 2.0, 1),
+                    _mk_ev(50, True, 2.1, 1),
+                ],
+                session_target_min=30,
+            )
+            self.assertEqual(st_ft["state"], "fatigued")
+
+            # 4. Kalyuga Expertise-Reversal scaffolding transitions (novice vs advanced)
+            nov_prof = lm.load_profile(kg)
+            nov_prof["domains"]["Physics"]["elo"] = 1120.0
+            nov_prof["affectiveState"] = {"state": "flow"}
+            pol_nov = lm.compile_teaching_policy(nov_prof, domain="Physics", node_bkt=0.18)
+            self.assertEqual(pol_nov["scaffoldingMode"], "worked_example_parsons")
+            self.assertTrue(pol_nov["allowWorkedExample"])
+            self.assertFalse(pol_nov["allowProductiveFailure"])
+
+            adv_prof = lm.load_profile(kg)
+            adv_prof["domains"]["Computer Science"]["elo"] = 1820.0
+            adv_prof["affectiveState"] = {"state": "flow"}
+            pol_adv = lm.compile_teaching_policy(adv_prof, domain="Computer Science", node_bkt=0.92)
+            self.assertEqual(pol_adv["scaffoldingMode"], "challenge_transfer")
+            self.assertFalse(pol_adv["allowWorkedExample"])
+            self.assertTrue(pol_adv["allowProductiveFailure"])
+
+            # 5. Tier-3 telemetry, prior decay 6/(6+N), Failure DNA, 20-event FIFO cap (< 8 KB), overrides & 2-line summary
+            mistakes_path = kg / "mistakes.jsonl"
+            mistakes_path.write_text(
+                "\n".join(json.dumps({"id": f"m-{i}", "category": "sign_error", "chapter": "SHM"}) for i in range(4)) + "\n",
+                encoding="utf-8",
+            )
+            for idx in range(25):
+                ev_t = base_t + timedelta(minutes=idx * 2)
+                lm.record_telemetry_event(
+                    kg,
+                    domain="Physics",
+                    prop_id=f"p-{idx % 4}",
+                    kind="review",
+                    correct=(idx % 3 != 0),
+                    difficulty=1450.0,
+                    confidence=0.75,
+                    duration_ms=16000,
+                    hints_used=0 if idx % 3 != 0 else 1,
+                    mistake_category="sign_error" if idx % 3 == 0 else None,
+                    now=ev_t,
+                )
+
+            after_prof = lm.load_profile(kg)
+            self.assertEqual(after_prof["globalStats"]["totalEvents"], 25)
+            self.assertAlmostEqual(after_prof["globalStats"]["priorWeight"], 6.0 / (6.0 + 25.0), places=3)
+            self.assertLessEqual(len(after_prof["recentEvents"]), 20)
+            self.assertEqual(after_prof["failureDna"]["dominantTier"], "process_encoding")
+            self.assertGreaterEqual(after_prof["failureDna"]["tierShares"]["process_encoding"], 0.50)
+
+            prof_bytes = (kg / lm.PROFILE_FILENAME).stat().st_size
+            self.assertLess(prof_bytes, 8192, f"learner-profile.json exceeded 8 KB FIFO cap ({prof_bytes} B)")
+
+            ov_res = lm.apply_user_overrides(
+                kg,
+                {"scaffoldingMode": "faded", "allowProductiveFailure": False, "maxProseWords": 110},
+            )
+            ov_pol = lm.compile_teaching_policy(ov_res, domain="Physics")
+            self.assertEqual(ov_pol["scaffoldingMode"], "faded")
+            self.assertFalse(ov_pol["allowProductiveFailure"])
+            self.assertEqual(ov_pol["maxProseWords"], 110)
+
+            lines = lm.format_compact_policy_lines(ov_res, domain="Physics")
+            self.assertEqual(len(lines), 2)
+            self.assertLessEqual(sum(len(ln.split()) for ln in lines), 55)
+
+    def test_root_cause_evidence_ledger_brainstem_and_packs_zero_pii(self) -> None:
+        import syntopik.brainstem as bs
+        import syntopik.evidence as ev
+        import syntopik.forks as fk
+        import syntopik.learner_model as lm
+        import syntopik.packs as pk
+        import syntopik.root_cause as rc
+        import syntopik.whiteboard as wb
+
+        with tempfile.TemporaryDirectory(prefix="synt-v3-core-") as tmp:
+            ws = Path(tmp) / "ws"
+            kg = ws / "knowledge-graph"
+            ch = ws / "chapters"
+            kg.mkdir(parents=True)
+            ch.mkdir(parents=True)
+
+            # Seed multi-chapter DAG: p-root (shaky) + p-solid (solid) -> p-mid (solid) -> p-leaf (shaky) & p-other (shaky, Ch2)
+            props = [
+                {"id": "p-root", "subject": "Physics", "chapter": "Ch1 Kinematics", "title": "Vector sign convention", "kind": "axiom", "status": "shaky", "bktMastery": 0.35},
+                {"id": "p-solid", "subject": "Physics", "chapter": "Ch1 Kinematics", "title": "Conservation of mass", "kind": "axiom", "status": "solid", "bktMastery": 0.94, "fsrs": {"stability": 30.0, "difficulty": 4.0, "lastReview": "2026-11-25T10:00:00Z"}},
+                {"id": "p-mid", "subject": "Physics", "chapter": "Ch2 Dynamics", "title": "Restoring force law F = -kx", "kind": "derivation", "status": "solid", "bktMastery": 0.88, "fsrs": {"stability": 20.0, "difficulty": 4.5, "lastReview": "2026-11-25T10:00:00Z"}},
+                {"id": "p-leaf", "subject": "Physics", "chapter": "Ch3 SHM", "title": "SHM phase equation", "kind": "theorem", "status": "shaky", "bktMastery": 0.42},
+                {"id": "p-other", "subject": "Physics", "chapter": "Ch2 Dynamics", "title": "Spring energy potential", "kind": "theorem", "status": "shaky", "bktMastery": 0.45},
+            ]
+            chains = [
+                {"premises": ["p-root", "p-solid"], "conclusion": "p-mid", "relation": "derives", "why": "Hooke restoring force"},
+                {"premises": ["p-mid"], "conclusion": "p-leaf", "relation": "derives", "why": "Solve ODE for SHM"},
+                {"premises": ["p-root"], "conclusion": "p-other", "relation": "requires", "why": "Sign of work"},
+            ]
+            (kg / "propositions.jsonl").write_text("\n".join(json.dumps(p) for p in props) + "\n", encoding="utf-8")
+            (kg / "chains.jsonl").write_text("\n".join(json.dumps(c) for c in chains) + "\n", encoding="utf-8")
+            (kg / "mistakes.jsonl").write_text(
+                json.dumps({"id": "m-1", "propId": "p-leaf", "chapter": "Ch3 SHM", "category": "sign_error"}) + "\n",
+                encoding="utf-8",
+            )
+
+            # 1. root_cause.py: Noisy-OR non-destructive suspect scoring, Delta-H probe, cross-chapter blast radius
+            before_props_raw = (kg / "propositions.jsonl").read_text(encoding="utf-8")
+            loc = rc.localize_fault(kg, "p-leaf")
+            self.assertTrue(loc["ok"])
+            self.assertTrue(loc["nonDestructive"])
+            self.assertEqual(loc["topSuspect"]["propId"], "p-root")
+            self.assertGreater(loc["topSuspect"]["suspectRootScore"], 0.4)
+            # Solid nodes MUST remain untouched on disk
+            self.assertEqual((kg / "propositions.jsonl").read_text(encoding="utf-8"), before_props_raw)
+
+            probe = rc.select_diagnostic_probe(kg, "p-leaf")
+            self.assertTrue(probe["ok"])
+            self.assertIsNotNone(probe["bestProbe"])
+            self.assertGreater(probe["bestProbe"]["deltaHBits"], 0.0)
+
+            blast = rc.find_blast_radius(kg, limit=5)
+            self.assertGreaterEqual(len(blast), 1)
+            self.assertEqual(blast[0]["propId"], "p-root")
+            self.assertGreaterEqual(len(blast[0]["affectedChapters"]), 2)
+
+            # 2. evidence.py: 4-tier T1..T4 inference, SHA-256 hash chain + tamper catch, anti-inflation, zero-PII/zero-CDN dossier
+            synthetic_local_path = "/" + "Users" + "/alice/private/lecture.pdf"
+            ev.record_evidence(ws, "p-root", 1, "manual", detail=f"Read {synthetic_local_path}")
+            ev.record_evidence(ws, "p-solid", 2, "fsrs_review", detail="Cold recall 14d")
+            ev.record_evidence(ws, "p-other", 3, "fork_replay", detail="Woodpecker cleared")
+            ev.record_evidence(ws, "p-leaf", 4, "viva_chamber", detail="5-turn viva pass")
+
+            chk_ok = ev.verify_ledger_chain(kg)
+            self.assertTrue(chk_ok["ok"], chk_ok)
+            self.assertEqual(chk_ok["count"], 4)
+            self.assertIsNone(chk_ok["brokenAt"])
+
+            summary = ev.compute_evidence_summary(ws)
+            self.assertTrue(summary["ok"])
+            self.assertEqual(summary["propositions"]["p-root"]["tier"], 1)
+            self.assertEqual(summary["propositions"]["p-solid"]["tier"], 2)
+            self.assertEqual(summary["propositions"]["p-other"]["tier"], 3)
+            self.assertEqual(summary["propositions"]["p-leaf"]["tier"], 4)
+            # Anti-inflation gate catches p-mid / p-root bottlenecks stuck at T1/T2
+            alert_ids = {a["propId"] for a in summary["antiInflationAlerts"]}
+            self.assertIn("p-root", alert_ids)
+            self.assertIn("p-mid", alert_ids)
+
+            dossier_html = Path(tmp) / "mastery-dossier.html"
+            dos_res = ev.export_mastery_dossier(ws, dossier_html)
+            self.assertTrue(dos_res["ok"])
+            self.assertTrue(dossier_html.is_file())
+            dos_txt = dossier_html.read_text(encoding="utf-8")
+            self.assertNotIn("alice", dos_txt)
+            self.assertIsNone(re.search(r"<(?:script|link)\b[^>]*\b(?:src|href)\s*=\s*['\"]https?://", dos_txt, re.I))
+            self.assertIn(chk_ok["headHash"][:12], dos_txt)
+
+            # Tamper entry #2 and assert verify_ledger_chain catches brokenAt == 2
+            ledger_file = kg / ev.LEDGER_FILENAME
+            l_lines = ledger_file.read_text(encoding="utf-8").splitlines()
+            tampered = json.loads(l_lines[1])
+            tampered["tier"] = 4
+            l_lines[1] = json.dumps(tampered)
+            ledger_file.write_text("\n".join(l_lines) + "\n", encoding="utf-8")
+            chk_bad = ev.verify_ledger_chain(kg)
+            self.assertFalse(chk_bad["ok"])
+            self.assertEqual(chk_bad["brokenAt"], 2)
+
+            # 3. brainstem.py: priority hierarchy + <= 180-token envelope + drop_sources Teacher-First spine
+            ws_b = Path(tmp) / "ws-brainstem"
+            kg_b = ws_b / "knowledge-graph"
+            ch_b = ws_b / "chapters"
+            kg_b.mkdir(parents=True)
+            ch_b.mkdir(parents=True)
+            (kg_b / "propositions.jsonl").write_text(
+                json.dumps({"id": "b-node", "subject": "CS", "chapter": "Raft", "title": "Leader election", "status": "solid", "nextReview": "2099-01-01", "fsrs": {"stability": 30.0}}) + "\n",
+                encoding="utf-8",
+            )
+            (kg_b / "chains.jsonl").write_text("", encoding="utf-8")
+            (ch_b / "raft-tracker.json").write_text(
+                json.dumps({
+                    "schemaVersion": 1, "slug": "raft", "title": "Raft Consensus", "subject": "CS", "active": True,
+                    "topics": [{"id": "t1", "order": 1, "title": "Log replication", "level": "basics", "prereqTopicIds": [], "propIds": ["b-node"], "status": "pending"}],
+                }),
+                encoding="utf-8",
+            )
+
+            # (a) onboarding_calibration when total_events == 0 & uncalibrated
+            m_cal = bs.plan_next_move(ws_b)
+            self.assertEqual(m_cal["recommendedMode"], "onboarding_calibration")
+            self.assertLessEqual(len(re.findall(r"\S+", json.dumps(m_cal))), 180)
+
+            # (b) whiteboard_pin_answer overrides everything
+            wb.push_frame(kg_b, {"kind": "derivation_step", "title": "Step 1", "body": "Quorum intersection"})
+            pin_r = wb.pin_step(kg_b, 0, "Why strict majority?")
+            m_pin = bs.plan_next_move(ws_b)
+            self.assertEqual(m_pin["recommendedMode"], "whiteboard_pin_answer")
+            self.assertLessEqual(len(re.findall(r"\S+", json.dumps(m_pin))), 180)
+            wb.resolve_pin(kg_b, pin_r["pin"]["id"], resolution="Answered")
+
+            # (c) cold_start_reentry when calibrated & >= 4 days away
+            p_b = lm.load_profile(kg_b)
+            p_b = lm.apply_tier1_calibration(p_b, entry_ramp="balanced", challenge_appetite="balanced")
+            lm.save_profile(kg_b, p_b)
+            old_ts = (datetime.now(timezone.utc) - timedelta(days=6)).isoformat().replace("+00:00", "Z")
+            (kg_b / "revlog.jsonl").write_text(
+                json.dumps({"ts": old_ts, "propId": "b-node", "rating": "good", "correct": True}) + "\n",
+                encoding="utf-8",
+            )
+            m_cold = bs.plan_next_move(ws_b)
+            self.assertEqual(m_cold["recommendedMode"], "cold_start_reentry")
+            self.assertLessEqual(len(re.findall(r"\S+", json.dumps(m_cold))), 180)
+
+            # (d) fork_replay when recent activity & due fork exists
+            now_ts = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+            (kg_b / "revlog.jsonl").write_text(
+                json.dumps({"ts": now_ts, "propId": "b-node", "rating": "good", "correct": True}) + "\n",
+                encoding="utf-8",
+            )
+            fk.capture_fork(
+                prop_id="b-node",
+                prefix_steps=["Split brain partition occurs"],
+                fork_prompt="Minimum nodes to elect leader?",
+                sealed_blunder="N/2",
+                sealed_winning_move="floor(N/2)+1",
+                refutation_msg="N/2 allows two disjoint quorums.",
+                kg_dir=kg_b,
+                workspace=ws_b,
+            )
+            m_fork = bs.plan_next_move(ws_b)
+            self.assertEqual(m_fork["recommendedMode"], "fork_replay")
+            self.assertLessEqual(len(re.findall(r"\S+", json.dumps(m_fork))), 180)
+
+            # (e) teach_frontier when forks cleared & nothing due
+            (kg_b / "forks.jsonl").write_text("", encoding="utf-8")
+            m_front = bs.plan_next_move(ws_b)
+            self.assertEqual(m_front["recommendedMode"], "teach_frontier")
+            self.assertLessEqual(len(re.findall(r"\S+", json.dumps(m_front))), 180)
+
+            # (f) drop_sources Teacher-First spine classification
+            drop_dir = Path(tmp) / "drops"
+            drop_dir.mkdir(parents=True)
+            lec_md = drop_dir / "lecture_01_notes.md"
+            lec_md.write_text("# Consensus Safety\nMajority quorums always intersect.\n", encoding="utf-8")
+            pyq_md = drop_dir / "raft_pyq_problems.md"
+            pyq_md.write_text("# Practice Problems\nQ1: 5-node cluster.\n", encoding="utf-8")
+            drop_res = bs.drop_sources(ws_b, [pyq_md, lec_md], slug="raft-drop")
+            self.assertTrue(drop_res["ok"])
+            self.assertEqual(drop_res["spineSource"]["role"], "teacher_spine")
+            self.assertIn("lecture_01_notes.md", drop_res["spineSource"]["input"])
+            roles_by_name = {Path(c["input"]).name: c["role"] for c in drop_res["classifiedSources"]}
+            self.assertEqual(roles_by_name["lecture_01_notes.md"], "teacher_spine")
+            self.assertEqual(roles_by_name["raft_pyq_problems.md"], "problem_bank")
+            self.assertTrue(drop_res["probeOneHint"])
+
+            # 4. packs.py: fail-closed exclusion & smuggle rejection of all v3 personal files
+            personal_files = (
+                "learner-profile.json",
+                "whiteboard-session.json",
+                "evidence-ledger.jsonl",
+                "viva-sessions.jsonl",
+            )
+            for pf in personal_files:
+                self.assertIn(pf, pk.EXCLUDED_PERSONAL_FILES)
+                (kg / pf).write_text('{"secretPersonal": true}\n', encoding="utf-8")
+
+            pack_zip = Path(tmp) / "clean-v3.syntopik-pack.zip"
+            exp_r = pk.export_pack("Physics", workspace=ws, kg_dir=kg, chapters_dir=ch, out_path=pack_zip)
+            self.assertTrue(exp_r["ok"])
+            with zipfile.ZipFile(pack_zip, "r") as zf:
+                names = set(zf.namelist())
+                for pf in personal_files:
+                    self.assertNotIn(pf, names)
+                    self.assertFalse(any(n.endswith("/" + pf) for n in names))
+            ver_clean = pk.verify_pack(pack_zip)
+            self.assertTrue(ver_clean["ok"], ver_clean)
+
+            # Craft smuggled ZIPs for each personal file -> verify_pack & import_pack MUST reject!
+            for pf in personal_files:
+                with self.subTest(smuggled=pf):
+                    bad_zip = Path(tmp) / f"smuggle-{pf}.zip"
+                    with zipfile.ZipFile(pack_zip, "r") as src_z, zipfile.ZipFile(bad_zip, "w") as dst_z:
+                        for info in src_z.infolist():
+                            dst_z.writestr(info, src_z.read(info.filename))
+                        dst_z.writestr(f"knowledge-graph/{pf}", '{"smuggled": true}\n')
+                    ver_bad = pk.verify_pack(bad_zip)
+                    self.assertFalse(ver_bad["ok"], f"verify_pack failed to reject smuggled {pf}")
+                    imp_dir = Path(tmp) / f"imp-{pf}"
+                    imp_bad = pk.import_pack(bad_zip, workspace=imp_dir, no_sync=True)
+                    self.assertFalse(imp_bad["ok"], f"import_pack failed to reject smuggled {pf}")
+                    self.assertTrue(imp_bad.get("errors"), imp_bad)
+                    self.assertFalse((imp_dir / "knowledge-graph" / pf).exists())
+
+
+class TestV3PedagogyAndWorkMentor(unittest.TestCase):
+    """30. Syntopik v3.0 Explorable RPN Sandbox, Derivation Forge, Viva Chamber, Work Mentor, Sunset, Auto-Pacer & Whiteboard."""
+
+    def test_explorable_parser_rpn_curves_limit_check_and_ast_sandbox(self) -> None:
+        import syntopik.explorable as ex
+
+        md = """
+# Small-Angle Regime Break
+
+:::explore pendulum-limit
+{
+  "title": "Pendulum Small-Angle Approximation",
+  "prompt": "Drag theta to see where sin(theta) diverges from theta.",
+  "params": [
+    {"name": "A", "label": "Amplitude", "min": 0.1, "max": 2.0, "step": 0.1, "default": 1.0}
+  ],
+  "outputs": [
+    {"label": "Peak Restoring Ratio", "expr": "sin(A) / A"}
+  ],
+  "curve": {
+    "xVar": "theta",
+    "xMin": 0.05,
+    "xMax": 1.5,
+    "samples": 32,
+    "exactExpr": "A * sin(theta)",
+    "approxExpr": "A * theta",
+    "regimeThreshold": 0.25,
+    "yLabel": "Torque"
+  },
+  "limitCheck": {
+    "question": "As theta -> 0, what is cos(theta)?",
+    "var": "theta",
+    "target": 0,
+    "expectedExpr": "cos(theta)"
+  }
+}
+:::
+"""
+        specs = ex.parse_explorable_blocks(md, strict=True)
+        self.assertEqual(len(specs), 1)
+        spec = specs[0]
+        self.assertEqual(spec["id"], "pendulum-limit")
+        self.assertTrue(spec["outputs"][0]["rpn"])
+        val = ex.evaluate_rpn(spec["outputs"][0]["rpn"], {"A": 1.0})
+        self.assertAlmostEqual(val, math.sin(1.0), places=6)
+
+        curve = ex.sample_explorable_curve(spec, {"A": 2.0})
+        self.assertTrue(curve["ok"])
+        self.assertEqual(len(curve["points"]), 32)
+        self.assertGreater(curve["maxAbsError"], 0.5)
+
+        lim_pass = ex.evaluate_limit_check(spec, "1.0")
+        self.assertTrue(lim_pass["passed"])
+        lim_fail = ex.evaluate_limit_check(spec, "0.2")
+        self.assertFalse(lim_fail["passed"])
+        self.assertTrue(lim_fail["hint"])
+
+        # Strict AST sandbox refusal of malicious & DoS payloads
+        bad_payloads = [
+            "__import__('os').system('id')",
+            "lambda x: x + 1",
+            "open('/etc/passwd').read()",
+            "9**9**9",
+            "x**13",
+            "(1).__class__.__mro__",
+        ]
+        for payload in bad_payloads:
+            with self.subTest(payload=payload):
+                with self.assertRaises(ValueError):
+                    ex.compile_expr_to_rpn(payload, allowed_vars={"x"})
+
+    def test_derivation_forge_viva_chamber_work_mentor_sunset_pace_and_whiteboard(self) -> None:
+        import syntopik.evidence as ev
+        import syntopik.whiteboard as wb
+        import syntopik.work_mentor as wm
+
+        df = load_script_module("derivation_forge.py")
+        vc = load_script_module("viva_chamber.py")
+        gi = load_script_module("graph_intel.py")
+        dp = load_script_module("daily_plan.py")
+
+        with tempfile.TemporaryDirectory(prefix="synt-v3-ped-") as tmp:
+            ws = Path(tmp) / "ws"
+            kg = ws / "knowledge-graph"
+            ch = ws / "chapters"
+            kg.mkdir(parents=True)
+            ch.mkdir(parents=True)
+
+            # Seed propositions + chains for Viva & Sunset
+            props = [
+                {
+                    "id": "phy-shm-period",
+                    "subject": "Physics",
+                    "chapter": "SHM",
+                    "title": "Simple pendulum small-angle period T = 2*pi*sqrt(L/g)",
+                    "kind": "theorem",
+                    "status": "solid",
+                    "bktMastery": 0.90,
+                    "boundaryConditions": ["small angle theta << 1 rad", "uniform gravity field", "massless inextensible string"],
+                    "antiPatterns": ["claiming period is independent of amplitude at large angles"],
+                },
+                {
+                    "id": "phy-fragile-solid",
+                    "subject": "Physics",
+                    "chapter": "SHM",
+                    "title": "Hooke law linear restoring force F = -kx",
+                    "kind": "axiom",
+                    "status": "solid",
+                    "bktMastery": 0.92,
+                    "boundaryConditions": ["elastic linear limit", "massless spring"],
+                    "antiPatterns": ["assuming linearity beyond elastic yield threshold"],
+                },
+                {"id": "shm-ax-1", "subject": "Physics", "chapter": "SHM", "title": "Newton 2nd law restoring ODE", "kind": "axiom", "status": "solid"},
+                {"id": "shm-leaf-1", "subject": "Physics", "chapter": "SHM", "title": "Vertical spring shift", "kind": "fact", "status": "solid"},
+                {"id": "shm-leaf-2", "subject": "Physics", "chapter": "SHM", "title": "Series spring shortcut", "kind": "fact", "status": "solid"},
+                {"id": "shm-leaf-3", "subject": "Physics", "chapter": "SHM", "title": "Parallel spring shortcut", "kind": "fact", "status": "solid"},
+                {"id": "shm-leaf-4", "subject": "Physics", "chapter": "SHM", "title": "Cut spring k scaling", "kind": "fact", "status": "solid"},
+                {"id": "waves-link", "subject": "Physics", "chapter": "Waves", "title": "Wave equation coupling", "kind": "theorem", "status": "shaky"},
+            ]
+            chains = [
+                {"premises": ["shm-ax-1"], "conclusion": "phy-shm-period", "relation": "derives"},
+                {"premises": ["shm-ax-1"], "conclusion": "shm-leaf-1", "relation": "derives"},
+                {"premises": ["shm-ax-1"], "conclusion": "shm-leaf-2", "relation": "derives"},
+                {"premises": ["shm-ax-1"], "conclusion": "shm-leaf-3", "relation": "derives"},
+                {"premises": ["shm-ax-1"], "conclusion": "shm-leaf-4", "relation": "derives"},
+                {"premises": ["shm-ax-1"], "conclusion": "waves-link", "relation": "requires"},
+            ]
+            (kg / "propositions.jsonl").write_text("\n".join(json.dumps(p) for p in props) + "\n", encoding="utf-8")
+            (kg / "chains.jsonl").write_text("\n".join(json.dumps(c) for c in chains) + "\n", encoding="utf-8")
+
+            # 1. derivation_forge.py: create, blackout (zero leak), check (math equiv), cut BFS Axiom-Cut Surgery
+            secret_step_expr = "2*pi*sqrt(m/k)"
+            created = df.create_derivation(
+                {
+                    "id": "deriv-shm-T",
+                    "propId": "phy-shm-period",
+                    "chapter": "SHM",
+                    "title": "Spring-Mass Period Derivation",
+                    "domain": "Physics",
+                    "steps": [
+                        {"id": "a1", "label": "Newton 2nd Law", "expr": "m*a = -k*x", "role": "axiom", "dependsOn": []},
+                        {"id": "a2", "label": "Energy Scale", "expr": "E = 0.5*k*A**2", "role": "axiom", "dependsOn": []},
+                        {"id": "s1", "label": "Angular frequency", "expr": "sqrt(k/m)", "role": "step", "dependsOn": ["a1"]},
+                        {"id": "s2", "label": "Period formula", "expr": secret_step_expr, "role": "theorem", "dependsOn": ["s1"]},
+                        {"id": "s3", "label": "Max energy check", "expr": "0.5*k*A**2", "role": "step", "dependsOn": ["a2"]},
+                    ],
+                },
+                kg_dir=kg,
+                workspace=ws,
+            )
+            self.assertTrue(created["ok"])
+
+            bo = df.get_blackout_challenge("deriv-shm-T", level=3, kg_dir=kg, workspace=ws)
+            self.assertEqual(bo["hiddenCount"], 3)
+            self.assertNotIn(secret_step_expr, json.dumps(bo), "Blackout challenge leaked hidden theorem expr!")
+            self.assertNotIn("sqrt(k/m)", json.dumps(bo), "Blackout challenge leaked hidden intermediate expr!")
+
+            chk_eq = df.check_blackout_step("deriv-shm-T", "s2", "sqrt(m/k) * 2 * pi", kg_dir=kg, workspace=ws)
+            self.assertTrue(chk_eq["passed"], chk_eq)
+            self.assertEqual(chk_eq["method"], "math_equivalence")
+
+            cut_res = df.grade_axiom_cut("deriv-shm-T", "a1", guess_step_id="s1", kg_dir=kg, workspace=ws)
+            self.assertTrue(cut_res["passed"], cut_res)
+            self.assertEqual(cut_res["earliestBreak"], "s1")
+            self.assertEqual(cut_res["invalidatedSteps"], ["s1", "s2"])
+            self.assertEqual(cut_res["survivingSteps"], ["a2", "s3"])
+            self.assertTrue(cut_res["evidenceRecorded"])
+
+            # 2. viva_chamber.py: (a) 5-turn pass (>= 0.75 + T4 evidence)
+            v_pass = vc.start_viva("phy-shm-period", kg_dir=kg, workspace=ws)
+            self.assertEqual(v_pass["currentTurn"], 1)
+            strong_turns = [
+                "Because restoring torque scales as sin(theta), the simple pendulum period T = 2*pi*sqrt(L/g) holds only in the small angle boundary regime where theta << 1 rad under uniform gravity and a massless inextensible string, and it breaks when large angles invalidate the linear approximation.",
+                "When the small angle boundary condition is violated at large theta, the restoring force sin(theta) falls below theta, therefore the linear approximation breaks first because curvature decreases and period increases beyond the small-angle limit.",
+                "Claiming period is independent of amplitude at large angles is false; instead a concrete counterexample at theta = 90 degrees refutes it because the elliptic integral correction shifts period upward by roughly 18 percent.",
+                "If we transfer the pendulum mechanism into an accelerating elevator or large amplitude edge regime, effective gravity shifts downstream and we can verify the prediction by comparing measured period against the limiting case g -> 0 where period diverges.",
+                "To reconcile Turn 1 with Turns 2-4, the sharpened invariant is that pendulum period requires small angle linear restoring torque under uniform gravity; violating that boundary causes amplitude dependence that we verify via nonlinear perturbation.",
+            ]
+            last_p = None
+            for resp in strong_turns:
+                last_p = vc.submit_viva_turn(v_pass["sessionId"], resp, confidence=0.85, kg_dir=kg, workspace=ws)
+            assert last_p is not None
+            self.assertEqual(last_p["status"], "completed")
+            self.assertEqual(last_p["outcome"], "passed", last_p)
+            self.assertGreaterEqual(last_p["scores"]["composite"], 0.75)
+            self.assertTrue(last_p["evidenceRecorded"])
+            self.assertTrue(ev.verify_ledger_chain(kg)["ok"])
+
+            # (b) Critical boundary collapse demoting `solid -> shaky`
+            v_fail = vc.start_viva("phy-fragile-solid", kg_dir=kg, workspace=ws)
+            weak_turns = [
+                "Hooke law always holds unconditionally with no exceptions regardless of stretching.",
+                "It always works everywhere without failing.",
+                "No exceptions ever.",
+                "Always true.",
+                "Same formula always works.",
+            ]
+            last_f = None
+            for resp in weak_turns:
+                last_f = vc.submit_viva_turn(v_fail["sessionId"], resp, confidence=0.95, kg_dir=kg, workspace=ws)
+            assert last_f is not None
+            self.assertEqual(last_f["outcome"], "boundary_collapse", last_f)
+            self.assertTrue(last_f["demotedToShaky"])
+            props_after = {json.loads(ln)["id"]: json.loads(ln) for ln in (kg / "propositions.jsonl").read_text(encoding="utf-8").splitlines() if ln.strip()}
+            self.assertEqual(props_after["phy-fragile-solid"]["status"], "shaky")
+
+            # 3. work_mentor.py: debrief_git_diff + dedup + flag injection rejection + mentor gate
+            sample_diff = """diff --git a/search.py b/search.py
+--- a/search.py
++++ b/search.py
+@@ -1,6 +1,8 @@
+ def bsearch(nums, target):
++    if nums is None or len(nums) == 0:
++        return -1
+     lo, hi = 0, len(nums) - 1
+-    while lo < hi:
++    while lo <= hi:
+         mid = (lo + hi) // 2
+         if nums[mid] == target:
+             return mid
+"""
+            deb1 = wm.debrief_git_diff(ws, diff_text=sample_diff, kg_dir=kg)
+            self.assertTrue(deb1["ok"])
+            self.assertGreaterEqual(deb1["findingsCount"], 1)
+            self.assertGreaterEqual(len(deb1["crystallized"]["forks"]), 1)
+            self.assertGreaterEqual(len(deb1["crystallized"]["arenas"]), 1)
+            self.assertGreaterEqual(len(deb1["crystallized"]["propositions"]), 1)
+            n_props_1 = len([ln for ln in (kg / "propositions.jsonl").read_text(encoding="utf-8").splitlines() if ln.strip()])
+            n_arenas_1 = len([ln for ln in (kg / "arenas.jsonl").read_text(encoding="utf-8").splitlines() if ln.strip()])
+
+            # Rerun on identical diff MUST deduplicate cleanly
+            deb2 = wm.debrief_git_diff(ws, diff_text=sample_diff, kg_dir=kg)
+            self.assertTrue(deb2["ok"])
+            n_props_2 = len([ln for ln in (kg / "propositions.jsonl").read_text(encoding="utf-8").splitlines() if ln.strip()])
+            n_arenas_2 = len([ln for ln in (kg / "arenas.jsonl").read_text(encoding="utf-8").splitlines() if ln.strip()])
+            self.assertEqual(n_props_1, n_props_2)
+            self.assertEqual(n_arenas_1, n_arenas_2)
+
+            # Flag-injection refusal on git ref starting with '-'
+            for bad_ref in ("--exec=touch /tmp/pwn", "-u", "--output=/tmp/x"):
+                with self.assertRaises(ValueError):
+                    wm.validate_git_ref(bad_ref)
+                with self.assertRaises(ValueError):
+                    wm.debrief_git_diff(ws, ref=bad_ref, kg_dir=kg)
+
+            # Mentor mode gate: silent passthrough on solid T3+ vs 20s gate on shaky
+            wm.set_mentor_mode(ws, True, kg_dir=kg)
+            gate_solid = wm.evaluate_mentor_gate(ws, ["phy-shm-period"], kg_dir=kg)
+            self.assertFalse(gate_solid["gated"])
+            self.assertEqual(gate_solid["action"], "passthrough")
+            self.assertEqual(gate_solid["durationSec"], 0)
+
+            gate_shaky = wm.evaluate_mentor_gate(ws, ["phy-fragile-solid"], kg_dir=kg)
+            self.assertTrue(gate_shaky["gated"])
+            self.assertEqual(gate_shaky["action"], "micro_prediction")
+            self.assertEqual(gate_shaky["durationSec"], 20)
+            self.assertIn("phy-fragile-solid", gate_shaky["prompt"])
+
+            # 4. graph_intel.py --sunset & daily_plan.py --pace --rebalance --ics
+            ss_plan = gi.compute_sunset_plan(kg, "shm", keep_ratio=0.20, target_retention=0.80)
+            self.assertTrue(ss_plan["ok"])
+            self.assertGreaterEqual(ss_plan["keepCount"], 1)
+            self.assertGreater(ss_plan["archiveCount"], ss_plan["keepCount"])
+            self.assertEqual(ss_plan["keepAxioms"][0]["id"], "shm-ax-1")
+            self.assertEqual(ss_plan["targetRetention"], 0.80)
+
+            (kg / "study-config.json").write_text(
+                json.dumps({
+                    "dailyMinutes": 90,
+                    "slackBufferPct": 20,
+                    "exams": [
+                        {"name": "Physics Midterm", "subject": "Physics", "chapterSlug": "shm", "examDate": "2026-12-10", "weight": 1.2, "missedDays": 1},
+                        {"name": "Systems Final", "subject": "CS", "examDate": "2026-12-18", "weight": 1.0},
+                    ],
+                }),
+                encoding="utf-8",
+            )
+            pace_plan = dp.build_pace_plan(kg_dir=kg, chapters_dir=ch, today="2026-11-26", rebalance=True, horizon_days=10)
+            self.assertEqual(pace_plan["mode"], "pace")
+            self.assertTrue(pace_plan["rebalanced"])
+            self.assertEqual(pace_plan["courseCount"], 2)
+            self.assertGreaterEqual(pace_plan["bufferDaysScheduled"], 1)
+
+            ics_out = Path(tmp) / "pace.ics"
+            dp.export_pace_ics(pace_plan, ics_out)
+            ics_txt = ics_out.read_text(encoding="utf-8")
+            self.assertIn("BEGIN:VCALENDAR", ics_txt)
+            self.assertIn("VERSION:2.0", ics_txt)
+            self.assertIn("BEGIN:VEVENT", ics_txt)
+            self.assertIn("END:VEVENT", ics_txt)
+            self.assertIn("END:VCALENDAR", ics_txt)
+
+            # 5. whiteboard.py: push/unlock/pin/resolve/clear + atomic revisions
+            r_p1 = wb.push_frame(kg, {"kind": "derivation_step", "title": "Step 1", "body": "Write Newton 2nd law"})
+            self.assertEqual(r_p1["revision"], 1)
+            r_p2 = wb.push_frame(
+                kg,
+                {
+                    "id": "gate-1",
+                    "kind": "prediction_gate",
+                    "title": "Sign Check",
+                    "prompt": "Predict restoring sign",
+                    "revealedBody": "SECRET_REVEALED_BODY",
+                    "expectedAnswer": "negative",
+                },
+            )
+            self.assertEqual(r_p2["revision"], 2)
+            self.assertTrue(r_p2["frame"]["locked"])
+            self.assertEqual(r_p2["frame"]["body"], "")
+
+            r_pin = wb.pin_step(kg, 0, "Why is damping ignored?", frame_id=r_p1["frame"]["id"])
+            self.assertEqual(r_pin["revision"], 3)
+            self.assertEqual(wb.get_session(kg)["pendingPinCount"], 1)
+
+            r_unl = wb.unlock_gate(kg, "gate-1", "negative restoring force", confidence=80)
+            self.assertEqual(r_unl["revision"], 4)
+            self.assertFalse(r_unl["frame"]["locked"])
+            self.assertEqual(r_unl["frame"]["body"], "SECRET_REVEALED_BODY")
+            self.assertAlmostEqual(r_unl["confidence"], 0.8, places=4)
+
+            r_res = wb.resolve_pin(kg, r_pin["pin"]["id"], resolution="Ideal frictionless model")
+            self.assertEqual(r_res["revision"], 5)
+            self.assertEqual(wb.get_session(kg)["pendingPinCount"], 0)
+
+            r_clr = wb.clear_session(kg)
+            self.assertEqual(r_clr["revision"], 6)
+            self.assertEqual(r_clr["session"]["frameCount"], 0)
+
+
+class TestV3ServerHooksMcpAndWindowsPortability(unittest.TestCase):
+    """31. Syntopik v3.0 Studio Server Endpoints, Hooks/sync-graph v5, Fixed CLI Flags, --vault local, Windows Configs & MCP v3."""
+
+    def test_v3_studio_server_endpoints_zero_leak_csrf_and_lan_isolation(self) -> None:
+        import syntopik.forks as fk
+        import syntopik.server as srv_mod
+        import syntopik.whiteboard as wb
+
+        df = load_script_module("derivation_forge.py")
+        fa = load_script_module("falsify_arena.py")
+
+        def _req(
+            port: int,
+            method: str,
+            path: str,
+            *,
+            headers: dict[str, str] | None = None,
+            body: Any = None,
+        ) -> tuple[int, dict[str, str], bytes]:
+            conn = http.client.HTTPConnection("127.0.0.1", port, timeout=6.0)
+            try:
+                hdrs = dict(headers or {})
+                raw = None
+                if body is not None:
+                    raw = json.dumps(body).encode("utf-8") if isinstance(body, (dict, list)) else body
+                    hdrs.setdefault("Content-Type", "application/json")
+                conn.request(method, path, body=raw, headers=hdrs)
+                resp = conn.getresponse()
+                data = resp.read()
+                return resp.status, {k.lower(): v for k, v in resp.getheaders()}, data
+            finally:
+                conn.close()
+
+        with tempfile.TemporaryDirectory(prefix="synt-v3-srv-") as tmp:
+            ws = Path(tmp) / "ws"
+            kg = ws / "knowledge-graph"
+            ch = ws / "chapters"
+            kg.mkdir(parents=True)
+            ch.mkdir(parents=True)
+
+            (kg / "propositions.jsonl").write_text(
+                "\n".join([
+                    json.dumps({
+                        "id": "p-root", "subject": "Physics", "chapter": "SHM",
+                        "title": "Restoring force", "kind": "axiom", "status": "shaky", "bktMastery": 0.4,
+                        "boundaryConditions": ["linear spring"], "antiPatterns": ["ignores minus sign"],
+                    }),
+                    json.dumps({
+                        "id": "p-leaf", "subject": "Physics", "chapter": "SHM",
+                        "title": "SHM period", "kind": "theorem", "status": "shaky", "bktMastery": 0.45,
+                        "boundaryConditions": ["small amplitude"], "antiPatterns": ["uses g instead of k/m"],
+                    }),
+                ]) + "\n",
+                encoding="utf-8",
+            )
+            (kg / "chains.jsonl").write_text(
+                json.dumps({"premises": ["p-root"], "conclusion": "p-leaf", "relation": "derives"}) + "\n",
+                encoding="utf-8",
+            )
+
+            # Seed secrets across forks, arenas, decisions, derivations, and locked whiteboard gate
+            canary_fork_win = "SECRET_WIN_MOVE_7741"
+            canary_fork_blunder = "SECRET_BLUNDER_7742"
+            canary_mutant = "SECRET_MUTANT_CODE_7743"
+            canary_wb_ans = "SECRET_GATE_ANS_7744"
+            canary_wb_body = "SECRET_GATE_BODY_7745"
+            canary_deriv_expr = "2*pi*sqrt(m/k)"
+
+            fk.capture_fork(
+                prop_id="p-leaf",
+                prefix_steps=["Spring mass m, stiffness k"],
+                fork_prompt="Write angular frequency squared.",
+                sealed_blunder=canary_fork_blunder,
+                sealed_winning_move=canary_fork_win,
+                refutation_msg="Check units",
+                kg_dir=kg,
+                workspace=ws,
+            )
+            fa.create_arena(
+                prop_id="p-leaf",
+                domain="code",
+                claim="Return max of list",
+                entry="my_max",
+                sealed_reference={"code": "def my_max(xs):\n    return max(xs)\n"},
+                sealed_mutants=[{"id": "m1", "trapTag": "neg", "code": f"# {canary_mutant}\ndef my_max(xs):\n    return 0\n"}],
+                assumption_predicates=["len(args[0]) >= 1"],
+                workspace=ws,
+                kg_dir=kg,
+            )
+            (kg / "decisions.jsonl").write_text(
+                json.dumps({
+                    "id": "dec-1", "propId": "p-leaf", "prompt": "Pick first move",
+                    "killCue": "SECRET_KILL_CUE_7746", "sealedAnswer": "SECRET_DEC_ANS_7747",
+                }) + "\n",
+                encoding="utf-8",
+            )
+            df.create_derivation(
+                {
+                    "id": "d-srv-1", "propId": "p-leaf", "chapter": "SHM", "title": "SHM T", "domain": "Physics",
+                    "steps": [
+                        {"id": "a1", "label": "Axiom", "expr": "a = -w**2*x", "role": "axiom", "dependsOn": []},
+                        {"id": "s1", "label": "Period", "expr": canary_deriv_expr, "role": "theorem", "dependsOn": ["a1"]},
+                    ],
+                },
+                kg_dir=kg,
+                workspace=ws,
+            )
+            wb.push_frame(
+                kg,
+                {
+                    "id": "wb-gate-1",
+                    "kind": "prediction_gate",
+                    "title": "Locked Gate",
+                    "prompt": "Predict before unlock",
+                    "expectedAnswer": canary_wb_ans,
+                    "revealedBody": canary_wb_body,
+                },
+            )
+
+            srv = srv_mod.create_server(workspace=ws, host="127.0.0.1", port=0, lan=False)
+            t_srv = threading.Thread(target=srv.serve_forever, kwargs={"poll_interval": 0.05}, daemon=True)
+            t_srv.start()
+            try:
+                port = srv.bound_port
+                auth = {"X-Syntopik-Token": srv.csrf_token}
+
+                # 1. GET /api/state -> schemaVersion == 5 & ZERO leaked secrets!
+                st_st, _, raw_st = _req(port, "GET", "/api/state")
+                self.assertEqual(st_st, 200)
+                st_text = raw_st.decode("utf-8")
+                state_obj = json.loads(st_text)
+                self.assertEqual(state_obj["hub"]["schemaVersion"], 5)
+                for secret in (canary_fork_win, canary_fork_blunder, canary_mutant, canary_wb_ans, canary_wb_body, "SECRET_DEC_ANS_7747"):
+                    self.assertNotIn(secret, st_text, f"GET /api/state leaked secret: {secret}")
+
+                # 2. CSRF 403 enforcement on v3 POST/PATCH routes
+                st_csrf1, _, _ = _req(port, "POST", "/api/profile/calibrate", body={"entryRamp": "balanced"})
+                self.assertEqual(st_csrf1, 403)
+                st_csrf2, _, _ = _req(port, "PATCH", "/api/profile/override", body={"maxProseWords": 110})
+                self.assertEqual(st_csrf2, 403)
+                st_csrf3, _, _ = _req(port, "POST", "/api/whiteboard/push", body={"kind": "summary", "body": "x"})
+                self.assertEqual(st_csrf3, 403)
+
+                # 3. Profile GET / calibrate / PATCH override
+                st_p0, _, raw_p0 = _req(port, "GET", "/api/profile")
+                self.assertEqual(st_p0, 200)
+                self.assertTrue(json.loads(raw_p0)["ok"])
+
+                st_cal, _, raw_cal = _req(
+                    port, "POST", "/api/profile/calibrate", headers=auth,
+                    body={"entryRamp": "formalism_first", "challengeAppetite": "balanced", "proseDensity": "terse"},
+                )
+                self.assertEqual(st_cal, 200, raw_cal)
+                self.assertTrue(json.loads(raw_cal)["profile"]["calibration"]["completed"])
+
+                st_ov, _, raw_ov = _req(
+                    port, "PATCH", "/api/profile/override", headers=auth,
+                    body={"scaffoldingMode": "standard", "maxProseWords": 120},
+                )
+                self.assertEqual(st_ov, 200, raw_ov)
+                self.assertEqual(json.loads(raw_ov)["compiledPolicy"]["maxProseWords"], 120)
+
+                # 4. /api/next-move, /api/root-cause, /api/evidence
+                st_nm, _, raw_nm = _req(port, "GET", "/api/next-move")
+                self.assertEqual(st_nm, 200)
+                self.assertIn("recommendedMode", json.loads(raw_nm))
+
+                st_rc, _, raw_rc = _req(port, "GET", "/api/root-cause?nodeId=p-leaf")
+                self.assertEqual(st_rc, 200)
+                rc_j = json.loads(raw_rc)
+                self.assertTrue(rc_j["ok"])
+                self.assertEqual(rc_j["localization"]["topSuspect"]["propId"], "p-root")
+
+                st_ev, _, raw_ev = _req(port, "GET", "/api/evidence")
+                self.assertEqual(st_ev, 200)
+                self.assertIn("tierCounts", json.loads(raw_ev))
+
+                # 5. /api/whiteboard*
+                st_wbg, _, raw_wbg = _req(port, "GET", "/api/whiteboard")
+                self.assertEqual(st_wbg, 200)
+                self.assertNotIn(canary_wb_ans, raw_wbg.decode("utf-8"))
+                self.assertNotIn(canary_wb_body, raw_wbg.decode("utf-8"))
+
+                st_wbp, _, raw_wbp = _req(
+                    port, "POST", "/api/whiteboard/push", headers=auth,
+                    body={"kind": "derivation_step", "title": "Step 2", "body": "Integrate"},
+                )
+                self.assertEqual(st_wbp, 200, raw_wbp)
+                st_wbpin, _, raw_wbpin = _req(
+                    port, "POST", "/api/whiteboard/pin", headers=auth,
+                    body={"stepIndex": 0, "note": "Check sign"},
+                )
+                self.assertEqual(st_wbpin, 200, raw_wbpin)
+                st_wbu, _, raw_wbu = _req(
+                    port, "POST", "/api/whiteboard/unlock", headers=auth,
+                    body={"frameId": "wb-gate-1", "prediction": "negative", "confidence": 0.8},
+                )
+                self.assertEqual(st_wbu, 200, raw_wbu)
+                self.assertTrue(json.loads(raw_wbu)["unlocked"])
+                st_wbc, _, raw_wbc = _req(port, "POST", "/api/whiteboard/clear", headers=auth, body={})
+                self.assertEqual(st_wbc, 200, raw_wbc)
+                self.assertTrue(json.loads(raw_wbc)["cleared"])
+
+                # 6. /api/derivation/* & /api/viva/*
+                st_dg, _, raw_dg = _req(port, "GET", "/api/derivations")
+                self.assertEqual(st_dg, 200)
+                self.assertEqual(json.loads(raw_dg)["count"], 1)
+
+                st_dc, _, raw_dc = _req(
+                    port, "POST", "/api/derivation/check", headers=auth,
+                    body={"derivationId": "d-srv-1", "stepId": "s1", "answer": "sqrt(m/k)*2*pi"},
+                )
+                self.assertEqual(st_dc, 200, raw_dc)
+                self.assertTrue(json.loads(raw_dc)["passed"])
+
+                st_dcut, _, raw_dcut = _req(
+                    port, "POST", "/api/derivation/cut", headers=auth,
+                    body={"derivationId": "d-srv-1", "axiomId": "a1", "guessStepId": "s1"},
+                )
+                self.assertEqual(st_dcut, 200, raw_dcut)
+                self.assertTrue(json.loads(raw_dcut)["passed"])
+
+                st_vs, _, raw_vs = _req(port, "POST", "/api/viva/start", headers=auth, body={"propId": "p-leaf"})
+                self.assertEqual(st_vs, 200, raw_vs)
+                v_sid = json.loads(raw_vs)["sessionId"]
+                st_vt, _, raw_vt = _req(
+                    port, "POST", "/api/viva/turn", headers=auth,
+                    body={"sessionId": v_sid, "response": "Because SHM requires small amplitude linear restoring force.", "confidence": 0.8},
+                )
+                self.assertEqual(st_vt, 200, raw_vt)
+                self.assertEqual(json.loads(raw_vt)["turnCompleted"], 1)
+
+                # 7. /api/demo/load (valid starter pack + traversal 400)
+                st_bad_demo, _, _ = _req(port, "POST", "/api/demo/load", headers=auth, body={"packSlug": "../evil"})
+                self.assertEqual(st_bad_demo, 400)
+                st_ok_demo, _, raw_ok_demo = _req(port, "POST", "/api/demo/load", headers=auth, body={"packSlug": "raft-consensus"})
+                self.assertEqual(st_ok_demo, 200, raw_ok_demo)
+                self.assertTrue(json.loads(raw_ok_demo)["ok"])
+            finally:
+                srv.shutdown()
+                srv.server_close()
+                t_srv.join(timeout=3.0)
+
+            # 8. --lan paired-cookie isolation: MUST block /api/profile & /api/whiteboard (403)
+            srv_lan = srv_mod.create_server(workspace=ws, host="127.0.0.1", port=0, lan=True)
+            t_lan = threading.Thread(target=srv_lan.serve_forever, kwargs={"poll_interval": 0.05}, daemon=True)
+            t_lan.start()
+            try:
+                lport = srv_lan.bound_port
+                lan_host = f"192.168.1.77:{lport}"
+                st_p, hdrs_p, _ = _req(lport, "GET", f"/pocket?pair={srv_lan.pair_token}", headers={"Host": lan_host})
+                self.assertEqual(st_p, 302)
+                cookie = hdrs_p["set-cookie"].split(";", 1)[0]
+
+                st_pkt, _, _ = _req(lport, "GET", "/api/pocket/state", headers={"Host": lan_host, "Cookie": cookie})
+                self.assertEqual(st_pkt, 200)
+                for blocked_path in ("/api/profile", "/api/whiteboard", "/api/next-move", "/api/root-cause", "/api/evidence"):
+                    st_b, _, _ = _req(lport, "GET", blocked_path, headers={"Host": lan_host, "Cookie": cookie})
+                    self.assertEqual(st_b, 403, f"--lan cookie MUST be blocked (403) on {blocked_path}")
+                st_bpost, _, _ = _req(
+                    lport, "POST", "/api/whiteboard/push",
+                    headers={"Host": lan_host, "Origin": f"http://{lan_host}", "Cookie": cookie},
+                    body={"kind": "summary", "body": "blocked"},
+                )
+                self.assertEqual(st_bpost, 403)
+            finally:
+                srv_lan.shutdown()
+                srv_lan.server_close()
+                t_lan.join(timeout=3.0)
+
+    def test_v3_hooks_sync_graph_cli_flags_vault_local_attach_and_windows_configs(self) -> None:
+        import syntopik.cli as cli_mod
+        import syntopik.paths as paths_mod
+        import syntopik.whiteboard as wb
+
+        with tempfile.TemporaryDirectory(prefix="synt-v3-cli-") as tmp:
+            t = Path(tmp)
+            ws = t / "ws"
+            kg = ws / "knowledge-graph"
+            ch = ws / "chapters"
+            kg.mkdir(parents=True)
+            ch.mkdir(parents=True)
+
+            (kg / "propositions.jsonl").write_text(
+                json.dumps({
+                    "id": "cs-q1", "subject": "CS", "chapter": "Consensus", "title": "Quorum intersection",
+                    "kind": "axiom", "status": "shaky", "nextReview": "2020-01-01",
+                }) + "\n",
+                encoding="utf-8",
+            )
+            (kg / "chains.jsonl").write_text("", encoding="utf-8")
+            (kg / "mistakes.jsonl").write_text("", encoding="utf-8")
+            (kg / "forks.jsonl").write_text(
+                json.dumps({
+                    "id": "fk-1", "propId": "cs-q1", "prompt": "Min quorum?",
+                    "sealedBlunder": "SECRET_SYNC_BLUNDER", "sealedWinningMove": "SECRET_SYNC_WIN",
+                    "nextReview": "2020-01-01",
+                }) + "\n",
+                encoding="utf-8",
+            )
+            wb.push_frame(
+                kg,
+                {
+                    "id": "g-sync", "kind": "prediction_gate", "title": "Gate",
+                    "prompt": "Predict?", "expectedAnswer": "SECRET_SYNC_GATE", "revealedBody": "SECRET_SYNC_BODY",
+                },
+            )
+            wb.pin_step(kg, 0, "Need intuition on quorum")
+
+            (ch / "consensus.md").write_text(
+                "# Consensus\n\n:::explore quorum-lab\n"
+                '{"title":"Quorum Size","params":[{"name":"N","min":3,"max":11,"step":2,"default":5}],"outputs":[{"label":"Quorum","expr":"floor(N/2)+1"}]}\n'
+                ":::\n",
+                encoding="utf-8",
+            )
+
+            # 1. session-start.mjs --workspace <tmp>, post-graph-sync.mjs --workspace <tmp>, sync-graph.mjs v5
+            ss = run_cli(["node", str(ROOT / ".agents" / "hooks" / "session-start.mjs"), "--workspace", str(ws)], stdin_text="{}")
+            self.assertEqual(ss.returncode, 0, ss.stderr)
+            msg = json.loads(ss.stdout)["injectSteps"][0]["systemMessage"]["systemMessage"]
+            self.assertIn("Learner Profile:", msg)
+            self.assertIn("Active TeachingPolicy:", msg)
+            self.assertIn("Due Forks/Arenas/Re-Entry:", msg)
+            self.assertIn("Pending Whiteboard Pins (1):", msg)
+            self.assertIn("Need intuition on quorum", msg)
+
+            ps = run_cli(
+                ["node", str(ROOT / ".agents" / "hooks" / "post-graph-sync.mjs"), "--workspace", str(ws)],
+                stdin_text=json.dumps({"tool_name": "Write", "tool_input": {"file_path": str(kg / "learner-profile.json")}}),
+            )
+            self.assertEqual(ps.returncode, 0, ps.stderr)
+            self.assertTrue((kg / "graph-data.js").is_file())
+
+            gd_out = kg / "graph-data-v5.js"
+            sg = run_cli([
+                "node", str(SCRIPTS_DIR / "sync-graph.mjs"),
+                "--kg-dir", str(kg), "--chapters-dir", str(ch), "--out", str(gd_out),
+            ])
+            self.assertEqual(sg.returncode, 0, sg.stderr)
+            gd_txt = gd_out.read_text(encoding="utf-8")
+            for secret in ("SECRET_SYNC_BLUNDER", "SECRET_SYNC_WIN", "SECRET_SYNC_GATE", "SECRET_SYNC_BODY"):
+                self.assertNotIn(secret, gd_txt, f"sync-graph.mjs leaked secret: {secret}")
+            # Parse window.__STUDY_HUB__ via Node cleanly
+            hub_eval = run_cli(
+                ["node", "-e", f"globalThis.window={{}}; require({json.dumps(str(gd_out))}); console.log(JSON.stringify(window.__STUDY_HUB__));"]
+            )
+            self.assertEqual(hub_eval.returncode, 0, hub_eval.stderr)
+            hub = json.loads(hub_eval.stdout)
+            self.assertEqual(hub["schemaVersion"], 5)
+            self.assertGreaterEqual(len(hub.get("starterPacks") or []), 3)
+            expl_map = hub.get("explorables") or {}
+            self.assertIsInstance(expl_map, dict)
+            all_expls = [item for arr in expl_map.values() if isinstance(arr, list) for item in arr]
+            self.assertGreaterEqual(len(all_expls), 1)
+            self.assertTrue(all_expls[0]["outputs"][0]["rpn"])
+
+            # 2. All 5 fixed CLI flags (triage --exam-in 48h, review --recover, doctor --fix, import --chapter, export json|dossier|--pocket|--vault)
+            def _run_py_cli(args: list[str]) -> dict[str, Any]:
+                p = run_cli([sys.executable, "-B", "-m", "syntopik.cli", *args])
+                self.assertEqual(p.returncode, 0, f"CLI {args} failed (rc={p.returncode}):\nSTDOUT: {p.stdout}\nSTDERR: {p.stderr}")
+                return json.loads(p.stdout)
+
+            tr_res = _run_py_cli(["triage", "--exam-in", "48h", "--workspace", str(ws), "--json"])
+            self.assertTrue(tr_res["ok"])
+            self.assertAlmostEqual(tr_res["triage"]["hoursLeft"], 48.0, places=1)
+
+            rev_res = _run_py_cli(["review", "--recover", "--daily-cap", "10", "--workspace", str(ws), "--json"])
+            self.assertTrue(rev_res["ok"])
+            self.assertEqual(rev_res["mode"], "recover")
+
+            ws_fix = t / "ws-fix"
+            doc_res = _run_py_cli(["doctor", "--fix", "--core-only", "--workspace", str(ws_fix), "--json"])
+            self.assertTrue(doc_res["fixApplied"])
+            self.assertTrue((ws_fix / "knowledge-graph" / "propositions.jsonl").is_file())
+
+            note_file = t / "my_notes.md"
+            note_file.write_text("# Cache Coherence\nMESI protocol states.\n", encoding="utf-8")
+            imp_res = _run_py_cli(["import", str(note_file), "--chapter", "mesi-cache", "--workspace", str(ws), "--json"])
+            self.assertEqual(imp_res["slug"], "mesi-cache")
+
+            exp_json_path = t / "export.json"
+            ej = _run_py_cli(["export", "json", "--workspace", str(ws), "--out", str(exp_json_path), "--json"])
+            self.assertTrue(ej["ok"] and exp_json_path.is_file())
+            self.assertEqual(json.loads(exp_json_path.read_text(encoding="utf-8"))["format"], "json")
+
+            exp_dos_path = t / "dossier.html"
+            ed = _run_py_cli(["export", "dossier", "--workspace", str(ws), "--out", str(exp_dos_path), "--json"])
+            self.assertTrue(ed["ok"] and exp_dos_path.is_file())
+
+            exp_pkt_path = t / "pocket.html"
+            ep = _run_py_cli(["export", "--pocket", "--workspace", str(ws), "--out", str(exp_pkt_path), "--json"])
+            self.assertTrue(ep["ok"] and exp_pkt_path.is_file())
+
+            exp_vault_dir = t / "obs-vault"
+            eo = _run_py_cli(["export", "obsidian", "--vault", str(exp_vault_dir), "--workspace", str(ws), "--json"])
+            self.assertTrue(eo["ok"] and exp_vault_dir.is_dir())
+
+            # 3. --vault local split-brain parity + attach --harness auto|antigravity + Claude settings hook merge preservation
+            repo = t / "host-repo"
+            repo.mkdir(parents=True)
+            subprocess.run(["git", "init", "-q"], cwd=str(repo), check=True)
+            subprocess.run(["git", "config", "user.email", "test@example.com"], cwd=str(repo), check=True)
+            subprocess.run(["git", "config", "user.name", "Test"], cwd=str(repo), check=True)
+            host_agents = "# Custom Host AGENTS\n"
+            (repo / "AGENTS.md").write_text(host_agents, encoding="utf-8")
+            (repo / ".claude").mkdir(parents=True)
+            custom_hook = {"hooks": [{"type": "command", "command": "echo existing-host-hook"}]}
+            (repo / ".claude" / "settings.json").write_text(
+                json.dumps({"hooks": {"SessionStart": [custom_hook]}}),
+                encoding="utf-8",
+            )
+            subprocess.run(["git", "add", "."], cwd=str(repo), check=True)
+            subprocess.run(["git", "commit", "-q", "-m", "init"], cwd=str(repo), check=True)
+
+            att_auto = cli_mod.attach_workspace(repo, harness="auto", vault="local")
+            self.assertTrue(att_auto["ok"])
+            self.assertIn("claude", att_auto["harnesses"])
+            # Split-brain parity: resolve_workspace(repo) MUST equal <repo>/.syntopik!
+            self.assertEqual(paths_mod.resolve_workspace(repo), (repo / ".syntopik").resolve())
+            self.assertEqual(paths_mod.resolve_kg_dir(repo), (repo / ".syntopik" / "knowledge-graph").resolve())
+
+            # Existing host hook MUST be preserved alongside Syntopik hook (and deduped on rerun)
+            merged_1 = json.loads((repo / ".claude" / "settings.json").read_text(encoding="utf-8"))
+            ss_entries_1 = merged_1["hooks"]["SessionStart"]
+            cmds_1 = [h.get("command", "") for entry in ss_entries_1 for h in entry.get("hooks", [])]
+            self.assertIn("echo existing-host-hook", cmds_1)
+            self.assertTrue(any("session-start.mjs" in c for c in cmds_1))
+            cli_mod.attach_workspace(repo, harness="claude", vault="local")
+            merged_2 = json.loads((repo / ".claude" / "settings.json").read_text(encoding="utf-8"))
+            self.assertEqual(len(merged_2["hooks"]["SessionStart"]), len(ss_entries_1))
+
+            att_ag = cli_mod.attach_workspace(repo, harness="antigravity", vault="local")
+            self.assertTrue(att_ag["ok"])
+            self.assertTrue((repo / ".agents" / "hooks.json").is_file())
+            self.assertEqual((repo / "AGENTS.md").read_text(encoding="utf-8"), host_agents)
+
+            # 4. Zero Windows-breaking POSIX shell patterns in tracked hook & MCP configs!
+            posix_forbidden = ("SYNT_WORKSPACE=", "$(git rev-parse", "${VAR:-", "MLH_WORKSPACE=")
+            for rel_cfg in (
+                ".claude/settings.json",
+                ".codex/hooks.json",
+                ".claude-plugin/hooks.json",
+                ".agents/hooks.json",
+                ".mcp.json",
+            ):
+                cfg_p = ROOT / rel_cfg
+                self.assertTrue(cfg_p.is_file(), f"Missing tracked config: {rel_cfg}")
+                txt = cfg_p.read_text(encoding="utf-8")
+                for bad_tok in posix_forbidden:
+                    self.assertNotIn(bad_tok, txt, f"Windows-breaking POSIX token {bad_tok!r} found in {rel_cfg}")
+                self.assertIsNone(re.search(r"\$\{[A-Za-z0-9_]+:-", txt), f"POSIX default expansion found in {rel_cfg}")
+
+    def test_mcp_v3_stdio_brainstem_whiteboard_frontier_and_blackout_zero_leak(self) -> None:
+        import syntopik.whiteboard as wb
+
+        server_mjs = ROOT / "mcp-app" / "mlh-studio" / "dist" / "server.mjs"
+        self.assertTrue(server_mjs.is_file())
+
+        with tempfile.TemporaryDirectory(prefix="synt-v3-mcp-") as tmp:
+            t = Path(tmp)
+            ws = t / "ws"
+            kg = ws / "knowledge-graph"
+            ch = ws / "chapters"
+            kg.mkdir(parents=True)
+            ch.mkdir(parents=True)
+            (kg / "propositions.jsonl").write_text(
+                json.dumps({
+                    "id": "p-mcp-1", "subject": "Math", "chapter": "Linear Algebra",
+                    "title": "Rank-nullity theorem", "kind": "theorem", "status": "shaky", "nextReview": "2020-01-01",
+                }) + "\n",
+                encoding="utf-8",
+            )
+            (kg / "chains.jsonl").write_text("", encoding="utf-8")
+            (kg / "mistakes.jsonl").write_text("", encoding="utf-8")
+            wb.push_frame(kg, {"kind": "derivation_step", "title": "Basis", "body": "Pick kernel basis"})
+            wb.pin_step(kg, 0, "Why extend basis?")
+
+            secret_expr = "SECRET_BLACKOUT_EXPR_8821"
+            secret_sol = "SECRET_BLACKOUT_MODEL_8822"
+            secret_gate = "SECRET_WB_GATE_ANS_8823"
+
+            reqs = [
+                {
+                    "jsonrpc": "2.0", "id": 1, "method": "initialize",
+                    "params": {"protocolVersion": "2024-11-05", "capabilities": {}, "clientInfo": {"name": "syntopik-v3-test", "version": "3.0"}},
+                },
+                {"jsonrpc": "2.0", "method": "notifications/initialized"},
+                {"jsonrpc": "2.0", "id": 2, "method": "tools/call", "params": {"name": "synt_next_move", "arguments": {"domain": "Math"}}},
+                {
+                    "jsonrpc": "2.0", "id": 3, "method": "tools/call",
+                    "params": {
+                        "name": "synt_whiteboard_step",
+                        "arguments": {
+                            "kind": "prediction_gate",
+                            "title": "Kernel Dimension Gate",
+                            "prompt": "What is dim(ker T) + dim(im T)?",
+                            "expectedAnswer": secret_gate,
+                            "revealedBody": "Equals dim(V).",
+                        },
+                    },
+                },
+                {"jsonrpc": "2.0", "id": 4, "method": "tools/call", "params": {"name": "synt_get_frontier", "arguments": {"limit": 5}}},
+                {
+                    "jsonrpc": "2.0", "id": 5, "method": "tools/call",
+                    "params": {
+                        "name": "synt_practice_card",
+                        "arguments": {
+                            "action": "pose",
+                            "problemId": "bo-rank-nullity",
+                            "mode": "blackout",
+                            "derivationId": "deriv-rn",
+                            "blackoutLevel": 2,
+                            "statement": "Reconstruct the hidden rank-nullity proof step.",
+                            "steps": [
+                                {"id": "a1", "label": "Kernel basis", "role": "axiom", "expr": "span(u_1..u_k) = ker(T)", "hidden": False},
+                                {"id": "s1", "label": "Extend & map", "role": "step", "expr": secret_expr, "expectedExpr": secret_expr, "hidden": True, "dependsOn": ["a1"]},
+                            ],
+                            "modelSolution": secret_sol,
+                        },
+                    },
+                },
+                {
+                    "jsonrpc": "2.0", "id": 6, "method": "tools/call",
+                    "params": {
+                        "name": "synt_practice_card",
+                        "arguments": {
+                            "action": "conclude",
+                            "problemId": "bo-rank-nullity",
+                            "outcome": "solved",
+                            "verdict": "Exact linear independence proof.",
+                            "rung": None,
+                        },
+                    },
+                },
+            ]
+
+            proc = run_cli(
+                ["node", str(server_mjs), f"--workspace={ws}", f"--data-dir={t / 'mcp-data'}"],
+                stdin_text="\n".join(json.dumps(r) for r in reqs) + "\n",
+                timeout=15.0,
+            )
+            self.assertEqual(proc.returncode, 0, proc.stderr)
+            by_id = {
+                int(m["id"]): m
+                for m in (json.loads(ln) for ln in proc.stdout.splitlines() if ln.strip())
+                if "id" in m
+            }
+
+            self.assertEqual(by_id[1]["result"]["serverInfo"]["version"], "3.0.0")
+
+            # 1. synt_next_move returns Action Envelope honoring pending pin
+            nm = by_id[2]["result"]
+            self.assertFalse(nm.get("isError", False), nm)
+            self.assertEqual(nm["structuredContent"]["recommendedMode"], "whiteboard_pin_answer")
+            self.assertIn("teachingPolicy", nm["structuredContent"])
+
+            # 2. synt_whiteboard_step pushes frame, returns pendingPins, and seals expectedAnswer
+            wb_r = by_id[3]["result"]
+            self.assertFalse(wb_r.get("isError", False), wb_r)
+            self.assertNotIn(secret_gate, json.dumps(wb_r), "synt_whiteboard_step leaked expectedAnswer!")
+            self.assertGreaterEqual(len(wb_r["structuredContent"].get("pendingPins") or []), 1)
+
+            # 3. synt_get_frontier enriched with v3 psychology & gym telemetry
+            fr = by_id[4]["result"]
+            self.assertFalse(fr.get("isError", False), fr)
+            fr_sc = fr["structuredContent"]
+            for key in ("learnerProfile", "teachingPolicy", "dueForks", "arenasCount", "coldStartDays", "pendingPins"):
+                self.assertIn(key, fr_sc, f"synt_get_frontier missing v3 key: {key}")
+
+            # 4. synt_practice_card(mode="blackout") ZERO leak on pose, verbatim reveal on conclude
+            bo_pose = by_id[5]["result"]
+            self.assertFalse(bo_pose.get("isError", False), bo_pose)
+            bo_dump = json.dumps(bo_pose)
+            self.assertNotIn(secret_expr, bo_dump, "Blackout pose leaked hidden step expr!")
+            self.assertNotIn(secret_sol, bo_dump, "Blackout pose leaked modelSolution!")
+            self.assertNotIn("expectedExpr", bo_dump, "Blackout pose leaked expectedExpr key!")
+            self.assertEqual(bo_pose["structuredContent"]["cardMode"], "blackout")
+            self.assertEqual(bo_pose["structuredContent"]["hiddenStepIds"], ["s1"])
+
+            bo_conc = by_id[6]["result"]
+            self.assertFalse(bo_conc.get("isError", False), bo_conc)
+            self.assertEqual(bo_conc["structuredContent"]["modelSolution"], secret_sol)
+
+
+class TestSyntopikEvalAndStarterPacks(unittest.TestCase):
+    """32. Syntopik v3.0 Deterministic 60-Day Cognitive Benchmark (7/7 Gates) & 3 Curated Zero-PII Starter Packs."""
+
+    def test_syntopik_eval_deterministic_reproducible_and_all_7_gates_green(self) -> None:
+        bench_script = ROOT / "benchmarks" / "syntopik_bench.py"
+        self.assertTrue(bench_script.is_file())
+
+        cmd = [sys.executable, "-B", str(bench_script), "--days", "60", "--seed", "42", "--check", "--json"]
+        p1 = run_cli(cmd, timeout=20.0)
+        self.assertEqual(p1.returncode, 0, f"syntopik_bench run 1 failed: {p1.stderr}")
+        p2 = run_cli(cmd, timeout=20.0)
+        self.assertEqual(p2.returncode, 0, f"syntopik_bench run 2 failed: {p2.stderr}")
+
+        r1 = json.loads(p1.stdout)
+        r2 = json.loads(p2.stdout)
+        self.assertTrue(r1["gates"]["ok"], r1["gates"])
+        self.assertEqual(r1["gates"]["total"], 7)
+        self.assertEqual(r1["gates"]["passed"], 7)
+
+        # Strip wall-clock timing and assert exact determinism across runs
+        r1.pop("elapsedMs", None)
+        r2.pop("elapsedMs", None)
+        self.assertEqual(r1, r2, "Syntopik-Eval benchmark output is not deterministic across repeated runs!")
+
+        # Also verify SVG generation into /tmp produces valid XML SVGs
+        with tempfile.TemporaryDirectory(prefix="synt-v3-svg-") as tmp:
+            p_svg = run_cli(
+                [sys.executable, "-B", str(bench_script), "--days", "60", "--seed", "42", "--svg", "--svg-dir", tmp, "--check", "--json"],
+                timeout=20.0,
+            )
+            self.assertEqual(p_svg.returncode, 0, p_svg.stderr)
+            svg_meta = json.loads(p_svg.stdout)["svgOutputs"]
+            self.assertTrue(svg_meta["ablation"]["validXml"])
+            self.assertTrue(svg_meta["calibration"]["validXml"])
+            self.assertTrue((Path(tmp) / "benchmark-ablation.svg").is_file())
+            self.assertTrue((Path(tmp) / "benchmark-calibration.svg").is_file())
+
+    def test_all_three_starter_packs_verify_zero_pii_and_roundtrip_import(self) -> None:
+        import syntopik.packs as pk
+
+        expected_packs = [
+            "raft-consensus.syntopik-pack.zip",
+            "shm-physics.syntopik-pack.zip",
+            "transformers-attention.syntopik-pack.zip",
+        ]
+        packs_dir = ROOT / "packs"
+        self.assertTrue(packs_dir.is_dir())
+
+        for pack_name in expected_packs:
+            pack_path = packs_dir / pack_name
+            with self.subTest(pack=pack_name):
+                self.assertTrue(pack_path.is_file(), f"Missing bundled starter pack: {pack_path}")
+
+                ver = pk.verify_pack(pack_path)
+                self.assertTrue(ver["ok"], f"verify_pack failed for {pack_name}: {ver}")
+                self.assertEqual(ver.get("errors") or [], [])
+                self.assertEqual(ver.get("unsafePaths") or [], [])
+                self.assertEqual(ver.get("mismatches") or [], [])
+
+                ins = pk.inspect_pack(pack_path)
+                self.assertTrue(ins["ok"], ins)
+                self.assertTrue(ins.get("zeroPiiVerified"), f"PII leaks found in {pack_name}: {ins.get('piiLeaks')}")
+                self.assertEqual(ins.get("piiLeaks") or [], [])
+                self.assertGreaterEqual(ins["counts"]["propositions"], 8)
+                self.assertGreaterEqual(ins["counts"]["chains"], 5)
+                self.assertGreaterEqual(ins["counts"]["derivations"], 1)
+
+                with tempfile.TemporaryDirectory(prefix=f"synt-pack-{pack_path.stem}-") as tmp:
+                    ws = Path(tmp) / "ws"
+                    kg = ws / "knowledge-graph"
+                    ch = ws / "chapters"
+                    kg.mkdir(parents=True)
+                    ch.mkdir(parents=True)
+
+                    imp1 = pk.import_pack(pack_path, workspace=ws, kg_dir=kg, chapters_dir=ch, no_sync=True)
+                    self.assertTrue(imp1["ok"], imp1)
+                    self.assertGreaterEqual(imp1["addedPropositions"], 8)
+                    self.assertGreaterEqual(imp1["addedChains"], 5)
+                    self.assertGreaterEqual(imp1["addedDerivations"], 1)
+                    self.assertTrue((kg / "propositions.jsonl").is_file())
+                    self.assertTrue((kg / "chains.jsonl").is_file())
+                    self.assertTrue((kg / "derivations.jsonl").is_file())
+                    self.assertTrue(any(ch.glob("*-tracker.json")))
+
+                    # Idempotent re-import skips duplicates cleanly
+                    imp2 = pk.import_pack(pack_path, workspace=ws, kg_dir=kg, chapters_dir=ch, no_sync=True)
+                    self.assertTrue(imp2["ok"], imp2)
+                    self.assertEqual(imp2["addedPropositions"], 0)
+                    self.assertGreaterEqual(imp2["skippedExisting"], 8)
+
+    def test_wave4_security_pack_import_sympy_dos_evidence_cli_and_paths(self) -> None:
+        """Wave 4C Lock: P0.1, P0.3, P1.1, P1.2, P1.5, P1.6, P2.1."""
+        import syntopik.evidence as ev_mod
+        import syntopik.forks as forks_mod
+        import syntopik.learner_model as lm_mod
+        import syntopik.packs as pk_mod
+        import syntopik.paths as paths_mod
+        import syntopik.work_mentor as wm_mod
+
+        fa_mod = load_script_module("falsify_arena.py")
+        df_mod = load_script_module("derivation_forge.py")
+        sh_mod = load_script_module("setup_harness.py")
+
+        # --- P0.1: import_pack populates chapters/*.md, forks.jsonl, exams/* & gates code arenas ---
+        raft_pack = ROOT / "packs" / "raft-consensus.syntopik-pack.zip"
+        shm_pack = ROOT / "packs" / "shm-physics.syntopik-pack.zip"
+        with tempfile.TemporaryDirectory(prefix="synt-w4-p01-") as tmp:
+            ws = Path(tmp) / "ws"
+            kg = ws / "knowledge-graph"
+            ch = ws / "chapters"
+            kg.mkdir(parents=True)
+            ch.mkdir(parents=True)
+
+            res_default = pk_mod.import_pack(raft_pack, workspace=ws, kg_dir=kg, chapters_dir=ch, no_sync=True)
+            self.assertTrue(res_default["ok"], res_default)
+            self.assertEqual(res_default["addedChapters"], 1)
+            self.assertTrue((ch / "raft-consensus.md").is_file())
+            self.assertGreaterEqual(res_default["addedForks"], 2)
+            self.assertTrue((kg / "forks.jsonl").is_file())
+            self.assertGreaterEqual(res_default["addedExams"], 1)
+            self.assertTrue(any((ws / "exams").glob("raft-consensus*")))
+            # Code-domain arena MUST be skipped by default (allow_code_arenas=False)
+            self.assertEqual(res_default["addedArenas"], 0)
+            self.assertEqual(res_default["skippedCodeArenas"], 1)
+            self.assertIn("arena-raft-uptodate-check", res_default.get("skippedCodeArenaIds") or [])
+
+            # Math-domain arena imports even when allow_code_arenas=False
+            res_shm = pk_mod.import_pack(shm_pack, workspace=ws, kg_dir=kg, chapters_dir=ch, no_sync=True)
+            self.assertTrue(res_shm["ok"], res_shm)
+            self.assertEqual(res_shm["addedArenas"], 1)
+            self.assertEqual(res_shm["skippedCodeArenas"], 0)
+
+            # Explicit allow_code_arenas=True imports the Raft code arena
+            res_allow = pk_mod.import_pack(
+                raft_pack, workspace=ws, kg_dir=kg, chapters_dir=ch, allow_code_arenas=True, no_sync=True
+            )
+            self.assertTrue(res_allow["ok"], res_allow)
+            self.assertEqual(res_allow["addedArenas"], 1)
+            self.assertEqual(res_allow["skippedCodeArenas"], 0)
+            arena_rows = [json.loads(ln) for ln in (kg / "arenas.jsonl").read_text(encoding="utf-8").splitlines() if ln.strip()]
+            self.assertIn("arena-raft-uptodate-check", {r.get("id") for r in arena_rows})
+
+        # --- P0.3: SymPy symbolic-exponent CPU DoS guard across all 3 math evaluators (<0.5s) ---
+        dos_cases = [
+            ("forks_poly80", lambda: forks_mod._math_equivalent("(x+y+z)**80", "x**80")),
+            ("forks_pow1000", lambda: forks_mod._math_equivalent("(x+1)**1000 - x**1000", "1")),
+            ("forge_poly80", lambda: df_mod._math_equivalent("(x+y+z)**80", "x**80")),
+            ("forge_pow1000", lambda: df_mod._math_equivalent("(x+1)**1000 - x**1000", "1")),
+            ("arena_poly80", lambda: fa_mod._try_sympy_eval("x", {"x": "(a+b+c)**80"})),
+            ("arena_pow1000", lambda: fa_mod._try_sympy_eval("(x+1)**1000 - x**1000", {"x": 2})),
+        ]
+        for label, fn in dos_cases:
+            with self.subTest(dos_case=label):
+                t0 = time.monotonic()
+                res_val = fn()
+                dt = time.monotonic() - t0
+                self.assertLess(dt, 0.5, f"{label} took {dt:.3f}s (exceeds 0.5s DoS ceiling)")
+                if label.startswith("arena_"):
+                    self.assertFalse(res_val[0], f"{label} should reject/skip DoS payload: {res_val}")
+                else:
+                    self.assertFalse(res_val, f"{label} should return False for non-equivalent DoS expr")
+        # Legitimate low-degree algebraic equivalence still passes
+        self.assertTrue(forks_mod._math_equivalent("(x+1)**2", "x**2 + 2*x + 1"))
+        self.assertTrue(df_mod._math_equivalent("2*pi*sqrt(m/k)", "sqrt(m/k)*2*pi"))
+
+        # --- P1.1: evidence.py T3 from sealedMutants kill ratio & T4 from Viva outcome/scores.passed ---
+        with tempfile.TemporaryDirectory(prefix="synt-w4-p11-") as tmp:
+            ws = Path(tmp) / "ws"
+            kg = ws / "knowledge-graph"
+            kg.mkdir(parents=True)
+            (kg / "propositions.jsonl").write_text(
+                "\n".join([
+                    json.dumps({"id": "p-t3-arena", "subject": "CS", "chapter": "Raft", "title": "Arena Prop", "status": "solid"}),
+                    json.dumps({"id": "p-t4-viva", "subject": "CS", "chapter": "Raft", "title": "Viva Prop", "status": "solid"}),
+                ]) + "\n",
+                encoding="utf-8",
+            )
+            (kg / "chains.jsonl").write_text("", encoding="utf-8")
+            (kg / "arenas.jsonl").write_text(
+                json.dumps({
+                    "id": "a-p11",
+                    "propId": "p-t3-arena",
+                    "sealedMutants": [{"id": "m1"}, {"id": "m2"}, {"id": "m3"}, {"id": "m4"}],
+                    "killedMutants": ["m1", "m2", "m3"],
+                }) + "\n",
+                encoding="utf-8",
+            )
+            (kg / "viva-sessions.jsonl").write_text(
+                json.dumps({
+                    "id": "v-p11",
+                    "propId": "p-t4-viva",
+                    "status": "completed",
+                    "outcome": "passed",
+                    "scores": {"composite": 0.85, "passed": True},
+                }) + "\n",
+                encoding="utf-8",
+            )
+            ev_sum = ev_mod.compute_evidence_summary(ws)
+            self.assertEqual(ev_sum["propositions"]["p-t3-arena"]["tier"], 3, ev_sum["propositions"]["p-t3-arena"])
+            self.assertEqual(ev_sum["propositions"]["p-t4-viva"]["tier"], 4, ev_sum["propositions"]["p-t4-viva"])
+
+        # --- P1.2: CLI board push --content writes frame["body"] & profile override --prose-density terse ---
+        with tempfile.TemporaryDirectory(prefix="synt-w4-p12-") as tmp:
+            ws = Path(tmp) / "ws"
+            kg = ws / "knowledge-graph"
+            kg.mkdir(parents=True)
+            (kg / "propositions.jsonl").write_text("", encoding="utf-8")
+            (kg / "chains.jsonl").write_text("", encoding="utf-8")
+
+            p_wb = run_cli([
+                sys.executable, "-B", "-m", "syntopik.cli",
+                "board", "push", "--kind", "derivation_step", "--title", "Sign Check",
+                "--content", "Keep restoring minus sign", "--workspace", str(ws), "--json",
+            ])
+            self.assertEqual(p_wb.returncode, 0, p_wb.stderr)
+            wb_json = json.loads(p_wb.stdout)
+            self.assertEqual(wb_json["frame"]["body"], "Keep restoring minus sign")
+            wb_disk = json.loads((kg / "whiteboard-session.json").read_text(encoding="utf-8"))
+            self.assertEqual(wb_disk["frames"][-1]["body"], "Keep restoring minus sign")
+
+            p_cal = run_cli([
+                sys.executable, "-B", "-m", "syntopik.cli",
+                "profile", "calibrate", "--domain", "Physics", "--entry-ramp", "formalism_first",
+                "--workspace", str(ws), "--json",
+            ])
+            self.assertEqual(p_cal.returncode, 0, p_cal.stderr)
+
+            p_ov_txt = run_cli([
+                sys.executable, "-B", "-m", "syntopik.cli",
+                "profile", "override", "--prose-density", "terse", "--domain", "Physics", "--workspace", str(ws),
+            ])
+            self.assertEqual(p_ov_txt.returncode, 0, p_ov_txt.stderr)
+            self.assertNotIn("Uncalibrated", p_ov_txt.stdout)
+            self.assertIn("<= 105w", p_ov_txt.stdout)
+            prof_disk = lm_mod.load_profile(kg)
+            self.assertEqual(prof_disk["userOverrides"].get("maxProseWords"), 105)
+            self.assertEqual(lm_mod.compile_teaching_policy(prof_disk, domain="Physics")["maxProseWords"], 105)
+
+        # --- P1.5: learner_model NaN/Inf guards & ValueError on malformed now ---
+        self.assertEqual(lm_mod._clamp(float("nan"), 0.0, 1.0), 0.0)
+        self.assertEqual(lm_mod._clamp(float("inf"), 0.0, 1.0), 1.0)
+        self.assertEqual(lm_mod._clamp(float("-inf"), 0.0, 1.0), 0.0)
+        with tempfile.TemporaryDirectory(prefix="synt-w4-p15-") as tmp:
+            kg = Path(tmp) / "kg"
+            kg.mkdir(parents=True)
+            tel = lm_mod.record_telemetry_event(
+                kg,
+                domain="Physics",
+                prop_id="p-nan",
+                correct=True,
+                confidence=float("nan"),
+                duration_ms=float("inf"),  # type: ignore[arg-type]
+                now="2026-11-26T12:00:00Z",
+            )
+            self.assertTrue(tel["ok"])
+            last_ev = tel["profile"]["recentEvents"][-1]
+            self.assertIsNone(last_ev["confidence"])
+            self.assertIsNone(last_ev["durationMs"])
+
+            with self.assertRaises(ValueError):
+                lm_mod.record_telemetry_event(kg, domain="Physics", prop_id="p-bad", correct=True, now="not-a-timestamp")
+            with self.assertRaises(ValueError):
+                lm_mod.classify_affective_state([], now="not-a-timestamp")
+
+        # --- P1.6: Windows executable lookup returns full suffixed path (.cmd/.exe) ---
+        with tempfile.TemporaryDirectory(prefix="synt-w4-p16-") as tmp:
+            bin_dir = Path(tmp) / "winbin"
+            bin_dir.mkdir(parents=True)
+            cmd_path = bin_dir / "synt_fake_cmd.cmd"
+            exe_path = bin_dir / "synt_fake_exe.exe"
+            cmd_path.write_text("@echo off\n", encoding="utf-8")
+            exe_path.write_text("MZ", encoding="utf-8")
+
+            host_path_cls = type(Path())
+            for mod_name, mod in (("syntopik.paths", paths_mod), ("setup_harness", sh_mod)):
+                with self.subTest(module=mod_name):
+                    with unittest.mock.patch.object(mod, "Path", host_path_cls), unittest.mock.patch.object(
+                        mod.os, "name", "nt"
+                    ):
+                        hit_cmd = mod.find_binary("synt_fake_cmd", extra_dirs=[bin_dir])
+                        hit_exe = mod.find_binary("synt_fake_exe", extra_dirs=[bin_dir])
+                        self.assertEqual(hit_cmd, str(cmd_path))
+                        self.assertEqual(hit_exe, str(exe_path))
+
+        # --- P2.1: work_mentor validate_git_ref rejects HEAD:../etc/passwd while allowing HEAD~1..HEAD ---
+        for bad_ref in ("HEAD:../etc/passwd", "../etc/passwd", "main:secret.txt", "HEAD --exec=evil"):
+            with self.subTest(bad_ref=bad_ref):
+                with self.assertRaises(ValueError):
+                    wm_mod.validate_git_ref(bad_ref)
+        for ok_ref in ("HEAD~1..HEAD", "main...feature", "origin/main..feature/v2.1"):
+            with self.subTest(ok_ref=ok_ref):
+                self.assertEqual(wm_mod.validate_git_ref(ok_ref), ok_ref)
+
+    def test_wave4_level3_blackout_dossier_jail_and_explorable_sandbox(self) -> None:
+        """Wave 4C Lock: P0.4 (server + sync-graph.mjs), P1.4 (explorable.py + sync-graph.mjs + dashboard.html RPN), P2.2."""
+        import syntopik.explorable as expl_mod
+        import syntopik.server as srv_mod
+
+        def _req(
+            port: int,
+            method: str,
+            path: str,
+            *,
+            headers: dict[str, str] | None = None,
+            body: Any = None,
+        ) -> tuple[int, bytes]:
+            conn = http.client.HTTPConnection("127.0.0.1", port, timeout=10.0)
+            hdrs = dict(headers or {})
+            payload: bytes | None = None
+            if body is not None:
+                payload = json.dumps(body).encode("utf-8")
+                hdrs.setdefault("Content-Type", "application/json")
+            try:
+                conn.request(method, path, body=payload, headers=hdrs)
+                resp = conn.getresponse()
+                return resp.status, resp.read()
+            finally:
+                conn.close()
+
+        # --- P1.4 (Python explorable.py) ---
+        with self.assertRaises(ValueError):
+            expl_mod.compile_expr_to_rpn("9" * 400)
+        with self.assertRaises(ValueError):
+            expl_mod.compile_explorable_spec({
+                "id": "bad-empty-params",
+                "title": "Proto Probe",
+                "params": [],
+                "outputs": [{"label": "Leak", "expr": "constructor + toString"}],
+            })
+        exact_rpn = expl_mod.compile_expr_to_rpn("x * 2", allowed_vars={"x"})
+        hi_curve = expl_mod.sample_explorable_curve({
+            "params": [{"name": "x", "default": 1.0}],
+            "curve": {"xVar": "x", "xMin": 0.0, "xMax": 1.0, "samples": 100000, "exactRpn": exact_rpn},
+        })
+        self.assertEqual(len(hi_curve["points"]), 200)
+        lo_curve = expl_mod.sample_explorable_curve({
+            "params": [{"name": "x", "default": 1.0}],
+            "curve": {"xVar": "x", "xMin": 0.0, "xMax": 1.0, "samples": -5, "exactRpn": exact_rpn},
+        })
+        self.assertEqual(len(lo_curve["points"]), 2)
+
+        # --- P0.4 (server + sync-graph.mjs Level-3 blackout) & P2.2 (dossier out-of-jail 403) ---
+        canary_step = "SECRET_STEP_EXPR_4C_9101"
+        canary_step_note = "SECRET_STEP_NOTE_4C_9102"
+        canary_thm = "SECRET_THEOREM_EXPR_4C_9103"
+        canary_thm_note = "SECRET_THEOREM_NOTE_4C_9104"
+
+        with tempfile.TemporaryDirectory(prefix="synt-w4-srv-") as tmp:
+            ws = Path(tmp) / "ws"
+            kg = ws / "knowledge-graph"
+            ch = ws / "chapters"
+            kg.mkdir(parents=True)
+            ch.mkdir(parents=True)
+            (kg / "propositions.jsonl").write_text(
+                json.dumps({"id": "p-w4", "subject": "Physics", "chapter": "SHM", "title": "Pendulum", "status": "solid"}) + "\n",
+                encoding="utf-8",
+            )
+            (kg / "chains.jsonl").write_text("", encoding="utf-8")
+            (kg / "mistakes.jsonl").write_text("", encoding="utf-8")
+            (kg / "derivations.jsonl").write_text(
+                json.dumps({
+                    "id": "deriv-w4-l3",
+                    "propId": "p-w4",
+                    "title": "Level-3 Masking Test",
+                    "steps": [
+                        {"id": "a1", "role": "axiom", "label": "Axiom", "expr": "F = -k*x", "note": "Visible axiom", "dependsOn": []},
+                        {"id": "s1", "role": "step", "label": "Mid Step", "expr": canary_step, "note": canary_step_note, "dependsOn": ["a1"]},
+                        {"id": "s2", "role": "theorem", "label": "Theorem", "expr": canary_thm, "note": canary_thm_note, "dependsOn": ["s1"]},
+                    ],
+                }) + "\n",
+                encoding="utf-8",
+            )
+            # Chapter with both malicious prototype :::explore blocks AND valid over-sampled block
+            (ch / "sandbox.md").write_text(
+                "# Sandbox\n\n"
+                ":::explore bad-proto-1\n"
+                '{"title":"Bad 1","params":[],"outputs":[{"label":"X","expr":"constructor(1)"}]}\n'
+                ":::\n\n"
+                ":::explore bad-proto-2\n"
+                '{"title":"Bad 2","params":[{"name":"__proto__","min":0,"max":1,"default":0}],"outputs":[{"label":"X","expr":"__proto__ + 1"}]}\n'
+                ":::\n\n"
+                ":::explore good-lab\n"
+                '{"title":"Good Lab","params":[{"name":"x","min":0,"max":10,"default":2}],"outputs":[{"label":"Sq","expr":"x**2"}],"curve":{"xVar":"x","xMin":0,"xMax":10,"samples":9999,"exactExpr":"x**2"}}\n'
+                ":::\n",
+                encoding="utf-8",
+            )
+
+            # (a) sync-graph.mjs Level-3 blackout masking & prototype-safe RPN parser
+            gd_out = kg / "graph-data-w4.js"
+            sg = run_cli([
+                "node", str(SCRIPTS_DIR / "sync-graph.mjs"),
+                "--workspace", str(ws), "--kg-dir", str(kg), "--chapters-dir", str(ch), "--out", str(gd_out),
+            ])
+            self.assertEqual(sg.returncode, 0, sg.stderr)
+            gd_text = gd_out.read_text(encoding="utf-8")
+            for secret in (canary_step, canary_step_note, canary_thm, canary_thm_note):
+                self.assertNotIn(secret, gd_text, f"sync-graph.mjs leaked derivation secret: {secret}")
+            hub_proc = run_cli([
+                "node", "-e",
+                f"globalThis.window={{}}; require({json.dumps(str(gd_out))}); console.log(JSON.stringify(window.__STUDY_HUB__));",
+            ])
+            self.assertEqual(hub_proc.returncode, 0, hub_proc.stderr)
+            hub = json.loads(hub_proc.stdout)
+            d_row = hub["derivations"][0]
+            self.assertEqual(d_row["blackoutLevel"], 3)
+            steps_by_id = {s["id"]: s for s in d_row["steps"]}
+            self.assertFalse(steps_by_id["a1"]["hidden"])
+            self.assertEqual(steps_by_id["a1"]["expr"], "F = -k*x")
+            for hid in ("s1", "s2"):
+                self.assertTrue(steps_by_id[hid]["hidden"])
+                self.assertIsNone(steps_by_id[hid]["expr"])
+                self.assertIsNone(steps_by_id[hid]["note"])
+
+            # Malicious :::explore blocks rejected; valid block compiled & samples clamped to 200
+            sb_expl = (hub.get("explorables") or {}).get("sandbox") or []
+            self.assertEqual([e.get("id") for e in sb_expl], ["good-lab"])
+            self.assertEqual(sb_expl[0]["curve"]["samples"], 200)
+
+            # (b) Live server GET /api/state, GET /api/derivations (Level-3), POST /api/export/dossier jail
+            srv = srv_mod.create_server(workspace=ws, host="127.0.0.1", port=0)
+            t_srv = threading.Thread(target=srv.serve_forever, kwargs={"poll_interval": 0.05}, daemon=True)
+            t_srv.start()
+            try:
+                port = srv.bound_port
+                auth = {"X-Syntopik-Token": srv.csrf_token}
+
+                for ep in ("/api/state", "/api/derivations"):
+                    st_code, raw_b = _req(port, "GET", ep)
+                    self.assertEqual(st_code, 200, f"{ep} failed: {raw_b}")
+                    raw_s = raw_b.decode("utf-8")
+                    for secret in (canary_step, canary_step_note, canary_thm, canary_thm_note):
+                        self.assertNotIn(secret, raw_s, f"{ep} leaked derivation secret: {secret}")
+                    body_j = json.loads(raw_s)
+                    derivs = body_j["derivations"]
+                    self.assertEqual(derivs[0]["hiddenCount"], 2)
+                    self.assertEqual(derivs[0]["hiddenStepIds"], ["s1", "s2"])
+                    st_map = {s["id"]: s for s in derivs[0]["steps"]}
+                    self.assertFalse(st_map["a1"]["hidden"])
+                    self.assertEqual(st_map["a1"]["expr"], "F = -k*x")
+                    self.assertTrue(st_map["s1"]["hidden"] and st_map["s1"]["expr"] is None and st_map["s1"]["note"] is None)
+                    self.assertTrue(st_map["s2"]["hidden"] and st_map["s2"]["expr"] is None and st_map["s2"]["note"] is None)
+
+                # P2.2: out-of-jail knowledge-graph/pwn.html MUST return 403 and NOT create file
+                st_jail, _ = _req(
+                    port, "POST", "/api/export/dossier", headers=auth, body={"outPath": "knowledge-graph/pwn.html"}
+                )
+                self.assertEqual(st_jail, 403)
+                self.assertFalse((kg / "pwn.html").exists())
+
+                # In-jail chapters/ok-dossier.html MUST succeed (200)
+                st_ok, raw_ok = _req(
+                    port, "POST", "/api/export/dossier", headers=auth, body={"outPath": "chapters/ok-dossier.html"}
+                )
+                self.assertEqual(st_ok, 200, raw_ok)
+                self.assertTrue((ch / "ok-dossier.html").is_file())
+            finally:
+                srv.shutdown()
+                srv.server_close()
+                t_srv.join(timeout=3.0)
+
+        # --- P1.4 (Node runtime verification of dashboard.html null-prototype RPN sandbox) ---
+        dash_src = (ROOT / "dashboard.html").read_text(encoding="utf-8")
+        rpn_start = dash_src.index("const RPN_MAX_OPS = 256;")
+        rpn_end = dash_src.index("function ensureCompiledExploreSpec(", rpn_start)
+        rpn_snippet = dash_src[rpn_start:rpn_end]
+        node_rpn_check = (
+            rpn_snippet
+            + "\n"
+            + "if (Object.getPrototypeOf(RPN_FUNCS) !== null) throw new Error('RPN_FUNCS has prototype');\n"
+            + "if (Object.getPrototypeOf(RPN_CONSTS) !== null) throw new Error('RPN_CONSTS has prototype');\n"
+            + "if (compileExprToRpnJs('constructor(1)') !== null) throw new Error('constructor call allowed');\n"
+            + "if (compileExprToRpnJs('__proto__ + 1') !== null) throw new Error('__proto__ var allowed');\n"
+            + "if (validateRpnArray([{op:'call', fn:'constructor', argc:0}]) !== null) throw new Error('raw constructor op allowed');\n"
+            + "if (validateRpnArray([{op:'var', name:'__proto__'}]) !== null) throw new Error('raw __proto__ op allowed');\n"
+            + "const okOps = compileExprToRpnJs('sin(x)**2 + cos(x)**2');\n"
+            + "const val = evaluateRpn(okOps, {x: 1.23});\n"
+            + "if (!Number.isFinite(val) || Math.abs(val - 1.0) > 1e-9) throw new Error('valid RPN failed: ' + val);\n"
+            + "console.log('RPN_OK');\n"
+        )
+        rpn_proc = run_cli(["node", "-e", node_rpn_check])
+        self.assertEqual(rpn_proc.returncode, 0, f"dashboard.html RPN check failed: {rpn_proc.stderr}")
+        self.assertIn("RPN_OK", rpn_proc.stdout)
+
+    def test_wave4_ui_xss_pack_mode_svg_uri_and_static_demo_site_locks(self) -> None:
+        """Wave 4C Lock: P0.2, P1.3, P1.7, and docs/{index,viewer,pocket}.html static sandbox gates."""
+        dash_src = (ROOT / "dashboard.html").read_text(encoding="utf-8")
+        pane_src = (ROOT / "mcp-app" / "mlh-studio" / "src" / "ui" / "studio-pane.mjs").read_text(encoding="utf-8")
+        docs_dir = ROOT / "docs"
+        index_path = docs_dir / "index.html"
+        viewer_path = docs_dir / "viewer.html"
+        pocket_path = docs_dir / "pocket.html"
+        nojekyll_path = docs_dir / ".nojekyll"
+
+        for p in (index_path, viewer_path, pocket_path, nojekyll_path):
+            self.assertTrue(p.is_file(), f"Missing static demo artifact: {p}")
+
+        index_src = index_path.read_text(encoding="utf-8")
+
+        # --- P0.2: Arena res.newlyKilled XSS escape & studio-pane maxWords escape ---
+        for label, html_txt in (("dashboard.html", dash_src), ("docs/index.html", index_src)):
+            with self.subTest(xss_target=label):
+                self.assertIn('esc(res.newlyKilled.join(", "))', html_txt)
+                self.assertNotIn('${res.newlyKilled.join(', html_txt)
+        self.assertIn("escapeHtml(String(maxWords))", pane_src)
+
+        # --- P1.3: Pack import mode uses 'suspend-all' (never broken 'replace') ---
+        for label, html_txt in (("dashboard.html", dash_src), ("docs/index.html", index_src)):
+            with self.subTest(pack_mode_target=label):
+                self.assertIn('value="suspend-all"', html_txt)
+                self.assertNotIn('value="replace"', html_txt)
+
+        # --- P1.7: SVG <image href> URI scheme hardening in dashboard.html & studio-pane.mjs ---
+        dash_occ_start = dash_src.index("function isSafeOcclusionDataUri(")
+        dash_occ_end = dash_src.index("function renderOcclusionStageHtml(", dash_occ_start)
+        dash_occ_js = (
+            "function relHref(p) { return './' + p; }\n"
+            + dash_src[dash_occ_start:dash_occ_end]
+            + "\n"
+            + "const png = 'data:image/png;base64,iVBORw0KGgo=';\n"
+            + "const badSvg = 'data:image/svg+xml;base64,' + Buffer.from('<svg><script>alert(1)</script></svg>').toString('base64');\n"
+            + "const extSvg = 'data:image/svg+xml;base64,' + Buffer.from('<svg><image href=\"https://evil.example/x.png\"/></svg>').toString('base64');\n"
+            + "for (const spec of [\n"
+            + "  {src: 'https://evil.example/a.png'}, {src: 'http://evil.example/a.png'},\n"
+            + "  {src: 'javascript:alert(1)'}, {dataUri: 'javascript:alert(1)'},\n"
+            + "  {dataUri: 'https://evil.example/a.png'}, {dataUri: 'data:text/html;base64,PGgxPg=='},\n"
+            + "  {dataUri: badSvg}, {dataUri: extSvg}, {src: '../secret.png'}\n"
+            + "]) {\n"
+            + "  const r = resolveSafeOcclusionHref(spec);\n"
+            + "  if (r !== '') throw new Error('dashboard allowed unsafe href: ' + JSON.stringify(spec) + ' -> ' + r);\n"
+            + "}\n"
+            + "if (resolveSafeOcclusionHref({dataUri: png}) !== png) throw new Error('dashboard rejected valid png dataUri');\n"
+            + "if (resolveSafeOcclusionHref({src: 'assets/fig1.png'}) !== './assets/fig1.png') throw new Error('dashboard rejected local asset');\n"
+            + "console.log('DASH_SVG_OK');\n"
+        )
+        p_dash_svg = run_cli(["node", "-e", dash_occ_js])
+        self.assertEqual(p_dash_svg.returncode, 0, f"dashboard.html SVG URI check failed: {p_dash_svg.stderr}")
+        self.assertIn("DASH_SVG_OK", p_dash_svg.stdout)
+
+        pane_occ_start = pane_src.index("function isSafeOcclusionDataUri(")
+        pane_occ_end = pane_src.index("function renderOcclusionWidget(", pane_occ_start)
+        pane_occ_js = (
+            pane_src[pane_occ_start:pane_occ_end]
+            + "\n"
+            + "const png = 'data:image/png;base64,iVBORw0KGgo=';\n"
+            + "const badSvg = 'data:image/svg+xml;base64,' + Buffer.from('<svg onload=\"alert(1)\"></svg>').toString('base64');\n"
+            + "for (const spec of [\n"
+            + "  {src: 'https://evil.example/a.png'}, {src: 'http://evil.example/a.png'},\n"
+            + "  {src: 'javascript:alert(1)'}, {dataUri: 'javascript:alert(1)'},\n"
+            + "  {dataUri: 'https://evil.example/a.png'}, {dataUri: badSvg}\n"
+            + "]) {\n"
+            + "  const r = resolveSafeOcclusionImageHref(spec);\n"
+            + "  if (r !== '') throw new Error('studio-pane allowed unsafe href: ' + JSON.stringify(spec) + ' -> ' + r);\n"
+            + "}\n"
+            + "if (resolveSafeOcclusionImageHref({dataUri: png}) !== png) throw new Error('studio-pane rejected valid png dataUri');\n"
+            + "console.log('PANE_SVG_OK');\n"
+        )
+        p_pane_svg = run_cli(["node", "-e", pane_occ_js])
+        self.assertEqual(p_pane_svg.returncode, 0, f"studio-pane.mjs SVG URI check failed: {p_pane_svg.stderr}")
+        self.assertIn("PANE_SVG_OK", p_pane_svg.stdout)
+
+        # --- Static GitHub Pages Demo Site Gates (<= 650 KB, zero CDN, zero user paths, zero eval, Level-3 masking) ---
+        max_bytes = 650 * 1024
+        ext_cdn_re = re.compile(
+            r"""(?:<script\b[^>]*\bsrc\s*=\s*["']https?://|<link\b[^>]*\bhref\s*=\s*["']https?://"""
+            r"""|<img\b[^>]*\bsrc\s*=\s*["']https?://|@import\s+(?:url\s*\(\s*)?["']?https?://"""
+            r"""|fonts\.googleapis\.com|cdn\.jsdelivr\.net|unpkg\.com|cdnjs\.cloudflare\.com)""",
+            re.IGNORECASE,
+        )
+        user_path_re = re.compile(
+            r"(?:/Users/[A-Za-z0-9._-]+|/home/[A-Za-z0-9._-]+|[A-Za-z]:\\Users\\[A-Za-z0-9._-]+)"
+        )
+        dangerous_js_re = re.compile(r"\b(?:eval\s*\(|new\s+Function\s*\()")
+        for doc_file in (index_path, viewer_path, pocket_path):
+            with self.subTest(demo_file=doc_file.name):
+                size = doc_file.stat().st_size
+                self.assertGreater(size, 1000)
+                self.assertLessEqual(size, max_bytes, f"{doc_file.name} ({size} B) exceeds 650 KB ceiling ({max_bytes} B)")
+                txt = doc_file.read_text(encoding="utf-8")
+                self.assertEqual(ext_cdn_re.findall(txt), [], f"{doc_file.name} has external CDN/resource links")
+                self.assertEqual(user_path_re.findall(txt), [], f"{doc_file.name} leaks personal home path")
+                self.assertEqual(dangerous_js_re.findall(txt), [], f"{doc_file.name} contains eval/new Function")
+                for stok in ("sealedWinningMove", "sealedBlunder", "sealedMutants", "sealedReference"):
+                    self.assertNotIn(stok, txt, f"{doc_file.name} leaks sealed token {stok!r}")
+
+        # Verify docs/index.html embeds Level-3 masked derivations
+        hub_match = re.search(r"window\.__STUDY_HUB__\s*=\s*(\{.*?\});\n</script>", index_src)
+        self.assertIsNotNone(hub_match, "docs/index.html missing inline window.__STUDY_HUB__")
+        assert hub_match is not None
+        demo_hub = json.loads(hub_match.group(1))
+        self.assertGreaterEqual(len(demo_hub.get("derivations") or []), 3)
+        for dv in demo_hub["derivations"]:
+            self.assertEqual(dv.get("blackoutLevel"), 3, f"docs/index.html derivation {dv.get('id')} not Level-3 masked")
+            for st in dv.get("steps") or []:
+                if st.get("role") != "axiom":
+                    self.assertTrue(st.get("hidden"), f"Non-axiom step {st.get('id')} exposed in docs/index.html")
+                    self.assertIsNone(st.get("expr"), f"Non-axiom expr exposed in docs/index.html")
 
 
 if __name__ == "__main__":

@@ -19,7 +19,8 @@ from __future__ import annotations
 import argparse
 import json
 import sys
-from datetime import date as date_cls, datetime, timezone
+from datetime import date as date_cls, datetime, timedelta, timezone
+import hashlib
 from pathlib import Path
 from typing import Any
 
@@ -38,7 +39,11 @@ from syntopik.fsrs_core import (  # noqa: E402
     compress_due_queue,
     load_fsrs_parameters,
 )
-from syntopik.storage import load_json as _load_json_safe, load_jsonl as _load_jsonl  # noqa: E402
+from syntopik.storage import (  # noqa: E402
+    load_json as _load_json_safe,
+    load_jsonl as _load_jsonl,
+    write_text_atomic as _write_text_atomic,
+)
 
 import chapter_tracker  # noqa: E402
 import graph_intel  # noqa: E402
@@ -75,6 +80,8 @@ def _compute_due_items(
     params = load_fsrs_parameters(kg_dir)
     items: list[dict[str, Any]] = []
     for p in props:
+        if p.get("archived") is True:
+            continue
         pid = str(p.get("id") or "").strip()
         if not pid:
             continue
@@ -628,6 +635,8 @@ def _select_warm_start_prop(
     fallback: list[tuple[float, int, str, dict[str, Any]]] = []
 
     for p in props:
+        if p.get("archived") is True:
+            continue
         pid = str(p.get("id") or "").strip()
         if not pid:
             continue
@@ -781,6 +790,8 @@ def build_triage_plan(
     cut_raw: list[dict[str, Any]] = []
 
     for p in props:
+        if p.get("archived") is True:
+            continue
         pid = str(p.get("id") or "").strip()
         if not pid:
             continue
@@ -960,6 +971,88 @@ def build_triage_plan(
     }
 
 
+def _load_fatigue_cliff(kg_dir: Path) -> dict[str, Any] | None:
+    """Read `sessionTargetMinutes` and fatigue affect state from `learner-profile.json` if present."""
+    profile = _load_json_safe(kg_dir / "learner-profile.json")
+    if not isinstance(profile, dict):
+        return None
+    target_min: int | None = None
+    candidates = [
+        profile.get("sessionTargetMinutes"),
+        (profile.get("compiledPolicy") or {}).get("sessionTargetMinutes") if isinstance(profile.get("compiledPolicy"), dict) else None,
+        (profile.get("calibration") or {}).get("sessionTargetMinutes") if isinstance(profile.get("calibration"), dict) else None,
+        (profile.get("calibration") or {}).get("sessionMinutes") if isinstance(profile.get("calibration"), dict) else None,
+        (profile.get("preferences") or {}).get("sessionTargetMinutes") if isinstance(profile.get("preferences"), dict) else None,
+        (profile.get("userOverrides") or {}).get("sessionTargetMinutes") if isinstance(profile.get("userOverrides"), dict) else None,
+    ]
+    for cand in candidates:
+        if isinstance(cand, (int, float)) and not isinstance(cand, bool) and int(cand) >= 5:
+            target_min = int(cand)
+            break
+
+    affect_state = ""
+    if isinstance(profile.get("affect"), dict):
+        affect_state = str(profile["affect"].get("state") or "").strip().lower()
+    elif isinstance(profile.get("affectiveState"), dict):
+        affect_state = str(profile["affectiveState"].get("state") or "").strip().lower()
+    elif isinstance(profile.get("compiledPolicy"), dict):
+        affect_state = str(profile["compiledPolicy"].get("affectState") or "").strip().lower()
+
+    if target_min is None and not affect_state:
+        return None
+    return {
+        "sessionTargetMinutes": target_min,
+        "affectState": affect_state or None,
+        "isFatigued": affect_state == "fatigued",
+    }
+
+
+def _cap_blocks_for_fatigue(
+    blocks: list[dict[str, Any]],
+    max_block_min: int,
+) -> tuple[list[dict[str, Any]], bool]:
+    """Split any continuous study block exceeding `max_block_min` so every block respects the fatigue cliff."""
+    cap = max(5, int(max_block_min))
+    capped_any = False
+    out: list[dict[str, Any]] = []
+    total_all = sum(int(b.get("minutes") or 0) for b in blocks) or 1
+
+    for blk in blocks:
+        mins = int(blk.get("minutes") or 0)
+        if mins <= cap:
+            out.append(dict(blk))
+            continue
+        capped_any = True
+        rem = mins
+        part = 1
+        total_parts = (mins + cap - 1) // cap
+        tasks = list(blk.get("tasks") or [])
+        while rem > 0:
+            chunk = min(cap, rem)
+            rem -= chunk
+            sub = dict(blk)
+            sub["id"] = f"{blk.get('id', 'block')}_p{part}"
+            sub["title"] = f"{blk.get('title', 'Study Block')} (Part {part}/{total_parts} · fatigue cap {cap}m)"
+            sub["minutes"] = chunk
+            sub["sharePct"] = round((chunk / total_all) * 100.0, 1)
+            sub["fatigueCapped"] = True
+            if part == 1:
+                sub["tasks"] = tasks
+            else:
+                sub["tasks"] = [
+                    {
+                        "type": "fatigue_break_continue",
+                        "description": f"Take a 5-min eyes-off-screen reset, then resume {blk.get('title', 'block')} for {chunk}m.",
+                    }
+                ]
+            out.append(sub)
+            part += 1
+
+    for idx, b in enumerate(out, start=1):
+        b["order"] = idx
+    return out, capped_any
+
+
 def build_daily_plan(
     *,
     minutes: int | None = None,
@@ -989,6 +1082,10 @@ def build_daily_plan(
     if not isinstance(cfg, dict):
         cfg = {}
 
+    fatigue_info = _load_fatigue_cliff(resolved_kg)
+    fatigue_target_min = fatigue_info["sessionTargetMinutes"] if fatigue_info else None
+    fatigue_capped_total = False
+
     exam_date_str = str(cfg.get("examDate") or "").strip() or None
     days_to_exam: int | None = None
     exam_phase = "standard"
@@ -1013,6 +1110,12 @@ def build_daily_plan(
         total_minutes = max(5, int(cfg["dailyMinutes"]))
     else:
         total_minutes = 60
+
+    if minutes is None and fatigue_target_min is not None and total_minutes > fatigue_target_min:
+        total_minutes = fatigue_target_min
+        fatigue_capped_total = True
+    if fatigue_info and fatigue_info.get("isFatigued") and energy_norm == "normal":
+        energy_norm = "low"
 
     props = _load_jsonl(resolved_kg / "propositions.jsonl")
     chains = _load_jsonl(resolved_kg / "chains.jsonl")
@@ -1397,6 +1500,10 @@ def build_daily_plan(
             },
         ]
 
+    fatigue_blocks_capped = False
+    if fatigue_target_min is not None:
+        blocks, fatigue_blocks_capped = _cap_blocks_for_fatigue(blocks, fatigue_target_min)
+
     if energy_norm == "low":
         suggested_prompt = f"Low-energy session ({total_minutes}m): start with my warm-start cue and stop guilt-free after 3 steps."
     elif reentry:
@@ -1419,6 +1526,12 @@ def build_daily_plan(
         "date": today_iso,
         "totalMinutes": total_minutes,
         "allocatedMinutes": sum(b["minutes"] for b in blocks),
+        "fatigueCliff": {
+            "sessionTargetMinutes": fatigue_target_min,
+            "cappedTotal": fatigue_capped_total,
+            "cappedBlocks": fatigue_blocks_capped,
+            "affectState": fatigue_info.get("affectState") if fatigue_info else None,
+        },
         "exam": {
             "targetExam": target_label,
             "examDate": exam_date_str,
@@ -1446,7 +1559,422 @@ def build_daily_plan(
     return out
 
 
+# ---------------------------------------------------------------------------
+# Multi-Course Buffer-Protected Auto-Pacer & Pure-Stdlib RFC-5545 .ics Export
+# ---------------------------------------------------------------------------
+
+
+def _ics_escape(text: str) -> str:
+    return (
+        str(text or "")
+        .replace("\\", "\\\\")
+        .replace("\r\n", "\\n")
+        .replace("\n", "\\n")
+        .replace(";", "\\;")
+        .replace(",", "\\,")
+    )
+
+
+def _ics_fold(line: str) -> str:
+    """Fold RFC-5545 content lines to <= 75 UTF-8 octets using CRLF + single space."""
+    raw = str(line)
+    if len(raw.encode("utf-8")) <= 75:
+        return raw
+    chunks: list[str] = []
+    cur = ""
+    limit = 75
+    for ch in raw:
+        cand = cur + ch
+        if len(cand.encode("utf-8")) > limit and cur:
+            chunks.append(cur)
+            cur = " " + ch
+            limit = 75
+        else:
+            cur = cand
+    if cur:
+        chunks.append(cur)
+    return "\r\n".join(chunks)
+
+
+def build_pace_plan(
+    *,
+    kg_dir: Path | str | None = None,
+    chapters_dir: Path | str | None = None,
+    config_path: Path | str | None = None,
+    today: str | None = None,
+    rebalance: bool = False,
+    horizon_days: int = 14,
+    daily_minutes: int | None = None,
+    slack_buffer_pct: float | None = None,
+) -> dict[str, Any]:
+    """Multi-Course Buffer-Protected Auto-Pacer reading `exams[]` in `study-config.json`
+    with a 20% guilt-free slack buffer and `learner-profile.json` fatigue cliff capping.
+    """
+    resolved_kg = resolve_kg_dir(kg_dir)
+    resolved_chapters = resolve_chapters_dir(chapters_dir)
+    today_date, _now_dt = _parse_today(today)
+    today_iso = today_date.isoformat()
+
+    if config_path:
+        cfg_file = Path(config_path).expanduser().resolve()
+    elif (resolved_kg / "study-config.json").is_file():
+        cfg_file = resolved_kg / "study-config.json"
+    else:
+        cfg_file = resolved_kg / "exam-config.json"
+    cfg = _load_json_safe(cfg_file)
+    if not isinstance(cfg, dict):
+        cfg = {}
+
+    fatigue_info = _load_fatigue_cliff(resolved_kg)
+    fatigue_cap = fatigue_info["sessionTargetMinutes"] if fatigue_info else None
+
+    if daily_minutes is not None:
+        eff_daily = max(15, int(daily_minutes))
+    elif isinstance(cfg.get("dailyMinutes"), (int, float)) and int(cfg["dailyMinutes"]) > 0:
+        eff_daily = max(15, int(cfg["dailyMinutes"]))
+    else:
+        eff_daily = 90
+
+    if slack_buffer_pct is not None:
+        buf_pct = max(0.05, min(0.40, float(slack_buffer_pct) / 100.0 if float(slack_buffer_pct) > 1.0 else float(slack_buffer_pct)))
+    elif isinstance(cfg.get("slackBufferPct"), (int, float)):
+        raw_b = float(cfg["slackBufferPct"])
+        buf_pct = max(0.05, min(0.40, raw_b / 100.0 if raw_b > 1.0 else raw_b))
+    else:
+        buf_pct = 0.20
+
+    props = _load_jsonl(resolved_kg / "propositions.jsonl")
+    active_tracker = _inspect_active_tracker(resolved_chapters)
+
+    raw_exams = cfg.get("exams")
+    exam_specs: list[dict[str, Any]] = []
+    if isinstance(raw_exams, list) and raw_exams:
+        for idx, ex in enumerate(raw_exams):
+            if not isinstance(ex, dict):
+                continue
+            name = str(ex.get("name") or ex.get("title") or ex.get("subject") or f"Course {idx + 1}").strip()
+            d_str = str(ex.get("examDate") or ex.get("date") or "").strip()
+            if not d_str:
+                continue
+            try:
+                ex_dt = date_cls.fromisoformat(d_str[:10])
+            except ValueError:
+                continue
+            exam_specs.append(
+                {
+                    "name": name,
+                    "subject": str(ex.get("subject") or name).strip(),
+                    "chapterSlug": str(ex.get("chapterSlug") or ex.get("slug") or "").strip() or None,
+                    "examDate": ex_dt.isoformat(),
+                    "examDateObj": ex_dt,
+                    "weight": max(0.25, float(ex.get("weight") or 1.0)),
+                    "remainingTopics": ex.get("remainingTopics"),
+                    "missedDays": max(0, int(ex.get("missedDays") or 0)),
+                }
+            )
+    elif cfg.get("examDate"):
+        try:
+            ex_dt = date_cls.fromisoformat(str(cfg["examDate"])[:10])
+            exam_specs.append(
+                {
+                    "name": _default_target_label(cfg, active_tracker),
+                    "subject": (active_tracker or {}).get("subject") or "General",
+                    "chapterSlug": (active_tracker or {}).get("slug"),
+                    "examDate": ex_dt.isoformat(),
+                    "examDateObj": ex_dt,
+                    "weight": 1.0,
+                    "remainingTopics": None,
+                    "missedDays": 0,
+                }
+            )
+        except ValueError:
+            pass
+
+    courses: list[dict[str, Any]] = []
+    for ex in exam_specs:
+        days_left = (ex["examDateObj"] - today_date).days
+        if days_left <= 0:
+            continue
+        slug = ex["chapterSlug"]
+        rem_units = ex["remainingTopics"]
+        if rem_units is None:
+            # Estimate remaining units from tracker or non-archived non-solid propositions
+            tr_rem = 0
+            if slug and (resolved_chapters / f"{slug}-tracker.json").is_file():
+                tr_obj = _load_json_safe(resolved_chapters / f"{slug}-tracker.json")
+                if isinstance(tr_obj, dict):
+                    tr_rem = sum(
+                        1
+                        for t in (tr_obj.get("topics") or [])
+                        if isinstance(t, dict) and t.get("status") != "mastered"
+                    )
+            subj_low = ex["subject"].lower()
+            kg_rem = sum(
+                1
+                for p in props
+                if p.get("archived") is not True
+                and str(p.get("status") or "planned").lower() != "solid"
+                and (
+                    subj_low in str(p.get("subject") or "").lower()
+                    or (slug and slug.lower() in str(p.get("chapter") or "").lower())
+                )
+            )
+            rem_units = max(1, tr_rem or kg_rem or 4)
+        rem_units = max(1, int(rem_units))
+
+        raw_buffer_days = max(1, int(round(days_left * buf_pct)))
+        if rebalance and ex["missedDays"] > 0:
+            # Absorb missed days cleanly into the guilt-free slack buffer first
+            absorbed = min(raw_buffer_days, ex["missedDays"])
+            remaining_buffer = max(0, raw_buffer_days - absorbed)
+        else:
+            absorbed = 0
+            remaining_buffer = raw_buffer_days
+
+        effective_study_days = max(1, days_left - remaining_buffer)
+        urgency = (rem_units * ex["weight"]) / effective_study_days
+        courses.append(
+            {
+                "name": ex["name"],
+                "subject": ex["subject"],
+                "chapterSlug": slug,
+                "examDate": ex["examDate"],
+                "daysUntilExam": days_left,
+                "bufferDaysReserved": remaining_buffer,
+                "bufferDaysAbsorbed": absorbed,
+                "effectiveStudyDays": effective_study_days,
+                "remainingUnits": rem_units,
+                "weight": round(ex["weight"], 2),
+                "urgencyScore": round(urgency, 4),
+                "triageRecommended": effective_study_days < rem_units and remaining_buffer == 0,
+            }
+        )
+
+    courses.sort(key=lambda c: (-c["urgencyScore"], c["daysUntilExam"], c["name"]))
+
+    # Allocate daily study minutes proportionally across active courses
+    total_urgency = sum(c["urgencyScore"] for c in courses) or 1.0
+    for c in courses:
+        share = c["urgencyScore"] / total_urgency
+        c["dailyMinutesAllocated"] = max(10, int(round(eff_daily * share))) if courses else 0
+        c["sharePct"] = round(share * 100.0, 1)
+
+    # Normalize exact sum to eff_daily when courses exist
+    if courses:
+        diff_min = eff_daily - sum(c["dailyMinutesAllocated"] for c in courses)
+        if diff_min != 0:
+            courses[0]["dailyMinutesAllocated"] = max(10, courses[0]["dailyMinutesAllocated"] + diff_min)
+
+    # Build multi-day calendar schedule with 1-in-5 (20%) guilt-free buffer days
+    max_days_span = max((c["daysUntilExam"] for c in courses), default=horizon_days)
+    sched_days = max(1, min(30, int(horizon_days), max_days_span))
+    buffer_stride = max(2, int(round(1.0 / buf_pct)))  # 20% -> every 5th day is a guilt-free buffer day
+    max_chunk = fatigue_cap if (fatigue_cap is not None and fatigue_cap >= 15) else 45
+
+    schedule: list[dict[str, Any]] = []
+    buffer_day_count = 0
+    for offset in range(sched_days):
+        day_dt = today_date + timedelta(days=offset)
+        day_iso = day_dt.isoformat()
+        active_today = [c for c in courses if c["examDate"] > day_iso]
+        exam_today = [c for c in courses if c["examDate"] == day_iso]
+
+        is_buffer = ((offset + 1) % buffer_stride == 0) and not exam_today
+        day_blocks: list[dict[str, Any]] = []
+
+        if exam_today:
+            for ex_c in exam_today:
+                day_blocks.append(
+                    {
+                        "course": ex_c["name"],
+                        "subject": ex_c["subject"],
+                        "type": "exam_day",
+                        "minutes": 20,
+                        "focus": f"Exam Day: {ex_c['name']} — light 20m calm confidence warmup only.",
+                    }
+                )
+        elif is_buffer:
+            buffer_day_count += 1
+            day_blocks.append(
+                {
+                    "course": "Guilt-Free Slack Buffer",
+                    "subject": "Recovery",
+                    "type": "guilt_free_buffer",
+                    "minutes": min(25, eff_daily),
+                    "focus": "Protected 20% slack buffer: zero new material — rest, light catch-up, or 5-min micro-sprint only.",
+                }
+            )
+        elif active_today:
+            sub_urg = sum(c["urgencyScore"] for c in active_today) or 1.0
+            for c in active_today:
+                alloc = max(10, int(round(eff_daily * (c["urgencyScore"] / sub_urg))))
+                # Respect learner-profile fatigue cliff by splitting long course blocks
+                rem_m = alloc
+                part = 1
+                while rem_m > 0:
+                    chunk = min(max_chunk, rem_m)
+                    rem_m -= chunk
+                    part_tag = f" (Part {part})" if alloc > max_chunk else ""
+                    day_blocks.append(
+                        {
+                            "course": c["name"],
+                            "subject": c["subject"],
+                            "chapterSlug": c["chapterSlug"],
+                            "type": "paced_study",
+                            "minutes": chunk,
+                            "focus": (
+                                f"{c['name']}{part_tag}: active recall + next core topic "
+                                f"({c['daysUntilExam'] - offset}d to exam, {c['bufferDaysReserved']}d buffer protected)."
+                            ),
+                        }
+                    )
+                    part += 1
+
+        schedule.append(
+            {
+                "date": day_iso,
+                "isBufferDay": is_buffer,
+                "totalMinutes": sum(b["minutes"] for b in day_blocks),
+                "blocks": day_blocks,
+            }
+        )
+
+    return {
+        "brand": "Syntopik",
+        "mode": "pace",
+        "date": today_iso,
+        "rebalanced": bool(rebalance),
+        "dailyMinutesBudget": eff_daily,
+        "slackBufferPct": round(buf_pct * 100.0, 1),
+        "fatigueBlockCapMinutes": max_chunk,
+        "fatigueCliffApplied": fatigue_cap is not None,
+        "courseCount": len(courses),
+        "bufferDaysScheduled": buffer_day_count,
+        "courses": courses,
+        "schedule": schedule,
+        "suggestedPrompt": (
+            f"Run my paced multi-course plan ({len(courses)} course(s), {eff_daily}m/day, "
+            f"{round(buf_pct * 100)}% guilt-free slack buffer)."
+        ),
+    }
+
+
+def render_ics_calendar(
+    pace_plan: dict[str, Any],
+    *,
+    start_hour_utc: int = 9,
+) -> str:
+    """Serialize a `build_pace_plan()` schedule into a pure-stdlib RFC-5545 `.ics` calendar."""
+    dtstamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+    lines: list[str] = [
+        "BEGIN:VCALENDAR",
+        "VERSION:2.0",
+        "PRODID:-//Syntopik//Multi-Course Auto-Pacer 3.0//EN",
+        "CALSCALE:GREGORIAN",
+        "METHOD:PUBLISH",
+        "X-WR-CALNAME:Syntopik Study Pace",
+    ]
+
+    for day in pace_plan.get("schedule") or []:
+        d_str = str(day.get("date") or "")[:10]
+        if not d_str:
+            continue
+        try:
+            d_obj = date_cls.fromisoformat(d_str)
+        except ValueError:
+            continue
+        cursor = datetime(d_obj.year, d_obj.month, d_obj.day, int(start_hour_utc) % 24, 0, 0, tzinfo=timezone.utc)
+
+        for idx, blk in enumerate(day.get("blocks") or [], start=1):
+            mins = max(5, int(blk.get("minutes") or 20))
+            end_dt = cursor + timedelta(minutes=mins)
+            course = str(blk.get("course") or "Study Block")
+            btype = str(blk.get("type") or "paced_study")
+            focus = str(blk.get("focus") or "")
+            summary = f"Syntopik: {course} ({mins}m)"
+            uid_seed = f"{d_str}|{idx}|{course}|{btype}|{mins}"
+            uid = f"syntopik-{hashlib.sha256(uid_seed.encode('utf-8')).hexdigest()[:16]}@syntopik.local"
+
+            lines.append("BEGIN:VEVENT")
+            lines.append(_ics_fold(f"UID:{uid}"))
+            lines.append(f"DTSTAMP:{dtstamp}")
+            lines.append(f"DTSTART:{cursor.strftime('%Y%m%dT%H%M%SZ')}")
+            lines.append(f"DTEND:{end_dt.strftime('%Y%m%dT%H%M%SZ')}")
+            lines.append(_ics_fold(f"SUMMARY:{_ics_escape(summary)}"))
+            lines.append(_ics_fold(f"DESCRIPTION:{_ics_escape(focus)}"))
+            lines.append(_ics_fold(f"CATEGORIES:Syntopik,{_ics_escape(str(blk.get('subject') or 'Study'))}"))
+            lines.append("END:VEVENT")
+
+            # Add 10-minute cognitive recovery break between blocks on the same day
+            cursor = end_dt + timedelta(minutes=10)
+
+    # Also emit explicit exam deadline reminders
+    for c in pace_plan.get("courses") or []:
+        ex_str = str(c.get("examDate") or "")[:10]
+        if not ex_str:
+            continue
+        try:
+            ex_d = date_cls.fromisoformat(ex_str)
+        except ValueError:
+            continue
+        start_dt = datetime(ex_d.year, ex_d.month, ex_d.day, 8, 0, 0, tzinfo=timezone.utc)
+        end_dt = start_dt + timedelta(hours=1)
+        uid_seed = f"exam|{ex_str}|{c.get('name')}"
+        uid = f"syntopik-exam-{hashlib.sha256(uid_seed.encode('utf-8')).hexdigest()[:16]}@syntopik.local"
+        lines.append("BEGIN:VEVENT")
+        lines.append(_ics_fold(f"UID:{uid}"))
+        lines.append(f"DTSTAMP:{dtstamp}")
+        lines.append(f"DTSTART:{start_dt.strftime('%Y%m%dT%H%M%SZ')}")
+        lines.append(f"DTEND:{end_dt.strftime('%Y%m%dT%H%M%SZ')}")
+        lines.append(_ics_fold(f"SUMMARY:{_ics_escape('Exam: ' + str(c.get('name') or 'Course'))}"))
+        lines.append(_ics_fold(f"DESCRIPTION:{_ics_escape('Syntopik target exam date.')}"))
+        lines.append("CATEGORIES:Syntopik,Exam")
+        lines.append("END:VEVENT")
+
+    lines.append("END:VCALENDAR")
+    return "\r\n".join(lines) + "\r\n"
+
+
+def export_pace_ics(pace_plan: dict[str, Any], out_path: Path | str) -> Path:
+    """Write a pure-stdlib RFC-5545 `.ics` file atomically."""
+    ics_text = render_ics_calendar(pace_plan)
+    return _write_text_atomic(Path(out_path).expanduser().resolve(), ics_text)
+
+
 def _render_human_plan(plan: dict[str, Any]) -> str:
+    if plan.get("mode") == "pace":
+        lines = [
+            f"# Syntopik Multi-Course Buffer-Protected Auto-Pacer — {plan['date']}",
+            (
+                f"**Budget:** {plan['dailyMinutesBudget']}m/day · "
+                f"**Guilt-Free Slack Buffer:** {plan['slackBufferPct']}% "
+                f"({plan['bufferDaysScheduled']} buffer day(s) scheduled) · "
+                f"**Block Fatigue Cap:** {plan['fatigueBlockCapMinutes']}m"
+            ),
+            "",
+        ]
+        if plan.get("courses"):
+            lines.append(f"## Active Courses ({len(plan['courses'])})")
+            for c in plan["courses"]:
+                lines.append(
+                    f"- **{c['name']}** ({c['subject']}): exam `{c['examDate']}` ({c['daysUntilExam']}d left · "
+                    f"{c['bufferDaysReserved']}d slack protected) · {c['dailyMinutesAllocated']}m/day ({c['sharePct']}%)"
+                )
+            lines.append("")
+        else:
+            lines.append("_No future exams found in study-config.json `exams[]`._")
+            lines.append("")
+        lines.append("## Upcoming Paced Schedule")
+        for day in (plan.get("schedule") or [])[:7]:
+            tag = " [GUILT-FREE BUFFER]" if day.get("isBufferDay") else ""
+            lines.append(f"- **`{day['date']}`** ({day['totalMinutes']}m){tag}:")
+            for blk in day.get("blocks") or []:
+                lines.append(f"  - {blk['course']} ({blk['minutes']}m): {blk['focus']}")
+        if plan.get("icsExportPath"):
+            lines.append("")
+            lines.append(f"**iCalendar Export:** `{plan['icsExportPath']}`")
+        return "\n".join(lines)
+
     if plan.get("mode") == "exam_triage":
         lines = [
             f"# Syntopik {int(round(plan['hoursLeft']))}-Hour Pareto Exam Triage — {plan['date']}",
@@ -1536,6 +2064,9 @@ def main(argv: list[str] | None = None) -> None:
     parser.add_argument("--triage-hours", type=float, default=None, metavar="HOURS", help="Launch Pareto Exam Triage mode for an exam in H hours (e.g., 48)")
     parser.add_argument("--sleep-hours", type=float, default=7.0, metavar="HOURS", help="Protected sleep hours per night during exam triage (default: 7)")
     parser.add_argument("--chapter", default=None, help="Optional chapter/subject filter for exam triage")
+    parser.add_argument("--pace", action="store_true", help="Run Multi-Course Buffer-Protected Auto-Pacer reading exams[] from study-config.json (20%% guilt-free slack buffer)")
+    parser.add_argument("--rebalance", action="store_true", help="Rebalance multi-course pace plan absorbing missed days into the 20%% slack buffer first")
+    parser.add_argument("--ics", metavar="OUT_PATH", default=None, help="Export paced multi-course calendar as pure-stdlib RFC-5545 .ics file")
     parser.add_argument("--kg-dir", help="Override knowledge-graph directory (or SYNT_KG_DIR / MLH_KG_DIR)")
     parser.add_argument("--chapters-dir", help="Override chapters directory containing *-tracker.json (or SYNT_CHAPTERS_DIR / MLH_CHAPTERS_DIR)")
     parser.add_argument("--config", help="Optional path to study-config.json / exam-config.json")
@@ -1543,7 +2074,19 @@ def main(argv: list[str] | None = None) -> None:
     parser.add_argument("--json", action="store_true", help="Emit structured JSON output")
     args = parser.parse_args(argv)
 
-    if args.triage_hours is not None:
+    if args.pace or args.rebalance or args.ics:
+        plan = build_pace_plan(
+            kg_dir=args.kg_dir,
+            chapters_dir=args.chapters_dir,
+            config_path=args.config,
+            today=args.today,
+            rebalance=bool(args.rebalance),
+            daily_minutes=args.minutes,
+        )
+        if args.ics:
+            ics_path = export_pace_ics(plan, args.ics)
+            plan["icsExportPath"] = str(ics_path)
+    elif args.triage_hours is not None:
         plan = build_triage_plan(
             hours_left=args.triage_hours,
             sleep_hours=args.sleep_hours,

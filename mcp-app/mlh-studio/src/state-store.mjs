@@ -188,6 +188,16 @@ function sanitizePracticePatch(patch) {
     }
     out.fadedBlanks = cleanBlanks;
   }
+  if (patch.blackoutAnswers && typeof patch.blackoutAnswers === "object" && !Array.isArray(patch.blackoutAnswers)) {
+    const cleanAnswers = {};
+    let count = 0;
+    for (const [k, v] of Object.entries(patch.blackoutAnswers)) {
+      if (count >= 60) break;
+      cleanAnswers[String(k).slice(0, 120)] = String(v ?? "").slice(0, 600);
+      count += 1;
+    }
+    out.blackoutAnswers = cleanAnswers;
+  }
   return out;
 }
 

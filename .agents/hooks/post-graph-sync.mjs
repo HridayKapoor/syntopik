@@ -10,6 +10,22 @@ const packageRoot = existsSync(path.join(path.resolve(hookDir, ".."), "scripts",
 	? path.resolve(hookDir, "..")
 	: path.resolve(hookDir, "..", "..");
 
+const rawArgv = process.argv.slice(2);
+
+function getArgValue(flag) {
+	const idx = rawArgv.indexOf(flag);
+	if (idx !== -1 && idx + 1 < rawArgv.length && !rawArgv[idx + 1].startsWith("--")) {
+		return rawArgv[idx + 1];
+	}
+	const prefix = `${flag}=`;
+	const hit = rawArgv.find((a) => a.startsWith(prefix));
+	return hit ? hit.slice(prefix.length) : null;
+}
+
+const cliWorkspaceArg = (getArgValue("--workspace") || "").trim();
+const cliKgArg = (getArgValue("--kg-dir") || "").trim();
+const cliChaptersArg = (getArgValue("--chapters-dir") || "").trim();
+
 function isPluginCachePath(dirPath) {
 	if (!dirPath) return false;
 	const norm = path.resolve(dirPath).replace(/\\/gu, "/");
@@ -51,6 +67,7 @@ function resolveAttachedOrDirect(dirPath) {
 }
 
 function resolveWorkspaceRoot(payload) {
+	if (cliWorkspaceArg) return path.resolve(cliWorkspaceArg);
 	const wsEnv = (process.env.SYNT_WORKSPACE || process.env.MLH_WORKSPACE || "").trim();
 	if (wsEnv) return path.resolve(wsEnv);
 
@@ -101,6 +118,17 @@ const WATCHED_BASENAMES = new Set([
 	"reading-queue.jsonl",
 	"exam-attempts.jsonl",
 	"harness-log.jsonl",
+	"learner-profile.json",
+	"forks.jsonl",
+	"arenas.jsonl",
+	"decisions.jsonl",
+	"derivations.jsonl",
+	"evidence-ledger.jsonl",
+	"viva-sessions.jsonl",
+	"whiteboard-session.json",
+	"study-config.json",
+	"mentor-config.json",
+	"exam-config.json",
 ]);
 
 const STATIC_IGNORED_BASENAMES = new Set([
@@ -113,7 +141,7 @@ const READONLY_CMD_RE =
 	/^\s*(?:grep|rg|cat|head|tail|wc|ls|find|stat|file|shasum|sha256sum|md5|diff|git\s+(?:status|diff|log|show|grep|rev-parse|ls-files)|node\s+--check|python3?\s+-m\s+(?:py_compile|unittest))\b/iu;
 
 const MUTATING_STUDY_SCRIPT_RE =
-	/\b(?:srs_engine|chapter_tracker|exam_runner|mistake_analytics|cheatsheet_pdf|audio_brief|setup_harness|ingest_source|vault_sync|mnemonic_sync)\.py\b/iu;
+	/(?:\b(?:srs_engine|chapter_tracker|exam_runner|mistake_analytics|cheatsheet_pdf|audio_brief|setup_harness|ingest_source|vault_sync|mnemonic_sync|learner_profile|fork_replay|falsify_arena|decision_blitz|derivation_forge|viva_chamber|pedagogy_eval)\.py\b|(?:^|[;&|(\s])(?:npx\s+(?:-y\s+)?|python3?\s+-m\s+)?syntopik\s+(?:init|attach|import|drop|demo|review|triage|recover|exam|pack|export|sunset|pace|profile|board|debrief|mode|doctor|run|sync|obsidian|pocket)\b)/iu;
 
 function isExternalTempPath(candidatePath, root) {
 	const abs = path.isAbsolute(candidatePath)
@@ -214,7 +242,7 @@ function commandTouchesWorkspace(payload, root) {
 		return true;
 	}
 	if (
-		/(?:>|>>|\btee\b|\bcp\b|\bmv\b|\btouch\b|\bmkdir\b).*?(?:\b(?:knowledge-graph|chapters|demos|animations|sources|exams)\/|\b(?:revlog|reading-queue|propositions|chains|mistakes)\.jsonl\b)/iu.test(
+		/(?:>|>>|\btee\b|\bcp\b|\bmv\b|\btouch\b|\bmkdir\b).*?(?:\b(?:knowledge-graph|chapters|demos|animations|sources|exams)\/|\b(?:revlog|reading-queue|propositions|chains|mistakes|forks|arenas|decisions|derivations|evidence-ledger|viva-sessions)\.jsonl\b|\b(?:learner-profile|whiteboard-session|study-config|mentor-config)\.json\b)/iu.test(
 			cmd,
 		)
 	) {
@@ -262,8 +290,9 @@ try {
 	const raw = readFileSync(0, "utf8").trim();
 	const payload = raw ? JSON.parse(raw) : {};
 	const root = resolveWorkspaceRoot(payload);
-	const customKgEnv = (process.env.SYNT_KG_DIR || process.env.MLH_KG_DIR || "").trim();
-	const customChaptersEnv = (process.env.SYNT_CHAPTERS_DIR || process.env.MLH_CHAPTERS_DIR || "").trim();
+	const customKgEnv = cliKgArg || (process.env.SYNT_KG_DIR || process.env.MLH_KG_DIR || "").trim();
+	const customChaptersEnv =
+		cliChaptersArg || (process.env.SYNT_CHAPTERS_DIR || process.env.MLH_CHAPTERS_DIR || "").trim();
 	const kgDir = customKgEnv ? path.resolve(customKgEnv) : path.join(root, "knowledge-graph");
 
 	const candidatePaths = extractTargetPaths(payload);

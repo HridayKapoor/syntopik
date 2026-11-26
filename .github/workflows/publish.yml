@@ -1,0 +1,130 @@
+# OIDC Trusted-Publishing Release Pipeline for Syntopik (PyPI + npm)
+#
+# Opt-in publishing:
+#   - Artifacts (Python wheel/sdist + npm tarball) are ALWAYS built & verified on
+#     GitHub Release creation and manual workflow_dispatch.
+#   - Live publishing to PyPI / npm uses OIDC Trusted Publishing (`id-token: write`)
+#     and runs ONLY once enabled via repository variables (`ENABLE_PYPI_PUBLISH=true`,
+#     `ENABLE_NPM_PUBLISH=true`) or explicit `workflow_dispatch` inputs after
+#     configuring Trusted Publishers on pypi.org and npmjs.com.
+
+name: Publish Syntopik (PyPI & npm OIDC)
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      publish_pypi:
+        description: "Publish built wheel & sdist to PyPI via OIDC Trusted Publisher"
+        type: boolean
+        required: false
+        default: false
+      publish_npm:
+        description: "Publish npm package with provenance via OIDC Trusted Publisher"
+        type: boolean
+        required: false
+        default: false
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: Build & Verify Release Artifacts
+    runs-on: ubuntu-latest
+    env:
+      PYTHONUTF8: "1"
+      PYTHONDONTWRITEBYTECODE: "1"
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Set up Node.js 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Build Python wheel & sdist
+        run: |
+          python -m pip install --quiet --upgrade build hatchling
+          python -m build --outdir dist .
+          ls -lh dist/
+
+      - name: Verify npm tarball contents
+        run: |
+          mkdir -p npm-dist
+          npm pack --pack-destination npm-dist
+          ls -lh npm-dist/
+
+      - name: Upload Python release artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: python-dist
+          path: dist/
+          retention-days: 7
+
+      - name: Upload npm release artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: npm-dist
+          path: npm-dist/
+          retention-days: 7
+
+  publish-pypi:
+    name: Publish to PyPI (OIDC Trusted Publishing)
+    needs: build
+    if: >-
+      (github.event_name == 'release' && vars.ENABLE_PYPI_PUBLISH == 'true') ||
+      (github.event_name == 'workflow_dispatch' && inputs.publish_pypi == true)
+    runs-on: ubuntu-latest
+    environment:
+      name: pypi
+      url: https://pypi.org/p/syntopik
+    permissions:
+      id-token: write
+      contents: read
+    steps:
+      - name: Download Python distributions
+        uses: actions/download-artifact@v4
+        with:
+          name: python-dist
+          path: dist/
+
+      - name: Publish wheel & sdist to PyPI
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          packages-dir: dist/
+
+  publish-npm:
+    name: Publish to npm (OIDC Provenance)
+    needs: build
+    if: >-
+      (github.event_name == 'release' && vars.ENABLE_NPM_PUBLISH == 'true') ||
+      (github.event_name == 'workflow_dispatch' && inputs.publish_npm == true)
+    runs-on: ubuntu-latest
+    environment:
+      name: npm
+      url: https://www.npmjs.com/package/syntopik
+    permissions:
+      id-token: write
+      contents: read
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          registry-url: "https://registry.npmjs.org"
+
+      - name: Publish npm package with provenance
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: npm publish --provenance --access public

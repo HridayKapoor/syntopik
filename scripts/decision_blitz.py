@@ -656,6 +656,32 @@ def grade_decision(
     decisions_path = resolve_decisions_path(workspace=workspace, kg_dir=kg_dir)
     _append_jsonl_locked(decisions_path, record)
 
+    try:
+        from syntopik.learner_model import record_telemetry_event
+
+        dom = "General"
+        if eff_prop_id:
+            for p_row in _load_jsonl(kdir / "propositions.jsonl"):
+                if str(p_row.get("id") or "") == eff_prop_id:
+                    dom = str(p_row.get("subject") or "General")
+                    break
+        record_telemetry_event(
+            kdir,
+            domain=dom,
+            prop_id=eff_prop_id or None,
+            kind="decision_blitz",
+            correct=(fields_hit == 3),
+            difficulty=1480,
+            confidence=None,
+            duration_ms=eff_ms if eff_ms > 0 else None,
+            hints_used=0,
+            mistake_category="condition_missed" if not dc_hit else (None if fields_hit == 3 else "concept_gap"),
+            pf_outcome=None,
+            skipped=False,
+        )
+    except Exception:
+        pass
+
     live_stats = compute_decision_stats(workspace=workspace, kg_dir=kg_dir)
 
     expert_diff: dict[str, Any] | None = None

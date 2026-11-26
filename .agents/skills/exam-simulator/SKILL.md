@@ -1,9 +1,9 @@
 ---
 name: exam-simulator
 description: >-
-  Build, run, auto-grade, and debrief offline or live-workbench timed exams and
-  NTA JEE Main/Adv CBT mocks, with 3-bucket Knowledge/Execution/Time-Sink
-  autopsy and micro-sprints.
+  Build, grade, and debrief offline/live CBT exams, NTA JEE mocks, and
+  Adversarial Viva Defense chambers with 4-tier evidence gates, 3-bucket
+  Knowledge/Execution/Time-Sink autopsy, and micro-sprints.
 ---
 
 # Exam Simulator — Timed Mastery Assessments, Offline/Live CBT & 3-Bucket Autopsy
@@ -73,3 +73,23 @@ Automatically performs in-process:
    - Offer **1** clear next move: live `R0–R5` non-spoiling repair on top `2–3` misses (`synt_practice_card` + Pause Law), a 3-strike Surgical Bug-Hunt, OR a 1–2p Typst Pitfall PDF (`mistake_analytics export-traps` → `cheatsheet_pdf build`).
 2. **Live Micro-Sprint (`3–5` Verified Questions in Chat)**:
    - Pose **1** verified question per turn (`synt_quiz_card`, native question tool, or calm Markdown card with `"I don't know"` = skip for `0` marks), track cumulative score & pacing, sync hits (`good`) & misses (`again`) to `mistakes.jsonl` + `srs_engine.py`, and repair the #1 leak.
+
+---
+
+## Mode C — 5-Turn Adversarial Viva Voce Defense Chamber & 4-Tier Evidence Ledger (v3.0)
+
+Use for high-centrality / bottleneck nodes (`"Viva defense <topic>"` or when `synt_next_move` flags `transfer_verify` anti-inflation):
+```bash
+syntopik run viva_chamber start <propId> --json
+syntopik run viva_chamber turn <sessionId> --response "<learner defense>" --confidence 0.80 --json
+syntopik run viva_chamber status <sessionId> --json
+```
+1. **5-Turn Structured Defense (`knowledge-graph/viva-sessions.jsonl`)**:
+   - **Turn 1 — Commitment Claim**: pins the learner's initial claim in the **Turn-1 Commitment Ledger**.
+   - **Turn 2 — Boundary Perturbation**: tests edge/regime limits from `boundaryConditions[]` / premises.
+   - **Turn 3 — Assumption / Anti-Pattern Attack**: probes real failure traps from `mistakes.jsonl` / `chains.jsonl`.
+   - **Turn 4 — Transfer Perturbation**: tests downstream or novel-regime consequences.
+   - **Turn 5 — Sharpened Synthesis**: reconciles Turn 1 with Turns 2–4 (auto-checked by `contradictionCheck`!).
+2. **4-Tier Epistemic Evidence Ledger (`T1`–`T4`, `syntopik/evidence.py`)**:
+   - **T1**: assisted / recognized · **T2**: unaided recall/quiz · **T3**: verified transfer (`Counterexample Arena`, `Derivation Blackout`, timed CBT) · **T4**: structural defense (`Adversarial Viva >= 0.75`, `Axiom-Cut Surgery`, unassisted synthesis).
+   - Passing Viva (`>= 0.75` across `clarity`, `boundary_awareness`, `transfer`, `calibration`) awards **T4** evidence; critical boundary collapse demotes a fragile `solid` node back to `shaky` immediately so mastery never inflates!

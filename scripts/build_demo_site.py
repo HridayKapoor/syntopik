@@ -1,0 +1,2223 @@
+#!/usr/bin/env python3
+"""Deterministic Builder & Verifier for Syntopik v3.0 1-Click Live GitHub Pages Demo Site.
+
+Builds the zero-install, zero-CDN, zero-PII interactive browser sandbox directly from
+Syntopik v3.0's finished `dashboard.html`, `knowledge-graph/viewer.html`, `syntopik/pocket.py`,
+and the 3 bundled starter packs (`packs/*.syntopik-pack.zip`):
+
+  - `docs/index.html`   (<= 650 KB self-contained interactive Studio + Mastery Gym + :::explore)
+  - `docs/viewer.html`  (self-contained standalone Hypergraph Viewer w/ Causal Halos & T1-T4)
+  - `docs/pocket.html`  (~25-35 KB self-contained Mobile Pocket Commute Deck)
+  - `docs/.nojekyll`    (empty file so GitHub Pages skips Jekyll processing)
+
+Pure Python 3.12+ standard library only (zero external dependencies, deterministic seed 42,
+zero personal user data, zero external CDNs, zero eval/new Function, zero sealed-secret leaks).
+"""
+
+from __future__ import annotations
+
+import argparse
+from datetime import datetime, timedelta, timezone
+import hashlib
+import json
+import os
+from pathlib import Path
+import random
+import re
+import shutil
+import subprocess
+import sys
+import tempfile
+from typing import Any
+
+ROOT = Path(__file__).resolve().parent.parent
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
+
+from syntopik.brainstem import plan_next_move  # noqa: E402
+from syntopik.evidence import (  # noqa: E402
+    GENESIS_HASH,
+    LEDGER_FILENAME,
+    TIER_LABELS,
+    compute_evidence_summary,
+    verify_ledger_chain,
+)
+from syntopik.explorable import compile_explorable_spec, parse_explorable_blocks  # noqa: E402
+from syntopik.fsrs_core import (  # noqa: E402
+    DEFAULT_FSRS_PARAMETERS,
+    apply_fire_credit,
+    assess_confidence_signal,
+    bkt_update,
+    review_card_dict,
+)
+from syntopik.learner_model import (  # noqa: E402
+    apply_tier1_calibration,
+    compile_teaching_policy,
+    load_profile,
+    record_telemetry_event,
+    save_profile,
+)
+from syntopik.packs import import_pack, verify_pack  # noqa: E402
+from syntopik.pocket import export_pocket_html  # noqa: E402
+from syntopik.root_cause import find_blast_radius, localize_fault  # noqa: E402
+from syntopik.storage import load_json, load_jsonl, save_json_atomic, save_jsonl_atomic  # noqa: E402
+
+# ---------------------------------------------------------------------------
+# Constants & strict verification ceilings
+# ---------------------------------------------------------------------------
+
+SEED = 42
+DEMO_NOW = datetime(2026, 11, 26, 12, 0, 0, tzinfo=timezone.utc)
+DEMO_NOW_ISO = "2026-11-26T12:00:00Z"
+DEMO_TODAY = "2026-11-26"
+DEMO_WORKSPACE_NAME = "syntopik-live-demo"
+MAX_INDEX_BYTES = 650 * 1024  # 650 KB hard ceiling
+
+STARTER_PACK_SLUGS: tuple[str, ...] = (
+    "raft-consensus",
+    "shm-physics",
+    "transformers-attention",
+)
+
+FORBIDDEN_SEALED_KEYS: frozenset[str] = frozenset(
+    {
+        "sealedWinningMove",
+        "sealedBlunder",
+        "sealedMutants",
+        "sealedReference",
+        "expectedAnswer",
+        "canonicalAnswer",
+        "revealedBody",
+        "verifySpec",
+        "winningMove",
+    }
+)
+
+FORBIDDEN_PERSONAL_STRINGS: tuple[str, ...] = (
+    "SHM-FINAL",
+    "426-SIMPLE-HARMONIC-MOTI",
+    "eduniti",
+    "Eduniti",
+)
+
+ABS_USER_PATH_RE = re.compile(
+    r"(?:/Users/[A-Za-z0-9._-]+|/home/[A-Za-z0-9._-]+|[A-Za-z]:\\Users\\[A-Za-z0-9._-]+)"
+)
+
+FORBIDDEN_HTML_SECRET_TOKENS: tuple[str, ...] = (
+    "sealedWinningMove",
+    "sealedBlunder",
+    "sealedMutants",
+    "sealedReference",
+)
+
+EXTERNAL_RESOURCE_RE = re.compile(
+    r"""(?:<script\b[^>]*\bsrc\s*=\s*["']https?://"""
+    r"""|<link\b[^>]*\bhref\s*=\s*["']https?://"""
+    r"""|<img\b[^>]*\bsrc\s*=\s*["']https?://"""
+    r"""|@import\s+(?:url\s*\(\s*)?["']?https?://"""
+    r"""|fonts\.googleapis\.com|cdn\.jsdelivr\.net|unpkg\.com|cdnjs\.cloudflare\.com)""",
+    re.IGNORECASE,
+)
+
+DANGEROUS_JS_RE = re.compile(r"\b(?:eval\s*\(|new\s+Function\s*\()")
+
+
+def _fmt_iso(dt: datetime) -> str:
+    return dt.astimezone(timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z")
+
+
+def _safe_script_json(obj: Any) -> str:
+    raw = json.dumps(obj, ensure_ascii=False, separators=(",", ":"))
+    return (
+        raw.replace("<", "\\u003c")
+        .replace(">", "\\u003e")
+        .replace("&", "\\u0026")
+        .replace("\u2028", "\\u2028")
+        .replace("\u2029", "\\u2029")
+    )
+
+
+def _scan_forbidden_keys(obj: Any, prefix: str = "") -> list[str]:
+    hits: list[str] = []
+    if isinstance(obj, dict):
+        for k, v in obj.items():
+            if k in FORBIDDEN_SEALED_KEYS:
+                hits.append(f"{prefix}{k}")
+            hits.extend(_scan_forbidden_keys(v, f"{prefix}{k}."))
+    elif isinstance(obj, list):
+        for idx, item in enumerate(obj):
+            hits.extend(_scan_forbidden_keys(item, f"{prefix}[{idx}]."))
+    return hits
+
+
+def _canonical_sha256(obj: dict[str, Any]) -> str:
+    raw = json.dumps(obj, sort_keys=True, separators=(",", ":"), ensure_ascii=False).encode("utf-8")
+    return hashlib.sha256(raw).hexdigest()
+
+
+# ---------------------------------------------------------------------------
+# Phase A: Import the 3 bundled zero-PII starter packs into temp workspace
+# ---------------------------------------------------------------------------
+
+
+def _unpack_starter_packs(ws: Path, kg: Path, ch: Path) -> None:
+    packs_src = ROOT / "packs"
+    packs_dst = ws / "packs"
+    packs_dst.mkdir(parents=True, exist_ok=True)
+    kg.mkdir(parents=True, exist_ok=True)
+    ch.mkdir(parents=True, exist_ok=True)
+
+    for slug in STARTER_PACK_SLUGS:
+        src_zip = packs_src / f"{slug}.syntopik-pack.zip"
+        if not src_zip.is_file():
+            raise FileNotFoundError(f"Missing starter pack: {src_zip}")
+        rep = verify_pack(src_zip)
+        if not rep.get("ok"):
+            raise RuntimeError(f"Starter pack verification failed for {slug}: {rep.get('errors')}")
+
+        dst_zip = packs_dst / src_zip.name
+        shutil.copy2(src_zip, dst_zip)
+
+        imp = import_pack(
+            dst_zip,
+            workspace=ws,
+            kg_dir=kg,
+            chapters_dir=ch,
+            allow_code_arenas=True,
+            no_sync=True,
+        )
+        if not imp.get("ok"):
+            raise RuntimeError(f"import_pack failed for {slug}: {imp.get('errors')}")
+
+    # Deterministic mtime for chapter markdown & exam files so sync-graph.mjs ordering is byte-stable
+    ts = DEMO_NOW.timestamp()
+    for md_out in sorted(ch.glob("*.md")):
+        os.utime(md_out, (ts, ts))
+    exams_dir = ws / "exams"
+    if exams_dir.is_dir():
+        for ex_out in sorted(exams_dir.iterdir()):
+            if ex_out.is_file():
+                os.utime(ex_out, (ts, ts))
+
+
+# ---------------------------------------------------------------------------
+# Phase B: Deterministic 45-Day Multi-Subject Synthetic Learning History
+# ---------------------------------------------------------------------------
+
+
+def _seed_45_day_history(ws: Path, kg: Path, ch: Path) -> None:
+    rng = random.Random(SEED)
+    props = load_jsonl(kg / "propositions.jsonl")
+    chains = load_jsonl(kg / "chains.jsonl")
+    prop_by_id = {str(p["id"]): p for p in props}
+
+    # Explicit pedagogical trajectories per proposition over the 45-day window:
+    # Each entry: (target_status, review_script: list[(days_ago, rating, confidence, dur_ms)])
+    schedules: dict[str, tuple[str, list[tuple[int, str, float, int]]]] = {
+        # --- Pack 1: Raft Consensus (Systems) ---
+        "sys-raft-quorum": ("solid", [(44, "good", 0.72, 14200), (38, "good", 0.84, 11400), (26, "easy", 0.92, 8600), (9, "good", 0.90, 9100)]),
+        "sys-raft-term-monotonic": ("solid", [(43, "good", 0.70, 15100), (35, "good", 0.82, 11800), (20, "good", 0.88, 9900), (6, "easy", 0.92, 8400)]),
+        "sys-raft-election-safety": ("solid", [(41, "hard", 0.60, 19800), (34, "good", 0.76, 13400), (21, "good", 0.86, 10800), (5, "good", 0.90, 9500)]),
+        "sys-raft-log-append": ("solid", [(39, "good", 0.74, 12900), (28, "good", 0.83, 10600), (12, "good", 0.86, 9800)]),
+        "sys-raft-log-matching": ("solid", [(36, "hard", 0.62, 18200), (24, "good", 0.80, 12400), (10, "good", 0.85, 10900)]),
+        # Causal root-cause suspect ancestor (upstream of leader-completeness, figure8-commit, state-machine-safety)
+        "sys-raft-uptodate-log": ("shaky", [(32, "hard", 0.75, 22400), (22, "again", 0.78, 25600), (14, "hard", 0.55, 20800), (4, "again", 0.68, 23100)]),
+        "sys-raft-leader-completeness": ("shaky", [(25, "again", 0.82, 24800), (15, "hard", 0.58, 21900), (3, "hard", 0.60, 19400)]),
+        "sys-raft-figure8-commit": ("misconception", [(29, "again", 0.85, 26400), (19, "again", 0.80, 27200), (11, "again", 0.72, 24100), (2, "again", 0.82, 25900)]),
+        "sys-raft-split-brain": ("solid", [(31, "good", 0.76, 13600), (17, "good", 0.84, 11200), (4, "good", 0.88, 9700)]),
+        "sys-raft-state-machine-safety": ("planned", []),
+        # --- Pack 2: Simple Harmonic Motion (Physics) ---
+        "phys-shm-linearization": ("solid", [(45, "good", 0.78, 12200), (37, "easy", 0.90, 9100), (23, "good", 0.92, 8500), (7, "easy", 0.95, 7900)]),
+        "phys-shm-ode-solution": ("solid", [(42, "good", 0.75, 13800), (33, "good", 0.85, 10900), (18, "good", 0.90, 9400), (5, "good", 0.92, 8800)]),
+        "phys-shm-phasor-circle": ("solid", [(40, "hard", 0.64, 17400), (30, "good", 0.80, 12300), (15, "good", 0.87, 10200)]),
+        "phys-shm-energy-curvature": ("solid", [(37, "good", 0.72, 14500), (27, "good", 0.84, 11100), (11, "easy", 0.90, 8900)]),
+        "phys-shm-constant-force": ("solid", [(34, "good", 0.76, 13100), (22, "good", 0.86, 10400), (8, "good", 0.89, 9200)]),
+        "phys-shm-spring-combos": ("shaky", [(28, "again", 0.84, 21400), (18, "hard", 0.62, 18900), (6, "again", 0.76, 22300)]),
+        "phys-shm-reduced-mass": ("solid", [(26, "good", 0.70, 15800), (13, "good", 0.82, 12600)]),
+        "phys-shm-compound-pendulum": ("solid", [(33, "good", 0.76, 14900), (20, "good", 0.86, 11500), (6, "easy", 0.93, 8700)]),
+        "phys-shm-damped-regimes": ("shaky", [(19, "hard", 0.56, 19800), (7, "hard", 0.60, 17600)]),
+        "phys-shm-driven-resonance": ("planned", []),
+        # --- Pack 3: Transformers & Attention (Machine Learning) ---
+        "ml-attn-dot-variance": ("solid", [(43, "good", 0.76, 13400), (35, "good", 0.88, 10200), (21, "easy", 0.93, 8400), (6, "good", 0.94, 8100)]),
+        "ml-attn-softmax-saturation": ("solid", [(40, "good", 0.74, 14600), (29, "good", 0.85, 11300), (14, "good", 0.90, 9600)]),
+        "ml-attn-scaled-dot": ("solid", [(38, "good", 0.78, 13200), (25, "good", 0.86, 10700), (9, "good", 0.90, 9200)]),
+        "ml-attn-causal-mask": ("shaky", [(30, "again", 0.78, 22600), (19, "hard", 0.60, 19200), (5, "hard", 0.64, 18400)]),
+        "ml-attn-multihead-subspace": ("solid", [(34, "good", 0.74, 14100), (21, "good", 0.82, 11800), (8, "good", 0.86, 10100)]),
+        "ml-attn-permutation-equiv": ("solid", [(31, "good", 0.30, 16200), (16, "good", 0.80, 12100)]),  # includes 1 lucky guess on day 31!
+        "ml-attn-rope": ("solid", [(27, "good", 0.72, 15200), (14, "good", 0.82, 11900)]),  # due today for FIRe ancestor refresh demo!
+        "ml-attn-quad-complexity": ("solid", [(24, "good", 0.76, 13900), (10, "good", 0.85, 11200)]),
+        "ml-attn-kv-cache": ("shaky", [(16, "again", 0.70, 21500), (4, "hard", 0.58, 19100)]),
+        "ml-attn-gqa-mqa": ("planned", []),
+    }
+
+    # Build chronological review timeline across all 30 propositions
+    timeline: list[tuple[int, str, str, float, int]] = []
+    for pid, (_target_st, events) in schedules.items():
+        for days_ago, rating, conf, dur_ms in events:
+            timeline.append((days_ago, pid, rating, conf, dur_ms))
+    # Sort oldest first (largest days_ago first), then stable by pid
+    timeline.sort(key=lambda row: (-row[0], row[1]))
+
+    revlog: list[dict[str, Any]] = []
+    card_id_seq = 1760000000000
+
+    for idx, (days_ago, pid, rating, conf, dur_ms) in enumerate(timeline):
+        node = prop_by_id.get(pid)
+        if node is None:
+            continue
+        hour = 9 + ((idx * 3 + rng.randint(0, 2)) % 11)
+        minute = (idx * 17) % 60
+        ev_dt = (DEMO_NOW - timedelta(days=days_ago)).replace(hour=hour, minute=minute, second=0, microsecond=0)
+        ev_iso = _fmt_iso(ev_dt)
+
+        prev_card = node.get("fsrs") if isinstance(node.get("fsrs"), dict) else None
+        if prev_card is None:
+            card_id_seq += 1000
+            prev_card = {"card_id": card_id_seq}
+
+        new_card, meta = review_card_dict(
+            prev_card,
+            rating,
+            now=ev_dt,
+            parameters=DEFAULT_FSRS_PARAMETERS,
+            enable_fuzzing=False,
+        )
+        correct = rating in ("good", "easy")
+        prior_bkt = float(node.get("bktMastery") or 0.35)
+        p_transit = {"again": 0.05, "hard": 0.10, "good": 0.25, "easy": 0.35}[rating]
+        new_bkt = bkt_update(prior_bkt, correct=correct, p_transit=p_transit)
+        conf_sig = assess_confidence_signal(correct, conf)
+
+        lapses = int(node.get("lapses") or 0) + (1 if rating == "again" else 0)
+        reps = int(node.get("reps") or 0) + 1
+        new_card["reps"] = reps
+        new_card["lapses"] = lapses
+
+        node["fsrs"] = new_card
+        node["bktMastery"] = new_bkt
+        node["confidence"] = new_bkt
+        node["lapses"] = lapses
+        node["reps"] = reps
+        node["lastReviewed"] = ev_dt.date().isoformat()
+        node["lastTested"] = ev_dt.date().isoformat()
+        node["nextReview"] = str(new_card.get("due") or "")[:10]
+        node["stabilityDays"] = round(float(new_card.get("stability") or 1.0), 2)
+
+        cues = node.get("cues") or []
+        cue_id = "c1"
+        if cues and isinstance(cues[0], dict):
+            cue_id = str(cues[0].get("id") or "c1")
+            cues[0]["lastRating"] = rating
+            cues[0]["reviews"] = int(cues[0].get("reviews") or 0) + 1
+
+        # Apply FIRe implicit ancestor credit on Good/Easy
+        fire_credits: list[dict[str, Any]] = []
+        if correct:
+            fire_credits = apply_fire_credit(
+                pid,
+                rating,
+                props,
+                chains,
+                now=ev_dt,
+                parameters=DEFAULT_FSRS_PARAMETERS,
+            )
+
+        revlog.append(
+            {
+                "ts": ev_iso,
+                "date": ev_dt.date().isoformat(),
+                "propId": pid,
+                "cueId": cue_id,
+                "rating": rating,
+                "correct": correct,
+                "durationMs": dur_ms,
+                "learnerConfidence": conf_sig["learnerConfidence"],
+                "hypercorrection": conf_sig["hypercorrection"],
+                "luckyGuess": conf_sig["luckyGuess"],
+                "brierError": conf_sig["brierError"],
+                "elapsedDays": round(float(meta.get("elapsedDays") or 0.0), 2),
+                "intervalDays": int(meta.get("intervalDays") or 1),
+                "stability": round(float(new_card.get("stability") or 1.0), 3),
+                "difficulty": round(float(new_card.get("difficulty") or 5.0), 3),
+                "bktAfter": new_bkt,
+                "fireCreditsCount": len(fire_credits),
+                "hintsUsed": 2 if rating == "again" else (1 if rating == "hard" else 0),
+            }
+        )
+
+    # Fine-tune final statuses & due dates so the demo dashboard is crisp and actionable on day 0
+    due_today_ids = {
+        "sys-raft-figure8-commit",
+        "sys-raft-leader-completeness",
+        "sys-raft-uptodate-log",
+        "phys-shm-spring-combos",
+        "phys-shm-damped-regimes",
+        "ml-attn-causal-mask",
+        "ml-attn-kv-cache",
+        "ml-attn-rope",  # solid node with 2 parents -> ideal for 1-click FIRe ancestor refresh toast!
+    }
+    for pid, (target_st, _events) in schedules.items():
+        node = prop_by_id.get(pid)
+        if node is None:
+            continue
+        node["status"] = target_st
+        if target_st == "planned":
+            node.pop("nextReview", None)
+            continue
+        if pid in due_today_ids:
+            due_d = DEMO_TODAY if pid != "sys-raft-figure8-commit" else "2026-11-24"
+            node["nextReview"] = due_d
+            if isinstance(node.get("fsrs"), dict):
+                node["fsrs"]["due"] = f"{due_d}T12:00:00+00:00"
+        if pid == "sys-raft-figure8-commit":
+            node["lapses"] = max(4, int(node.get("lapses") or 0))
+            if isinstance(node.get("fsrs"), dict):
+                node["fsrs"]["lapses"] = node["lapses"]
+                node["fsrs"]["difficulty"] = 8.75
+
+    save_jsonl_atomic(kg / "propositions.jsonl", props)
+    save_jsonl_atomic(kg / "revlog.jsonl", revlog)
+
+    # --- Seed 9 realistic, 100% original multi-subject mistakes (all 3 NEA tiers) ---
+    mistakes: list[dict[str, Any]] = [
+        {
+            "id": "m-demo-01",
+            "date": "2026-11-24",
+            "ts": "2026-11-24T14:20:00Z",
+            "subject": "Systems",
+            "chapter": "Raft Consensus",
+            "propId": "sys-raft-figure8-commit",
+            "category": "misconception",
+            "triggerCue": "Old-term log entry replicated onto a majority of servers",
+            "wrongMove": "Commit the older-term entry directly by counting replicas",
+            "correctMove": "Commit only currentTerm entries by counting replicas; older entries commit indirectly via Log Matching",
+            "sourceRef": "Raft Consensus §5.4.2 (Figure 8)",
+        },
+        {
+            "id": "m-demo-02",
+            "date": "2026-11-22",
+            "ts": "2026-11-22T11:10:00Z",
+            "subject": "Systems",
+            "chapter": "Raft Consensus",
+            "propId": "sys-raft-uptodate-log",
+            "category": "condition_missed",
+            "triggerCue": "Comparing candidate vs voter log freshness in RequestVote",
+            "wrongMove": "Compare log lengths before comparing last log terms",
+            "correctMove": "Compare (lastLogTerm, lastLogIndex) lexicographically — higher last term always wins",
+            "sourceRef": "Raft Consensus §5.4.1",
+        },
+        {
+            "id": "m-demo-03",
+            "date": "2026-11-20",
+            "ts": "2026-11-20T16:45:00Z",
+            "subject": "Systems",
+            "chapter": "Raft Consensus",
+            "propId": "sys-raft-leader-completeness",
+            "category": "edge_case_missed",
+            "triggerCue": "Network partition heals with stale term leader rejoining",
+            "wrongMove": "Assume minority leader's uncommitted appends survive partition recovery",
+            "correctMove": "Stale leader steps down on higher term and overwrites uncommitted suffix via AppendEntries",
+            "sourceRef": "Raft Consensus §5.3",
+        },
+        {
+            "id": "m-demo-04",
+            "date": "2026-11-20",
+            "ts": "2026-11-20T10:15:00Z",
+            "subject": "Physics",
+            "chapter": "Simple Harmonic Motion",
+            "propId": "phys-shm-spring-combos",
+            "category": "misconception",
+            "triggerCue": "Two springs k1 and k2 connected end-to-end in series",
+            "wrongMove": "Add stiffnesses directly: k_eq = k1 + k2",
+            "correctMove": "Invert extensions under shared tension F: 1/k_eq = 1/k1 + 1/k2 => k_eq = k1*k2/(k1+k2)",
+            "sourceRef": "SHM Textbook §2.4",
+        },
+        {
+            "id": "m-demo-05",
+            "date": "2026-11-17",
+            "ts": "2026-11-17T15:30:00Z",
+            "subject": "Physics",
+            "chapter": "Simple Harmonic Motion",
+            "propId": "phys-shm-damped-regimes",
+            "category": "sign_error",
+            "triggerCue": "Damped oscillator discriminant gamma^2 - omega_0^2",
+            "wrongMove": "Drop the factor of 2 in c/(2m) when computing damping ratio zeta",
+            "correctMove": "Write x'' + 2*zeta*omega_0*x' + omega_0^2*x = 0 so critical damping occurs at zeta = 1 (c = 2*sqrt(k*m))",
+            "sourceRef": "SHM Textbook §3.2",
+        },
+        {
+            "id": "m-demo-06",
+            "date": "2026-11-13",
+            "ts": "2026-11-13T18:05:00Z",
+            "subject": "Physics",
+            "chapter": "Simple Harmonic Motion",
+            "propId": "phys-shm-energy-curvature",
+            "category": "algebra_slip",
+            "triggerCue": "Frequency of kinetic energy K(t) = (1/2) m v^2 in SHM",
+            "wrongMove": "State K(t) oscillates at the same angular frequency omega as x(t)",
+            "correctMove": "Use sin^2(omega*t) = (1 - cos(2*omega*t))/2: K(t) oscillates at 2*omega",
+            "sourceRef": "SHM Textbook §1.5",
+        },
+        {
+            "id": "m-demo-07",
+            "date": "2026-11-21",
+            "ts": "2026-11-21T13:40:00Z",
+            "subject": "Machine Learning",
+            "chapter": "Transformers & Attention",
+            "propId": "ml-attn-causal-mask",
+            "category": "edge_case_missed",
+            "triggerCue": "Masking future tokens j > i in autoregressive self-attention",
+            "wrongMove": "Set masked logits to 0.0 before softmax or zero weights after softmax without renormalizing",
+            "correctMove": "Fill j > i logits with -inf BEFORE softmax so exp(-inf) = 0 and remaining rows sum strictly to 1",
+            "sourceRef": "Attention Architecture §2.1",
+        },
+        {
+            "id": "m-demo-08",
+            "date": "2026-11-18",
+            "ts": "2026-11-18T17:12:00Z",
+            "subject": "Machine Learning",
+            "chapter": "Transformers & Attention",
+            "propId": "ml-attn-kv-cache",
+            "category": "off_by_one",
+            "triggerCue": "KV-cache memory footprint during autoregressive decoding",
+            "wrongMove": "Forget the factor of 2 (Keys + Values) or number of layers L when sizing VRAM",
+            "correctMove": "Size KV-cache as 2 * L * n_kv_heads * d_head * seq_len * batch * bytes_per_elem",
+            "sourceRef": "Attention Architecture §3.4",
+        },
+        {
+            "id": "m-demo-09",
+            "date": "2026-11-14",
+            "ts": "2026-11-14T19:00:00Z",
+            "subject": "Machine Learning",
+            "chapter": "Transformers & Attention",
+            "propId": "ml-attn-scaled-dot",
+            "category": "time_pressure",
+            "triggerCue": "Timed drill on attention logit variance scaling denominator",
+            "wrongMove": "Rushed and wrote 1/d_k instead of 1/sqrt(d_k)",
+            "correctMove": "Var((q.k)/c) = d_k / c^2 = 1 requires c = sqrt(d_k)",
+            "sourceRef": "Attention Architecture §1.3",
+        },
+    ]
+    save_jsonl_atomic(kg / "mistakes.jsonl", mistakes)
+
+    # --- Seed deterministic SHA-256 hash-chained Evidence Ledger (T2 / T3 / T4) ---
+    ledger_specs: list[tuple[str, str, int, str, str]] = [
+        ("2026-11-05T11:00:00Z", "phys-shm-linearization", 4, "derivation_axiom_cut", "Localized small-angle break in compound pendulum DAG"),
+        ("2026-11-08T15:30:00Z", "ml-attn-dot-variance", 4, "derivation_blackout", "Clean-room variance scaling proof reconstruction"),
+        ("2026-11-11T10:15:00Z", "sys-raft-election-safety", 3, "verifier_pass", "Verified quorum intersection + single-vote-per-term invariant"),
+        ("2026-11-12T16:40:00Z", "phys-shm-energy-curvature", 3, "fork_replay", "Woodpecker compression 2.0x on fork-shm-energy-freq"),
+        ("2026-11-14T14:20:00Z", "phys-shm-ode-solution", 3, "verifier_pass", "Verified symbolic ODE general solution & phase equivalence"),
+        ("2026-11-16T11:45:00Z", "ml-attn-scaled-dot", 3, "fork_replay", "Passed fork-attn-scale-denom in 9.4s"),
+        ("2026-11-18T17:00:00Z", "sys-raft-term-monotonic", 3, "verifier_pass", "Verified crash-recovery persistence boundary for votedFor"),
+        ("2026-11-19T12:30:00Z", "ml-attn-softmax-saturation", 3, "verifier_pass", "Verified softmax Jacobian collapse under large logit variance"),
+        ("2026-11-21T16:10:00Z", "phys-shm-compound-pendulum", 4, "derivation_axiom_cut", "Localized small-angle cut on deriv-shm-compound-pendulum"),
+        ("2026-11-23T14:05:00Z", "sys-raft-quorum", 4, "viva_chamber", "Passed 5-turn Adversarial Viva Voce defense (composite=0.88)"),
+    ]
+    ledger_rows: list[dict[str, Any]] = []
+    prev_hash = GENESIS_HASH
+    for seq, (ts_str, pid, tier, src, detail) in enumerate(ledger_specs, start=1):
+        body = {
+            "seq": seq,
+            "ts": ts_str,
+            "propId": pid,
+            "tier": tier,
+            "tierLabel": TIER_LABELS[tier],
+            "source": src,
+            "detail": detail,
+            "verified": True,
+            "prevHash": prev_hash,
+        }
+        entry_hash = _canonical_sha256(body)
+        ledger_rows.append({**body, "entryHash": entry_hash})
+        prev_hash = entry_hash
+    save_jsonl_atomic(kg / LEDGER_FILENAME, ledger_rows)
+    chain_chk = verify_ledger_chain(kg)
+    if not chain_chk.get("ok"):
+        raise RuntimeError(f"Seeded evidence ledger hash-chain verification failed: {chain_chk}")
+
+    # --- Enrich Forks (6 total: 4 due today, 2 with Woodpecker history) ---
+    forks = load_jsonl(kg / "forks.jsonl")
+    for fk in forks:
+        fid = str(fk.get("id") or "")
+        fk["createdAt"] = "2026-10-20T10:00:00Z"
+        if fid == "fork-shm-energy-freq":
+            fk["winCount"] = 2
+            fk["blunderRepeatCount"] = 1
+            fk["woodpeckerPassed"] = True
+            fk["status"] = "cleared"
+            fk["latencyHistoryMs"] = [18400, 9200]
+            fk["nextReview"] = "2026-12-03"
+            fk["lastReviewedAt"] = "2026-11-21T10:30:00Z"
+        elif fid == "fork-attn-scale-denom":
+            fk["winCount"] = 1
+            fk["blunderRepeatCount"] = 1
+            fk["woodpeckerPassed"] = True
+            fk["status"] = "active"
+            fk["latencyHistoryMs"] = [16200, 9400]
+            fk["nextReview"] = "2026-11-29"
+            fk["lastReviewedAt"] = "2026-11-16T11:45:00Z"
+        elif fid == "fork-raft-uptodate":
+            fk["winCount"] = 0
+            fk["blunderRepeatCount"] = 2
+            fk["status"] = "active"
+            fk["latencyHistoryMs"] = [21500]
+            fk["nextReview"] = DEMO_TODAY
+        elif fid == "fork-shm-series-springs":
+            fk["winCount"] = 0
+            fk["blunderRepeatCount"] = 1
+            fk["status"] = "active"
+            fk["latencyHistoryMs"] = [19400]
+            fk["nextReview"] = DEMO_TODAY
+        else:
+            fk["winCount"] = 0
+            fk["blunderRepeatCount"] = 0
+            fk["status"] = "active"
+            fk["latencyHistoryMs"] = []
+            fk["nextReview"] = DEMO_TODAY
+    save_jsonl_atomic(kg / "forks.jsonl", forks)
+
+    # --- Enrich Arenas (3 total: 1 partially killed 1/3, 2 fresh 0/3) ---
+    arenas = load_jsonl(kg / "arenas.jsonl")
+    for ar in arenas:
+        if ar.get("id") == "arena-shm-series-stiffness":
+            ar["killedMutants"] = ["m1"]
+            ar["attemptsCount"] = 2
+            ar["status"] = "open"
+            ar["updatedAt"] = "2026-11-20T10:40:00Z"
+        else:
+            ar["killedMutants"] = []
+            ar["attemptsCount"] = 0
+            ar["status"] = "open"
+            ar["updatedAt"] = "2026-11-24T12:00:00Z"
+    save_jsonl_atomic(kg / "arenas.jsonl", arenas)
+
+    # --- Enrich Derivations (3 total: mark SHM compound pendulum as completed once for T4) ---
+    derivs = load_jsonl(kg / "derivations.jsonl")
+    for dv in derivs:
+        dv["updatedAt"] = "2026-11-21T16:10:00Z"
+        if dv.get("id") == "deriv-shm-compound-pendulum":
+            dv["completions"] = 1
+            dv["axiomCutPassed"] = True
+            dv["passed"] = True
+    save_jsonl_atomic(kg / "derivations.jsonl", derivs)
+
+    # --- Seed 4 graded ShadowBox Blitz decisions ---
+    decisions = [
+        {
+            "id": "dec-demo-01",
+            "ts": "2026-11-18T11:20:00Z",
+            "date": "2026-11-18",
+            "propId": "sys-raft-election-safety",
+            "subject": "Systems",
+            "killCueHit": True,
+            "firstMoveHit": True,
+            "decoyHit": True,
+            "decisionMs": 14800,
+            "graded": True,
+            "status": "graded",
+            "deepPrinciple": "Quorum Intersection + Single-Vote-Per-Term",
+        },
+        {
+            "id": "dec-demo-02",
+            "ts": "2026-11-19T14:05:00Z",
+            "date": "2026-11-19",
+            "propId": "phys-shm-constant-force",
+            "subject": "Physics",
+            "killCueHit": True,
+            "firstMoveHit": True,
+            "decoyHit": True,
+            "decisionMs": 12400,
+            "graded": True,
+            "status": "graded",
+            "deepPrinciple": "Constant Force Shifts Equilibrium, Never Period",
+        },
+        {
+            "id": "dec-demo-03",
+            "ts": "2026-11-22T16:30:00Z",
+            "date": "2026-11-22",
+            "propId": "ml-attn-scaled-dot",
+            "subject": "Machine Learning",
+            "killCueHit": True,
+            "firstMoveHit": True,
+            "decoyHit": False,
+            "decisionMs": 17900,
+            "graded": True,
+            "status": "graded",
+            "deepPrinciple": "Variance Normalization by sqrt(d_k)",
+        },
+        {
+            "id": "dec-demo-04",
+            "ts": "2026-11-24T15:10:00Z",
+            "date": "2026-11-24",
+            "propId": "sys-raft-uptodate-log",
+            "subject": "Systems",
+            "killCueHit": False,
+            "firstMoveHit": False,
+            "decoyHit": True,
+            "decisionMs": 23600,
+            "graded": True,
+            "status": "graded",
+            "deepPrinciple": "Lexicographic (lastTerm, lastIndex) Freshness",
+        },
+    ]
+    save_jsonl_atomic(kg / "decisions.jsonl", decisions)
+
+    # --- Seed 1 completed passed Viva Voce Defense session (T4 evidence) ---
+    viva_sessions = [
+        {
+            "id": "viva-demo-raft-quorum",
+            "propId": "sys-raft-quorum",
+            "propTitle": "Quorum Intersection Principle",
+            "subject": "Systems",
+            "chapter": "Raft Consensus",
+            "status": "completed",
+            "outcome": "passed",
+            "passed": True,
+            "currentTurn": 5,
+            "totalTurns": 5,
+            "prompts": [
+                {"turn": 1, "stage": "commitment_claim", "prompt": "State the Quorum Intersection Principle and why it prevents split elections."},
+                {"turn": 2, "stage": "boundary_perturbation", "prompt": "What breaks if cluster membership changes dynamically from N=3 to N=5 without joint consensus?"},
+                {"turn": 3, "stage": "assumption_attack", "prompt": "If a voter crashes and forgets votedFor on restart, does quorum intersection alone save Election Safety?"},
+                {"turn": 4, "stage": "transfer_perturbation", "prompt": "Why does an even cluster of N=4 tolerate only f=1 failure—the same as N=3?"},
+                {"turn": 5, "stage": "sharpened_synthesis", "prompt": "Synthesize the exact boundary conditions under which quorum intersection guarantees Election Safety."},
+            ],
+            "turns": [
+                {"turn": 1, "response": "Any two majorities of floor(N/2)+1 overlap in at least one server by Pigeonhole Principle, preventing two leaders in one term when votes are single-use.", "confidence": 0.85},
+                {"turn": 2, "response": "During uncoordinated reconfiguration, two disjoint quorums can form across old and new configurations; joint consensus C_old,new forces intersection across both.", "confidence": 0.80},
+                {"turn": 3, "response": "No — quorum intersection only guarantees a shared witness; without durable votedFor + currentTerm, that witness can vote twice in the same term.", "confidence": 0.90},
+                {"turn": 4, "response": "For N=4, majority requires 3 servers, leaving only 1 spare failure before availability stalls—identical fault tolerance to N=3 with extra replication overhead.", "confidence": 0.85},
+                {"turn": 5, "response": "Election Safety requires static or joint-consensus membership plus durable single-vote-per-term storage so the overlapping quorum witness cannot endorse two candidates.", "confidence": 0.88},
+            ],
+            "commitmentLedger": {
+                "rawClaim": "Any two majorities of floor(N/2)+1 overlap in at least one server by Pigeonhole Principle, preventing two leaders in one term when votes are single-use.",
+                "assertedUniversal": False,
+            },
+            "scores": {
+                "clarity": 0.90,
+                "boundary_awareness": 0.88,
+                "transfer": 0.86,
+                "calibration": 0.88,
+                "composite": 0.88,
+            },
+            "evidenceRecorded": True,
+            "demotedToShaky": False,
+            "createdAt": "2026-11-23T13:50:00Z",
+            "updatedAt": "2026-11-23T14:05:00Z",
+        }
+    ]
+    save_jsonl_atomic(kg / "viva-sessions.jsonl", viva_sessions)
+
+    # --- Seed 2 graded Exam Attempts ---
+    exam_attempts = [
+        {
+            "id": "exam-att-raft-01",
+            "date": "2026-11-23",
+            "examSlug": "raft-consensus-checkpoint",
+            "title": "Raft Consensus Safety Checkpoint",
+            "subject": "Systems",
+            "chapter": "Raft Consensus",
+            "examType": "chapter_mock",
+            "score": 13,
+            "maxScore": 16,
+            "percentage": 81.3,
+            "accuracyPct": 83.3,
+            "correctCount": 3,
+            "partialCount": 1,
+            "wrongCount": 1,
+            "unattemptedCount": 0,
+            "negativeMarksLost": 1.0,
+            "timeSpentSec": 465,
+        },
+        {
+            "id": "exam-att-shm-01",
+            "date": "2026-11-16",
+            "examSlug": "shm-physics-checkpoint",
+            "title": "SHM Mechanics & Pendulum Mock",
+            "subject": "Physics",
+            "chapter": "Simple Harmonic Motion",
+            "examType": "chapter_mock",
+            "score": 12,
+            "maxScore": 16,
+            "percentage": 75.0,
+            "accuracyPct": 75.0,
+            "correctCount": 3,
+            "partialCount": 0,
+            "wrongCount": 1,
+            "unattemptedCount": 0,
+            "negativeMarksLost": 1.0,
+            "timeSpentSec": 510,
+        },
+    ]
+    save_jsonl_atomic(kg / "exam-attempts.jsonl", exam_attempts)
+
+    # --- Seed 1 Active Live Whiteboard Session (3 frames incl. 1 blurred prediction_gate + 1 explore_widget) ---
+    wb_explore_spec = compile_explorable_spec(
+        {
+            "id": "wb-raft-quorum-lab",
+            "title": "Quorum Size & Fault Tolerance Tradeoff",
+            "prompt": "Slide cluster size N to see why odd cluster sizes maximize crash tolerance per server.",
+            "params": [
+                {"name": "N", "label": "Cluster Size N", "min": 3, "max": 11, "step": 1, "default": 5, "unit": "nodes"},
+            ],
+            "outputs": [
+                {"label": "Majority Quorum Q", "expr": "floor(N / 2) + 1", "unit": "nodes"},
+                {"label": "Max Failures f", "expr": "N - (floor(N / 2) + 1)", "unit": "nodes"},
+                {"label": "Quorum Overlap |Q1 n Q2|", "expr": "2 * (floor(N / 2) + 1) - N", "unit": "nodes"},
+            ],
+            "curve": {
+                "xVar": "N",
+                "xMin": 3,
+                "xMax": 11,
+                "samples": 9,
+                "exactExpr": "N - (floor(N / 2) + 1)",
+                "approxExpr": "(N - 1) / 2",
+                "yLabel": "Faults Tolerated f",
+            },
+        }
+    )
+    whiteboard_session = {
+        "schemaVersion": 1,
+        "sessionId": "wb-demo-raft-fig8",
+        "revision": 3,
+        "title": "Raft Figure 8 Safety & Indirect Commitment",
+        "activeFrameId": "wb-f2",
+        "frames": [
+            {
+                "id": "wb-f1",
+                "seq": 1,
+                "kind": "derivation_step",
+                "title": "1. Quorum Overlap Forces a Term Witness",
+                "body": "Any two majority quorums in an $N$-server cluster share at least one voter: $2(\\lfloor N/2 \\rfloor + 1) > N$. Paired with durable `votedFor`, at most one leader can be elected in any term.",
+                "latex": "|Q_1 \\cap Q_2| \\ge 1 \\implies \\text{leaders}(t) \\le 1",
+                "propId": "sys-raft-quorum",
+                "stepIndex": 0,
+                "locked": False,
+                "gate": None,
+                "payload": {},
+                "createdAt": "2026-11-26T11:42:00Z",
+                "updatedAt": "2026-11-26T11:42:00Z",
+            },
+            {
+                "id": "wb-f2",
+                "seq": 2,
+                "kind": "prediction_gate",
+                "title": "2. Prediction Gate — Raft Figure 8 Trap",
+                "body": "",
+                "latex": None,
+                "propId": "sys-raft-figure8-commit",
+                "stepIndex": 1,
+                "locked": True,
+                "gate": {
+                    "prompt": "A Term-4 leader replicates an older Term-2 entry onto 3 of 5 servers. Can it safely commit that Term-2 entry purely by counting replicas? Predict YES or NO and state the mechanism before unlocking.",
+                    "revealedBody": "**No — committing prior-term entries purely by replica count violates Leader Completeness (Raft Figure 8).** A server holding a Term-3 entry at the same index can still win Term 5 over the majority that only holds Term 2, then overwrite the 'committed' entry. Raft only commits entries from `currentTerm` by counting replicas; older entries commit indirectly via Log Matching.",
+                    "expectedAnswer": "No — a higher intermediate term entry can still win election and overwrite the old-term majority.",
+                    "prediction": None,
+                    "confidence": None,
+                    "unlockedAt": None,
+                },
+                "payload": {},
+                "createdAt": "2026-11-26T11:44:00Z",
+                "updatedAt": "2026-11-26T11:44:00Z",
+            },
+            {
+                "id": "wb-f3",
+                "seq": 3,
+                "kind": "explore_widget",
+                "title": "3. Live Lab — Why Odd Cluster Sizes Win",
+                "body": "Test why $N=4$ tolerates the same $f=1$ failure as $N=3$ while requiring a larger quorum.",
+                "latex": None,
+                "propId": "sys-raft-quorum",
+                "stepIndex": 2,
+                "locked": False,
+                "gate": None,
+                "payload": {"spec": wb_explore_spec},
+                "createdAt": "2026-11-26T11:46:00Z",
+                "updatedAt": "2026-11-26T11:46:00Z",
+            },
+        ],
+        "pins": [],
+        "updatedAt": "2026-11-26T11:46:00Z",
+    }
+    save_json_atomic(kg / "whiteboard-session.json", whiteboard_session)
+
+    # --- Update Chapter Trackers (raft-consensus ACTIVE; shm & transformers inactive with progress) ---
+    raft_tr_path = ch / "raft-consensus-tracker.json"
+    raft_tr = load_json(raft_tr_path, default={}) or {}
+    raft_tr["active"] = True
+    raft_tr["title"] = "Raft Consensus — Distributed Safety Spine"
+    raft_tr["subject"] = "Systems"
+    raft_tr["createdAt"] = "2026-10-14T09:00:00Z"
+    raft_tr["updatedAt"] = DEMO_NOW_ISO
+    raft_tr["stepCounter"] = 14
+    raft_tr["milestones"] = {
+        "sourcesIndexed": True,
+        "probed": True,
+        "theoryComplete": False,
+        "questionsComplete": False,
+        "revisionSheetBuilt": True,
+        "cbtMockBuilt": True,
+        "cbtMockPassed": False,
+        "audioBriefBuilt": False,
+    }
+    for t in raft_tr.get("topics") or []:
+        tid = t.get("id")
+        if tid == "raft-t1":
+            t["status"] = "mastered"
+        elif tid == "raft-t2":
+            t["status"] = "in_progress"
+        else:
+            t["status"] = "pending"
+    raft_tr["questions"] = [
+        {"qid": "raft-q1", "label": "Q1 · Quorum intersection lower bound", "topicId": "raft-t1", "status": "mastered", "lastStep": 3},
+        {"qid": "raft-q2", "label": "Q2 · Persisted votedFor across crash-restart", "topicId": "raft-t1", "status": "mastered", "lastStep": 5},
+        {"qid": "raft-q3", "label": "Q3 · Election Safety two-axiom proof", "topicId": "raft-t1", "status": "solved", "lastStep": 7},
+        {"qid": "raft-q4", "label": "Q4 · AppendEntries prevLogTerm induction", "topicId": "raft-t2", "status": "solved", "lastStep": 9},
+        {"qid": "raft-q5", "label": "Q5 · RequestVote lexicographic up-to-date check", "topicId": "raft-t2", "status": "retest", "lastStep": 10},
+        {"qid": "raft-q6", "label": "Q6 · Figure 8 old-term overwrite trace", "topicId": "raft-t3", "status": "unseen", "lastStep": None},
+        {"qid": "raft-q7", "label": "Q7 · 2-vs-3 partition rollback behavior", "topicId": "raft-t3", "status": "solved", "lastStep": 12},
+        {"qid": "raft-q8", "label": "Q8 · End-to-end State Machine Safety chain", "topicId": "raft-t3", "status": "unseen", "lastStep": None},
+    ]
+    save_json_atomic(raft_tr_path, raft_tr)
+    os.utime(raft_tr_path, (DEMO_NOW.timestamp(), DEMO_NOW.timestamp()))
+
+    shm_tr_path = ch / "shm-physics-tracker.json"
+    shm_tr = load_json(shm_tr_path, default={}) or {}
+    shm_tr["active"] = False
+    shm_tr["createdAt"] = "2026-10-12T09:00:00Z"
+    shm_tr["updatedAt"] = "2026-11-21T16:15:00Z"
+    shm_tr["milestones"] = {
+        "sourcesIndexed": True,
+        "probed": True,
+        "theoryComplete": True,
+        "questionsComplete": False,
+        "revisionSheetBuilt": True,
+        "cbtMockBuilt": True,
+        "cbtMockPassed": True,
+        "audioBriefBuilt": False,
+    }
+    for t in shm_tr.get("topics") or []:
+        tid = t.get("id")
+        t["status"] = "mastered" if tid in ("shm-t1", "shm-t2") else "in_progress"
+    shm_tr["questions"] = [
+        {"qid": "shm-q1", "label": "Q1 · Small-angle pendulum linearization", "topicId": "shm-t1", "status": "mastered"},
+        {"qid": "shm-q2", "label": "Q2 · Phasor time-interval geometry", "topicId": "shm-t1", "status": "mastered"},
+        {"qid": "shm-q3", "label": "Q3 · Constant force equilibrium shift", "topicId": "shm-t2", "status": "solved"},
+        {"qid": "shm-q4", "label": "Q4 · Series vs parallel stiffness derivation", "topicId": "shm-t2", "status": "retest"},
+        {"qid": "shm-q5", "label": "Q5 · Two-body reduced mass oscillation", "topicId": "shm-t2", "status": "solved"},
+        {"qid": "shm-q6", "label": "Q6 · Critical damping vs underdamped decay", "topicId": "shm-t3", "status": "unseen"},
+    ]
+    save_json_atomic(shm_tr_path, shm_tr)
+    os.utime(shm_tr_path, (DEMO_NOW.timestamp() - 3600, DEMO_NOW.timestamp() - 3600))
+
+    attn_tr_path = ch / "transformers-attention-tracker.json"
+    attn_tr = load_json(attn_tr_path, default={}) or {}
+    attn_tr["active"] = False
+    attn_tr["createdAt"] = "2026-10-15T09:00:00Z"
+    attn_tr["updatedAt"] = "2026-11-22T15:00:00Z"
+    attn_tr["milestones"] = {
+        "sourcesIndexed": True,
+        "probed": True,
+        "theoryComplete": False,
+        "questionsComplete": False,
+        "revisionSheetBuilt": False,
+        "cbtMockBuilt": False,
+        "cbtMockPassed": False,
+        "audioBriefBuilt": False,
+    }
+    for t in attn_tr.get("topics") or []:
+        tid = t.get("id")
+        t["status"] = "mastered" if tid == "attn-t1" else ("in_progress" if tid == "attn-t2" else "pending")
+    attn_tr["questions"] = [
+        {"qid": "attn-q1", "label": "Q1 · 1/sqrt(d_k) variance proof", "topicId": "attn-t1", "status": "mastered"},
+        {"qid": "attn-q2", "label": "Q2 · Softmax Jacobian saturation regime", "topicId": "attn-t1", "status": "solved"},
+        {"qid": "attn-q3", "label": "Q3 · Pre-softmax -inf causal mask", "topicId": "attn-t2", "status": "retest"},
+        {"qid": "attn-q4", "label": "Q4 · RoPE relative phase inner product", "topicId": "attn-t2", "status": "solved"},
+        {"qid": "attn-q5", "label": "Q5 · KV-cache VRAM scaling", "topicId": "attn-t3", "status": "unseen"},
+        {"qid": "attn-q6", "label": "Q6 · GQA vs MQA bandwidth tradeoff", "topicId": "attn-t3", "status": "unseen"},
+    ]
+    save_json_atomic(attn_tr_path, attn_tr)
+    os.utime(attn_tr_path, (DEMO_NOW.timestamp() - 7200, DEMO_NOW.timestamp() - 7200))
+
+    # --- Seed Calibrated Learner Profile (Domain Elo across Distributed Systems / Physics / Deep Learning, Flow state, NEA DNA) ---
+    prof = load_profile(kg)
+    prof = apply_tier1_calibration(
+        prof,
+        entry_ramp="balanced",
+        challenge_appetite="balanced",
+        domain_fluency={"Systems": 2, "Physics": 2, "Machine Learning": 2},
+        session_minutes=30,
+        prose_density="standard",
+    )
+    prof["calibration"]["completedAt"] = "2026-10-12T09:15:00Z"
+    save_profile(kg, prof)
+
+    # Feed realistic telemetry events through learner_model so Pelanek Elo, NEA Failure DNA, and Flow state are authentic
+    telemetry_events: list[dict[str, Any]] = [
+        # Earlier mixed errors to populate realistic NEA Failure DNA (model + process + pacing)
+        {"domain": "Systems", "propId": "sys-raft-figure8-commit", "kind": "quiz", "correct": False, "difficulty": 1620, "durationMs": 25900, "confidence": 0.82, "hintsUsed": 1, "mistakeCategory": "misconception", "ts": "2026-11-24T14:20:00Z"},
+        {"domain": "Systems", "propId": "sys-raft-uptodate-log", "kind": "fork", "correct": False, "difficulty": 1560, "durationMs": 23100, "confidence": 0.68, "hintsUsed": 1, "mistakeCategory": "condition_missed", "ts": "2026-11-22T11:10:00Z"},
+        {"domain": "Physics", "propId": "phys-shm-spring-combos", "kind": "quiz", "correct": False, "difficulty": 1520, "durationMs": 21400, "confidence": 0.84, "hintsUsed": 1, "mistakeCategory": "misconception", "ts": "2026-11-20T10:15:00Z"},
+        {"domain": "Physics", "propId": "phys-shm-damped-regimes", "kind": "practice", "correct": False, "difficulty": 1580, "durationMs": 74000, "confidence": 0.60, "hintsUsed": 1, "mistakeCategory": "sign_error", "ts": "2026-11-17T15:30:00Z"},
+        {"domain": "Machine Learning", "propId": "ml-attn-causal-mask", "kind": "arena", "correct": False, "difficulty": 1590, "durationMs": 48000, "confidence": 0.72, "hintsUsed": 0, "mistakeCategory": "edge_case_missed", "ts": "2026-11-21T13:40:00Z"},
+        {"domain": "Machine Learning", "propId": "ml-attn-kv-cache", "kind": "practice", "correct": False, "difficulty": 1550, "durationMs": 68000, "confidence": 0.62, "hintsUsed": 1, "mistakeCategory": "off_by_one", "ts": "2026-11-18T17:12:00Z"},
+        {"domain": "Physics", "propId": "phys-shm-energy-curvature", "kind": "review", "correct": False, "difficulty": 1480, "durationMs": 14500, "confidence": 0.70, "hintsUsed": 0, "mistakeCategory": "algebra_slip", "ts": "2026-11-13T18:05:00Z"},
+        {"domain": "Machine Learning", "propId": "ml-attn-scaled-dot", "kind": "blitz", "correct": False, "difficulty": 1520, "durationMs": 29500, "confidence": 0.65, "hintsUsed": 0, "mistakeCategory": "time_pressure", "ts": "2026-11-14T19:00:00Z"},
+        # Recent clean flow session across all 3 domains so affect == "flow" and Domain Elo reflects strong progress!
+        {"domain": "Physics", "propId": "phys-shm-linearization", "kind": "review", "correct": True, "difficulty": 1560, "durationMs": 10200, "confidence": 0.92, "hintsUsed": 0, "ts": "2026-11-25T10:05:00Z"},
+        {"domain": "Physics", "propId": "phys-shm-compound-pendulum", "kind": "derivation", "correct": True, "difficulty": 1680, "durationMs": 72000, "confidence": 0.90, "hintsUsed": 0, "ts": "2026-11-25T10:12:00Z"},
+        {"domain": "Physics", "propId": "phys-shm-ode-solution", "kind": "review", "correct": True, "difficulty": 1540, "durationMs": 10800, "confidence": 0.88, "hintsUsed": 0, "ts": "2026-11-25T10:18:00Z"},
+        {"domain": "Machine Learning", "propId": "ml-attn-dot-variance", "kind": "derivation", "correct": True, "difficulty": 1650, "durationMs": 68000, "confidence": 0.92, "hintsUsed": 0, "ts": "2026-11-25T16:10:00Z"},
+        {"domain": "Machine Learning", "propId": "ml-attn-scaled-dot", "kind": "fork", "correct": True, "difficulty": 1600, "durationMs": 28400, "confidence": 0.88, "hintsUsed": 0, "ts": "2026-11-25T16:16:00Z"},
+        {"domain": "Machine Learning", "propId": "ml-attn-softmax-saturation", "kind": "review", "correct": True, "difficulty": 1560, "durationMs": 11400, "confidence": 0.86, "hintsUsed": 0, "ts": "2026-11-25T16:22:00Z"},
+        {"domain": "Systems", "propId": "sys-raft-quorum", "kind": "viva", "correct": True, "difficulty": 1640, "durationMs": 76000, "confidence": 0.88, "hintsUsed": 0, "ts": "2026-11-26T11:25:00Z"},
+        {"domain": "Systems", "propId": "sys-raft-election-safety", "kind": "review", "correct": True, "difficulty": 1580, "durationMs": 11900, "confidence": 0.85, "hintsUsed": 0, "ts": "2026-11-26T11:32:00Z"},
+        {"domain": "Systems", "propId": "sys-raft-split-brain", "kind": "review", "correct": True, "difficulty": 1540, "durationMs": 11200, "confidence": 0.84, "hintsUsed": 0, "ts": "2026-11-26T11:38:00Z"},
+        {"domain": "Machine Learning", "propId": "ml-attn-quad-complexity", "kind": "review", "correct": True, "difficulty": 1520, "durationMs": 12400, "confidence": 0.85, "hintsUsed": 0, "ts": "2026-11-26T11:42:00Z"},
+    ]
+    for ev in telemetry_events:
+        record_telemetry_event(
+            kg,
+            domain=ev["domain"],
+            prop_id=ev.get("propId"),
+            kind=ev.get("kind", "review"),
+            correct=bool(ev.get("correct", True)),
+            difficulty=float(ev.get("difficulty", 1500.0)),
+            confidence=ev.get("confidence"),
+            duration_ms=ev.get("durationMs"),
+            hints_used=int(ev.get("hintsUsed", 0)),
+            mistake_category=ev.get("mistakeCategory"),
+            now=ev.get("ts"),
+        )
+
+    prof = load_profile(kg)
+    # Use clean domain display labels matching the 3 flagship starter packs
+    raw_domains = prof.get("domains") or {}
+    clean_domains: dict[str, Any] = {}
+    for k, v in raw_domains.items():
+        if k == "Systems":
+            clean_domains["Distributed Systems"] = v
+        elif k == "Machine Learning":
+            clean_domains["Deep Learning"] = v
+        else:
+            clean_domains[k] = v
+    prof["domains"] = clean_domains
+    # Ensure calm active flow state and deterministic updatedAt
+    prof["affectiveState"]["state"] = "flow"
+    prof["affectiveState"]["errorStreak"] = 0
+    prof["affectiveState"]["activeSessionMinutes"] = 18.0
+    prof["affectiveState"]["lastEventAt"] = "2026-11-26T11:42:00Z"
+    prof["updatedAt"] = DEMO_NOW_ISO
+    prof["compiledPolicy"] = compile_teaching_policy(prof, domain="Distributed Systems", energy="normal")
+    save_profile(kg, prof)
+
+
+# ---------------------------------------------------------------------------
+# Phase C: Build schemaVersion 5 payload via sync-graph.mjs + v3 engines
+# ---------------------------------------------------------------------------
+
+
+def _extract_js_assignment(bundle_text: str, var_name: str) -> dict[str, Any]:
+    marker = f"window.{var_name} = "
+    idx = bundle_text.find(marker)
+    if idx < 0:
+        raise ValueError(f"Could not locate {marker} in graph-data.js")
+    start = idx + len(marker)
+    end = bundle_text.find(";\n", start)
+    if end < 0:
+        end = bundle_text.rfind(";")
+    return json.loads(bundle_text[start:end])
+
+
+def _normalize_mtimes(obj: Any) -> Any:
+    if isinstance(obj, dict):
+        out: dict[str, Any] = {}
+        for k, v in obj.items():
+            if k == "mtimeIso" and isinstance(v, str):
+                out[k] = DEMO_NOW_ISO
+            else:
+                out[k] = _normalize_mtimes(v)
+        return out
+    if isinstance(obj, list):
+        return [_normalize_mtimes(x) for x in obj]
+    return obj
+
+
+def _build_demo_payloads(ws: Path, kg: Path, ch: Path) -> tuple[dict[str, Any], dict[str, Any]]:
+    # Run scripts/sync-graph.mjs against the ephemeral temp workspace
+    sync_script = ROOT / "scripts" / "sync-graph.mjs"
+    out_js = kg / "graph-data.js"
+    proc = subprocess.run(
+        ["node", str(sync_script), "--workspace", str(ws), "--kg-dir", str(kg), "--chapters-dir", str(ch), "--out", str(out_js), "--quiet"],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    if proc.returncode != 0 or not out_js.is_file():
+        raise RuntimeError(f"sync-graph.mjs failed (rc={proc.returncode}): {proc.stderr or proc.stdout}")
+
+    bundle_txt = out_js.read_text(encoding="utf-8")
+    study_graph = _extract_js_assignment(bundle_txt, "__STUDY_GRAPH__")
+    study_hub = _extract_js_assignment(bundle_txt, "__STUDY_HUB__")
+
+    # Enrich with Python v3.0 engines for exact parity with syntopik/server.py
+    ev_summary = compute_evidence_summary(ws)
+    blast = find_blast_radius(kg, limit=12)
+
+    # Combine root_cause.py Bayesian fault localization across weak/failing leaves + blast radius
+    props = study_graph.get("propositions") or []
+    by_prop: dict[str, float] = dict((study_hub.get("rootCauseHotspots") or {}).get("byProp") or {})
+    for p in props:
+        pid = str(p.get("id") or "")
+        st = str(p.get("status") or "").lower()
+        if pid and st in ("shaky", "misconception"):
+            loc = localize_fault(kg, pid, max_depth=4)
+            if loc.get("ok"):
+                for susp in loc.get("suspects") or []:
+                    sid = str(susp.get("propId") or "")
+                    sc = float(susp.get("suspectRootScore") or 0.0)
+                    if sid and sc > by_prop.get(sid, 0.0):
+                        by_prop[sid] = round(sc, 4)
+
+    next_move = plan_next_move(ws, energy="normal")
+    prof = load_profile(kg)
+    prof["updatedAt"] = DEMO_NOW_ISO
+    prof["compiledPolicy"] = compile_teaching_policy(prof, domain="Distributed Systems", energy="normal")
+
+    # Compile all chapter :::explore blocks via syntopik.explorable (exact server.py parity)
+    explorables_map: dict[str, list[dict[str, Any]]] = {}
+    for md_path in sorted(ch.glob("*.md")):
+        blocks = parse_explorable_blocks(md_path.read_text(encoding="utf-8"), strict=True)
+        if blocks:
+            explorables_map[md_path.stem] = blocks
+
+    # Drop redundant normalizedEdges (dashboard.html & viewer.html derive edges from chains in <1ms)
+    study_graph.pop("normalizedEdges", None)
+
+    study_hub = _normalize_mtimes(study_hub)
+    study_hub["schemaVersion"] = 5
+    study_hub["generatedAt"] = DEMO_NOW_ISO
+    study_hub["today"] = DEMO_TODAY
+    study_hub["workspaceName"] = DEMO_WORKSPACE_NAME
+    study_hub["learnerProfile"] = prof
+    study_hub["nextMove"] = next_move
+    study_hub["evidenceSummary"] = ev_summary
+    study_hub["explorables"] = explorables_map
+    study_hub["rootCauseHotspots"] = {
+        "byProp": {k: round(float(v), 4) for k, v in sorted(by_prop.items())},
+        "blastRadius": blast,
+    }
+    study_hub["triageRecommended"] = False
+    study_hub["reentry"] = None
+    if isinstance(study_hub.get("retentionHeatmap"), dict):
+        study_hub["retentionHeatmap"].pop("byDate", None)
+    study_hub["stats"]["verifiedTransferPct"] = ev_summary.get("verifiedTransferPct", 0.0)
+    study_hub["stats"]["explorablesCount"] = sum(len(v) for v in explorables_map.values())
+
+    # Strict zero-sealed-secret assertion on public static payloads
+    leaks = _scan_forbidden_keys(study_graph, "graph.") + _scan_forbidden_keys(study_hub, "hub.")
+    if leaks:
+        raise RuntimeError(f"Sealed secret leak detected in static payload: {leaks}")
+
+    return study_graph, study_hub
+
+
+# ---------------------------------------------------------------------------
+# Phase D: Compact, Zero-CDN, Zero-Eval In-Browser Studio Shim
+# ---------------------------------------------------------------------------
+
+DEMO_RESET_CSS = """
+  .demo-reset-pill {
+    display: inline-flex; align-items: center; gap: 6px;
+    padding: 4px 10px; border-radius: 999px; font-size: 11px; font-weight: 600;
+    background: var(--accent-bg, rgba(122,162,247,0.14));
+    border: 1px solid var(--border-strong, #3a404c);
+    color: var(--text, #eae7df); cursor: pointer; white-space: nowrap;
+  }
+  .demo-reset-pill:hover { border-color: var(--accent, #7aa2f7); }
+  #readerOpenLink { display: none !important; }
+"""
+
+VIEWER_DEMO_COMPACT_CSS = """
+  @media (max-width: 1380px) {
+    #countPill { display: none; }
+    .controls { gap: 4px; }
+    .controls select { max-width: 92px; min-width: 68px; flex: 0 1 88px; }
+    .controls input[type="search"], #searchInput { min-width: 82px; flex: 0 1 108px; }
+    .demo-reset-pill { padding: 3px 8px; font-size: 11px; }
+  }
+"""
+
+SHIM_JS = r"""
+(() => {
+  "use strict";
+  const KEY = "syntopik_live_demo_v3_state";
+  const VER = 3;
+  const clone = (o) => JSON.parse(JSON.stringify(o));
+  const normTxt = (s) => String(s || "").toLowerCase().replace(/\s+/g, "").replace(/[−–—]/g, "-");
+  const todayIso = () => (window.__STUDY_HUB__ && window.__STUDY_HUB__.today) || "2026-11-26";
+  const addDays = (iso, d) => {
+    const t = Date.parse(iso + "T12:00:00Z");
+    return new Date((Number.isFinite(t) ? t : Date.now()) + d * 86400000).toISOString().slice(0, 10);
+  };
+
+  // Closure-scoped demo grading rules (never exposed on window.__STUDY_HUB__ / window.__STUDY_GRAPH__)
+  const WB_REVEALS = {
+    "wb-f2": "**No — committing prior-term entries purely by replica count violates Leader Completeness (Raft Figure 8).** A server holding a Term-3 entry at the same index can still win Term 5 over the majority that only holds Term 2, then overwrite the 'committed' entry. Raft only commits entries from `currentTerm` by counting replicas; older entries commit indirectly via Log Matching."
+  };
+  const FORK_RULES = {
+    "fork-raft-uptodate": {
+      ok: ["return(cand_term,cand_len)>=(voter_term,voter_len)", "(cand_term,cand_len)>=(voter_term,voter_len)", "returncand_term>voter_termor(cand_term==voter_termandcand_len>=voter_len)", "cand_term>voter_termor(cand_term==voter_termandcand_len>=voter_len)"],
+      trap: ["returncand_len>=voter_len", "cand_len>=voter_len"],
+      fix: "return (cand_term, cand_len) >= (voter_term, voter_len)",
+      refute: "Checking length alone lets a stale term-1 log of length 5 beat a committed term-3 log of length 2. Compare last term first, then length."
+    },
+    "fork-raft-quorum-size": {
+      ok: ["2*f+1", "2f+1", "1+2*f", "1+2f"],
+      trap: ["2*f", "2f", "f+1"],
+      fix: "2*f + 1",
+      refute: "With N = 2*f, quorum is f + 1, leaving only f - 1 spare servers — so f failures halt the cluster."
+    },
+    "fork-shm-series-springs": {
+      ok: ["k1*k2/(k1+k2)", "(k1*k2)/(k1+k2)", "k2*k1/(k1+k2)", "1/(1/k1+1/k2)"],
+      trap: ["k1+k2", "k2+k1"],
+      fix: "k1*k2/(k1 + k2)",
+      refute: "k1 + k2 is stiffer than either spring alone — joining springs in series makes the chain softer because both stretch under shared tension F."
+    },
+    "fork-shm-energy-freq": {
+      ok: ["2*omega", "2omega", "2*w", "2w"],
+      trap: ["omega", "w", "omega/2"],
+      fix: "2*omega",
+      refute: "sin^2(omega*t) = (1 - cos(2*omega*t))/2 completes two full oscillations for every single period of x(t)."
+    },
+    "fork-attn-scale-denom": {
+      ok: ["sqrt(d_k)", "d_k**0.5", "d_k^(1/2)", "math.sqrt(d_k)", "sqrt(dk)"],
+      trap: ["d_k", "dk", "d_k**2"],
+      fix: "sqrt(d_k)",
+      refute: "Dividing by d_k scales variance by 1/d_k^2, giving Var = 1/d_k -> 0 and flattening attention into uniform averages."
+    },
+    "fork-attn-causal-fill": {
+      ok: ["-inf", "-infinity", "float('-inf')", 'float("-inf")', "-math.inf", "-np.inf", "-1e9"],
+      trap: ["0", "0.0", "1"],
+      fix: "-inf",
+      refute: "Filling future scores with 0 produces exp(0) = 1, giving future tokens positive attention weight and leaking targets."
+    }
+  };
+  const DERIV_STEPS = {
+    "deriv-raft-safety": {
+      s3: { expr: "leaders(term) <= 1", ok: ["leaders(term)<=1", "leaders<=1", "atmostoneleader", "n_leaders<=1"] },
+      s4: { expr: "same_term_and_index => identical_prefix", ok: ["same_term_and_index=>identical_prefix", "same(index,term)=>identicalprefix", "identical_prefix", "logmatching"] },
+      s5: { expr: "applied(s_a, i) == applied(s_b, i)", ok: ["applied(s_a,i)==applied(s_b,i)", "applied(a,i)==applied(b,i)"] }
+    },
+    "deriv-shm-compound-pendulum": {
+      s3: { expr: "alpha = -(m * g * d / I) * theta", ok: ["alpha=-(m*g*d/i)*theta", "alpha=-(mgd/i)*theta", "alpha=-(m*g*d/i)theta"] },
+      s4: { expr: "omega = sqrt(m * g * d / I)", ok: ["omega=sqrt(m*g*d/i)", "omega=sqrt(mgd/i)", "sqrt(m*g*d/i)"] },
+      s5: { expr: "T = 2 * pi * sqrt(I / (m * g * d))", ok: ["t=2*pi*sqrt(i/(m*g*d))", "t=2*pi*sqrt(i/(mgd))", "2*pi*sqrt(i/(m*g*d))"] }
+    },
+    "deriv-attn-variance-scaling": {
+      s2: { expr: "Var(q_i * k_i) = Var(q_i) * Var(k_i) = 1", ok: ["var(q_i*k_i)=var(q_i)*var(k_i)=1", "var(q_i*k_i)=1", "1"] },
+      s3: { expr: "Var(q . k) = d_k", ok: ["var(q.k)=d_k", "var(q*k)=d_k", "d_k"] },
+      s4: { expr: "Var((q . k) / c) = d_k / c**2", ok: ["var((q.k)/c)=d_k/c**2", "var((q.k)/c)=d_k/c^2", "d_k/c**2", "d_k/c^2"] },
+      s5: { expr: "c = sqrt(d_k)", ok: ["c=sqrt(d_k)", "sqrt(d_k)", "c=d_k**0.5"] }
+    }
+  };
+
+  function evalCausalMatrix(scores, mode) {
+    const n = scores.length, out = [];
+    for (let i = 0; i < n; i++) {
+      let row;
+      if (mode === "ref") {
+        const sub = scores[i].slice(0, i + 1), mx = Math.max(...sub);
+        const ex = sub.map((x) => Math.exp(x - mx)), s = ex.reduce((a, b) => a + b, 0);
+        row = ex.map((e) => Math.round((e / s) * 1e6) / 1e6).concat(Array(n - i - 1).fill(0));
+      } else if (mode === "m1") {
+        const m = scores[i].map((v, j) => (j <= i ? v : 0)), mx = Math.max(...m);
+        const ex = m.map((x) => Math.exp(x - mx)), s = ex.reduce((a, b) => a + b, 0);
+        row = ex.map((e) => Math.round((e / s) * 1e6) / 1e6);
+      } else if (mode === "m2") {
+        const mx = Math.max(...scores[i]), ex = scores[i].map((x) => Math.exp(x - mx)), s = ex.reduce((a, b) => a + b, 0);
+        row = ex.map((e, j) => (j <= i ? Math.round((e / s) * 1e6) / 1e6 : 0));
+      } else {
+        const sub = scores[i].slice(0, i);
+        if (!sub.length) { row = Array(n).fill(0); }
+        else {
+          const mx = Math.max(...sub), ex = sub.map((x) => Math.exp(x - mx)), s = ex.reduce((a, b) => a + b, 0);
+          row = ex.map((e) => Math.round((e / s) * 1e6) / 1e6).concat(Array(n - i).fill(0));
+        }
+      }
+      out.push(row);
+    }
+    return out;
+  }
+
+  function runArenaEval(arenaId, rawInput) {
+    let val = rawInput;
+    if (typeof val === "string") {
+      try { val = JSON.parse(val); } catch { /* leave as string */ }
+    }
+    if (arenaId === "arena-raft-uptodate-check") {
+      const a = val && typeof val === "object" && Array.isArray(val.args) ? val.args : val;
+      if (!Array.isArray(a) || a.length !== 4 || !a.every((x) => Number.isInteger(x) && x >= 0)) {
+        return { valid: false, failed: ["Expected 4 non-negative integers [cand_term, cand_idx, voter_term, voter_idx]."] };
+      }
+      const [ct, ci, vt, vi] = a;
+      const ref = ct !== vt ? ct > vt : ci >= vi;
+      const muts = [
+        ["m1", "length_before_term", ci !== vi ? ci > vi : ct >= vt],
+        ["m2", "strict_gt_on_equal_term", ct !== vt ? ct > vt : ci > vi],
+        ["m3", "ignore_index_on_tie", ct >= vt]
+      ];
+      return { valid: true, hits: muts.filter((m) => m[2] !== ref).map((m) => ({ id: m[0], tag: m[1] })) };
+    }
+    if (arenaId === "arena-shm-series-stiffness") {
+      const k1 = Array.isArray(val) ? Number(val[0]) : Number(val && val.k1);
+      const k2 = Array.isArray(val) ? Number(val[1]) : Number(val && val.k2);
+      if (!Number.isFinite(k1) || !Number.isFinite(k2) || k1 <= 0 || k2 <= 0) {
+        return { valid: false, failed: ["Requires k1 > 0 and k2 > 0, e.g. {\"k1\": 2, \"k2\": 6}."] };
+      }
+      const ref = (k1 * k2) / (k1 + k2);
+      const muts = [
+        ["m1", "parallel_sum_confusion", k1 + k2],
+        ["m2", "symmetric_halving_shortcut", k1 / 2],
+        ["m3", "harmonic_mean_factor2", (2 * k1 * k2) / (k1 + k2)]
+      ];
+      return { valid: true, hits: muts.filter((m) => Math.abs(m[2] - ref) > 1e-6).map((m) => ({ id: m[0], tag: m[1] })) };
+    }
+    if (arenaId === "arena-attn-causal-softmax") {
+      const m = val && typeof val === "object" && Array.isArray(val.args) && Array.isArray(val.args[0]) ? val.args[0] : val;
+      if (!Array.isArray(m) || m.length < 1 || !m.every((r) => Array.isArray(r) && r.length === m.length && r.every((x) => typeof x === "number" && Number.isFinite(x)))) {
+        return { valid: false, failed: ["Expected square N x N numeric matrix, e.g. [[1, 2], [0, 1]]."] };
+      }
+      const ref = JSON.stringify(evalCausalMatrix(m, "ref"));
+      const muts = [
+        ["m1", "zero_mask_before_softmax", JSON.stringify(evalCausalMatrix(m, "m1"))],
+        ["m2", "post_softmax_zero_no_renorm", JSON.stringify(evalCausalMatrix(m, "m2"))],
+        ["m3", "strict_lt_blocks_self_diagonal", JSON.stringify(evalCausalMatrix(m, "m3"))]
+      ];
+      return { valid: true, hits: muts.filter((x) => x[2] !== ref).map((x) => ({ id: x[0], tag: x[1] })) };
+    }
+    return { valid: false, failed: ["Unknown demo arena."] };
+  }
+
+  function initialState() {
+    return { v: VER, graph: clone(window.__STUDY_GRAPH__ || { propositions: [], chains: [] }), hub: clone(window.__STUDY_HUB__ || {}) };
+  }
+  function loadState() {
+    try {
+      const raw = localStorage.getItem(KEY);
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        if (parsed && parsed.v === VER && parsed.graph && parsed.hub) return parsed;
+      }
+    } catch { /* ignore storage restrictions */ }
+    return initialState();
+  }
+  function saveState(st) {
+    try { localStorage.setItem(KEY, JSON.stringify(st)); } catch { /* ignore quota */ }
+  }
+
+  let state = loadState();
+  const blitzStore = new Map();
+  const vivaStore = new Map();
+
+  function recomputePolicy(lp, energy) {
+    const base = clone(lp.compiledPolicy || { domain: "Distributed Systems", domainElo: 1560, expertiseBand: "intermediate", scaffoldingMode: "faded", allowWorkedExample: false, allowProductiveFailure: true, maxProseWords: 135, targetSuccessRate: 0.85, affectState: "flow", activeGuardrails: [] });
+    const cal = lp.calibration || {};
+    const ov = lp.userOverrides || {};
+    const wordsMap = { terse: 105, standard: 135, rich: 155 };
+    const targMap = { guided: 0.88, balanced: 0.85, adversarial: 0.78 };
+    base.maxProseWords = wordsMap[cal.proseDensity] || 135;
+    base.targetSuccessRate = targMap[cal.challengeAppetite] || 0.85;
+    base.scaffoldingMode = cal.challengeAppetite === "adversarial" ? "challenge_transfer" : cal.challengeAppetite === "guided" ? "worked_example_parsons" : "faded";
+    base.allowProductiveFailure = cal.challengeAppetite !== "guided";
+    base.energyOverride = energy && energy !== "normal" ? energy : null;
+    if (energy === "low") { base.maxProseWords = Math.min(base.maxProseWords, 105); base.allowProductiveFailure = false; base.activeGuardrails = ["low_energy_warm_start"]; }
+    else if (energy === "deep") { base.maxProseWords = Math.min(155, Math.max(base.maxProseWords, 145)); base.allowProductiveFailure = true; base.activeGuardrails = ["deep_focus_stretch"]; }
+    else { base.activeGuardrails = []; }
+    if (ov.scaffoldingMode) base.scaffoldingMode = ov.scaffoldingMode;
+    if (typeof ov.allowProductiveFailure === "boolean") base.allowProductiveFailure = ov.allowProductiveFailure;
+    if (ov.maxProseWords) base.maxProseWords = Math.min(155, Number(ov.maxProseWords));
+    base.allowWorkedExample = base.scaffoldingMode === "worked_example_parsons";
+    lp.compiledPolicy = base;
+    return base;
+  }
+
+  function refreshDerived(st) {
+    const props = st.graph.propositions || [];
+    const tdy = st.hub.today || todayIso();
+    const counts = { solid: 0, shaky: 0, misconception: 0, planned: 0 };
+    const due = [];
+    for (const p of props) {
+      if (p.status in counts) counts[p.status] += 1;
+      const nr = String(p.nextReview || (p.fsrs && p.fsrs.due) || "").slice(0, 10);
+      if (p.status === "misconception" || p.status === "shaky" || (nr && nr <= tdy)) {
+        due.push({ id: p.id, title: p.title || p.id, subject: p.subject, chapter: p.chapter, status: p.status, nextReview: nr || tdy });
+      }
+    }
+    st.hub.dueItems = due;
+    st.hub.stats = { ...(st.hub.stats || {}), propositions: props.length, solid: counts.solid, shaky: counts.shaky, misconception: counts.misconception, planned: counts.planned, dueCount: due.length };
+    const forks = st.hub.forks || [];
+    st.hub.forksDue = forks.filter((f) => f && f.isDue !== false);
+    st.hub.forksDueCount = st.hub.forksDue.length;
+    st.hub.arenasCount = (st.hub.arenas || []).length;
+    const ev = st.hub.evidenceSummary;
+    if (ev && ev.propositions) {
+      const tc = { T1: 0, T2: 0, T3: 0, T4: 0 };
+      const vals = Object.values(ev.propositions);
+      for (const e of vals) { const t = Math.max(1, Math.min(4, Number(e.tier || 1))); tc["T" + t] += 1; }
+      ev.tierCounts = tc;
+      ev.verifiedTransferPct = vals.length ? Number((((tc.T3 + tc.T4) / vals.length) * 100).toFixed(1)) : 0;
+      st.hub.stats.verifiedTransferPct = ev.verifiedTransferPct;
+    }
+  }
+
+  function promoteEvidence(st, propId, tier, src) {
+    const ev = st.hub.evidenceSummary;
+    if (!ev || !ev.propositions || !propId || !ev.propositions[propId]) return false;
+    const rec = ev.propositions[propId];
+    const labels = { 1: "T1 Exposure", 2: "T2 Cold Recall", 3: "T3 Mechanistic Transfer", 4: "T4 Adversarial Defense" };
+    if (tier > Number(rec.tier || 1)) { rec.tier = tier; rec.tierLabel = labels[tier]; }
+    if (!Array.isArray(rec.sources)) rec.sources = [];
+    if (src && !rec.sources.includes(src)) rec.sources.push(src);
+    return true;
+  }
+
+  function buildStateResponse(energy) {
+    state = loadState();
+    if (state.hub.learnerProfile) recomputePolicy(state.hub.learnerProfile, energy);
+    refreshDerived(state);
+    return {
+      ok: true, schemaVersion: 5, demo: true, energyMode: energy || "normal",
+      graph: state.graph, hub: state.hub,
+      forksDue: state.hub.forksDue, forksDueCount: state.hub.forksDueCount, arenasCount: state.hub.arenasCount,
+      reentry: state.hub.reentry || null, triageRecommended: Boolean(state.hub.triageRecommended),
+      learnerProfile: state.hub.learnerProfile, nextMove: state.hub.nextMove,
+      forks: state.hub.forks, arenas: state.hub.arenas, decisions: state.hub.decisions,
+      derivations: state.hub.derivations, vivaSessions: state.hub.vivaSessions,
+      evidenceSummary: state.hub.evidenceSummary, rootCauseHotspots: state.hub.rootCauseHotspots,
+      whiteboard: state.hub.whiteboard, explorables: state.hub.explorables, starterPacks: state.hub.starterPacks
+    };
+  }
+
+  function handleReview(body) {
+    state = loadState();
+    const pid = String(body.propId || body.id || "").trim();
+    const rating = String(body.rating || "good").toLowerCase();
+    const props = state.graph.propositions || [];
+    const node = props.find((p) => p.id === pid);
+    if (!node) return { ok: false, error: "Proposition not found: " + pid };
+    const tdy = state.hub.today || todayIso();
+    const mult = { again: 0.45, hard: 1.2, good: 2.05, easy: 2.8 }[rating] || 2.0;
+    const prevS = Number((node.fsrs && node.fsrs.stability) || node.stabilityDays || 2.0);
+    const newS = Number(Math.max(0.5, prevS * mult).toFixed(2));
+    const ivl = rating === "again" ? 1 : Math.max(2, Math.round(newS));
+    const nextDue = addDays(tdy, ivl);
+    const ok = rating === "good" || rating === "easy";
+    const prior = Number(node.bktMastery || node.confidence || 0.5);
+    const pT = { again: 0.05, hard: 0.1, good: 0.25, easy: 0.35 }[rating] || 0.25;
+    const num = prior * (ok ? 0.9 : 0.1), den = num + (1 - prior) * (ok ? 0.2 : 0.8);
+    const post = den ? num / den : prior;
+    const bkt = Number(Math.max(0.05, Math.min(0.99, post + (1 - post) * pT)).toFixed(3));
+    node.bktMastery = bkt;
+    node.confidence = bkt;
+    node.status = rating === "again" ? "shaky" : (bkt >= 0.78 && ok ? "solid" : (node.status === "planned" ? "shaky" : node.status));
+    node.lastReviewed = tdy;
+    node.nextReview = nextDue;
+    node.stabilityDays = newS;
+    node.reps = Number(node.reps || 0) + 1;
+    if (rating === "again") node.lapses = Number(node.lapses || 0) + 1;
+    node.fsrs = { ...(node.fsrs || {}), stability: newS, difficulty: Number(Math.max(1, Math.min(10, Number((node.fsrs && node.fsrs.difficulty) || 5) + (rating === "again" ? 0.6 : rating === "easy" ? -0.35 : -0.1))).toFixed(2)), due: nextDue + "T12:00:00+00:00", last_review: tdy + "T12:00:00+00:00", reps: node.reps, lapses: node.lapses || 0 };
+
+    // True FIRe upstream ancestor refresh on Good / Easy
+    const fireCredits = [];
+    if (ok) {
+      const seen = new Set([pid]);
+      const queue = [{ id: pid, depth: 0 }];
+      while (queue.length) {
+        const cur = queue.shift();
+        if (cur.depth >= 2) continue;
+        for (const ch of (state.graph.chains || [])) {
+          if (ch.conclusion !== cur.id) continue;
+          const w = Number(ch.encompassWeight || 0.45);
+          for (const prem of (ch.premises || [])) {
+            if (seen.has(prem)) continue;
+            seen.add(prem);
+            const pn = props.find((x) => x.id === prem);
+            if (pn && pn.status !== "planned") {
+              const pStab = Number((pn.fsrs && pn.fsrs.stability) || pn.stabilityDays || 4.0);
+              const boosted = Number((pStab * (1 + 0.18 * w)).toFixed(2));
+              pn.stabilityDays = boosted;
+              pn.implicitCredit = Number(((pn.implicitCredit || 0) + 0.4 * w).toFixed(2));
+              if (pn.fsrs) pn.fsrs.stability = boosted;
+              const pDue = addDays(tdy, Math.max(3, Math.round(boosted * 0.5)));
+              if (!pn.nextReview || pn.nextReview <= tdy) {
+                pn.nextReview = pDue;
+                if (pn.fsrs) pn.fsrs.due = pDue + "T12:00:00+00:00";
+              }
+              fireCredits.push({ propId: prem, title: pn.title || prem, credit: Number((0.4 * w).toFixed(2)), newStability: boosted });
+              queue.push({ id: prem, depth: cur.depth + 1 });
+            }
+          }
+        }
+      }
+    }
+    if (ok && ivl >= 7) promoteEvidence(state, pid, 2, "cold_recall");
+    const hm = state.hub.retentionHeatmap;
+    if (hm && Array.isArray(hm.days) && hm.days.length) {
+      const last = hm.days[hm.days.length - 1];
+      last.count = Number(last.count || 0) + 1;
+      last.reviews = Number(last.reviews || 0) + 1;
+      last.level = Math.min(4, Math.max(1, last.count));
+      hm.totalEvents = Number(hm.totalEvents || 0) + 1;
+    }
+    refreshDerived(state);
+    saveState(state);
+    const fireSummary = fireCredits.length ? `FIRe refreshed ${fireCredits.length} prerequisite${fireCredits.length === 1 ? "" : "s"}` : "";
+    return { ok: true, node, result: { propId: pid, rating, nextReview: nextDue, intervalDays: ivl, bktMastery: bkt, fireCredits }, fireCredits, fireRefreshedCount: fireCredits.length, fireSummary };
+  }
+
+  function handleRootCause(nodeId) {
+    state = loadState();
+    const props = state.graph.propositions || [];
+    const byId = new Map(props.map((p) => [p.id, p]));
+    const incoming = new Map();
+    for (const c of (state.graph.chains || [])) {
+      if (!incoming.has(c.conclusion)) incoming.set(c.conclusion, []);
+      for (const pr of (c.premises || [])) incoming.get(c.conclusion).push(pr);
+    }
+    const anc = new Set();
+    const q = [nodeId];
+    while (q.length) {
+      const cur = q.shift();
+      for (const pr of (incoming.get(cur) || [])) {
+        if (!anc.has(pr) && pr !== nodeId) { anc.add(pr); q.push(pr); }
+      }
+    }
+    const suspects = [...anc].map((uid) => {
+      const p = byId.get(uid) || {};
+      const st = String(p.status || "planned");
+      const score = st === "misconception" ? 0.82 : st === "shaky" ? 0.64 : 0.22;
+      return { propId: uid, title: p.title || uid, status: st, suspectRootScore: score, expectedInfoGainBits: st === "shaky" ? 0.74 : 0.42 };
+    }).sort((a, b) => b.suspectRootScore - a.suspectRootScore);
+    const bestProbe = suspects[0] || null;
+    const blast = (state.hub.rootCauseHotspots && state.hub.rootCauseHotspots.blastRadius) || [];
+    return { ok: true, nodeId, bestProbe, localization: { ok: true, failedNodeId: nodeId, suspects, topSuspect: bestProbe }, diagnosticProbe: { ok: true, bestProbe, candidates: suspects }, blastRadius: blast };
+  }
+
+  function handleBlitzBuild(count) {
+    state = loadState();
+    const props = state.graph.propositions || [];
+    const n = Math.max(1, Math.min(props.length || 1, Number(count || 6)));
+    const ordered = [...props].sort((a, b) => (a.status === "shaky" || a.status === "misconception" ? 0 : 1) - (b.status === "shaky" || b.status === "misconception" ? 0 : 1));
+    const chosen = ordered.slice(0, n);
+    const blitzId = "blitz-demo-" + Date.now();
+    const keyMap = {};
+    const items = chosen.map((p, idx) => {
+      const itemId = "item-" + (idx + 1);
+      const cue = (p.cues && p.cues[0]) || { q: "Identify the governing invariant for " + p.title, a: p.statement || p.title };
+      const other1 = props[(idx + 5) % props.length] || p;
+      const other2 = props[(idx + 11) % props.length] || p;
+      const kc = (p.boundaryConditions && p.boundaryConditions[0]) || ("Governing premise of " + p.title);
+      const fm = "Apply " + p.title + " directly";
+      const dc = "Jump to surface shortcut from " + other1.title;
+      keyMap[itemId] = { killCue: kc, firstMove: fm, rejectedDecoy: dc, deepPrinciple: p.title };
+      return {
+        itemId, propId: p.id, questionRef: p.id, prompt: cue.q,
+        choices: {
+          killCue: [kc, "Assume static equilibrium without checking regime", "Count total nodes ignoring term ordering", "I don't know"],
+          firstMove: [fm, "Substitute " + other1.title, "Skip directly to " + other2.title, "I don't know"],
+          rejectedDecoy: [dc, "Verify boundary conditions first", "Derive from conservation / invariant", "I don't know"]
+        }
+      };
+    });
+    blitzStore.set(blitzId, keyMap);
+    return { ok: true, blitzId, count: items.length, items };
+  }
+
+  function handleVivaStart(propId) {
+    state = loadState();
+    const p = (state.graph.propositions || []).find((x) => x.id === propId) || (state.graph.propositions || [])[0];
+    const sid = "viva-live-" + Date.now();
+    const bc = (p && p.boundaryConditions && p.boundaryConditions[0]) || "the core regime assumptions";
+    const prompts = [
+      { turn: 1, stage: "commitment_claim", prompt: `State "${p.title}" precisely in your own words, naming the mechanism that makes it hold.` },
+      { turn: 2, stage: "boundary_perturbation", prompt: `Boundary perturbation: suppose "${bc}" is violated. Where does your Turn-1 claim break first?` },
+      { turn: 3, stage: "assumption_attack", prompt: `Construct a concrete counterexample or failure scenario that refutes a naive shortcut of "${p.title}".` },
+      { turn: 4, stage: "transfer_perturbation", prompt: `How does "${p.title}" constrain a downstream theorem or engineering design choice in ${p.chapter || p.subject}?` },
+      { turn: 5, stage: "sharpened_synthesis", prompt: `Reconcile your Turn-1 commitment with Turns 2–4 into one caveat-free invariant statement.` }
+    ];
+    vivaStore.set(sid, { sessionId: sid, propId: p.id, propTitle: p.title, subject: p.subject, chapter: p.chapter, prompts, turns: [], ledger: null });
+    return { ok: true, sessionId: sid, propId: p.id, propTitle: p.title, status: "in_progress", currentTurn: 1, totalTurns: 5, prompt: prompts[0], nextPrompt: prompts[0] };
+  }
+
+  function handleVivaTurn(body) {
+    const sess = vivaStore.get(body.sessionId);
+    if (!sess) return { ok: false, error: "Viva session not found — start a new defense." };
+    const text = String(body.response || "").trim();
+    const conf = typeof body.confidence === "number" ? body.confidence : 0.75;
+    const words = text.split(/\s+/).filter(Boolean);
+    const low = text.toLowerCase();
+    const tNum = sess.turns.length + 1;
+    const hasMech = /(because|since|therefore|implies|breaks|fails|requires|invariant|quorum|variance|linear|term|majority|softmax|spring)/.test(low);
+    const hasBound = /(unless|only|limit|regime|boundary|condition|assumption|breaks|fails|violated|small|large|partition|zero)/.test(low);
+    const clarity = Number(Math.min(0.95, 0.35 + Math.min(0.35, words.length / 28) + (hasMech ? 0.25 : 0)).toFixed(2));
+    const boundary_awareness = Number(Math.min(0.95, 0.35 + (hasBound ? 0.45 : 0.15) + Math.min(0.15, words.length / 40)).toFixed(2));
+    const transfer = Number(Math.min(0.94, 0.40 + (hasMech && hasBound ? 0.42 : 0.22)).toFixed(2));
+    const qScore = (clarity + boundary_awareness + transfer) / 3;
+    const calibration = Number(Math.max(0.2, 1 - Math.abs(conf - qScore)).toFixed(2));
+    const bluff = conf >= 0.8 && words.length < 5;
+    const contradictionCheck = { flagged: bluff, bluffDetected: bluff, contradictions: bluff ? ["High confidence with under-specified defense."] : [] };
+    const rubric = { clarity, boundary_awareness, transfer, calibration, composite: Number(((clarity + boundary_awareness + transfer + calibration) / 4).toFixed(2)), contradictionCheck };
+    if (tNum === 1) sess.ledger = text;
+    sess.turns.push({ turn: tNum, response: text, confidence: conf, rubric });
+    const done = tNum >= 5;
+    const nextPrompt = done ? null : sess.prompts[tNum];
+    let evidenceTier = null;
+    if (done) {
+      state = loadState();
+      const comp = Number((sess.turns.reduce((a, t) => a + t.rubric.composite, 0) / sess.turns.length).toFixed(2));
+      const passed = comp >= 0.68;
+      if (passed) { promoteEvidence(state, sess.propId, 4, "viva_chamber"); evidenceTier = "T4 Adversarial Defense"; }
+      state.hub.vivaSessions = [...(state.hub.vivaSessions || []), { id: sess.sessionId, propId: sess.propId, propTitle: sess.propTitle, status: passed ? "passed" : "completed", outcome: passed ? "passed" : "needs_work", passed, scores: { ...rubric, composite: comp }, turnsCompleted: 5, totalTurns: 5 }];
+      refreshDerived(state);
+      saveState(state);
+    }
+    return { ok: true, sessionId: sess.sessionId, propId: sess.propId, propTitle: sess.propTitle, status: done ? "passed" : "in_progress", turnCompleted: tNum, currentTurn: done ? 5 : tNum + 1, totalTurns: 5, turnRubric: rubric, finalRubric: done ? rubric : null, nextPrompt, evidenceTier };
+  }
+
+  function routeApi(method, urlStr, body) {
+    const u = new URL(urlStr, window.location.origin || "http://localhost");
+    const p = u.pathname;
+    if (p === "/api/capabilities") return { live: true, demo: true, token: "demo-sandbox", version: "3.0.0-demo", workspaceName: "syntopik-live-demo", lan: null };
+    if (p === "/api/state") return buildStateResponse(u.searchParams.get("energy") || "normal");
+    if (p === "/api/root-cause") return handleRootCause(u.searchParams.get("nodeId") || u.searchParams.get("propId") || "");
+    if (p === "/api/review") return handleReview(body || {});
+    if (p === "/api/profile/calibrate") {
+      state = loadState();
+      const lp = state.hub.learnerProfile || {};
+      lp.calibration = { ...(lp.calibration || {}), completed: true, entryRamp: body.entryRamp || "balanced", challengeAppetite: body.challengeAppetite || "balanced", proseDensity: body.proseDensity || "standard", sessionTargetMinutes: Number(body.sessionMinutes || 30) };
+      if (body.domainFluency && typeof body.domainFluency === "object") {
+        const eloMap = { 0: 1150, 1: 1350, 2: 1550, 3: 1750 };
+        lp.domains = lp.domains || {};
+        for (const [dom, lvl] of Object.entries(body.domainFluency)) lp.domains[dom] = { ...(lp.domains[dom] || { events: 1 }), elo: eloMap[lvl] || 1450 };
+      }
+      const pol = recomputePolicy(lp, "normal");
+      state.hub.learnerProfile = lp;
+      saveState(state);
+      return { ok: true, profile: lp, compiledPolicy: pol };
+    }
+    if (p === "/api/profile/override") {
+      state = loadState();
+      const lp = state.hub.learnerProfile || {};
+      const ov = (body && body.overrides) || body || {};
+      lp.userOverrides = { ...(lp.userOverrides || {}), ...ov };
+      const pol = recomputePolicy(lp, "normal");
+      state.hub.learnerProfile = lp;
+      saveState(state);
+      return { ok: true, profile: lp, compiledPolicy: pol };
+    }
+    if (p === "/api/whiteboard/unlock") {
+      state = loadState();
+      const wb = state.hub.whiteboard;
+      const fr = (wb && wb.frames || []).find((f) => String(f.id) === String(body.frameId));
+      if (!fr) return { ok: false, error: "Frame not found" };
+      fr.locked = false;
+      fr.gate = { ...(fr.gate || {}), prediction: String(body.prediction || ""), confidence: Number(body.confidence || 0.7), unlockedAt: new Date().toISOString() };
+      if (!fr.body) fr.body = WB_REVEALS[fr.id] || "Prediction recorded — compare your reasoning against the formal invariant above.";
+      wb.revision = Number(wb.revision || 0) + 1;
+      saveState(state);
+      return { ok: true, revision: wb.revision, frameId: fr.id, unlocked: true, frame: fr, session: wb };
+    }
+    if (p === "/api/whiteboard/pin") {
+      state = loadState();
+      const wb = state.hub.whiteboard;
+      const pin = { id: "pin-" + Date.now(), frameId: body.frameId || null, stepIndex: Number(body.stepIndex || 0), note: String(body.note || ""), resolved: false, createdAt: new Date().toISOString() };
+      wb.pins = [...(wb.pins || []), pin];
+      wb.pendingPins = wb.pins.filter((x) => !x.resolved);
+      wb.pendingPinCount = wb.pendingPins.length;
+      wb.revision = Number(wb.revision || 0) + 1;
+      saveState(state);
+      return { ok: true, revision: wb.revision, pin, pendingPinCount: wb.pendingPinCount, session: wb };
+    }
+    if (p === "/api/whiteboard/push") {
+      state = loadState();
+      const wb = state.hub.whiteboard;
+      const fIn = (body && body.frame) || body || {};
+      const fr = { id: "wb-u-" + Date.now(), kind: fIn.kind || "derivation_step", title: fIn.title || "Working Step", body: fIn.body || "", stepIndex: (wb.frames || []).length, locked: false, payload: {} };
+      wb.frames = [...(wb.frames || []), fr];
+      wb.frameCount = wb.frames.length;
+      wb.revision = Number(wb.revision || 0) + 1;
+      saveState(state);
+      return { ok: true, revision: wb.revision, frame: fr, session: wb };
+    }
+    if (p === "/api/whiteboard/clear") {
+      state = loadState();
+      const wb = state.hub.whiteboard;
+      wb.frames = []; wb.pins = []; wb.pendingPins = []; wb.frameCount = 0; wb.pendingPinCount = 0; wb.revision = Number(wb.revision || 0) + 1;
+      saveState(state);
+      return { ok: true, cleared: true, revision: wb.revision, session: wb };
+    }
+    if (p === "/api/forks/check") {
+      state = loadState();
+      const fk = (state.hub.forks || []).find((f) => f.id === body.forkId);
+      const rule = FORK_RULES[body.forkId];
+      if (!fk || !rule) return { ok: false, error: "Fork not found" };
+      const mv = normTxt(body.move);
+      const correct = !body.revealFix && rule.ok.some((c) => mv === c || (mv.length >= 6 && mv.includes(c)));
+      const repeatedBlunder = !correct && rule.trap.some((t) => mv === t);
+      const lat = Number(body.latencyMs || 8000);
+      if (correct) {
+        fk.winCount = Number(fk.winCount || 0) + 1;
+        fk.isDue = false;
+        fk.nextReview = addDays(todayIso(), 7);
+        promoteEvidence(state, fk.propId, 3, "fork_replay");
+      } else if (repeatedBlunder) {
+        fk.blunderRepeatCount = Number(fk.blunderRepeatCount || 0) + 1;
+      }
+      refreshDerived(state);
+      saveState(state);
+      return {
+        ok: true, forkId: fk.id, correct, repeatedBlunder,
+        refutation: correct ? "" : rule.refute,
+        fixRevealed: Boolean(body.revealFix), winningMove: body.revealFix ? rule.fix : undefined,
+        nextReview: fk.nextReview,
+        latencyTrend: { latestMs: lat, compressionRatio: correct ? Number(Math.max(1.2, 18000 / Math.max(2500, lat)).toFixed(1)) : null }
+      };
+    }
+    if (p === "/api/arena/submit") {
+      state = loadState();
+      const ar = (state.hub.arenas || []).find((a) => a.id === body.arenaId);
+      if (!ar) return { ok: false, error: "Arena not found" };
+      const ev = runArenaEval(ar.id, body.input);
+      if (!ev.valid) return { ok: true, validAssumption: false, failedAssumptions: ev.failed, newlyKilled: [], killedTotalCount: ar.killedCount || 0, totalMutants: ar.totalMutants || 3, survivedCount: (ar.totalMutants || 3) - (ar.killedCount || 0) };
+      const prev = new Set(ar.killedMutants || []);
+      const newlyKilled = [];
+      const killedTrapTags = {};
+      for (const h of ev.hits) {
+        killedTrapTags[h.id] = h.tag;
+        if (!prev.has(h.id)) { prev.add(h.id); newlyKilled.push(h.id); }
+      }
+      ar.killedMutants = [...prev];
+      ar.killedCount = ar.killedMutants.length;
+      ar.survivedCount = Math.max(0, Number(ar.totalMutants || 3) - ar.killedCount);
+      const allKilled = ar.survivedCount === 0;
+      if (ar.killedCount / Math.max(1, ar.totalMutants || 3) >= 0.75) promoteEvidence(state, ar.propId, 3, "falsify_arena");
+      refreshDerived(state);
+      saveState(state);
+      return { ok: true, validAssumption: true, newlyKilled, killedTrapTags, allKilled, killedTotalCount: ar.killedCount, totalMutants: ar.totalMutants || 3, survivedCount: ar.survivedCount };
+    }
+    if (p === "/api/arena/repair") {
+      state = loadState();
+      const ar = (state.hub.arenas || []).find((a) => a.id === body.arenaId);
+      const lemma = String(body.lemma || "").trim();
+      if (!ar || !lemma) return { ok: false, error: "Arena and lemma required" };
+      const node = (state.graph.propositions || []).find((x) => x.id === ar.propId);
+      if (node) { node.boundaryConditions = [...(node.boundaryConditions || []), lemma]; }
+      saveState(state);
+      return { ok: true, repair: { arenaId: ar.id, propId: ar.propId, lemma } };
+    }
+    if (p === "/api/blitz/build") return handleBlitzBuild(body && body.count);
+    if (p === "/api/blitz/grade") {
+      const kmap = blitzStore.get(body.blitzId) || {};
+      const exp = kmap[body.itemId] || { killCue: "Governing invariant", firstMove: body.firstMoveAnswer, rejectedDecoy: "Surface shortcut", deepPrinciple: body.propId };
+      const kcHit = normTxt(body.killCueAnswer) === normTxt(exp.killCue);
+      const fmHit = normTxt(body.firstMoveAnswer) === normTxt(exp.firstMove);
+      const dcHit = normTxt(body.rejectedDecoyAnswer) === normTxt(exp.rejectedDecoy);
+      state = loadState();
+      state.hub.decisions = [...(state.hub.decisions || []), { propId: body.propId, firstMoveHit: fmHit, killCueHit: kcHit, decoyHit: dcHit, decisionMs: Number(body.decisionMs || 9000), graded: true }];
+      saveState(state);
+      return {
+        ok: true, decisionSec: Number((Number(body.decisionMs || 9000) / 1000).toFixed(1)), rejectedDecoyCorrect: dcHit,
+        record: { propId: body.propId },
+        expertLensDiff: { deepPrinciple: exp.deepPrinciple, killCue: { hit: kcHit, learner: body.killCueAnswer, expert: exp.killCue }, firstMove: { hit: fmHit, learner: body.firstMoveAnswer, expert: exp.firstMove }, rejectedDecoy: { hit: dcHit, learner: body.rejectedDecoyAnswer, expert: exp.rejectedDecoy } }
+      };
+    }
+    if (p === "/api/derivation/check") {
+      const dr = DERIV_STEPS[body.derivationId];
+      const stSpec = dr && dr[body.stepId];
+      const ans = normTxt(body.answer);
+      const passed = Boolean(stSpec && stSpec.ok.some((c) => ans === c || ans.includes(c)));
+      if (passed) {
+        state = loadState();
+        const dObj = (state.hub.derivations || []).find((x) => x.id === body.derivationId);
+        if (dObj) { promoteEvidence(state, dObj.propId, 3, "derivation_blackout"); refreshDerived(state); saveState(state); }
+      }
+      return { ok: true, derivationId: body.derivationId, stepId: body.stepId, passed, canonicalExpr: passed ? stSpec.expr : null };
+    }
+    if (p === "/api/derivation/cut") {
+      state = loadState();
+      const dObj = (state.hub.derivations || []).find((x) => x.id === body.derivationId);
+      if (!dObj) return { ok: false, error: "Derivation not found" };
+      const steps = dObj.steps || [];
+      const cutId = String(body.axiomId || "");
+      const children = new Map(steps.map((s) => [s.id, []]));
+      for (const s of steps) for (const dep of (s.dependsOn || [])) if (children.has(dep)) children.get(dep).push(s.id);
+      const inv = new Set();
+      const q = [...(children.get(cutId) || [])];
+      while (q.length) { const cur = q.shift(); if (inv.has(cur)) continue; inv.add(cur); for (const nx of (children.get(cur) || [])) if (!inv.has(nx)) q.push(nx); }
+      const order = new Map(steps.map((s, i) => [s.id, i]));
+      const invalidatedSteps = [...inv].sort((a, b) => order.get(a) - order.get(b));
+      const survivingSteps = steps.map((s) => s.id).filter((id) => id !== cutId && !inv.has(id));
+      const earliestCands = invalidatedSteps.filter((id) => {
+        const stp = steps.find((s) => s.id === id);
+        return (stp.dependsOn || []).includes(cutId) && !(stp.dependsOn || []).some((d) => inv.has(d));
+      });
+      const earliestBreak = earliestCands[0] || invalidatedSteps[0] || null;
+      const passed = body.guessStepId ? earliestCands.includes(body.guessStepId) : false;
+      let evidenceRecorded = false;
+      if (passed) { evidenceRecorded = promoteEvidence(state, dObj.propId, 4, "derivation_axiom_cut"); refreshDerived(state); saveState(state); }
+      return { ok: true, passed, earliestBreak, invalidatedSteps, survivingSteps, evidenceRecorded, explanation: passed ? `Cutting ${cutId} breaks ${earliestBreak} first (${invalidatedSteps.length} invalidated, ${survivingSteps.length} surviving).` : `Cutting ${cutId} invalidates ${invalidatedSteps.join(", ") || "none"}; earliest break is ${earliestBreak || "none"}.` };
+    }
+    if (p === "/api/viva/start") return handleVivaStart(body && body.propId);
+    if (p === "/api/viva/turn") return handleVivaTurn(body || {});
+    if (p === "/api/tracker/topic") {
+      state = loadState();
+      const tr = (state.hub.chapterTrackers || []).find((t) => t.slug === body.slug);
+      if (tr) {
+        const tp = (tr.topics || []).find((x) => x.id === body.topicId);
+        if (tp) tp.status = body.status;
+        tr.topicsMastered = (tr.topics || []).filter((x) => x.status === "mastered").length;
+        tr.pct = Math.round(((tr.topicsMastered + (tr.questionsSolved || 0)) / Math.max(1, (tr.topicsTotal || 1) + (tr.questionsTotal || 0))) * 100);
+        if (state.hub.activeChapterTracker && state.hub.activeChapterTracker.slug === tr.slug) state.hub.activeChapterTracker = clone(tr);
+        saveState(state);
+      }
+      return { ok: true, slug: body.slug, topicId: body.topicId, status: body.status };
+    }
+    if (p === "/api/tracker/milestone") {
+      state = loadState();
+      const tr = (state.hub.chapterTrackers || []).find((t) => t.slug === body.slug);
+      if (tr) {
+        tr.milestones = { ...(tr.milestones || {}), [body.key]: Boolean(body.value) };
+        if (state.hub.activeChapterTracker && state.hub.activeChapterTracker.slug === tr.slug) state.hub.activeChapterTracker = clone(tr);
+        saveState(state);
+      }
+      return { ok: true, slug: body.slug, key: body.key, value: Boolean(body.value) };
+    }
+    if (p === "/api/recover") {
+      state = loadState();
+      const cap = Math.max(1, Number((body && body.dailyCap) || 15));
+      let moved = 0;
+      (state.graph.propositions || []).forEach((pr, idx) => {
+        if (pr.nextReview && pr.nextReview <= todayIso()) { pr.nextReview = addDays(todayIso(), 1 + (idx % 4)); moved += 1; }
+      });
+      refreshDerived(state);
+      saveState(state);
+      return { ok: true, applied: true, dailyCap: cap, rescheduledCount: moved };
+    }
+    if (p === "/api/triage/plan") {
+      state = loadState();
+      const hrs = Number((body && body.hours) || 48), slp = Number((body && body.sleepHours) || 7);
+      const props = state.graph.propositions || [];
+      const salvage = props.filter((x) => x.status === "misconception" || x.status === "shaky").map((x) => ({ propId: x.id, title: x.title, status: x.status, chapter: x.chapter, allocatedMin: 35 }));
+      const protect = props.filter((x) => x.status === "solid" && x.nextReview && x.nextReview <= addDays(todayIso(), 3)).map((x) => ({ propId: x.id, title: x.title, status: x.status, chapter: x.chapter, allocatedMin: 15 }));
+      const cut = props.filter((x) => x.status === "planned").map((x) => ({ propId: x.id, title: x.title, status: x.status, chapter: x.chapter }));
+      return { ok: true, hoursLeft: hrs, sleepProtectedHours: Math.round((hrs / 24) * slp), usableStudyHours: Math.max(2, Math.round(hrs * 0.45)), buckets: { salvage_70pct: salvage, protect_20pct: protect, explicitly_cut: cut }, blocks: [{ order: 1, slot: "Block 1 (90m)", goal: "Repair Raft Figure 8 + Up-to-Date Log causal root" }, { order: 2, slot: "Block 2 (90m)", goal: "Kill remaining SHM & Attention Arena mutants" }] };
+    }
+    if (p === "/api/triage/crib-sheet") return { ok: true, compiled: false, antiMasteryMeta: { excludedSolidCount: 19 }, summary: "Demo sandbox preview — excludes 19 already-solid concepts." };
+    if (p === "/api/export/pocket") return { ok: true, pocketUrl: "./pocket.html", url: "./pocket.html", cardCount: 20 };
+    if (p === "/api/demo/load" || p === "/api/pack/import") return { ok: true, summary: "All 3 flagship Starter Packs (Raft, SHM Physics, Transformers) are pre-loaded in this interactive demo." };
+    if (p === "/api/pack/export") return { ok: true, relPath: "raft-consensus.syntopik-pack.zip", summary: "Demo sandbox: zero-PII pack schema verified (install locally via syntopik pack export to write zip)." };
+    if (p === "/api/export/obsidian") return { ok: true, propositionsExported: (state.graph.propositions || []).length, summary: "Demo sandbox: 30 concepts ready for Obsidian vault sync (run syntopik obsidian sync locally)." };
+    if (p === "/api/export/dossier") return { ok: true, relPath: "mastery-dossier.html", verifiedTransferPct: (state.hub.evidenceSummary && state.hub.evidenceSummary.verifiedTransferPct) || 33.3 };
+    if (p === "/api/import") return { ok: true, summary: "Demo sandbox: live URL/arXiv/YouTube/GitHub import runs locally via `syntopik serve`." };
+    return { ok: true, demo: true };
+  }
+
+  // Intercept EventSource for /api/events (zero network requests!)
+  const OrigES = window.EventSource;
+  window.EventSource = function DemoEventSource(url, cfg) {
+    const u = String(url || "");
+    if (u.startsWith("/api/") || u.includes("/api/events")) {
+      const listeners = new Map();
+      const es = {
+        url: u, readyState: 1, onmessage: null, onerror: null, onopen: null,
+        addEventListener(t, fn) { if (!listeners.has(t)) listeners.set(t, []); listeners.get(t).push(fn); },
+        removeEventListener(t, fn) { const a = listeners.get(t); if (a) listeners.set(t, a.filter((x) => x !== fn)); },
+        close() { es.readyState = 2; }
+      };
+      queueMicrotask(() => {
+        const ev = { data: JSON.stringify({ type: "ready", demo: true }) };
+        if (typeof es.onopen === "function") es.onopen({});
+        for (const fn of (listeners.get("message") || [])) fn(ev);
+      });
+      return es;
+    }
+    return OrigES ? new OrigES(url, cfg) : { close() {} };
+  };
+
+  // Intercept fetch('/api/...') with localStorage-backed responses
+  const origFetch = window.fetch ? window.fetch.bind(window) : null;
+  window.fetch = async function demoFetch(input, init) {
+    const urlStr = typeof input === "string" ? input : (input && input.url) || "";
+    if (urlStr.startsWith("/api/") || /^https?:\/\/[^/]+\/api\//.test(urlStr)) {
+      const method = String((init && init.method) || (input && input.method) || "GET").toUpperCase();
+      let body = {};
+      if (init && typeof init.body === "string" && init.body.trim()) {
+        try { body = JSON.parse(init.body); } catch { body = {}; }
+      }
+      const payload = routeApi(method, urlStr, body);
+      return new Response(JSON.stringify(payload), { status: payload && payload.ok === false ? 400 : 200, headers: { "Content-Type": "application/json" } });
+    }
+    if (origFetch) return origFetch(input, init);
+    return new Response(JSON.stringify({ ok: false, error: "Network unavailable" }), { status: 503, headers: { "Content-Type": "application/json" } });
+  };
+
+  window.__SYNTOPIK_SHIM__ = {
+    version: "3.0.0-demo",
+    storageKey: KEY,
+    reset() {
+      try { localStorage.removeItem(KEY); } catch { /* ignore */ }
+      window.location.reload();
+    }
+  };
+
+  document.addEventListener("click", (ev) => {
+    if (ev.target && ev.target.closest && ev.target.closest("#demoResetBtn")) {
+      window.__SYNTOPIK_SHIM__.reset();
+    }
+  });
+})();
+""".strip()
+
+
+# ---------------------------------------------------------------------------
+# Phase E: Assemble docs/index.html, docs/viewer.html, docs/pocket.html, .nojekyll
+# ---------------------------------------------------------------------------
+
+
+def _compact_style_blocks(html_text: str) -> str:
+    """Safely strip CSS comments and redundant whitespace inside <style> blocks only."""
+    def _shrink(m: re.Match[str]) -> str:
+        css = m.group(1)
+        css = re.sub(r"/\*[\s\S]*?\*/", "", css)
+        lines = [re.sub(r"\s+", " ", ln).strip() for ln in css.splitlines()]
+        compact = "\n".join(ln for ln in lines if ln)
+        return f"<style>\n{compact}\n</style>"
+    return re.sub(r"<style>([\s\S]*?)</style>", _shrink, html_text, count=1)
+
+
+def _build_index_html(study_graph: dict[str, Any], study_hub: dict[str, Any]) -> str:
+    src = (ROOT / "dashboard.html").read_text(encoding="utf-8")
+
+    # 1. Inject subtle Demo Reset pill styling & compact <style> whitespace cleanly
+    if "</style>" not in src:
+        raise RuntimeError("dashboard.html missing </style>")
+    src = src.replace("</style>", DEMO_RESET_CSS + "\n</style>", 1)
+    src = _compact_style_blocks(src)
+
+    # 2. Rewrite standalone Graph link for GitHub Pages relative routing
+    src = src.replace('href="./knowledge-graph/viewer.html"', 'href="./viewer.html"')
+    src = src.replace('href="/knowledge-graph/viewer.html"', 'href="./viewer.html"')
+    src = src.replace('href="knowledge-graph/viewer.html"', 'href="./viewer.html"')
+
+    # 3. Add calm "Interactive Demo · Reset" pill right beside liveStatusPill in .topbar-right
+    pill_anchor = '<span class="pill live-pill" id="liveStatusPill" title="Studio connection status"><span class="live-dot"></span>Offline</span>'
+    if pill_anchor not in src:
+        raise RuntimeError("Could not find #liveStatusPill in dashboard.html")
+    demo_pill_html = (
+        pill_anchor
+        + '\n    <button type="button" id="demoResetBtn" class="demo-reset-pill" '
+        + 'title="Interactive browser sandbox (localStorage) — click to reset all demo progress">'
+        + "Interactive Demo · Reset</button>"
+    )
+    src = src.replace(pill_anchor, demo_pill_html, 1)
+
+    # 4. Inline window.__STUDY_GRAPH__, window.__STUDY_HUB__, and window.__SYNTOPIK_SHIM__
+    script_tag = '<script src="./knowledge-graph/graph-data.js"></script>'
+    if script_tag not in src:
+        raise RuntimeError("Could not find graph-data.js script tag in dashboard.html")
+    inline_block = (
+        "<script>\n"
+        f"window.__STUDY_GRAPH__ = {_safe_script_json(study_graph)};\n"
+        f"window.__STUDY_HUB__ = {_safe_script_json(study_hub)};\n"
+        "</script>\n"
+        f"<script>\n{SHIM_JS}\n</script>"
+    )
+    src = src.replace(script_tag, inline_block, 1)
+    return src
+
+
+def _build_viewer_html(study_graph: dict[str, Any], study_hub: dict[str, Any]) -> str:
+    src = (ROOT / "knowledge-graph" / "viewer.html").read_text(encoding="utf-8")
+
+    # 1. Inject subtle Demo Reset pill styling + <=1380px header compaction so viewer stays <=1280px
+    if "</style>" not in src:
+        raise RuntimeError("viewer.html missing </style>")
+    src = src.replace("</style>", DEMO_RESET_CSS + VIEWER_DEMO_COMPACT_CSS + "\n</style>", 1)
+
+    # 2. Rewrite back-link to ./index.html
+    src = src.replace('href="../dashboard.html"', 'href="./index.html"')
+
+    # 3. Add calm "Interactive Demo · Reset" pill next to #liveStatusPill
+    pill_anchor = '<span class="pill live-pill" id="liveStatusPill" title="Studio connection mode"><span class="live-dot"></span>Offline</span>'
+    if pill_anchor not in src:
+        raise RuntimeError("Could not find #liveStatusPill in viewer.html")
+    demo_pill_html = (
+        pill_anchor
+        + '\n    <button type="button" id="demoResetBtn" class="demo-reset-pill" '
+        + 'title="Interactive browser sandbox (localStorage) — click to reset all demo progress">'
+        + "Interactive Demo · Reset</button>"
+    )
+    src = src.replace(pill_anchor, demo_pill_html, 1)
+
+    # 4. Slim hub for viewer while keeping full compatibility with shared localStorage state
+    viewer_hub = {
+        "schemaVersion": 5,
+        "generatedAt": DEMO_NOW_ISO,
+        "today": DEMO_TODAY,
+        "workspaceName": DEMO_WORKSPACE_NAME,
+        "stats": study_hub.get("stats", {}),
+        "leeches": study_hub.get("leeches", []),
+        "evidenceSummary": study_hub.get("evidenceSummary", {}),
+        "rootCauseHotspots": study_hub.get("rootCauseHotspots", {}),
+    }
+
+    script_tag = '<script src="./graph-data.js"></script>'
+    if script_tag not in src:
+        raise RuntimeError("Could not find graph-data.js script tag in viewer.html")
+    inline_block = (
+        "<script>\n"
+        f"window.__STUDY_GRAPH__ = {_safe_script_json(study_graph)};\n"
+        f"window.__STUDY_HUB__ = {_safe_script_json(viewer_hub)};\n"
+        "</script>\n"
+        f"<script>\n{SHIM_JS}\n</script>"
+    )
+    src = src.replace(script_tag, inline_block, 1)
+    return src
+
+
+def _build_pocket_html(ws: Path, kg: Path, out_path: Path) -> dict[str, Any]:
+    res = export_pocket_html(
+        workspace=ws,
+        out_path=out_path,
+        limit=20,
+        kg_dir=kg,
+        include_upcoming=True,
+        title="Syntopik Pocket — Live Demo",
+        api_base="",
+    )
+    txt = out_path.read_text(encoding="utf-8")
+    # Deterministic generatedAt & deckId
+    txt = re.sub(r'"generatedAt":\s*"[^"]+"', f'"generatedAt": "{DEMO_NOW_ISO}"', txt, count=1)
+    # Add subtle relative link back to ./index.html and hide LAN sync button on static GitHub Pages
+    txt = txt.replace(
+        '<button class="ibtn" id="undoBtn" type="button" title="Undo last rating">Undo</button>',
+        '<a class="ibtn" href="./index.html" style="text-decoration:none;">← Studio</a>\n    '
+        '<button class="ibtn" id="undoBtn" type="button" title="Undo last rating">Undo</button>',
+        1,
+    )
+    txt = txt.replace(
+        'if (DECK.apiBase || (window.location && /^https?:/.test(window.location.protocol))) {\n  lanBtn.style.display = "inline-block";\n}',
+        'if (DECK.apiBase) {\n  lanBtn.style.display = "inline-block";\n}',
+        1,
+    )
+    out_path.write_text(txt, encoding="utf-8")
+    res["bytes"] = out_path.stat().st_size
+    return res
+
+
+def build_demo_site(out_dir: Path) -> dict[str, Any]:
+    out_dir = out_dir.expanduser().resolve()
+    out_dir.mkdir(parents=True, exist_ok=True)
+
+    with tempfile.TemporaryDirectory(prefix="synt-demo-site-") as tmp:
+        ws = Path(tmp) / "ws"
+        kg = ws / "knowledge-graph"
+        ch = ws / "chapters"
+        _unpack_starter_packs(ws, kg, ch)
+        _seed_45_day_history(ws, kg, ch)
+        study_graph, study_hub = _build_demo_payloads(ws, kg, ch)
+
+        index_path = out_dir / "index.html"
+        viewer_path = out_dir / "viewer.html"
+        pocket_path = out_dir / "pocket.html"
+        nojekyll_path = out_dir / ".nojekyll"
+
+        index_html = _build_index_html(study_graph, study_hub)
+        viewer_html = _build_viewer_html(study_graph, study_hub)
+
+        index_path.write_text(index_html, encoding="utf-8")
+        viewer_path.write_text(viewer_html, encoding="utf-8")
+        pocket_meta = _build_pocket_html(ws, kg, pocket_path)
+        nojekyll_path.write_bytes(b"")
+
+    return {
+        "ok": True,
+        "outDir": str(out_dir),
+        "files": {
+            "index.html": index_path.stat().st_size,
+            "viewer.html": viewer_path.stat().st_size,
+            "pocket.html": pocket_path.stat().st_size,
+            ".nojekyll": nojekyll_path.stat().st_size,
+        },
+        "counts": {
+            "propositions": len(study_graph.get("propositions") or []),
+            "chains": len(study_graph.get("chains") or []),
+            "chapters": len(study_hub.get("chapters") or []),
+            "explorables": sum(len(v) for v in (study_hub.get("explorables") or {}).values()),
+            "forks": len(study_hub.get("forks") or []),
+            "arenas": len(study_hub.get("arenas") or []),
+            "derivations": len(study_hub.get("derivations") or []),
+            "whiteboardFrames": len((study_hub.get("whiteboard") or {}).get("frames") or []),
+            "causalSuspects": sum(
+                1 for v in ((study_hub.get("rootCauseHotspots") or {}).get("byProp") or {}).values() if float(v) >= 0.35
+            ),
+            "pocketCards": pocket_meta.get("cardCount", 0),
+        },
+    }
+
+
+# ---------------------------------------------------------------------------
+# Strict Static Verification (--check)
+# ---------------------------------------------------------------------------
+
+
+def check_demo_site(out_dir: Path) -> dict[str, Any]:
+    out_dir = out_dir.expanduser().resolve()
+    errors: list[str] = []
+    files_report: dict[str, Any] = {}
+
+    required = ("index.html", "viewer.html", "pocket.html", ".nojekyll")
+    for name in required:
+        fp = out_dir / name
+        if not fp.is_file():
+            errors.append(f"Missing required artifact: {name}")
+            continue
+        size = fp.stat().st_size
+        files_report[name] = {"bytes": size}
+        if name == ".nojekyll":
+            continue
+        txt = fp.read_text(encoding="utf-8")
+        if name == "index.html" and size > MAX_INDEX_BYTES:
+            errors.append(f"index.html exceeds {MAX_INDEX_BYTES} B ceiling: {size} B")
+
+        # 1. Zero external CDNs / external asset loads
+        ext_hits = EXTERNAL_RESOURCE_RE.findall(txt)
+        if ext_hits:
+            errors.append(f"{name}: external CDN/resource reference(s) detected: {ext_hits[:5]}")
+
+        # 2. Zero eval() / new Function()
+        js_hits = DANGEROUS_JS_RE.findall(txt)
+        if js_hits:
+            errors.append(f"{name}: disallowed eval/new Function detected: {js_hits[:5]}")
+
+        # 3. Zero personal strings or local user paths
+        abs_hits = ABS_USER_PATH_RE.findall(txt)
+        if abs_hits:
+            errors.append(f"{name}: forbidden local user path leaked: {abs_hits[:5]}")
+        for pstr in FORBIDDEN_PERSONAL_STRINGS:
+            if pstr in txt:
+                errors.append(f"{name}: forbidden personal string leaked: {pstr!r}")
+
+        # 4. Zero sealed secret keys in HTML
+        for stok in FORBIDDEN_HTML_SECRET_TOKENS:
+            if stok in txt:
+                errors.append(f"{name}: forbidden sealed secret token present: {stok!r}")
+
+        # 5. Relative navigation & shim assertions
+        if name == "index.html":
+            if 'href="./viewer.html"' not in txt:
+                errors.append("index.html: missing rewritten './viewer.html' link")
+            if "knowledge-graph/viewer.html" in txt:
+                errors.append("index.html: unrewritten 'knowledge-graph/viewer.html' link remains")
+            if 'src="./knowledge-graph/graph-data.js"' in txt:
+                errors.append("index.html: external graph-data.js script tag still present")
+            if 'id="demoResetBtn"' not in txt:
+                errors.append("index.html: missing 'Interactive Demo · Reset' button")
+            if "window.__SYNTOPIK_SHIM__" not in txt:
+                errors.append("index.html: missing window.__SYNTOPIK_SHIM__")
+            if '"schemaVersion":5' not in txt:
+                errors.append("index.html: missing schemaVersion: 5 payload")
+            if 'esc(res.newlyKilled.join(", "))' not in txt:
+                errors.append("index.html: missing Arena XSS fix esc(res.newlyKilled.join(\", \"))")
+            if 'value="suspend-all"' not in txt or 'value="replace"' in txt:
+                errors.append("index.html: pack import selector must use 'suspend-all' (not 'replace')")
+            if "resolveSafeOcclusionHref" not in txt or "validateRpnArray" not in txt:
+                errors.append("index.html: missing Wave 4B SVG/RPN hardening helpers")
+        elif name == "viewer.html":
+            if 'href="./index.html"' not in txt:
+                errors.append("viewer.html: missing rewritten './index.html' back-link")
+            if 'src="./graph-data.js"' in txt:
+                errors.append("viewer.html: external graph-data.js script tag still present")
+            if 'id="demoResetBtn"' not in txt:
+                errors.append("viewer.html: missing 'Interactive Demo · Reset' button")
+        elif name == "pocket.html":
+            if 'href="./index.html"' not in txt:
+                errors.append("pocket.html: missing './index.html' Studio back-link")
+
+    return {
+        "ok": len(errors) == 0,
+        "outDir": str(out_dir),
+        "maxIndexBytes": MAX_INDEX_BYTES,
+        "files": files_report,
+        "errors": errors,
+    }
+
+
+def main(argv: list[str] | None = None) -> int:
+    parser = argparse.ArgumentParser(
+        prog="build_demo_site.py",
+        description="Build & verify Syntopik v3.0 1-Click Zero-Install Live GitHub Pages Demo Site.",
+    )
+    parser.add_argument(
+        "--out-dir",
+        type=Path,
+        default=ROOT / "docs",
+        help="Output directory (default: docs/)",
+    )
+    parser.add_argument(
+        "--check",
+        action="store_true",
+        help="Run strict verification checks after building (size, zero CDNs, zero eval, zero PII/secrets).",
+    )
+    parser.add_argument(
+        "--check-only",
+        action="store_true",
+        help="Verify existing output files without rebuilding.",
+    )
+    parser.add_argument(
+        "--json",
+        action="store_true",
+        help="Emit machine-readable JSON output.",
+    )
+    args = parser.parse_args(argv)
+
+    build_res: dict[str, Any] | None = None
+    check_res: dict[str, Any] | None = None
+
+    if not args.check_only:
+        build_res = build_demo_site(args.out_dir)
+    if args.check or args.check_only:
+        check_res = check_demo_site(args.out_dir)
+
+    ok = (build_res["ok"] if build_res else True) and (check_res["ok"] if check_res else True)
+    summary = {"ok": ok, "build": build_res, "check": check_res}
+
+    if args.json:
+        print(json.dumps(summary, indent=2, ensure_ascii=False))
+    else:
+        if build_res:
+            f = build_res["files"]
+            c = build_res["counts"]
+            print(
+                f"Built Syntopik v3.0 Live Demo Site → {build_res['outDir']}\n"
+                f"  index.html  : {f['index.html']:,} B (ceiling {MAX_INDEX_BYTES:,} B)\n"
+                f"  viewer.html : {f['viewer.html']:,} B\n"
+                f"  pocket.html : {f['pocket.html']:,} B ({c['pocketCards']} commute cards)\n"
+                f"  .nojekyll   : {f['.nojekyll']} B\n"
+                f"  content     : {c['propositions']} props · {c['chains']} chains · {c['chapters']} chapters · "
+                f"{c['explorables']} :::explore labs · {c['forks']} forks · {c['arenas']} arenas · "
+                f"{c['derivations']} derivations · {c['whiteboardFrames']} WB frames · {c['causalSuspects']} causal suspects"
+            )
+        if check_res:
+            tag = "PASS" if check_res["ok"] else "FAIL"
+            print(f"Static Check: {tag}")
+            for err in check_res["errors"]:
+                print(f"  ERROR: {err}", file=sys.stderr)
+
+    return 0 if ok else 1
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

@@ -1,9 +1,9 @@
 ---
 name: knowledge-graph
 description: >-
-  Maintain Syntopik's persistent Knowledge Hypergraph with FIRe implicit
-  prerequisite credit, SRC knockouts, calm backlog recovery, personal FSRS-6
-  optimization, SVG occlusion, and Obsidian/Mnemonic sync.
+  Maintain the Knowledge Hypergraph with FIRe credit, SRC knockouts, 4-tier
+  evidence, causal root-cause halos, learner profiles, post-exam sunset pruning,
+  FSRS-6 tuning, SVG occlusion, and Obsidian sync.
 ---
 
 # Persistent Knowledge Hypergraph, FIRe HSRS, Calibration & Vault Sync
@@ -33,10 +33,12 @@ Every topic studied in **Syntopik** compounds into a privacy-safe (gitignored on
 - **Joint-Entailment Law**: never split $A \wedge B \rightarrow C$ into separate binary edges.
 - `relation`: `"requires"` | `"derives"` | `"generalizes"` | `"contrasts_with"` (default `encompassWeight`: `0.50` binary, `0.35`/premise joint, `0.0` `contrasts_with`).
 
-### 3. `revlog.jsonl`, `mistakes.jsonl` & `reading-queue.jsonl` (All Gitignored)
-- `revlog.jsonl`: append-only review telemetry (`propId`, `cueId`, `ts`, `rating`, `elapsedDays`, `predictedR`, `learnerConfidence`, `correct`, `durationMs`) powering personal FSRS-6 optimization, Brier calibration, and the 365-day retention heatmap.
+### 3. `revlog.jsonl`, `mistakes.jsonl`, `reading-queue.jsonl`, `learner-profile.json` & `whiteboard-session.json` (All Gitignored)
+- `revlog.jsonl`: append-only review telemetry (`propId`, `cueId`, `ts`, `rating`, `elapsedDays`, `predictedR`, `learnerConfidence`, `correct`, `hintsUsed`, `durationMs`) powering personal FSRS-6 optimization, Tier-3 psychology updates, Brier calibration, and the 365-day retention heatmap.
 - `mistakes.jsonl`: root errors (`category` across 13 types + optional `confusedWith` pair counter) kept separate from clean proposition statements.
 - `reading-queue.jsonl`: SuperMemo-style Incremental Reading queue (`priority` 0–100, `stage`: `queued -> extracted -> clozed -> crystallized`).
+- `learner-profile.json` (`< 8 KB`, `syntopik profile status|calibrate|policy|override|reset`): 3-Cadence Non-VARK Learner Psychology profile storing domain Pelánek Elos, 6-state affect, 3-tier NEA Failure DNA, transparent `userOverrides`, and compiled Kalyuga `TeachingPolicy`.
+- `whiteboard-session.json` (`syntopik board status|push|pin|clear`): atomic Live AI Chalkboard frames + unresolved learner `pendingPins`.
 
 ---
 
@@ -76,26 +78,36 @@ Every topic studied in **Syntopik** compounds into a privacy-safe (gitignored on
 
 5. **Bidirectional Obsidian Vault & Mnemonic Medium (`:::cue`) Sync (`vault_sync.py`)**:
    ```bash
-   syntopik export obsidian --vault ~/Notes/Syntopik --json                # Clean YAML (syntopik_id/status/mastery only), [[wikilinks]], Trap MOC
+   syntopik export obsidian --out ~/Notes/Syntopik --json                  # Alias: --vault ~/Notes/Syntopik (clean YAML, [[wikilinks]], Trap MOC)
    syntopik run vault_sync import --vault ~/Notes/Syntopik --json          # Imports edited :::cue & {{c1::...}} without clobbering FSRS state
    syntopik run vault_sync sync-notes --chapters-dir chapters --json       # Bidirectional chapters/*.md :::cue {propId, id, kind} sync w/ line anchors
    ```
    Updates strictly inside `<!-- syntopik:begin -->...<!-- syntopik:end -->` markers so personal learner prose is 100% preserved across Git/iCloud!
 
-6. **Zero-Install Offline Pocket Commute Deck & Zero-PII Shareable Study Packs**:
+6. **4-Tier Evidence Ledger, Causal Root-Cause Halos & Semester Sunset Pruning (v3.0)**:
    ```bash
-   syntopik export --pocket --limit 25 --out chapters/pocket-review.html    # ~45 KB zero-CDN mobile swipe/occlusion deck (opt-in LAN QR: syntopik serve --lan)
-   syntopik import --pocket-sync pocket-sync.json                           # Idempotent FSRS-6 + FIRe replay by reviewId
-   syntopik pack export <slug-or-subject> --out <slug>.syntopik-pack.zip    # SHA-256 verified, strips all personal FSRS/mastery/revlog PII
-   syntopik pack import <path> --mode merge|suspend-all                     # Zip-slip/symlink safe; find-similar dedup never overwrites solid mastery
+   syntopik sunset <slug> [--apply] --json                                 # Snapshots zero-PII pack, keeps core axioms at R=0.80, archives leaf clutter
+   syntopik export dossier --out chapters/mastery-dossier.md --json        # Verifiable evidence-tiered Mastery Dossier export
+   syntopik profile status --json                                          # Inspect domain Elo, 6-state affect, Failure DNA & TeachingPolicy
+   ```
+   - **4-Tier Evidence (`T1`–`T4`, `syntopik/evidence.py`)**: separates passive recall (`T1`/`T2`) from verified transfer (`T3`: Arena / Blackout / CBT) and structural defense (`T4`: Viva / Axiom-Cut), surfacing anti-inflation alerts whenever a high-centrality node stays stuck at `T1`/`T2`.
+   - **Bayesian Noisy-OR Causal Root-Cause Halos (`syntopik/root_cause.py`)**: traces recurring leaf failures upstream across `chains.jsonl`, renders amber causal-suspect halos (`rootCauseHotspots.byProp[id] >= 0.35`) in `knowledge-graph/viewer.html`, and selects the ancestor probe maximizing expected entropy reduction ($\Delta H$).
+
+7. **Zero-Install Offline Pocket Commute Deck & Zero-PII Shareable Study Packs**:
+   ```bash
+   syntopik export pocket --limit 25 --out chapters/pocket-review.html     # ~45 KB zero-CDN mobile swipe/occlusion deck (opt-in LAN QR: syntopik serve --lan)
+   syntopik import --pocket-sync pocket-sync.json                          # Idempotent FSRS-6 + FIRe replay by reviewId
+   syntopik pack export <slug-or-subject> --out <slug>.syntopik-pack.zip   # SHA-256 verified, strips all personal FSRS/mastery/revlog PII
+   syntopik pack import <path> --mode merge|suspend-all                    # Zip-slip/symlink safe; find-similar dedup never overwrites solid mastery
    syntopik pack inspect <path>
    ```
 
-7. **Graph Intelligence, Confusable Pairs, Daily Plans & Ambient MCP**:
+8. **Graph Intelligence, Confusable Pairs, Daily Plans & Ambient MCP (v3.0)**:
    ```bash
+   syntopik next --json                                                    # Unified <=180-token Pedagogical Brainstem Action Envelope
    syntopik run graph_intel --bottlenecks --islands --combos --confusables --json
    syntopik run daily_plan --minutes 60 --json                             # Or --micro 5 for 5-min sprint; emits [A, B, A'] contrast triplets
    syntopik run audio_brief --chapter chapters/<slug>.md --pause-sec 2.5 --out chapters/<slug>-audio.mp3
    syntopik run mistake_analytics summary --json                           # Log/analyze 13 root categories + confusedWith pairs
    ```
-   In *any* coding or reading chat, call headless MCP tools **`synt_capture_concept`**, **`synt_get_frontier`**, and **`synt_log_review`** to keep the hypergraph live effortlessly.
+   In *any* coding or reading chat, call headless MCP tools **`synt_next_move`**, **`synt_whiteboard_step`**, **`synt_capture_concept`**, **`synt_get_frontier`** (includes `learnerProfile`, `teachingPolicy`, `dueForks`, `arenasCount`, `coldStartDays`, `pendingPins`), and **`synt_log_review`** (pass `hintsUsed` `0..5` & `durationMs`).

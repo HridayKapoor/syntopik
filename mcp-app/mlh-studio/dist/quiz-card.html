@@ -794,6 +794,52 @@ details.why-box[open] summary { margin-bottom: 8px; color: var(--mlh-fg); }
   box-shadow: 0 0 0 2px var(--mlh-accent-soft);
 }
 
+/* Clean-Room Derivation Blackout */
+.blackout-wrap {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.blackout-list {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+}
+.blackout-row {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  border: 1px solid var(--mlh-border);
+  background: var(--mlh-bg-2);
+}
+.blackout-row.is-hidden {
+  border-style: dashed;
+  border-color: var(--mlh-border-info);
+  background: var(--mlh-bg);
+}
+.blackout-step-input {
+  font-family: var(--mlh-mono);
+  font-size: 12.5px;
+}
+
+/* Quiet Teaching Policy / Affect Strip */
+.policy-strip {
+  gap: 7px;
+  padding: 9px 11px;
+}
+.policy-pills {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  flex-wrap: wrap;
+}
+.policy-pill {
+  padding: 3px 8px;
+  font-size: 11px;
+}
+
 /* SVG Image Occlusion Stage */
 .io-stage {
   display: flex;

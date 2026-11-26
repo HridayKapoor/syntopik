@@ -29,6 +29,7 @@ import threading
 import time
 import urllib.parse
 import webbrowser
+import zipfile
 from datetime import date, datetime, timezone
 from http import HTTPStatus
 from http.cookies import SimpleCookie
@@ -105,6 +106,32 @@ def _is_loopback_ip(addr: str | None) -> bool:
 _HOST_IPV6_RE = re.compile(r"^\[([0-9a-fA-F:]+)\](?::(\d{1,5}))?$")
 _HOST_NAME_RE = re.compile(r"^([A-Za-z0-9.-]+)(?::(\d{1,5}))?$")
 _ARXIV_ID_RE = re.compile(r"^(?:arXiv:)?(?:\d{4}\.\d{4,5}|[a-z-]+(?:\.[A-Z]{2})?/\d{7})(?:v\d+)?$", re.IGNORECASE)
+_SAFE_PACK_SLUG_RE = re.compile(r"^[a-z0-9][a-z0-9_-]{0,63}$")
+
+_SEALED_FORK_FIELDS = frozenset({
+    "sealedWinningMove",
+    "sealedBlunder",
+    "refutationMsg",
+    "verifySpec",
+    "mutationPool",
+})
+_SEALED_DECISION_FIELDS = frozenset({
+    "bestMove",
+    "expertRationale",
+    "expertLens",
+    "killCue",
+    "firstMove",
+    "rejectedDecoy",
+    "sealedAnswer",
+    "canonicalAnswer",
+})
+_SEALED_GATE_FIELDS = frozenset({
+    "canonicalAnswer",
+    "expectedAnswer",
+    "revealedBody",
+    "sealedAnswer",
+    "answer",
+})
 
 
 def _valid_port_str(port_str: str | None) -> bool:
@@ -162,6 +189,22 @@ def _is_loopback_origin(origin_header: str | None) -> bool:
     return _is_loopback_host(parsed.netloc)
 
 
+def _origin_matches_host(origin_header: str, host_header: str | None) -> bool:
+    if not host_header:
+        return False
+    try:
+        parsed = urllib.parse.urlparse(origin_header.strip())
+    except ValueError:
+        return False
+    if parsed.scheme not in ("http", "https"):
+        return False
+    if parsed.username or parsed.password:
+        return False
+    if parsed.path not in ("", "/") or parsed.query or parsed.fragment:
+        return False
+    return parsed.netloc.lower() == host_header.strip().lower()
+
+
 def _detect_lan_ip() -> str:
     """Detect local LAN IPv4 address without sending network traffic."""
     for target in (("192.0.2.1", 80), ("10.255.255.255", 1)):
@@ -197,6 +240,13 @@ def _compute_workspace_signature(ws: Path, kg_dir: Path, chapters_dir: Path) -> 
         kg_dir / "forks.jsonl",
         kg_dir / "arenas.jsonl",
         kg_dir / "decisions.jsonl",
+        kg_dir / "learner-profile.json",
+        kg_dir / "derivations.jsonl",
+        kg_dir / "viva-sessions.jsonl",
+        kg_dir / "evidence-ledger.jsonl",
+        kg_dir / "whiteboard-session.json",
+        kg_dir / "mentor-config.json",
+        kg_dir / "blitz-sessions.json",
         kg_dir / "review-queue.md",
     ]
     for d in (chapters_dir, ws / "exams", ws / "sources"):
@@ -349,7 +399,7 @@ def _build_python_fallback_state(ws: Path, kg_dir: Path, chapters_dir: Path) -> 
         "chainCount": len(chains),
     }
     hub = {
-        "schemaVersion": 4,
+        "schemaVersion": 5,
         "generatedAt": now_iso(),
         "today": today,
         "workspaceName": ws.name,
@@ -451,6 +501,415 @@ def _compute_triage_recommended(kg_dir: Path, hub: dict[str, Any]) -> bool:
     return False
 
 
+# ----------------------------------------------------------------------
+# Syntopik v3.0 sanitization, packs, root-cause & explorable helpers
+# ----------------------------------------------------------------------
+
+
+def _sanitize_fork(fork: dict[str, Any]) -> dict[str, Any]:
+    """Return a public fork object guaranteed free of sealed winning/blunder moves."""
+    out = {k: v for k, v in fork.items() if k not in _SEALED_FORK_FIELDS}
+    if "mutationCount" not in out:
+        mp = fork.get("mutationPool")
+        out["mutationCount"] = len(mp) if isinstance(mp, list) else 0
+    if "engine" not in out:
+        vs = fork.get("verifySpec")
+        out["engine"] = vs.get("engine", "exact") if isinstance(vs, dict) else "exact"
+    return out
+
+
+def _sanitize_arena(arena: dict[str, Any]) -> dict[str, Any]:
+    """Return arena metadata WITHOUT leaking sealedReference or surviving mutant code/expr/trapTag."""
+    mutants = arena.get("sealedMutants") or []
+    killed = {str(k) for k in (arena.get("killedMutants") or [])}
+    total = len(mutants) if isinstance(mutants, list) else int(arena.get("totalMutants") or 0)
+    if isinstance(mutants, list) and mutants:
+        killed_n = sum(1 for m in mutants if isinstance(m, dict) and str(m.get("id")) in killed)
+    else:
+        killed_n = int(arena.get("killedCount") or len(killed))
+    survived_n = max(0, total - killed_n)
+
+    raw_repairs = arena.get("lemmaRepairs") or []
+    public_repairs: list[dict[str, Any]] = []
+    if isinstance(raw_repairs, list):
+        for r in raw_repairs:
+            if isinstance(r, dict):
+                public_repairs.append({
+                    "id": r.get("id"),
+                    "lemma": r.get("lemma"),
+                    "ts": r.get("ts"),
+                    "persistedToProp": bool(r.get("persistedToProp", False)),
+                })
+
+    raw_assumps = arena.get("assumptionPredicates")
+    if isinstance(raw_assumps, list):
+        assumptions = [
+            (p.get("description") or p.get("expr") or str(p)) if isinstance(p, dict) else str(p)
+            for p in raw_assumps
+        ]
+    elif isinstance(arena.get("assumptions"), list):
+        assumptions = [str(x) for x in arena["assumptions"]]
+    else:
+        assumptions = []
+
+    status = str(arena.get("status") or ("cleared" if total > 0 and killed_n >= total else "active")).lower()
+    return {
+        "id": arena.get("id"),
+        "propId": arena.get("propId"),
+        "domain": arena.get("domain"),
+        "title": arena.get("title"),
+        "claim": arena.get("claim"),
+        "entry": arena.get("entry"),
+        "lang": arena.get("lang"),
+        "status": status,
+        "assumptions": assumptions,
+        "totalMutants": total,
+        "killedCount": killed_n,
+        "survivedCount": survived_n,
+        "killedMutants": sorted(killed),
+        "bestMinimalSize": arena.get("bestMinimalSize"),
+        "lemmaRepairsCount": len(public_repairs),
+        "lemmaRepairs": public_repairs,
+        "updatedAt": arena.get("updatedAt"),
+    }
+
+
+def _sanitize_decision(dec: dict[str, Any]) -> dict[str, Any]:
+    """Strip sealed expert move/rationale from ungraded decisions while keeping graded records."""
+    status = str(dec.get("status") or "").strip().lower()
+    has_grade_flags = any(
+        isinstance(dec.get(k), bool) for k in ("killCueHit", "firstMoveHit", "decoyHit", "correct")
+    )
+    is_graded = (dec.get("graded") is True) or (
+        dec.get("graded") is not False
+        and status not in ("pending", "ungraded", "open", "draft")
+        and has_grade_flags
+    )
+    if is_graded:
+        return dict(dec)
+    return {k: v for k, v in dec.items() if k not in _SEALED_DECISION_FIELDS}
+
+
+def _sanitize_derivation_row(deriv: dict[str, Any], *, level: int = 3) -> dict[str, Any]:
+    """Expose derivation DAG structure with blackout-hidden steps masked (zero secret leak)."""
+    steps = [s for s in (deriv.get("steps") or []) if isinstance(s, dict)]
+    non_axioms = [s for s in steps if str(s.get("role") or "step") != "axiom"]
+    hidden_ids: set[str] = set()
+    if non_axioms:
+        lvl = max(1, min(3, int(level)))
+        if lvl == 1:
+            inter = [s for s in non_axioms if s.get("role") == "step"]
+            pool = inter if inter else non_axioms
+            target_n = max(1, round(len(pool) * 0.4))
+            stride = max(1, len(pool) // target_n)
+            for idx in range(len(pool) - 1, -1, -stride):
+                hidden_ids.add(str(pool[idx].get("id") or ""))
+                if len(hidden_ids) >= target_n:
+                    break
+        elif lvl == 2:
+            target_n = max(1, round(len(non_axioms) * 0.65))
+            for s in reversed(non_axioms):
+                if len(hidden_ids) >= target_n:
+                    break
+                hidden_ids.add(str(s.get("id") or ""))
+        else:
+            hidden_ids = {str(s.get("id") or "") for s in non_axioms}
+
+    public_steps: list[dict[str, Any]] = []
+    for s in steps:
+        sid = str(s.get("id") or "")
+        is_hidden = sid in hidden_ids
+        public_steps.append({
+            "id": sid,
+            "label": s.get("label", sid),
+            "role": s.get("role", "step"),
+            "dependsOn": list(s.get("dependsOn") or []),
+            "hidden": is_hidden,
+            "expr": None if is_hidden else s.get("expr"),
+            "note": None if is_hidden else (s.get("note") or None),
+        })
+
+    return {
+        "id": deriv.get("id"),
+        "propId": deriv.get("propId"),
+        "chapter": deriv.get("chapter"),
+        "title": deriv.get("title"),
+        "domain": deriv.get("domain"),
+        "stepCount": len(steps),
+        "axiomCount": sum(1 for s in steps if s.get("role") == "axiom"),
+        "theoremCount": sum(1 for s in steps if s.get("role") == "theorem"),
+        "hiddenCount": len(hidden_ids),
+        "hiddenStepIds": [s["id"] for s in public_steps if s["hidden"]],
+        "steps": public_steps,
+        "updatedAt": deriv.get("updatedAt"),
+    }
+
+
+def _sanitize_viva_session(sess: dict[str, Any]) -> dict[str, Any]:
+    """Return a clean Viva session summary without spoiling future attack prompts."""
+    prompts = [p for p in (sess.get("prompts") or []) if isinstance(p, dict)]
+    turns = [t for t in (sess.get("turns") or []) if isinstance(t, dict)]
+    cur = int(sess.get("currentTurn") or (len(turns) + 1))
+    status = str(sess.get("status") or "in_progress")
+    cur_prompt = (
+        prompts[cur - 1]
+        if status == "in_progress" and 1 <= cur <= len(prompts)
+        else None
+    )
+    visible_prompts = prompts if status == "completed" else prompts[: max(1, min(cur, len(prompts)))]
+    return {
+        "id": sess.get("id"),
+        "propId": sess.get("propId"),
+        "propTitle": sess.get("propTitle"),
+        "subject": sess.get("subject"),
+        "chapter": sess.get("chapter"),
+        "status": status,
+        "currentTurn": cur,
+        "totalTurns": int(sess.get("totalTurns") or 5),
+        "turnsCompleted": len(turns),
+        "turns": turns,
+        "currentPrompt": cur_prompt,
+        "prompts": visible_prompts,
+        "commitmentLedger": sess.get("commitmentLedger"),
+        "scores": sess.get("scores"),
+        "composite": (sess.get("scores") or {}).get("composite") if isinstance(sess.get("scores"), dict) else None,
+        "outcome": sess.get("outcome"),
+        "evidenceRecorded": bool(sess.get("evidenceRecorded")),
+        "demotedToShaky": bool(sess.get("demotedToShaky")),
+        "createdAt": sess.get("createdAt"),
+        "updatedAt": sess.get("updatedAt"),
+    }
+
+
+def _sanitize_whiteboard_frame(frame: dict[str, Any]) -> dict[str, Any]:
+    """Strip sealed canonical/expected answers and revealedBody from locked prediction_gate frames."""
+    fr = dict(frame)
+    kind = str(fr.get("kind") or "").lower()
+    raw_gate = fr.get("gate")
+    gate = dict(raw_gate) if isinstance(raw_gate, dict) else None
+    raw_payload = fr.get("payload")
+    payload = dict(raw_payload) if isinstance(raw_payload, dict) else {}
+
+    is_locked_gate = kind == "prediction_gate" and (
+        bool(fr.get("locked", True)) or not (gate and gate.get("unlockedAt"))
+    )
+    if is_locked_gate:
+        for k in _SEALED_GATE_FIELDS:
+            fr.pop(k, None)
+            payload.pop(k, None)
+            if gate is not None:
+                gate.pop(k, None)
+        fr["body"] = ""
+        fr["locked"] = True
+    elif kind == "prediction_gate" and gate is not None:
+        if "canonicalAnswer" not in fr and gate.get("expectedAnswer") is not None:
+            fr["canonicalAnswer"] = gate.get("expectedAnswer")
+
+    if gate is not None:
+        fr["gate"] = gate
+    fr["payload"] = payload
+    return fr
+
+
+def _sanitize_whiteboard(wb: dict[str, Any]) -> dict[str, Any]:
+    """Sanitize every frame in a whiteboard session so locked gates never leak answers."""
+    out = dict(wb)
+    raw_frames = wb.get("frames") or []
+    out["frames"] = [_sanitize_whiteboard_frame(f) for f in raw_frames if isinstance(f, dict)]
+    pins = [p for p in (wb.get("pins") or []) if isinstance(p, dict)]
+    out["pins"] = pins
+    pending = [p for p in pins if not p.get("resolved")]
+    out["pendingPins"] = pending
+    out["pendingPinCount"] = len(pending)
+    out["frameCount"] = len(out["frames"])
+    return out
+
+
+def _find_packs_dirs(ws: Path, pkg: Path) -> list[Path]:
+    dirs: list[Path] = []
+    seen: set[Path] = set()
+    for cand in (ws / "packs", pkg / "packs", pkg / "_bundle" / "packs"):
+        try:
+            res = cand.resolve()
+        except OSError:
+            continue
+        if res.is_dir() and res not in seen:
+            seen.add(res)
+            dirs.append(res)
+    return dirs
+
+
+def _resolve_starter_pack_slug(pack_slug: str, ws: Path, pkg: Path) -> tuple[str, Path]:
+    """Strictly validate a bundled starter pack slug against `packs/*.syntopik-pack.zip`."""
+    slug = str(pack_slug or "").strip().lower()
+    if not _SAFE_PACK_SLUG_RE.fullmatch(slug):
+        raise ValueError(f"Invalid packSlug {pack_slug!r}: only lowercase letters, digits, '-' and '_' allowed.")
+    filename = f"{slug}.syntopik-pack.zip"
+    for pdir in _find_packs_dirs(ws, pkg):
+        cand = (pdir / filename).resolve()
+        if not cand.is_relative_to(pdir):
+            continue
+        if cand.is_file():
+            return slug, cand
+    raise FileNotFoundError(f"Bundled starter pack '{slug}' not found in packs/.")
+
+
+def _scan_starter_packs(ws: Path, pkg: Path) -> list[dict[str, Any]]:
+    """Scan bundled `packs/*.syntopik-pack.zip` manifests safely without extracting files."""
+    packs_out: list[dict[str, Any]] = []
+    seen_slugs: set[str] = set()
+    max_manifest_bytes = 4 * 1024 * 1024
+    for pdir in _find_packs_dirs(ws, pkg):
+        try:
+            entries = sorted(pdir.glob("*.syntopik-pack.zip"))
+        except OSError:
+            continue
+        for zp in entries:
+            try:
+                resolved = zp.resolve()
+                if not resolved.is_relative_to(pdir) or not resolved.is_file():
+                    continue
+            except OSError:
+                continue
+            slug = zp.name[:-len(".syntopik-pack.zip")].strip().lower()
+            if not _SAFE_PACK_SLUG_RE.fullmatch(slug) or slug in seen_slugs:
+                continue
+            meta: dict[str, Any] = {
+                "slug": slug,
+                "id": slug,
+                "title": slug.replace("-", " ").title(),
+                "subject": "General",
+                "author": "Syntopik",
+                "license": "CC-BY-4.0",
+                "filename": zp.name,
+                "sizeBytes": zp.stat().st_size,
+                "propositionCount": 0,
+                "chainCount": 0,
+                "chapterCount": 0,
+                "forkCount": 0,
+                "arenaCount": 0,
+                "derivationCount": 0,
+                "examCount": 0,
+            }
+            try:
+                with zipfile.ZipFile(resolved, "r") as zf:
+                    names = set(zf.namelist())
+                    if "pack-manifest.json" in names:
+                        with zf.open("pack-manifest.json", "r") as fh:
+                            raw = fh.read(max_manifest_bytes + 1)
+                        if len(raw) <= max_manifest_bytes:
+                            pm = json.loads(raw.decode("utf-8"))
+                            if isinstance(pm, dict):
+                                meta["id"] = str(pm.get("id") or slug)
+                                meta["title"] = str(pm.get("title") or meta["title"])
+                                meta["subject"] = str(pm.get("subject") or meta["subject"])
+                                meta["author"] = str(pm.get("author") or meta["author"])
+                                meta["license"] = str(pm.get("license") or meta["license"])
+                                if isinstance(pm.get("description"), str):
+                                    meta["description"] = pm["description"]
+                                meta["propositionCount"] = len(pm.get("propositions") or [])
+                                meta["chainCount"] = len(pm.get("chains") or [])
+                                comp_files = [str(x) for x in (pm.get("companionFiles") or [])]
+                                meta["chapterCount"] = len(pm.get("chapters") or []) or sum(
+                                    1 for cf in comp_files if cf.startswith("chapters/") and cf.endswith(".md")
+                                )
+                                meta["forkCount"] = len(pm.get("forks") or [])
+                                meta["arenaCount"] = len(pm.get("arenas") or [])
+                                meta["derivationCount"] = len(pm.get("derivations") or [])
+                                meta["examCount"] = len(pm.get("exams") or [])
+                    if meta["forkCount"] == 0 and "forks.jsonl" in names:
+                        with zf.open("forks.jsonl", "r") as fh:
+                            f_raw = fh.read(512 * 1024).decode("utf-8", errors="ignore")
+                        meta["forkCount"] = sum(1 for ln in f_raw.splitlines() if ln.strip())
+                    if meta["arenaCount"] == 0 and "arenas.jsonl" in names:
+                        with zf.open("arenas.jsonl", "r") as fh:
+                            a_raw = fh.read(512 * 1024).decode("utf-8", errors="ignore")
+                        meta["arenaCount"] = sum(1 for ln in a_raw.splitlines() if ln.strip())
+            except Exception:
+                pass
+            seen_slugs.add(slug)
+            packs_out.append(meta)
+    packs_out.sort(key=lambda p: p["slug"])
+    return packs_out
+
+
+def _compute_root_cause_hotspots(kg_dir: Path) -> dict[str, Any]:
+    """Compute `{byProp, blastRadius}` using Bayesian Noisy-OR fault localization."""
+    from syntopik.root_cause import find_blast_radius, localize_fault
+
+    blast = find_blast_radius(kg_dir, limit=12)
+    by_prop: dict[str, float] = {}
+
+    for item in blast:
+        pid = str(item.get("propId") or "")
+        if not pid:
+            continue
+        weak_n = int(item.get("weakDownstreamCount") or 0)
+        miss_n = int(item.get("downstreamMissCount") or 0)
+        sev_base = 0.50 if item.get("status") == "misconception" else 0.38
+        est = min(0.96, round(sev_base + 0.08 * weak_n + 0.05 * miss_n, 4))
+        by_prop[pid] = max(by_prop.get(pid, 0.0), est)
+
+    props = load_jsonl(kg_dir / "propositions.jsonl")
+    mistakes = load_jsonl(kg_dir / "mistakes.jsonl")
+    failed_leaves: list[str] = []
+    seen_leaves: set[str] = set()
+    for p in props:
+        pid = str(p.get("id") or "")
+        if not pid or pid in seen_leaves:
+            continue
+        if str(p.get("status") or "").lower() in ("misconception", "shaky"):
+            seen_leaves.add(pid)
+            failed_leaves.append(pid)
+    for m in reversed(mistakes[-20:]):
+        pid = str(m.get("propId") or "")
+        if pid and pid not in seen_leaves:
+            seen_leaves.add(pid)
+            failed_leaves.append(pid)
+
+    for leaf_id in failed_leaves[:25]:
+        try:
+            loc = localize_fault(kg_dir, leaf_id, max_depth=4)
+            if loc.get("ok"):
+                for s in loc.get("suspects") or []:
+                    spid = str(s.get("propId") or "")
+                    score = float(s.get("suspectRootScore") or 0.0)
+                    if spid and score > by_prop.get(spid, 0.0):
+                        by_prop[spid] = round(score, 4)
+        except Exception:
+            continue
+
+    return {
+        "byProp": by_prop,
+        "blastRadius": blast,
+    }
+
+
+def _compile_chapter_explorables(chapters_dir: Path) -> dict[str, list[dict[str, Any]]]:
+    """Compile all `:::explore` blocks across `chapters/*.md` into `{chapterSlug: [spec...]}`."""
+    if not chapters_dir.is_dir():
+        return {}
+    from syntopik.explorable import parse_explorable_blocks
+
+    out: dict[str, list[dict[str, Any]]] = {}
+    for md_path in sorted(chapters_dir.rglob("*.md")):
+        if md_path.name.startswith("."):
+            continue
+        try:
+            text = md_path.read_text(encoding="utf-8")
+        except OSError:
+            continue
+        if ":::explore" not in text:
+            continue
+        try:
+            specs = parse_explorable_blocks(text, strict=False)
+        except Exception:
+            specs = []
+        if specs:
+            out[md_path.stem] = specs
+    return out
+
+
 class SyntopikStudioServer(ThreadingHTTPServer):
     """Multi-threaded local Studio HTTP server with CSRF token, SSE notifications & LAN pairing."""
 
@@ -484,6 +943,7 @@ class SyntopikStudioServer(ThreadingHTTPServer):
         self._change_cond = threading.Condition()
         self._change_seq = 0
         self._last_change_reason = "init"
+        self._event_history: list[tuple[int, str, str, dict[str, Any] | None]] = []
         self._shutdown_event = threading.Event()
         self._state_lock = threading.Lock()
         self._last_synced_sig = ""
@@ -545,10 +1005,19 @@ class SyntopikStudioServer(ThreadingHTTPServer):
                     return True
         return False
 
-    def notify_change(self, reason: str = "mutation") -> None:
+    def notify_change(
+        self,
+        reason: str = "mutation",
+        *,
+        event_type: str = "changed",
+        payload: dict[str, Any] | None = None,
+    ) -> None:
         with self._change_cond:
             self._change_seq += 1
             self._last_change_reason = reason
+            self._event_history.append((self._change_seq, event_type, reason, payload))
+            if len(self._event_history) > 64:
+                del self._event_history[:-64]
             self._change_cond.notify_all()
 
     def ensure_synced_graph(self, *, force: bool = False) -> tuple[dict[str, Any], dict[str, Any]]:
@@ -748,6 +1217,9 @@ class SyntopikRequestHandler(BaseHTTPRequestHandler):
                 if hmac.compare_digest(tok, self.server.csrf_token):
                     return True, False
                 if path == "/api/review/batch" and has_valid_cookie:
+                    if origin_hdr is not None and not _origin_matches_host(origin_hdr, host_hdr):
+                        self._send_error_json(HTTPStatus.FORBIDDEN, "Cross-origin Pocket request blocked")
+                        return False, True
                     return True, True
                 self._send_error_json(HTTPStatus.FORBIDDEN, "Missing or invalid X-Syntopik-Token")
                 return False, False
@@ -757,12 +1229,8 @@ class SyntopikRequestHandler(BaseHTTPRequestHandler):
         if not has_valid_cookie:
             self._send_error_json(HTTPStatus.FORBIDDEN, "Pocket LAN pairing required")
             return False, True
-        if method in ("POST", "PATCH") and origin_hdr:
-            try:
-                origin_netloc = urllib.parse.urlparse(origin_hdr.strip()).netloc.lower()
-            except ValueError:
-                origin_netloc = ""
-            if not host_hdr or origin_netloc != host_hdr.strip().lower():
+        if method in ("POST", "PATCH") and origin_hdr is not None:
+            if not _origin_matches_host(origin_hdr, host_hdr):
                 self._send_error_json(HTTPStatus.FORBIDDEN, "Cross-origin Pocket request blocked")
                 return False, True
         return True, True
@@ -829,7 +1297,7 @@ class SyntopikRequestHandler(BaseHTTPRequestHandler):
         path = parsed.path or "/"
         query = urllib.parse.parse_qs(parsed.query)
 
-        allowed, is_lan_client = self._check_access("GET", path, query)
+        allowed, _is_lan_client = self._check_access("GET", path, query)
         if not allowed:
             return
 
@@ -846,7 +1314,31 @@ class SyntopikRequestHandler(BaseHTTPRequestHandler):
             self._handle_sse()
             return
         if path == "/pocket":
-            self._handle_pocket_html(query, inject_csrf=not is_lan_client)
+            self._handle_pocket_html(query)
+            return
+
+        get_api_routes: dict[str, Any] = {
+            "/api/profile": lambda: self._handle_profile_get(query),
+            "/api/next-move": lambda: self._handle_next_move(query),
+            "/api/root-cause": lambda: self._handle_root_cause(query),
+            "/api/evidence": lambda: self._handle_evidence(),
+            "/api/arenas": lambda: self._handle_arenas_get(query),
+            "/api/derivations": lambda: self._handle_derivations_get(query),
+            "/api/viva": lambda: self._handle_viva_get(query),
+            "/api/whiteboard": lambda: self._handle_whiteboard_get(),
+        }
+        get_handler = get_api_routes.get(path)
+        if get_handler is not None:
+            try:
+                get_handler()
+            except ValueError as exc:
+                self._send_error_json(HTTPStatus.BAD_REQUEST, str(exc))
+            except (FileNotFoundError, KeyError) as exc:
+                self._send_error_json(HTTPStatus.NOT_FOUND, str(exc))
+            except PermissionError as exc:
+                self._send_error_json(HTTPStatus.FORBIDDEN, str(exc))
+            except Exception as exc:
+                self._send_error_json(HTTPStatus.INTERNAL_SERVER_ERROR, f"{type(exc).__name__}: {exc}")
             return
 
         self._handle_static(path)
@@ -870,13 +1362,27 @@ class SyntopikRequestHandler(BaseHTTPRequestHandler):
             "/api/import": self._handle_import,
             "/api/export/obsidian": self._handle_export_obsidian,
             "/api/export/pocket": self._handle_export_pocket,
+            "/api/export/dossier": self._handle_export_dossier,
             "/api/pack/export": self._handle_pack_export,
             "/api/pack/import": self._handle_pack_import,
+            "/api/demo/load": self._handle_demo_load,
             "/api/triage/plan": self._handle_triage_plan,
             "/api/triage/crib-sheet": self._handle_triage_crib_sheet,
             "/api/forks/check": self._handle_forks_check,
             "/api/arena/submit": self._handle_arena_submit,
+            "/api/arena/repair": self._handle_arena_repair,
+            "/api/blitz/build": self._handle_blitz_build,
             "/api/blitz/grade": self._handle_blitz_grade,
+            "/api/profile/calibrate": self._handle_profile_calibrate,
+            "/api/profile/override": self._handle_profile_override,
+            "/api/derivation/check": self._handle_derivation_check,
+            "/api/derivation/cut": self._handle_derivation_cut,
+            "/api/viva/start": self._handle_viva_start,
+            "/api/viva/turn": self._handle_viva_turn,
+            "/api/whiteboard/push": self._handle_whiteboard_push,
+            "/api/whiteboard/unlock": self._handle_whiteboard_unlock,
+            "/api/whiteboard/pin": self._handle_whiteboard_pin,
+            "/api/whiteboard/clear": self._handle_whiteboard_clear,
         }
         handler = routes.get(path)
         if handler is None:
@@ -1023,7 +1529,7 @@ class SyntopikRequestHandler(BaseHTTPRequestHandler):
             "lan": self.server.lan,
         })
 
-    def _handle_pocket_html(self, query: dict[str, list[str]], *, inject_csrf: bool) -> None:
+    def _handle_pocket_html(self, query: dict[str, list[str]]) -> None:
         from syntopik.pocket import export_pocket_html
 
         raw_limit = (query.get("limit") or ["25"])[0]
@@ -1081,24 +1587,136 @@ class SyntopikRequestHandler(BaseHTTPRequestHandler):
 
         graph, hub = self.server.ensure_synced_graph(force=force)
 
-        # Enrich with v2.0 engines (forksDue, arenasCount, reentry, triageRecommended)
+        # Enrich with v2.0 & v3.0 engines (strictly sanitized — zero sealed secret leaks!)
         forks_due_items: list[dict[str, Any]] = []
         forks_due_count = 0
+        forks_all: list[dict[str, Any]] = []
         try:
             from syntopik.forks import list_due_forks
 
-            f_res = list_due_forks(workspace=self.server.workspace, kg_dir=self.server.kg_dir)
-            forks_due_items = list(f_res.get("items") or [])
-            forks_due_count = int(f_res.get("dueCount") or len(forks_due_items))
+            f_due = list_due_forks(workspace=self.server.workspace, kg_dir=self.server.kg_dir, include_sealed=False)
+            forks_due_items = [_sanitize_fork(x) for x in (f_due.get("items") or []) if isinstance(x, dict)]
+            forks_due_count = int(f_due.get("dueCount") or len(forks_due_items))
+            f_all = list_due_forks(
+                workspace=self.server.workspace,
+                kg_dir=self.server.kg_dir,
+                limit=200,
+                include_all=True,
+                include_sealed=False,
+            )
+            forks_all = [_sanitize_fork(x) for x in (f_all.get("items") or []) if isinstance(x, dict)]
+        except Exception:
+            try:
+                raw_forks = load_jsonl(self.server.kg_dir / "forks.jsonl")
+                forks_all = [_sanitize_fork(x) for x in raw_forks if isinstance(x, dict)]
+            except Exception:
+                pass
+
+        arenas_public: list[dict[str, Any]] = []
+        try:
+            arenas_rows = load_jsonl(self.server.kg_dir / "arenas.jsonl")
+            arenas_public = [_sanitize_arena(a) for a in arenas_rows if isinstance(a, dict)]
+        except Exception:
+            arenas_public = []
+        arenas_count = len(arenas_public)
+
+        decisions_public: list[dict[str, Any]] = []
+        try:
+            dec_rows = load_jsonl(self.server.kg_dir / "decisions.jsonl")
+            decisions_public = [_sanitize_decision(d) for d in dec_rows if isinstance(d, dict)]
+        except Exception:
+            decisions_public = []
+
+        derivations_public: list[dict[str, Any]] = []
+        try:
+            deriv_rows = load_jsonl(self.server.kg_dir / "derivations.jsonl")
+            derivations_public = [_sanitize_derivation_row(d, level=3) for d in deriv_rows if isinstance(d, dict)]
+        except Exception:
+            derivations_public = []
+
+        viva_sessions_public: list[dict[str, Any]] = []
+        try:
+            viva_rows = load_jsonl(self.server.kg_dir / "viva-sessions.jsonl")
+            viva_sessions_public = [_sanitize_viva_session(v) for v in viva_rows if isinstance(v, dict)]
+        except Exception:
+            viva_sessions_public = []
+
+        learner_profile: dict[str, Any] = {}
+        try:
+            from syntopik.learner_model import compile_teaching_policy, load_profile
+
+            learner_profile = load_profile(self.server.kg_dir)
+            active_tr = hub.get("activeChapterTracker")
+            active_dom = (
+                str(active_tr.get("subject"))
+                if isinstance(active_tr, dict) and active_tr.get("subject")
+                else None
+            )
+            learner_profile["compiledPolicy"] = compile_teaching_policy(
+                learner_profile,
+                domain=active_dom,
+                energy=energy,
+            )
+        except Exception:
+            learner_profile = {}
+
+        next_move: dict[str, Any] | None = None
+        try:
+            from syntopik.brainstem import plan_next_move
+
+            next_move = plan_next_move(self.server.workspace, energy=energy)
+        except Exception:
+            next_move = None
+
+        evidence_summary: dict[str, Any] = {
+            "ok": True,
+            "totalPropositions": 0,
+            "tierCounts": {"T1": 0, "T2": 0, "T3": 0, "T4": 0},
+            "verifiedTransferPct": 0.0,
+            "propositions": {},
+            "antiInflationAlerts": [],
+            "ledgerIntegrity": {"ok": True, "count": 0, "brokenAt": None},
+        }
+        try:
+            from syntopik.evidence import compute_evidence_summary
+
+            evidence_summary = compute_evidence_summary(self.server.workspace)
         except Exception:
             pass
 
-        arenas_count = 0
+        root_cause_hotspots: dict[str, Any] = {"byProp": {}, "blastRadius": []}
         try:
-            arenas_rows = load_jsonl(self.server.kg_dir / "arenas.jsonl")
-            arenas_count = len(arenas_rows)
+            root_cause_hotspots = _compute_root_cause_hotspots(self.server.kg_dir)
         except Exception:
             pass
+
+        whiteboard_public: dict[str, Any] = {
+            "schemaVersion": 1,
+            "sessionId": None,
+            "revision": 0,
+            "title": "",
+            "activeFrameId": None,
+            "frames": [],
+            "pins": [],
+            "pendingPins": [],
+            "pendingPinCount": 0,
+            "frameCount": 0,
+            "updatedAt": None,
+        }
+        try:
+            from syntopik.whiteboard import get_session
+
+            whiteboard_public = _sanitize_whiteboard(get_session(self.server.kg_dir))
+        except Exception:
+            pass
+
+        explorables_map: dict[str, list[dict[str, Any]]] = {}
+        try:
+            explorables_map = _compile_chapter_explorables(self.server.chapters_dir)
+        except Exception:
+            explorables_map = {}
+
+        starter_packs = _scan_starter_packs(self.server.workspace, self.server.package_root)
 
         reentry: dict[str, Any] | None = None
         try:
@@ -1115,8 +1733,9 @@ class SyntopikRequestHandler(BaseHTTPRequestHandler):
 
         triage_recommended = _compute_triage_recommended(self.server.kg_dir, hub)
 
-        # Mirror enriched v2 fields inside hub as well as top-level for universal consumer compatibility
+        # Mirror enriched v2 & v3 fields inside hub as well as top-level for universal consumer compatibility
         hub_out = dict(hub)
+        hub_out["schemaVersion"] = 5
         hub_out.setdefault("retentionHeatmap", {"windowDays": 365, "totalEvents": 0, "activeDays": 0, "byDate": {}, "days": []})
         hub_out.setdefault("calibration", {"sampleCount": 0, "totalReviews": 0, "brierScore": None})
         hub_out.setdefault("leeches", [])
@@ -1126,9 +1745,22 @@ class SyntopikRequestHandler(BaseHTTPRequestHandler):
         hub_out["arenasCount"] = arenas_count
         hub_out["reentry"] = reentry
         hub_out["triageRecommended"] = triage_recommended
+        hub_out["learnerProfile"] = learner_profile
+        hub_out["nextMove"] = next_move
+        hub_out["forks"] = forks_all
+        hub_out["arenas"] = arenas_public
+        hub_out["decisions"] = decisions_public
+        hub_out["derivations"] = derivations_public
+        hub_out["vivaSessions"] = viva_sessions_public
+        hub_out["evidenceSummary"] = evidence_summary
+        hub_out["rootCauseHotspots"] = root_cause_hotspots
+        hub_out["whiteboard"] = whiteboard_public
+        hub_out["explorables"] = explorables_map
+        hub_out["starterPacks"] = starter_packs
 
         self._send_json({
             "ok": True,
+            "schemaVersion": 5,
             "graph": graph,
             "hub": hub_out,
             "forksDue": forks_due_items,
@@ -1137,6 +1769,18 @@ class SyntopikRequestHandler(BaseHTTPRequestHandler):
             "reentry": reentry,
             "triageRecommended": triage_recommended,
             "energyMode": energy,
+            "learnerProfile": learner_profile,
+            "nextMove": next_move,
+            "forks": forks_all,
+            "arenas": arenas_public,
+            "decisions": decisions_public,
+            "derivations": derivations_public,
+            "vivaSessions": viva_sessions_public,
+            "evidenceSummary": evidence_summary,
+            "rootCauseHotspots": root_cause_hotspots,
+            "whiteboard": whiteboard_public,
+            "explorables": explorables_map,
+            "starterPacks": starter_packs,
         })
 
     def _handle_sse(self) -> None:
@@ -1175,6 +1819,7 @@ class SyntopikRequestHandler(BaseHTTPRequestHandler):
                 self.server._change_cond.wait(timeout=0.5)
                 cur_seq = self.server._change_seq
                 reason = self.server._last_change_reason
+                queued = [e for e in self.server._event_history if e[0] > last_seq]
 
             if self.server._shutdown_event.is_set():
                 break
@@ -1182,7 +1827,34 @@ class SyntopikRequestHandler(BaseHTTPRequestHandler):
             cur_sig = _compute_workspace_signature(
                 self.server.workspace, self.server.kg_dir, self.server.chapters_dir
             )
-            if cur_seq != last_seq or cur_sig != last_sig:
+            if queued:
+                last_seq = cur_seq
+                last_sig = cur_sig
+                broken = False
+                for _ev_seq, ev_type, ev_reason, ev_payload in queued:
+                    body_obj: dict[str, Any] = {
+                        "type": ev_type,
+                        "reason": ev_reason,
+                        "ts": now_iso(),
+                    }
+                    if isinstance(ev_payload, dict):
+                        body_obj.update(ev_payload)
+                    ev_json = json.dumps(body_obj, ensure_ascii=False)
+                    if ev_type == "whiteboard_frame":
+                        if not _write_sse(f"event: whiteboard_frame\ndata: {ev_json}\n\n"):
+                            broken = True
+                            break
+                        if not _write_sse(f"data: {ev_json}\n\n"):
+                            broken = True
+                            break
+                    else:
+                        if not _write_sse(f"data: {ev_json}\n\n"):
+                            broken = True
+                            break
+                if broken:
+                    break
+                last_ping = time.monotonic()
+            elif cur_seq != last_seq or cur_sig != last_sig:
                 last_seq = cur_seq
                 last_sig = cur_sig
                 ev = json.dumps({"type": "changed", "reason": reason if cur_seq else "fs", "ts": now_iso()})
@@ -1193,6 +1865,163 @@ class SyntopikRequestHandler(BaseHTTPRequestHandler):
                 if not _write_sse(": ping\n\n"):
                     break
                 last_ping = time.monotonic()
+
+    # ------------------------------------------------------------------
+    # v3.0 GET API handlers (loopback-only)
+    # ------------------------------------------------------------------
+
+    def _handle_profile_get(self, query: dict[str, list[str]]) -> None:
+        from syntopik.learner_model import (
+            compile_teaching_policy,
+            format_compact_policy_lines,
+            load_profile,
+        )
+
+        domain = (query.get("domain") or [None])[0]
+        energy = (query.get("energy") or ["normal"])[0].strip().lower()
+        if energy not in ("low", "normal", "deep"):
+            energy = "normal"
+        profile = load_profile(self.server.kg_dir)
+        policy = compile_teaching_policy(profile, domain=domain, energy=energy)
+        profile["compiledPolicy"] = policy
+        self._send_json({
+            "ok": True,
+            "profile": profile,
+            "compiledPolicy": policy,
+            "compactLines": format_compact_policy_lines(profile, domain=domain),
+        })
+
+    def _handle_next_move(self, query: dict[str, list[str]]) -> None:
+        from syntopik.brainstem import plan_next_move
+
+        energy = (query.get("energy") or [None])[0]
+        domain = (query.get("domain") or [None])[0]
+        event = (query.get("event") or [None])[0]
+        res = plan_next_move(self.server.workspace, event=event, energy=energy, domain=domain)
+        self._send_json(res)
+
+    def _handle_root_cause(self, query: dict[str, list[str]]) -> None:
+        from syntopik.root_cause import find_blast_radius, localize_fault, select_diagnostic_probe
+
+        node_id = (query.get("nodeId") or query.get("propId") or [""])[0].strip()
+        try:
+            max_depth = max(1, min(8, int((query.get("maxDepth") or ["4"])[0])))
+        except ValueError:
+            max_depth = 4
+        try:
+            limit = max(1, min(25, int((query.get("limit") or ["10"])[0])))
+        except ValueError:
+            limit = 10
+
+        if node_id:
+            loc = localize_fault(self.server.kg_dir, node_id, max_depth=max_depth)
+            probe = select_diagnostic_probe(self.server.kg_dir, node_id, max_depth=max_depth)
+            blast = find_blast_radius(self.server.kg_dir, limit=limit)
+            self._send_json({
+                "ok": bool(loc.get("ok")),
+                "nodeId": node_id,
+                "localization": loc,
+                "diagnosticProbe": probe,
+                "blastRadius": blast,
+            })
+            return
+
+        hotspots = _compute_root_cause_hotspots(self.server.kg_dir)
+        self._send_json({
+            "ok": True,
+            "byProp": hotspots["byProp"],
+            "blastRadius": hotspots["blastRadius"][:limit],
+            "hotspots": hotspots,
+        })
+
+    def _handle_evidence(self) -> None:
+        from syntopik.evidence import compute_evidence_summary
+
+        res = compute_evidence_summary(self.server.workspace)
+        self._send_json(res)
+
+    def _handle_arenas_get(self, query: dict[str, list[str]]) -> None:
+        dom_f = ((query.get("domain") or [""])[0]).strip().lower()
+        prop_f = ((query.get("propId") or [""])[0]).strip()
+        rows = load_jsonl(self.server.kg_dir / "arenas.jsonl")
+        items: list[dict[str, Any]] = []
+        for a in rows:
+            if not isinstance(a, dict):
+                continue
+            if dom_f and str(a.get("domain") or "").lower() != dom_f:
+                continue
+            if prop_f and str(a.get("propId") or "") != prop_f:
+                continue
+            items.append(_sanitize_arena(a))
+        self._send_json({"ok": True, "count": len(items), "arenas": items})
+
+    def _handle_derivations_get(self, query: dict[str, list[str]]) -> None:
+        deriv_id = ((query.get("id") or query.get("derivationId") or [""])[0]).strip()
+        try:
+            level = max(1, min(3, int((query.get("level") or query.get("blackoutLevel") or ["3"])[0])))
+        except ValueError:
+            level = 3
+
+        df = _load_script_module("derivation_forge", self.server.workspace, self.server.package_root)
+        if deriv_id:
+            challenge = df.get_blackout_challenge(
+                deriv_id,
+                level=level,
+                kg_dir=self.server.kg_dir,
+                workspace=self.server.workspace,
+            )
+            self._send_json(challenge)
+            return
+
+        prop_f = ((query.get("propId") or [""])[0]).strip()
+        chap_f = ((query.get("chapter") or [""])[0]).strip().lower()
+        dom_f = ((query.get("domain") or [""])[0]).strip().lower()
+        rows = load_jsonl(self.server.kg_dir / "derivations.jsonl")
+        items: list[dict[str, Any]] = []
+        for r in rows:
+            if not isinstance(r, dict):
+                continue
+            if prop_f and str(r.get("propId") or "") != prop_f:
+                continue
+            if chap_f and chap_f not in str(r.get("chapter") or "").lower():
+                continue
+            if dom_f and str(r.get("domain") or "").lower() != dom_f:
+                continue
+            items.append(_sanitize_derivation_row(r, level=level))
+        self._send_json({"ok": True, "count": len(items), "derivations": items})
+
+    def _handle_viva_get(self, query: dict[str, list[str]]) -> None:
+        sess_id = ((query.get("sessionId") or query.get("id") or [""])[0]).strip()
+        if sess_id:
+            vc = _load_script_module("viva_chamber", self.server.workspace, self.server.package_root)
+            st = vc.get_viva_status(sess_id, kg_dir=self.server.kg_dir, workspace=self.server.workspace)
+            sess_clean = _sanitize_viva_session(st["session"])
+            self._send_json({
+                "ok": True,
+                "session": sess_clean,
+                "currentPrompt": st.get("currentPrompt"),
+            })
+            return
+
+        prop_f = ((query.get("propId") or [""])[0]).strip()
+        status_f = ((query.get("status") or [""])[0]).strip().lower()
+        rows = load_jsonl(self.server.kg_dir / "viva-sessions.jsonl")
+        items: list[dict[str, Any]] = []
+        for s in rows:
+            if not isinstance(s, dict):
+                continue
+            if prop_f and str(s.get("propId") or "") != prop_f:
+                continue
+            if status_f and str(s.get("status") or "").lower() != status_f:
+                continue
+            items.append(_sanitize_viva_session(s))
+        self._send_json({"ok": True, "count": len(items), "sessions": items})
+
+    def _handle_whiteboard_get(self) -> None:
+        from syntopik.whiteboard import get_session
+
+        sess = _sanitize_whiteboard(get_session(self.server.kg_dir))
+        self._send_json({"ok": True, **sess})
 
     # ------------------------------------------------------------------
     # POST API handlers
@@ -1615,12 +2444,22 @@ class SyntopikRequestHandler(BaseHTTPRequestHandler):
         body = self._read_json_body()
         if body is None:
             return
+        pack_slug_raw = str(body.get("packSlug") or "").strip()
         pack_raw = str(body.get("packPath") or "").strip()
-        if not pack_raw:
-            raise ValueError("'packPath' is required.")
-        pack_path = self._resolve_user_path_jailed(pack_raw, allow_temp=True)
-        if pack_path is None:
-            raise PermissionError("packPath must be within workspace or temp directory")
+        if not pack_slug_raw and not pack_raw:
+            raise ValueError("Provide either 'packSlug' (bundled starter pack) or workspace-jailed 'packPath'.")
+
+        resolved_slug: str | None = None
+        if pack_slug_raw:
+            resolved_slug, pack_path = _resolve_starter_pack_slug(
+                pack_slug_raw,
+                self.server.workspace,
+                self.server.package_root,
+            )
+        else:
+            pack_path = self._resolve_user_path_jailed(pack_raw, allow_temp=False)
+            if pack_path is None:
+                raise PermissionError("packPath must be within workspace")
         from syntopik.packs import import_pack
 
         res = import_pack(
@@ -1632,11 +2471,45 @@ class SyntopikRequestHandler(BaseHTTPRequestHandler):
             probe=bool(body.get("probe", False)),
             dry_run=bool(body.get("dryRun", False)),
             no_sync=True,
+            allow_code_arenas=bool(resolved_slug),
         )
         if not body.get("dryRun"):
             self.server.ensure_synced_graph(force=True)
             self.server.notify_change("pack_import")
-        self._send_json({"ok": True, **res})
+        out: dict[str, Any] = {"ok": True, **res}
+        if resolved_slug:
+            out["packSlug"] = resolved_slug
+        self._send_json(out)
+
+    def _handle_demo_load(self) -> None:
+        body = self._read_json_body()
+        if body is None:
+            return
+        pack_slug_raw = str(body.get("packSlug") or body.get("slug") or "").strip()
+        if not pack_slug_raw:
+            raise ValueError("'packSlug' is required.")
+        slug, pack_path = _resolve_starter_pack_slug(
+            pack_slug_raw,
+            self.server.workspace,
+            self.server.package_root,
+        )
+        from syntopik.packs import import_pack
+
+        res = import_pack(
+            pack_path,
+            workspace=self.server.workspace,
+            kg_dir=self.server.kg_dir,
+            chapters_dir=self.server.chapters_dir,
+            mode=str(body.get("mode") or "merge"),
+            probe=bool(body.get("probe", False)),
+            dry_run=bool(body.get("dryRun", False)),
+            no_sync=True,
+            allow_code_arenas=True,
+        )
+        if not body.get("dryRun"):
+            self.server.ensure_synced_graph(force=True)
+            self.server.notify_change("demo_load")
+        self._send_json({"ok": True, "packSlug": slug, **res})
 
     def _handle_triage_plan(self) -> None:
         body = self._read_json_body()
@@ -1695,13 +2568,17 @@ class SyntopikRequestHandler(BaseHTTPRequestHandler):
                 )
                 typ_file = stage_dir / "sheet.typ"
                 typ_file.write_text(typ_src, encoding="utf-8")
-                proc = subprocess.run(
-                    [typst_bin, "compile", "--root", str(stage_dir), str(typ_file), str(out_pdf)],
-                    capture_output=True,
-                    text=True,
-                    check=False,
-                )
-            if proc.returncode == 0 and out_pdf.is_file():
+                try:
+                    proc = subprocess.run(
+                        [typst_bin, "compile", "--root", str(stage_dir), str(typ_file), str(out_pdf)],
+                        capture_output=True,
+                        text=True,
+                        timeout=30,
+                        check=False,
+                    )
+                except subprocess.TimeoutExpired:
+                    proc = None
+            if proc is not None and proc.returncode == 0 and out_pdf.is_file():
                 pages = cs.count_pdf_pages(out_pdf)
                 self.server.ensure_synced_graph(force=True)
                 self.server.notify_change("triage_crib_sheet")
@@ -1747,6 +2624,7 @@ class SyntopikRequestHandler(BaseHTTPRequestHandler):
             variant_id=body.get("variantId"),
             reveal_fix=bool(body.get("revealFix", False)),
         )
+        self.server.ensure_synced_graph(force=True)
         self.server.notify_change("forks_check")
         self._send_json({"ok": True, **res})
 
@@ -1768,7 +2646,49 @@ class SyntopikRequestHandler(BaseHTTPRequestHandler):
             kg_dir=self.server.kg_dir,
             timeout_sec=timeout_sec,
         )
+        self.server.ensure_synced_graph(force=True)
         self.server.notify_change("arena_submit")
+        self._send_json({"ok": True, **res})
+
+    def _handle_arena_repair(self) -> None:
+        body = self._read_json_body()
+        if body is None:
+            return
+        arena_id = str(body.get("arenaId") or "").strip()
+        lemma = str(body.get("lemma") or "").strip()
+        if not arena_id or not lemma:
+            raise ValueError("'arenaId' and 'lemma' are required.")
+        arena = _load_script_module("falsify_arena", self.server.workspace, self.server.package_root)
+        res = arena.repair_arena_lemma(
+            arena_id,
+            lemma,
+            workspace=self.server.workspace,
+            kg_dir=self.server.kg_dir,
+        )
+        self.server.ensure_synced_graph(force=True)
+        self.server.notify_change("arena_repair")
+        self._send_json({"ok": True, **res})
+
+    def _handle_blitz_build(self) -> None:
+        body = self._read_json_body()
+        if body is None:
+            return
+        raw_n = body.get("count") if body.get("count") is not None else body.get("n")
+        n = max(1, min(20, int(raw_n or 6)))
+        seed_raw = body.get("seed")
+        seed = int(seed_raw) if isinstance(seed_raw, (int, float)) and not isinstance(seed_raw, bool) else None
+        blitz = _load_script_module("decision_blitz", self.server.workspace, self.server.package_root)
+        res = blitz.build_blitz(
+            slug=body.get("slug"),
+            n=n,
+            subject=body.get("subject"),
+            seed=seed,
+            include_key=False,
+            workspace=self.server.workspace,
+            kg_dir=self.server.kg_dir,
+            chapters_dir=self.server.chapters_dir,
+        )
+        self.server.notify_change("blitz_build")
         self._send_json({"ok": True, **res})
 
     def _handle_blitz_grade(self) -> None:
@@ -1793,8 +2713,284 @@ class SyntopikRequestHandler(BaseHTTPRequestHandler):
             workspace=self.server.workspace,
             kg_dir=self.server.kg_dir,
         )
+        self.server.ensure_synced_graph(force=True)
         self.server.notify_change("blitz_grade")
         self._send_json({"ok": True, **res})
+
+    # ------------------------------------------------------------------
+    # v3.0 POST / PATCH API handlers (loopback + CSRF)
+    # ------------------------------------------------------------------
+
+    def _handle_profile_calibrate(self) -> None:
+        body = self._read_json_body()
+        if body is None:
+            return
+        from syntopik.learner_model import (
+            PROFILE_FILENAME,
+            apply_tier1_calibration,
+            compile_teaching_policy,
+            load_profile,
+            save_profile,
+        )
+
+        entry_ramp = body.get("entryRamp") or body.get("entry_ramp") or "balanced"
+        challenge_appetite = body.get("challengeAppetite") or body.get("challenge_appetite") or "balanced"
+        domain_fluency = body.get("domainFluency") if "domainFluency" in body else body.get("domain_fluency")
+        session_minutes = body.get("sessionMinutes") or body.get("session_minutes") or body.get("sessionTargetMinutes") or 30
+        prose_density = body.get("proseDensity") or body.get("prose_density") or "standard"
+        micro_results = body.get("microTaskResults") if "microTaskResults" in body else body.get("micro_task_results")
+
+        prof_path = self.server.kg_dir / PROFILE_FILENAME
+        with workspace_lock(prof_path):
+            profile = load_profile(self.server.kg_dir)
+            updated = apply_tier1_calibration(
+                profile,
+                entry_ramp=str(entry_ramp),
+                challenge_appetite=str(challenge_appetite),
+                domain_fluency=domain_fluency if isinstance(domain_fluency, dict) else None,
+                session_minutes=int(session_minutes),
+                prose_density=str(prose_density),
+                micro_task_results=micro_results if isinstance(micro_results, list) else None,
+            )
+            policy = compile_teaching_policy(updated)
+            updated["compiledPolicy"] = policy
+            save_profile(self.server.kg_dir, updated)
+
+        self.server.ensure_synced_graph(force=True)
+        self.server.notify_change("profile_calibrate")
+        self._send_json({"ok": True, "profile": updated, "compiledPolicy": policy})
+
+    def _handle_profile_override(self) -> None:
+        body = self._read_json_body()
+        if body is None:
+            return
+        from syntopik.learner_model import apply_user_overrides
+
+        overrides = body.get("overrides") if isinstance(body.get("overrides"), dict) else body
+        res = apply_user_overrides(self.server.kg_dir, overrides)
+        self.server.ensure_synced_graph(force=True)
+        self.server.notify_change("profile_override")
+        self._send_json(res)
+
+    def _handle_export_dossier(self) -> None:
+        body = self._read_json_body()
+        if body is None:
+            return
+        from syntopik.evidence import export_mastery_dossier
+
+        out_raw = body.get("outPath")
+        allowed_roots = (
+            self.server.chapters_dir.resolve(),
+            (self.server.workspace / "exports").resolve(),
+        )
+        if out_raw:
+            out_path = self._resolve_user_path_jailed(str(out_raw), allow_temp=False)
+            if out_path is None or not any(out_path.is_relative_to(r) for r in allowed_roots):
+                raise PermissionError("outPath must stay within chapters/ or exports/")
+        else:
+            self.server.chapters_dir.mkdir(parents=True, exist_ok=True)
+            out_path = (self.server.chapters_dir / "mastery-dossier.html").resolve()
+
+        res = export_mastery_dossier(self.server.workspace, out_path)
+        extra: dict[str, Any] = {}
+        final_out = Path(str(res.get("outPath") or out_path)).resolve()
+        if final_out.is_relative_to(self.server.workspace):
+            rel_posix = final_out.relative_to(self.server.workspace).as_posix()
+            extra["relPath"] = rel_posix
+            if rel_posix.startswith(("chapters/", "sources/", "exams/", "demos/")):
+                extra["url"] = f"/{rel_posix}"
+        self.server.ensure_synced_graph(force=True)
+        self.server.notify_change("export_dossier")
+        self._send_json({"ok": True, **res, **extra})
+
+    def _handle_derivation_check(self) -> None:
+        body = self._read_json_body()
+        if body is None:
+            return
+        deriv_id = str(body.get("derivationId") or body.get("id") or "").strip()
+        step_id = str(body.get("stepId") or body.get("step") or "").strip()
+        answer = str(body.get("answer") or "")
+        if not deriv_id or not step_id or not answer.strip():
+            raise ValueError("'derivationId', 'stepId', and 'answer' are required.")
+        df = _load_script_module("derivation_forge", self.server.workspace, self.server.package_root)
+        res = df.check_blackout_step(
+            deriv_id,
+            step_id,
+            answer,
+            kg_dir=self.server.kg_dir,
+            workspace=self.server.workspace,
+            reveal=bool(body.get("reveal", False)),
+        )
+        self.server.ensure_synced_graph(force=True)
+        self.server.notify_change("derivation_check")
+        self._send_json(res)
+
+    def _handle_derivation_cut(self) -> None:
+        body = self._read_json_body()
+        if body is None:
+            return
+        deriv_id = str(body.get("derivationId") or body.get("id") or "").strip()
+        axiom_id = str(body.get("axiomId") or body.get("axiomStepId") or body.get("axiom") or "").strip()
+        guess_step_id = body.get("guessStepId") or body.get("guessStep")
+        if not deriv_id or not axiom_id:
+            raise ValueError("'derivationId' and 'axiomId' are required.")
+        df = _load_script_module("derivation_forge", self.server.workspace, self.server.package_root)
+        res = df.grade_axiom_cut(
+            deriv_id,
+            axiom_id,
+            guess_step_id=str(guess_step_id).strip() if guess_step_id is not None and str(guess_step_id).strip() else None,
+            kg_dir=self.server.kg_dir,
+            workspace=self.server.workspace,
+        )
+        self.server.ensure_synced_graph(force=True)
+        self.server.notify_change("derivation_cut")
+        self._send_json(res)
+
+    def _handle_viva_start(self) -> None:
+        body = self._read_json_body()
+        if body is None:
+            return
+        prop_id = str(body.get("propId") or body.get("id") or "").strip()
+        if not prop_id:
+            raise ValueError("'propId' is required.")
+        vc = _load_script_module("viva_chamber", self.server.workspace, self.server.package_root)
+        res = vc.start_viva(
+            prop_id,
+            kg_dir=self.server.kg_dir,
+            workspace=self.server.workspace,
+        )
+        self.server.ensure_synced_graph(force=True)
+        self.server.notify_change("viva_start")
+        self._send_json(res)
+
+    def _handle_viva_turn(self) -> None:
+        body = self._read_json_body()
+        if body is None:
+            return
+        session_id = str(body.get("sessionId") or body.get("id") or "").strip()
+        response = str(body.get("response") or "")
+        if not session_id or not response.strip():
+            raise ValueError("'sessionId' and 'response' are required.")
+        conf_raw = body.get("confidence")
+        confidence = float(conf_raw) if isinstance(conf_raw, (int, float)) and not isinstance(conf_raw, bool) else None
+        vc = _load_script_module("viva_chamber", self.server.workspace, self.server.package_root)
+        res = vc.submit_viva_turn(
+            session_id,
+            response,
+            confidence=confidence,
+            kg_dir=self.server.kg_dir,
+            workspace=self.server.workspace,
+        )
+        self.server.ensure_synced_graph(force=True)
+        self.server.notify_change("viva_turn")
+        self._send_json(res)
+
+    def _handle_whiteboard_push(self) -> None:
+        body = self._read_json_body()
+        if body is None:
+            return
+        from syntopik.whiteboard import push_frame
+
+        raw_frame = body.get("frame") if isinstance(body.get("frame"), dict) else body
+        frame_in = dict(raw_frame)
+        if str(frame_in.get("kind") or "").strip().lower() == "prediction_gate":
+            if "canonicalAnswer" in frame_in and "expectedAnswer" not in frame_in:
+                frame_in["expectedAnswer"] = frame_in["canonicalAnswer"]
+            gate_in = dict(frame_in.get("gate")) if isinstance(frame_in.get("gate"), dict) else {}
+            if "canonicalAnswer" in gate_in and "expectedAnswer" not in gate_in:
+                gate_in["expectedAnswer"] = gate_in["canonicalAnswer"]
+            if gate_in:
+                frame_in["gate"] = gate_in
+
+        res = push_frame(self.server.kg_dir, frame_in)
+        safe_frame = _sanitize_whiteboard_frame(res["frame"])
+        safe_session = _sanitize_whiteboard(res["session"])
+        self.server.ensure_synced_graph(force=True)
+        self.server.notify_change(
+            "whiteboard_push",
+            event_type="whiteboard_frame",
+            payload={"action": "push", "revision": res["revision"], "frame": safe_frame, "whiteboard": safe_session},
+        )
+        self._send_json({
+            "ok": True,
+            "revision": res["revision"],
+            "frame": safe_frame,
+            "session": safe_session,
+        })
+
+    def _handle_whiteboard_unlock(self) -> None:
+        body = self._read_json_body()
+        if body is None:
+            return
+        from syntopik.whiteboard import get_session, unlock_gate
+
+        frame_id = str(body.get("frameId") or "").strip()
+        prediction = str(body.get("prediction") or "")
+        conf_raw = body.get("confidence")
+        confidence = float(conf_raw) if isinstance(conf_raw, (int, float)) and not isinstance(conf_raw, bool) else 0.5
+        res = unlock_gate(self.server.kg_dir, frame_id, prediction, confidence=confidence)
+        safe_frame = _sanitize_whiteboard_frame(res["frame"])
+        safe_session = _sanitize_whiteboard(get_session(self.server.kg_dir))
+        self.server.ensure_synced_graph(force=True)
+        self.server.notify_change(
+            "whiteboard_unlock",
+            event_type="whiteboard_frame",
+            payload={"action": "unlock", "revision": res["revision"], "frame": safe_frame, "whiteboard": safe_session},
+        )
+        self._send_json({
+            "ok": True,
+            "revision": res["revision"],
+            "frameId": res["frameId"],
+            "unlocked": True,
+            "prediction": res["prediction"],
+            "confidence": res["confidence"],
+            "frame": safe_frame,
+            "session": safe_session,
+        })
+
+    def _handle_whiteboard_pin(self) -> None:
+        body = self._read_json_body()
+        if body is None:
+            return
+        from syntopik.whiteboard import get_session, pin_step
+
+        if body.get("stepIndex") is None:
+            raise ValueError("'stepIndex' is required.")
+        step_index = int(body["stepIndex"])
+        note = str(body.get("note") or "")
+        frame_id = body.get("frameId")
+        res = pin_step(
+            self.server.kg_dir,
+            step_index,
+            note,
+            frame_id=str(frame_id).strip() if frame_id is not None and str(frame_id).strip() else None,
+        )
+        safe_session = _sanitize_whiteboard(get_session(self.server.kg_dir))
+        self.server.ensure_synced_graph(force=True)
+        self.server.notify_change(
+            "whiteboard_pin",
+            event_type="whiteboard_frame",
+            payload={"action": "pin", "revision": res["revision"], "pin": res["pin"], "whiteboard": safe_session},
+        )
+        self._send_json({**res, "session": safe_session})
+
+    def _handle_whiteboard_clear(self) -> None:
+        from syntopik.whiteboard import clear_session
+
+        res = clear_session(self.server.kg_dir)
+        safe_session = _sanitize_whiteboard(res["session"])
+        self.server.ensure_synced_graph(force=True)
+        self.server.notify_change(
+            "whiteboard_clear",
+            event_type="whiteboard_frame",
+            payload={"action": "clear", "revision": res["revision"], "whiteboard": safe_session},
+        )
+        self._send_json({
+            "ok": True,
+            "cleared": True,
+            "revision": res["revision"],
+            "session": safe_session,
+        })
 
 
 class _SyntopikStudioServerIPv6(SyntopikStudioServer):

@@ -40,11 +40,20 @@ LEARNER_DIRS: tuple[str, ...] = (
     "knowledge-graph",
 )
 
-LEDGER_JSONL_FILES: tuple[str, ...] = (
+CORE_LEDGER_JSONL_FILES: tuple[str, ...] = (
     "propositions.jsonl",
     "chains.jsonl",
     "mistakes.jsonl",
     "exam-attempts.jsonl",
+)
+
+LEDGER_JSONL_FILES: tuple[str, ...] = (
+    *CORE_LEDGER_JSONL_FILES,
+    "revlog.jsonl",
+    "reading-queue.jsonl",
+    "derivations.jsonl",
+    "evidence-ledger.jsonl",
+    "viva-sessions.jsonl",
 )
 
 STARTER_REVIEW_QUEUE = """# Spaced Review & Weak-Edge Queue
@@ -84,12 +93,28 @@ MINIMAL_GRAPH_DATA_JS = (
 )
 
 
+def _is_bundle_or_site_path(path: Path) -> bool:
+    """Return True when `path` is inside a wheel bundle, site-packages, node_modules, or _npx cache."""
+    return bool(
+        {"_bundle", "site-packages", "dist-packages", "node_modules", "_npx"}.intersection(
+            path.parts
+        )
+    )
+
+
 def resolve_default_workspace(explicit: str | Path | None = None) -> Path:
     if explicit is not None and str(explicit).strip():
         return Path(explicit).expanduser().resolve()
     env_ws = os.environ.get("SYNT_WORKSPACE") or os.environ.get("MLH_WORKSPACE")
     if env_ws and env_ws.strip():
         return Path(env_ws).expanduser().resolve()
+    if _is_bundle_or_site_path(ROOT):
+        try:
+            from syntopik.paths import resolve_workspace
+
+            return resolve_workspace()
+        except Exception:
+            return (Path.home() / ".syntopik").resolve()
     return ROOT
 
 
@@ -103,22 +128,28 @@ def resolve_kg_dir(workspace: Path, explicit_kg: str | Path | None = None) -> Pa
     return (workspace / "knowledge-graph").resolve()
 
 
-def _is_executable(path: Path) -> bool:
-    if path.is_file() and os.access(path, os.X_OK):
-        return True
+def _resolve_executable(path: Path) -> Path | None:
     if os.name == "nt":
+        if path.suffix.lower() in (".exe", ".cmd", ".bat", ".com") and path.is_file():
+            return path
         for ext in (".exe", ".cmd", ".bat"):
             cand = path.with_suffix(ext) if not path.suffix else Path(str(path) + ext)
             if cand.is_file():
-                return True
-    return False
+                return cand
+    if path.is_file() and os.access(path, os.X_OK):
+        return path
+    return None
+
+
+def _is_executable(path: Path) -> bool:
+    return _resolve_executable(path) is not None
 
 
 def find_binary(name: str, extra_dirs: list[Path] | None = None) -> str | None:
     for d in extra_dirs or []:
-        cand = d / name
-        if _is_executable(cand):
-            return str(cand)
+        hit = _resolve_executable(Path(d) / name)
+        if hit is not None:
+            return str(hit)
     which_hit = shutil.which(name)
     if which_hit:
         return which_hit
@@ -131,9 +162,9 @@ def find_binary(name: str, extra_dirs: list[Path] | None = None) -> str | None:
         Path("/usr/bin"),
     ]
     for prefix in fallback_dirs:
-        cand = prefix / name
-        if _is_executable(cand):
-            return str(cand)
+        hit = _resolve_executable(prefix / name)
+        if hit is not None:
+            return str(hit)
     return None
 
 
@@ -296,25 +327,26 @@ def repair_claude_skills_link(workspace: Path, *, create_if_missing: bool = Fals
             pass
 
     claude_dir.mkdir(parents=True, exist_ok=True)
-    rel_target = os.path.relpath(agents_skills, claude_dir)
+    abs_target = str(agents_skills.resolve())
+    link_target = abs_target if os.name == "nt" else os.path.relpath(agents_skills, claude_dir)
 
     # 1. Try native directory symlink first
     try:
-        os.symlink(rel_target, claude_skills, target_is_directory=True)
+        os.symlink(link_target, claude_skills, target_is_directory=True)
         if claude_skills.is_dir():
             return {
                 "status": "ok",
                 "action": "repaired_symlink" if is_broken_stub else "created_symlink",
-                "detail": f"linked .claude/skills -> {rel_target}",
+                "detail": f"linked .claude/skills -> {link_target}",
                 "path": str(claude_skills),
             }
     except OSError:
         pass
 
-    # 2. Windows directory junction (`mklink /J`) fallback (requires zero admin privileges)
+    # 2. Windows directory junction (`mklink /J`) fallback (requires zero admin privileges & absolute target)
     if os.name == "nt":
         proc = subprocess.run(
-            ["cmd", "/c", "mklink", "/J", str(claude_skills), str(agents_skills)],
+            ["cmd", "/c", "mklink", "/J", str(claude_skills), abs_target],
             capture_output=True,
             text=True,
             check=False,
@@ -323,7 +355,7 @@ def repair_claude_skills_link(workspace: Path, *, create_if_missing: bool = Fals
             return {
                 "status": "ok",
                 "action": "repaired_junction" if is_broken_stub else "created_junction",
-                "detail": f"Windows junction .claude/skills -> {agents_skills}",
+                "detail": f"Windows junction .claude/skills -> {abs_target}",
                 "path": str(claude_skills),
             }
 
@@ -599,7 +631,8 @@ def inspect_capabilities(workspace: Path) -> dict[str, Any]:
     harness_info = detect_harnesses(ws)
     research_info = discover_researchctl(ws)
 
-    ledgers_present = all((kg / f).is_file() for f in LEDGER_JSONL_FILES)
+    ledgers_present = all((kg / f).is_file() for f in CORE_LEDGER_JSONL_FILES)
+    v3_ledgers_present = all((kg / f).is_file() for f in LEDGER_JSONL_FILES)
     hub_ready = ledgers_present and (kg / "review-queue.md").is_file() and (kg / "graph-data.js").is_file()
 
     return {
@@ -628,6 +661,7 @@ def inspect_capabilities(workspace: Path) -> dict[str, Any]:
         "workspaceState": {
             "skillsCount": skill_count,
             "ledgersReady": ledgers_present,
+            "v3LedgersReady": v3_ledgers_present,
             "graphDataJsReady": (kg / "graph-data.js").is_file(),
             "hubReady": hub_ready,
             "claudeSkillsLinkOk": (ws / ".claude" / "skills").is_dir(),
@@ -654,7 +688,6 @@ def configure_harnesses(workspace: Path, target: str, *, force: bool = False) ->
                         "command": "node",
                         "args": [
                             "./mcp-app/mlh-studio/dist/server.mjs",
-                            "--workspace=${CLAUDE_PROJECT_DIR:-.}",
                         ],
                     }
                 }
@@ -674,7 +707,7 @@ def configure_harnesses(workspace: Path, target: str, *, force: bool = False) ->
                             "hooks": [
                                 {
                                     "type": "command",
-                                    "command": 'node "${CLAUDE_PROJECT_DIR:-.}/.agents/hooks/session-start.mjs"',
+                                    "command": "node .agents/hooks/session-start.mjs",
                                     "timeout": 10,
                                 }
                             ]
@@ -686,7 +719,7 @@ def configure_harnesses(workspace: Path, target: str, *, force: bool = False) ->
                             "hooks": [
                                 {
                                     "type": "command",
-                                    "command": 'node "${CLAUDE_PROJECT_DIR:-.}/.agents/hooks/post-graph-sync.mjs"',
+                                    "command": "node .agents/hooks/post-graph-sync.mjs",
                                     "timeout": 10,
                                 }
                             ]
@@ -729,7 +762,7 @@ def configure_harnesses(workspace: Path, target: str, *, force: bool = False) ->
                             "hooks": [
                                 {
                                     "type": "command",
-                                    "command": 'node "$(git rev-parse --show-toplevel 2>/dev/null || pwd)/.agents/hooks/session-start.mjs"',
+                                    "command": "node .agents/hooks/session-start.mjs",
                                     "timeout": 10,
                                 }
                             ]
@@ -741,7 +774,7 @@ def configure_harnesses(workspace: Path, target: str, *, force: bool = False) ->
                             "hooks": [
                                 {
                                     "type": "command",
-                                    "command": 'node "$(git rev-parse --show-toplevel 2>/dev/null || pwd)/.agents/hooks/post-graph-sync.mjs"',
+                                    "command": "node .agents/hooks/post-graph-sync.mjs",
                                     "timeout": 10,
                                 }
                             ]

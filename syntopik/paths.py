@@ -78,35 +78,78 @@ def _has_workspace_marker(path: Path) -> bool:
     return (path / "knowledge-graph").is_dir() or (path / ".syntopik").is_dir()
 
 
+def _resolve_attached_or_direct(path: Path) -> Path | None:
+    """Resolve a candidate project/vault directory without split-brain on `--vault local`.
+
+    Matches `session-start.mjs`, `bin/syntopik.mjs`, and `mcp-app/mlh-studio/src/server.mjs`:
+      1. If `<path>/.syntopik/knowledge-graph` exists -> `<path>/.syntopik`
+      2. Else if `<path>/knowledge-graph` exists -> `<path>`
+      3. Else if `<path>/.syntopik` directory exists -> `<path>/.syntopik`
+      4. Else -> None
+    """
+    try:
+        if not path.is_dir():
+            return None
+        dot_synt = path / ".syntopik"
+        if (dot_synt / "knowledge-graph").is_dir():
+            return dot_synt.resolve()
+        if (path / "knowledge-graph").is_dir():
+            return path.resolve()
+        if dot_synt.is_dir():
+            return dot_synt.resolve()
+    except OSError:
+        return None
+    return None
+
+
+def _normalize_explicit_workspace(path: Path) -> Path:
+    """Resolve an explicit workspace path, redirecting to `<path>/.syntopik` only when
+    `<path>` is an attached `--vault local` host repository (has `.syntopik/knowledge-graph`
+    or `.syntopik/` without `<path>/knowledge-graph`).
+    """
+    resolved = path.expanduser().resolve()
+    try:
+        if resolved.is_dir() and not (resolved / "knowledge-graph").is_dir():
+            dot_synt = resolved / ".syntopik"
+            if (dot_synt / "knowledge-graph").is_dir():
+                return dot_synt.resolve()
+    except OSError:
+        pass
+    return resolved
+
+
 def resolve_workspace(explicit: Path | str | None = None) -> Path:
     """Resolve active Syntopik workspace root with strict precedence:
 
     1. `explicit` argument
     2. `SYNT_WORKSPACE` || `MLH_WORKSPACE`
     3. `$CLAUDE_PROJECT_DIR` or `Path.cwd()` if `knowledge-graph/` or `.syntopik/` exists
+       (resolving `.syntopik/` to `<dir>/.syntopik` cleanly to prevent `--vault local` split-brain)
     4. Direct repo checkout root if writable
     5. `~/.syntopik`
     """
     if explicit is not None and str(explicit).strip():
-        return Path(explicit).expanduser().resolve()
+        return _normalize_explicit_workspace(Path(explicit))
 
     env_ws = (
         os.environ.get("SYNT_WORKSPACE", "").strip()
         or os.environ.get("MLH_WORKSPACE", "").strip()
     )
     if env_ws:
-        return Path(env_ws).expanduser().resolve()
+        return _normalize_explicit_workspace(Path(env_ws))
 
     claude_dir = os.environ.get("CLAUDE_PROJECT_DIR", "").strip()
     if claude_dir:
         cand = Path(claude_dir).expanduser().resolve()
-        if _has_workspace_marker(cand):
-            return cand
+        resolved = _resolve_attached_or_direct(cand)
+        if resolved is not None:
+            return resolved
 
     try:
         cwd = Path.cwd().resolve()
-        if _has_workspace_marker(cwd):
-            return cwd
+        resolved = _resolve_attached_or_direct(cwd)
+        if resolved is not None:
+            return resolved
     except OSError:
         pass
 
@@ -126,7 +169,7 @@ def resolve_kg_dir(
     if explicit is not None and str(explicit).strip():
         return Path(explicit).expanduser().resolve()
     if workspace is not None and str(workspace).strip():
-        return (Path(workspace).expanduser().resolve() / "knowledge-graph").resolve()
+        return (resolve_workspace(workspace) / "knowledge-graph").resolve()
 
     env_kg = (
         os.environ.get("SYNT_KG_DIR", "").strip()
@@ -147,7 +190,7 @@ def resolve_chapters_dir(
     if explicit is not None and str(explicit).strip():
         return Path(explicit).expanduser().resolve()
     if workspace is not None and str(workspace).strip():
-        return (Path(workspace).expanduser().resolve() / "chapters").resolve()
+        return (resolve_workspace(workspace) / "chapters").resolve()
 
     env_ch = (
         os.environ.get("SYNT_CHAPTERS_DIR", "").strip()
@@ -189,23 +232,29 @@ def resolve_demos_dir(
     return (resolve_workspace(workspace) / "demos").resolve()
 
 
-def _is_executable(path: Path) -> bool:
-    if path.is_file() and os.access(path, os.X_OK):
-        return True
+def _resolve_executable(path: Path) -> Path | None:
     if os.name == "nt":
+        if path.suffix.lower() in (".exe", ".cmd", ".bat", ".com") and path.is_file():
+            return path
         for ext in (".exe", ".cmd", ".bat"):
             cand = path.with_suffix(ext) if not path.suffix else Path(str(path) + ext)
             if cand.is_file():
-                return True
-    return False
+                return cand
+    if path.is_file() and os.access(path, os.X_OK):
+        return path
+    return None
+
+
+def _is_executable(path: Path) -> bool:
+    return _resolve_executable(path) is not None
 
 
 def find_binary(name: str, extra_dirs: list[Path] | None = None) -> str | None:
     """Locate an executable portably across PATH and common macOS/Linux/Windows directories."""
     for d in extra_dirs or []:
-        cand = Path(d) / name
-        if _is_executable(cand):
-            return str(cand)
+        hit = _resolve_executable(Path(d) / name)
+        if hit is not None:
+            return str(hit)
 
     which_hit = shutil.which(name)
     if which_hit:
@@ -220,16 +269,23 @@ def find_binary(name: str, extra_dirs: list[Path] | None = None) -> str | None:
         Path("/usr/bin"),
     ]
     for prefix in fallback_dirs:
-        cand = prefix / name
-        if _is_executable(cand):
-            return str(cand)
+        hit = _resolve_executable(prefix / name)
+        if hit is not None:
+            return str(hit)
     return None
 
 
 def find_node() -> str | None:
-    """Locate Node.js portably across PATH, Homebrew, Volta, nvm, and standard Unix paths."""
+    """Locate Node.js portably across PATH, Homebrew, Volta, nvm, and Windows/Unix paths."""
     home = Path.home()
     extra: list[Path] = [home / ".volta" / "bin"]
+    if os.name == "nt":
+        prog_files = os.environ.get("ProgramFiles")
+        if prog_files:
+            extra.append(Path(prog_files) / "nodejs")
+        local_app = os.environ.get("LOCALAPPDATA")
+        if local_app:
+            extra.append(Path(local_app) / "Programs" / "nodejs")
     nvm_dir = home / ".nvm" / "versions" / "node"
     if nvm_dir.is_dir():
         try:

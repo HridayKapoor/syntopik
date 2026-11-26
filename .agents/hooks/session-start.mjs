@@ -10,6 +10,22 @@ const packageRoot = existsSync(path.join(path.resolve(hookDir, ".."), "scripts",
 	? path.resolve(hookDir, "..")
 	: path.resolve(hookDir, "..", "..");
 
+const rawArgv = process.argv.slice(2);
+
+function getArgValue(flag) {
+	const idx = rawArgv.indexOf(flag);
+	if (idx !== -1 && idx + 1 < rawArgv.length && !rawArgv[idx + 1].startsWith("--")) {
+		return rawArgv[idx + 1];
+	}
+	const prefix = `${flag}=`;
+	const hit = rawArgv.find((a) => a.startsWith(prefix));
+	return hit ? hit.slice(prefix.length) : null;
+}
+
+const cliWorkspaceArg = (getArgValue("--workspace") || "").trim();
+const cliKgArg = (getArgValue("--kg-dir") || "").trim();
+const cliChaptersArg = (getArgValue("--chapters-dir") || "").trim();
+
 function isPluginCachePath(dirPath) {
 	if (!dirPath) return false;
 	const norm = path.resolve(dirPath).replace(/\\/gu, "/");
@@ -51,6 +67,7 @@ function resolveAttachedOrDirect(dirPath) {
 }
 
 function resolveWorkspaceRoot(payload) {
+	if (cliWorkspaceArg) return path.resolve(cliWorkspaceArg);
 	const wsEnv = (process.env.SYNT_WORKSPACE || process.env.MLH_WORKSPACE || "").trim();
 	if (wsEnv) return path.resolve(wsEnv);
 
@@ -443,21 +460,22 @@ try {
 
 	const root = resolveWorkspaceRoot(payload);
 
-	const customKgEnv = process.env.SYNT_KG_DIR || process.env.MLH_KG_DIR || "";
-	const kgDir = customKgEnv.trim()
-		? path.resolve(customKgEnv.trim())
+	const customKgEnv = cliKgArg || (process.env.SYNT_KG_DIR || process.env.MLH_KG_DIR || "").trim();
+	const kgDir = customKgEnv
+		? path.resolve(customKgEnv)
 		: path.join(root, "knowledge-graph");
 
-	const customChaptersEnv = process.env.SYNT_CHAPTERS_DIR || process.env.MLH_CHAPTERS_DIR || "";
-	const chaptersDir = customChaptersEnv.trim()
-		? path.resolve(customChaptersEnv.trim())
+	const customChaptersEnv =
+		cliChaptersArg || (process.env.SYNT_CHAPTERS_DIR || process.env.MLH_CHAPTERS_DIR || "").trim();
+	const chaptersDir = customChaptersEnv
+		? path.resolve(customChaptersEnv)
 		: path.join(root, "chapters");
 
 	// Fresh-clone auto-bootstrap: ONLY when running without a custom *_KG_DIR override,
 	// outside read-only plugin caches, in a writable workspace, and graph-data.js does not exist yet.
 	const graphDataFile = path.join(kgDir, "graph-data.js");
 	const canBootstrap =
-		!customKgEnv.trim() &&
+		!customKgEnv &&
 		!existsSync(graphDataFile) &&
 		!isPluginCachePath(root) &&
 		(existsSync(kgDir) ? isWritableDir(kgDir) : existsSync(root) && isWritableDir(root));
@@ -466,7 +484,7 @@ try {
 		if (syncScript) {
 			try {
 				const syncArgs = [syncScript, "--quiet", `--workspace=${root}`];
-				if (customChaptersEnv.trim()) syncArgs.push(`--chapters-dir=${chaptersDir}`);
+				if (customChaptersEnv) syncArgs.push(`--chapters-dir=${chaptersDir}`);
 				execFileSync(process.execPath, syncArgs, {
 					cwd: root,
 					stdio: "ignore",
@@ -481,6 +499,29 @@ try {
 	const props = readJsonl(path.join(kgDir, "propositions.jsonl"));
 	const chains = readJsonl(path.join(kgDir, "chains.jsonl"));
 	const mistakes = readJsonl(path.join(kgDir, "mistakes.jsonl"));
+	const revlog = readJsonl(path.join(kgDir, "revlog.jsonl"));
+	const forks = readJsonl(path.join(kgDir, "forks.jsonl"));
+	const arenas = readJsonl(path.join(kgDir, "arenas.jsonl"));
+	let learnerProfile = null;
+	try {
+		const lpPath = path.join(kgDir, "learner-profile.json");
+		if (existsSync(lpPath)) {
+			const parsed = JSON.parse(readFileSync(lpPath, "utf8"));
+			if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) learnerProfile = parsed;
+		}
+	} catch {
+		learnerProfile = null;
+	}
+	let whiteboardSession = null;
+	try {
+		const wbPath = path.join(kgDir, "whiteboard-session.json");
+		if (existsSync(wbPath)) {
+			const parsed = JSON.parse(readFileSync(wbPath, "utf8"));
+			if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) whiteboardSession = parsed;
+		}
+	} catch {
+		whiteboardSession = null;
+	}
 	const chapters = listVisible(chaptersDir).filter((name) => !/-tracker\.json$/iu.test(name));
 	const activeTracker = readActiveChapterTracker(chaptersDir);
 	const sources = listVisible(path.join(root, "sources"));
@@ -545,6 +586,127 @@ try {
 				: `Top recurring mistake traps (${mistakes.length} logged): ${catsStr}`,
 		);
 	}
+
+	// v3.0 Pure-Node Turn-0 Teacher Brief (4 lines, < 5ms, zero Python subprocess)
+	const activeDomain = String(
+		(activeTracker && activeTracker.subject) ||
+			learnerProfile?.compiledPolicy?.domain ||
+			"General",
+	).trim() || "General";
+
+	const calDone = Boolean(learnerProfile?.calibration?.completed);
+	const totalEvents = Number(learnerProfile?.globalStats?.totalEvents || 0);
+	const domInfo = learnerProfile?.domains?.[activeDomain] || null;
+	const eloVal = Math.round(
+		Number(domInfo?.elo ?? learnerProfile?.compiledPolicy?.domainElo ?? learnerProfile?.globalStats?.elo ?? 1450),
+	);
+	const bandVal = String(
+		domInfo?.expertiseBand || learnerProfile?.compiledPolicy?.expertiseBand || "intermediate",
+	);
+	const affectState = String(learnerProfile?.affectiveState?.state || "flow");
+	const dominantDna = learnerProfile?.failureDna?.dominantTier || null;
+
+	// Compute Brier overconfidence bias & days since last review from revlog.jsonl (pure Node)
+	let latestReviewMs = null;
+	const considerTs = (raw) => {
+		if (typeof raw !== "string" || !raw.trim()) return;
+		const s = raw.trim();
+		const ms = Date.parse(s.length === 10 ? `${s}T12:00:00Z` : s);
+		if (Number.isFinite(ms) && (latestReviewMs === null || ms > latestReviewMs)) {
+			latestReviewMs = ms;
+		}
+	};
+	let biasSum = 0;
+	let biasCount = 0;
+	for (const ev of revlog) {
+		considerTs(ev.ts || ev.reviewedAt || ev.date);
+		const rating = String(ev.rating || "").trim().toLowerCase();
+		const y =
+			typeof ev.correct === "boolean"
+				? ev.correct ? 1 : 0
+				: rating === "good" || rating === "easy" || ev.rating === 3 || ev.rating === 4
+					? 1
+					: rating === "again" || rating === "hard" || ev.rating === 1 || ev.rating === 2
+						? 0
+						: null;
+		const rawConf =
+			typeof ev.learnerConfidence === "number" && Number.isFinite(ev.learnerConfidence)
+				? ev.learnerConfidence
+				: typeof ev.confidence === "number" && Number.isFinite(ev.confidence)
+					? ev.confidence
+					: null;
+		if (y !== null && rawConf !== null) {
+			const c = Math.max(0, Math.min(1, rawConf > 1 ? rawConf / 100 : rawConf));
+			biasSum += c - y;
+			biasCount += 1;
+		}
+	}
+	considerTs(learnerProfile?.affectiveState?.lastEventAt);
+	const daysSinceReview =
+		latestReviewMs !== null
+			? Math.max(0, Math.floor((Date.now() - latestReviewMs) / 86400000))
+			: null;
+	const brierBias =
+		typeof learnerProfile?.metacognition?.overconfidenceBias === "number" &&
+		Number.isFinite(learnerProfile.metacognition.overconfidenceBias)
+			? learnerProfile.metacognition.overconfidenceBias
+			: biasCount > 0
+				? biasSum / biasCount
+				: null;
+
+	const biasStr =
+		brierBias !== null
+			? `bias ${brierBias >= 0 ? "+" : ""}${(brierBias * 100).toFixed(0)}%`
+			: "uncalibrated";
+	const dnaStr = dominantDna ? ` · DNA=${dominantDna}` : "";
+	const profileLine =
+		!calDone && totalEvents === 0
+			? `Learner Profile: Uncalibrated (${activeDomain} Elo ${eloVal} · affect=${affectState} · ${biasStr} · optional 2-min calibration available)`
+			: `Learner Profile: ${activeDomain} Elo ${eloVal} (${bandVal}) · affect=${affectState} · ${biasStr}${dnaStr}`;
+
+	const pol = learnerProfile?.compiledPolicy || {};
+	const scaffMode = String(pol.scaffoldingMode || "faded");
+	const exFlag = pol.allowWorkedExample ? "on" : "off";
+	const pfFlag = pol.allowProductiveFailure === false ? "off" : "on";
+	const maxWords = Number(pol.maxProseWords || 135);
+	const targetRate = Number(pol.targetSuccessRate || 0.85).toFixed(2);
+	const guardrails = Array.isArray(pol.activeGuardrails) ? pol.activeGuardrails.filter(Boolean).slice(0, 1) : [];
+	const policyLine =
+		`Active TeachingPolicy: mode=${scaffMode} · ex=${exFlag} · PF=${pfFlag} · <= ${maxWords}w · p*=${targetRate}` +
+		(guardrails.length > 0 ? ` · ${String(guardrails[0]).slice(0, 64)}` : "");
+
+	const dueForksCount = forks.filter((f) => {
+		const st = String(f.status || "active").toLowerCase();
+		const nr = typeof f.nextReview === "string" ? f.nextReview.slice(0, 10) : "";
+		return st === "active" || st === "shaky" || !nr || nr <= today;
+	}).length;
+	const openArenasCount = arenas.filter((a) => {
+		const st = String(a.status || "").toLowerCase();
+		if (st === "cleared" || st === "passed") return false;
+		const total = Array.isArray(a.sealedMutants) ? a.sealedMutants.length : Number(a.totalMutants || 0);
+		const killed = Array.isArray(a.killedMutants) ? a.killedMutants.length : Number(a.killedCount || 0);
+		return total === 0 || killed < total;
+	}).length;
+	const reentryStr =
+		daysSinceReview !== null && daysSinceReview >= 4
+			? `Cold-Start Re-Entry ACTIVE (${daysSinceReview}d since last review — calm anchor first)`
+			: daysSinceReview !== null
+				? `re-entry clear (${daysSinceReview}d since review)`
+				: "re-entry clear";
+	const gymLine = `Due Forks/Arenas/Re-Entry: ${dueForksCount} fork(s) due (${forks.length} total) · ${openArenasCount}/${arenas.length} open arena(s) · ${reentryStr}`;
+
+	const rawPins = Array.isArray(whiteboardSession?.pins) ? whiteboardSession.pins : [];
+	const unresolvedPins = rawPins.filter((p) => p && typeof p === "object" && !p.resolved);
+	const pinsLine =
+		unresolvedPins.length > 0
+			? `Pending Whiteboard Pins (${unresolvedPins.length}): ` +
+				unresolvedPins
+					.slice(0, 2)
+					.map((p) => `step #${p.stepIndex ?? "?"}: "${String(p.note || "").replace(/\s+/gu, " ").trim().slice(0, 60)}"`)
+					.join("; ")
+			: "Pending Whiteboard Pins: none";
+
+	lines.push(profileLine, policyLine, gymLine, pinsLine);
 
 	const snapshotText = lines.join("\n");
 	const isExplicitAntigravity = Boolean(

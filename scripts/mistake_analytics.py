@@ -293,6 +293,26 @@ def append_mistake(
 
     append_jsonl_locked(mistakes_file, record)
 
+    try:
+        from syntopik.learner_model import record_telemetry_event
+
+        record_telemetry_event(
+            resolved_dir,
+            domain=rec_subject,
+            prop_id=rec_prop_id or None,
+            kind="mistake",
+            correct=False,
+            difficulty=1500,
+            confidence=None,
+            duration_ms=None,
+            hints_used=0,
+            mistake_category=rec_category,
+            pf_outcome=None,
+            skipped=False,
+        )
+    except Exception:
+        pass
+
     should_sync = (not no_sync) and (sync is not False)
     if should_sync:
         sync_viewer(resolved_dir)

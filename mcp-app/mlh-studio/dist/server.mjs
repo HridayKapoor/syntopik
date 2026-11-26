@@ -22358,11 +22358,30 @@ var VALID_PRACTICE_MODES = /* @__PURE__ */ new Set([
   "standard",
   "parsons",
   "faded",
+  "blackout",
   "recall",
   "discrimination",
   "composition"
 ]);
 var PARSONS_MODES = /* @__PURE__ */ new Set(["parsons", "faded"]);
+var VALID_BLACKOUT_ROLES = /* @__PURE__ */ new Set(["axiom", "step", "theorem"]);
+var VALID_WHITEBOARD_KINDS = /* @__PURE__ */ new Set([
+  "derivation_step",
+  "prediction_gate",
+  "explore_widget",
+  "diagram_callout",
+  "summary"
+]);
+var VALID_ENERGY_MODES = /* @__PURE__ */ new Set(["low", "normal", "deep"]);
+var VALID_SCAFFOLDING_MODES = /* @__PURE__ */ new Set([
+  "worked_example_parsons",
+  "faded",
+  "standard",
+  "challenge_transfer"
+]);
+var VALID_ENTRY_RAMPS = /* @__PURE__ */ new Set(["intuition_first", "balanced", "formalism_first"]);
+var VALID_CHALLENGE_APPETITES = /* @__PURE__ */ new Set(["guided", "balanced", "adversarial"]);
+var VALID_PROSE_DENSITIES = /* @__PURE__ */ new Set(["terse", "standard", "rich"]);
 var VALID_OUTCOMES = /* @__PURE__ */ new Set([
   "solved",
   "solvedWithHints",
@@ -22528,15 +22547,20 @@ function validatePracticePose(rawArgs, activeProblem2) {
   if (args.mode !== void 0 && args.mode !== null && args.mode !== "") {
     if (typeof args.mode !== "string" || !VALID_PRACTICE_MODES.has(args.mode.trim())) {
       errors.push(
-        `mode must be one of standard, parsons, faded, recall, discrimination, or composition (got ${JSON.stringify(args.mode)}).`
+        `mode must be one of standard, parsons, faded, blackout, recall, discrimination, or composition (got ${JSON.stringify(args.mode)}).`
       );
     } else {
       mode = args.mode.trim();
     }
   }
   const isParsonsMode = Boolean(mode && PARSONS_MODES.has(mode));
+  const isBlackoutMode = mode === "blackout";
   let cleanBlocks = null;
   let cleanCanonicalOrder = null;
+  let cleanSteps = null;
+  const derivationId = typeof args.derivationId === "string" && args.derivationId.trim() ? args.derivationId.trim() : null;
+  const rawLevel = Number(args.blackoutLevel ?? args.level ?? 1);
+  const blackoutLevel = Number.isFinite(rawLevel) ? Math.max(1, Math.min(3, Math.round(rawLevel))) : 1;
   if (args.blocks !== void 0 && args.blocks !== null) {
     if (!Array.isArray(args.blocks) || args.blocks.length < 2) {
       errors.push("blocks must be an array of at least 2 block objects {id, code, indent?, isDistractor?}.");
@@ -22593,6 +22617,57 @@ function validatePracticePose(rawArgs, activeProblem2) {
   } else if (isParsonsMode) {
     errors.push(`blocks array (at least 2 items) is required when mode is "${mode}".`);
   }
+  const rawSteps = args.steps ?? args.blackoutSteps;
+  if (rawSteps !== void 0 && rawSteps !== null) {
+    if (!Array.isArray(rawSteps) || rawSteps.length < 2) {
+      errors.push("steps must be an array of at least 2 derivation step objects {id, label?, role?, expr?, expectedExpr?, hidden?, dependsOn?}.");
+    } else {
+      const seenStepIds = /* @__PURE__ */ new Set();
+      cleanSteps = [];
+      rawSteps.forEach((st, idx) => {
+        if (!st || typeof st !== "object" || Array.isArray(st)) {
+          errors.push(`steps[${idx}] must be an object.`);
+          return;
+        }
+        const id = typeof st.id === "string" && st.id.trim() ? st.id.trim() : `s${idx + 1}`;
+        if (seenStepIds.has(id)) {
+          errors.push(`Duplicate blackout step id "${id}". Every step id must be unique.`);
+        }
+        seenStepIds.add(id);
+        const rawRole = typeof st.role === "string" ? st.role.trim().toLowerCase() : "step";
+        const role = VALID_BLACKOUT_ROLES.has(rawRole) ? rawRole : "step";
+        const label = typeof st.label === "string" && st.label.trim() ? st.label.trim() : id;
+        const rawExpr = typeof st.expr === "string" ? st.expr.trim() : "";
+        const rawExpected = typeof st.expectedExpr === "string" && st.expectedExpr.trim() ? st.expectedExpr.trim() : typeof st.answer === "string" && st.answer.trim() ? st.answer.trim() : "";
+        const hidden = typeof st.hidden === "boolean" ? st.hidden : role !== "axiom" && Boolean(rawExpected);
+        const sealedExpr = hidden ? rawExpected || rawExpr : rawExpr;
+        if (!sealedExpr) {
+          errors.push(
+            hidden ? `steps[${idx}] ("${id}") is hidden and requires expectedExpr (or expr) to seal server-side.` : `steps[${idx}] ("${id}") requires a non-empty expr.`
+          );
+        }
+        const dependsOn = Array.isArray(st.dependsOn) ? [...new Set(st.dependsOn.map((d2) => String(d2 || "").trim()).filter((d2) => d2 && d2 !== id))] : [];
+        const note = typeof st.note === "string" ? st.note.trim() : "";
+        if (sealedExpr) {
+          cleanSteps.push({
+            id,
+            label,
+            role,
+            dependsOn,
+            hidden,
+            expr: sealedExpr,
+            expectedExpr: hidden ? sealedExpr : null,
+            note
+          });
+        }
+      });
+      if (isBlackoutMode && cleanSteps.length > 0 && !cleanSteps.some((s) => s.hidden)) {
+        errors.push('mode="blackout" requires at least one step with hidden: true.');
+      }
+    }
+  } else if (isBlackoutMode) {
+    errors.push('steps array (at least 2 items with >= 1 hidden step) is required when mode is "blackout".');
+  }
   let targets = [];
   if (args.targets !== void 0 && args.targets !== null) {
     if (!Array.isArray(args.targets)) {
@@ -22619,8 +22694,12 @@ function validatePracticePose(rawArgs, activeProblem2) {
       statement,
       mode,
       isParsonsMode,
+      isBlackoutMode,
       blocks: cleanBlocks,
       canonicalOrder: cleanCanonicalOrder,
+      steps: cleanSteps,
+      derivationId,
+      blackoutLevel,
       targets,
       modelSolution
     }
@@ -22691,6 +22770,182 @@ function validateStudioArgs(rawArgs) {
   const rawTab = typeof args.tab === "string" ? args.tab.trim() : void 0;
   const tab = rawTab && VALID_TABS.has(rawTab) ? rawTab : void 0;
   return { planMermaid, activeNodeId, visitedNodeIds, tab };
+}
+function validateNextMoveArgs(rawArgs) {
+  const args = healRecord(rawArgs);
+  const errors = [];
+  let energy;
+  if (args.energy !== void 0 && args.energy !== null && args.energy !== "") {
+    const e = String(args.energy).trim().toLowerCase();
+    if (!VALID_ENERGY_MODES.has(e)) {
+      errors.push(`energy must be low, normal, or deep (got ${JSON.stringify(args.energy)}).`);
+    } else {
+      energy = e;
+    }
+  }
+  const domain2 = typeof args.domain === "string" && args.domain.trim() ? args.domain.trim() : void 0;
+  const event = args.event !== void 0 && args.event !== null && args.event !== "" ? args.event : void 0;
+  if (errors.length > 0) return { ok: false, error: errors.join(" ") };
+  return { ok: true, value: { energy, domain: domain2, event } };
+}
+function validateWhiteboardStepArgs(rawArgs) {
+  const args = healRecord(rawArgs);
+  const errors = [];
+  const rawKind = typeof args.kind === "string" && args.kind.trim() ? args.kind.trim().toLowerCase() : "derivation_step";
+  if (!VALID_WHITEBOARD_KINDS.has(rawKind)) {
+    errors.push(
+      `kind must be one of derivation_step, prediction_gate, explore_widget, diagram_callout, or summary (got ${JSON.stringify(args.kind)}).`
+    );
+  }
+  const title = typeof args.title === "string" ? args.title.trim() : "";
+  const body = typeof args.body === "string" ? args.body.trim() : typeof args.content === "string" ? args.content.trim() : "";
+  const latex = typeof args.latex === "string" && args.latex.trim() ? args.latex.trim() : void 0;
+  const propId = typeof args.propId === "string" && args.propId.trim() ? args.propId.trim() : void 0;
+  const id = typeof args.id === "string" && args.id.trim() ? args.id.trim() : void 0;
+  const sessionTitle = typeof args.sessionTitle === "string" && args.sessionTitle.trim() ? args.sessionTitle.trim() : void 0;
+  const resolvePinId = typeof args.resolvePinId === "string" && args.resolvePinId.trim() ? args.resolvePinId.trim() : void 0;
+  const resolution = typeof args.resolution === "string" && args.resolution.trim() ? args.resolution.trim() : void 0;
+  let stepIndex;
+  if (args.stepIndex !== void 0 && args.stepIndex !== null && args.stepIndex !== "") {
+    const n = Number(args.stepIndex);
+    if (!Number.isFinite(n) || n < 0) {
+      errors.push(`stepIndex must be a non-negative integer (got ${JSON.stringify(args.stepIndex)}).`);
+    } else {
+      stepIndex = Math.round(n);
+    }
+  }
+  const isGate = rawKind === "prediction_gate";
+  const locked = typeof args.locked === "boolean" ? args.locked : isGate ? true : false;
+  const gate = args.gate && typeof args.gate === "object" && !Array.isArray(args.gate) ? { ...args.gate } : void 0;
+  const prompt = typeof args.prompt === "string" && args.prompt.trim() ? args.prompt.trim() : gate && typeof gate.prompt === "string" && gate.prompt.trim() ? gate.prompt.trim() : void 0;
+  const revealedBody = typeof args.revealedBody === "string" && args.revealedBody.trim() ? args.revealedBody.trim() : gate && typeof gate.revealedBody === "string" && gate.revealedBody.trim() ? gate.revealedBody.trim() : void 0;
+  const expectedAnswer = args.expectedAnswer !== void 0 ? args.expectedAnswer : gate && gate.expectedAnswer !== void 0 ? gate.expectedAnswer : void 0;
+  const payload = args.payload && typeof args.payload === "object" && !Array.isArray(args.payload) ? args.payload : {};
+  if (!title && !body && !latex && Object.keys(payload).length === 0 && !prompt) {
+    errors.push("Provide at least one of title, body, latex, prompt, or payload for a whiteboard frame.");
+  }
+  if (errors.length > 0) return { ok: false, error: errors.join(" ") };
+  return {
+    ok: true,
+    value: {
+      id,
+      kind: rawKind,
+      title: title || rawKind.replace(/_/g, " "),
+      body,
+      latex,
+      propId,
+      stepIndex,
+      locked,
+      prompt,
+      revealedBody,
+      expectedAnswer,
+      gate,
+      payload,
+      sessionTitle,
+      resolvePinId,
+      resolution
+    }
+  };
+}
+function validateProfileUpdateArgs(rawArgs) {
+  const args = healRecord(rawArgs);
+  const errors = [];
+  const rawOverrides = args.userOverrides && typeof args.userOverrides === "object" && !Array.isArray(args.userOverrides) ? args.userOverrides : {};
+  const hasCalibrationInput = args.entryRamp !== void 0 || args.challengeAppetite !== void 0 || args.domainFluency !== void 0 || args.proseDensity !== void 0 || args.sessionMinutes !== void 0;
+  const hasOverrideInput = args.userOverrides !== void 0 || args.scaffoldingMode !== void 0 || args.allowProductiveFailure !== void 0 || args.maxProseWords !== void 0 || args.clearOverrides === true;
+  let op = typeof args.op === "string" ? args.op.trim().toLowerCase() : "";
+  if (!op) {
+    op = hasCalibrationInput && !hasOverrideInput ? "calibrate" : "override";
+  }
+  if (!["override", "calibrate", "reset"].includes(op)) {
+    errors.push(`op must be override, calibrate, or reset (got ${JSON.stringify(args.op)}).`);
+  }
+  const overrides = {};
+  if (op === "override") {
+    if (args.clearOverrides === true) {
+      overrides.scaffoldingMode = null;
+      overrides.allowProductiveFailure = null;
+      overrides.maxProseWords = null;
+    } else {
+      const scaf = args.scaffoldingMode !== void 0 ? args.scaffoldingMode : rawOverrides.scaffoldingMode;
+      if (scaf !== void 0) {
+        if (scaf === null || scaf === "" || scaf === "auto" || scaf === "clear") {
+          overrides.scaffoldingMode = null;
+        } else if (typeof scaf === "string" && VALID_SCAFFOLDING_MODES.has(scaf.trim())) {
+          overrides.scaffoldingMode = scaf.trim();
+        } else {
+          errors.push(`scaffoldingMode must be one of ${[...VALID_SCAFFOLDING_MODES].join(", ")} or null.`);
+        }
+      }
+      const allowPf = args.allowProductiveFailure !== void 0 ? args.allowProductiveFailure : rawOverrides.allowProductiveFailure;
+      if (allowPf !== void 0) {
+        if (allowPf === null || allowPf === "" || allowPf === "auto" || allowPf === "clear") {
+          overrides.allowProductiveFailure = null;
+        } else if (typeof allowPf === "boolean") {
+          overrides.allowProductiveFailure = allowPf;
+        } else {
+          errors.push("allowProductiveFailure must be boolean or null.");
+        }
+      }
+      const maxW = args.maxProseWords !== void 0 ? args.maxProseWords : rawOverrides.maxProseWords;
+      if (maxW !== void 0) {
+        if (maxW === null || maxW === "" || maxW === "auto" || maxW === "clear") {
+          overrides.maxProseWords = null;
+        } else {
+          const n = Number(maxW);
+          if (!Number.isFinite(n) || n < 60 || n > 160) {
+            errors.push("maxProseWords must be an integer between 60 and 160 (or null).");
+          } else {
+            overrides.maxProseWords = Math.round(n);
+          }
+        }
+      }
+    }
+  }
+  const calibration = {};
+  if (op === "calibrate") {
+    if (args.entryRamp !== void 0) {
+      const er = String(args.entryRamp).trim().toLowerCase();
+      if (!VALID_ENTRY_RAMPS.has(er)) errors.push(`Invalid entryRamp ${JSON.stringify(args.entryRamp)}.`);
+      else calibration.entryRamp = er;
+    }
+    if (args.challengeAppetite !== void 0) {
+      const ca = String(args.challengeAppetite).trim().toLowerCase();
+      if (!VALID_CHALLENGE_APPETITES.has(ca)) {
+        errors.push(`Invalid challengeAppetite ${JSON.stringify(args.challengeAppetite)}.`);
+      } else {
+        calibration.challengeAppetite = ca;
+      }
+    }
+    if (args.proseDensity !== void 0) {
+      const pd = String(args.proseDensity).trim().toLowerCase();
+      if (!VALID_PROSE_DENSITIES.has(pd)) {
+        errors.push(`Invalid proseDensity ${JSON.stringify(args.proseDensity)}.`);
+      } else {
+        calibration.proseDensity = pd;
+      }
+    }
+    if (args.sessionMinutes !== void 0) {
+      const sm = Number(args.sessionMinutes);
+      if (!Number.isFinite(sm) || sm < 5 || sm > 180) {
+        errors.push("sessionMinutes must be between 5 and 180.");
+      } else {
+        calibration.sessionMinutes = Math.round(sm);
+      }
+    }
+    if (args.domainFluency && typeof args.domainFluency === "object" && !Array.isArray(args.domainFluency)) {
+      const cleanFluency = {};
+      for (const [k, v2] of Object.entries(args.domainFluency)) {
+        const n = Number(v2);
+        if (k.trim() && Number.isFinite(n)) {
+          cleanFluency[k.trim()] = Math.max(0, Math.min(3, Math.round(n)));
+        }
+      }
+      calibration.domainFluency = cleanFluency;
+    }
+  }
+  if (errors.length > 0) return { ok: false, error: errors.join(" ") };
+  return { ok: true, value: { op, overrides, calibration } };
 }
 
 // mcp-app/mlh-studio/src/workspace.mjs
@@ -22763,6 +23018,200 @@ function writeJsonlAtomic(filePath, rows) {
   );
   fs.writeFileSync(tmp, content, "utf8");
   fs.renameSync(tmp, filePath);
+}
+function readJsonSafe(filePath, fallback = null) {
+  try {
+    if (!fs.existsSync(filePath)) return fallback;
+    const parsed = JSON.parse(fs.readFileSync(filePath, "utf8"));
+    return parsed && typeof parsed === "object" ? parsed : fallback;
+  } catch {
+    return fallback;
+  }
+}
+function writeJsonAtomic(filePath, data) {
+  fs.mkdirSync(path.dirname(filePath), { recursive: true });
+  const tmp = path.join(
+    path.dirname(filePath),
+    `.${path.basename(filePath)}.${process.pid}.${crypto.randomBytes(4).toString("hex")}.tmp`
+  );
+  fs.writeFileSync(tmp, `${JSON.stringify(data, null, 2)}
+`, "utf8");
+  fs.renameSync(tmp, filePath);
+}
+function buildPythonEnv(workspaceRoot) {
+  const pkgRoot = resolvePackageRoot();
+  const roots = [pkgRoot];
+  if (workspaceRoot && fs.existsSync(path.join(workspaceRoot, "syntopik"))) {
+    roots.unshift(path.resolve(workspaceRoot));
+  }
+  const existing = process.env.PYTHONPATH || "";
+  const uniqueRoots = [...new Set(roots.filter(Boolean))];
+  return {
+    ...process.env,
+    PYTHONDONTWRITEBYTECODE: "1",
+    PYTHONPATH: existing ? `${uniqueRoots.join(path.delimiter)}${path.delimiter}${existing}` : uniqueRoots.join(path.delimiter)
+  };
+}
+function eloToBand(elo) {
+  const v2 = Number(elo) || 1450;
+  if (v2 < 1250) return "novice";
+  if (v2 < 1450) return "developing";
+  if (v2 < 1700) return "intermediate";
+  return "advanced";
+}
+function computeColdStartDays(profile, revlog, mistakes) {
+  let latestMs = null;
+  const consider = (tsVal) => {
+    if (typeof tsVal !== "string" || !tsVal.trim()) return;
+    const parsed = Date.parse(tsVal.trim().length === 10 ? `${tsVal.trim()}T12:00:00Z` : tsVal.trim());
+    if (Number.isFinite(parsed) && (latestMs === null || parsed > latestMs)) {
+      latestMs = parsed;
+    }
+  };
+  consider(profile?.affectiveState?.lastEventAt);
+  for (const ev of (Array.isArray(profile?.recentEvents) ? profile.recentEvents : []).slice(-5)) {
+    consider(ev?.ts);
+  }
+  for (const r of revlog.slice(-10)) {
+    consider(r?.ts || r?.reviewedAt || r?.date);
+  }
+  for (const m of mistakes.slice(-5)) {
+    consider(m?.ts || m?.date);
+  }
+  if (latestMs === null) return 0;
+  return Math.max(0, Math.floor((Date.now() - latestMs) / 864e5));
+}
+function loadWhiteboardPendingPins(kgDir) {
+  const wb = readJsonSafe(path.join(kgDir, "whiteboard-session.json"), null);
+  if (!wb || !Array.isArray(wb.pins)) return [];
+  return wb.pins.filter((p2) => p2 && typeof p2 === "object" && !p2.resolved).map((p2, idx) => ({
+    id: String(p2.id || `pin-${idx + 1}`),
+    frameId: p2.frameId || null,
+    stepIndex: typeof p2.stepIndex === "number" ? p2.stepIndex : 0,
+    note: String(p2.note || "").trim().slice(0, 140),
+    createdAt: p2.createdAt || null
+  }));
+}
+function loadDueForksSummary(kgDir, today) {
+  const forks = readJsonl(path.join(kgDir, "forks.jsonl"));
+  const due = forks.filter((f2) => {
+    const st = String(f2.status || "due").toLowerCase();
+    if (st === "archived" || st === "mastered" || st === "retired") return false;
+    const nr = typeof f2.nextReview === "string" ? f2.nextReview.slice(0, 10) : null;
+    return !nr || nr <= today || st === "due";
+  }).map((f2) => ({
+    id: String(f2.id || ""),
+    propId: f2.propId || null,
+    domain: f2.domain || f2.subject || "General",
+    chapter: f2.chapter || "",
+    status: f2.status || "due",
+    nextReview: f2.nextReview || null
+  })).filter((f2) => f2.id);
+  return { dueForks: due.slice(0, 5), dueForksCount: due.length, totalForks: forks.length };
+}
+function loadArenasSummary(kgDir) {
+  const arenas = readJsonl(path.join(kgDir, "arenas.jsonl"));
+  const openArenasCount = arenas.filter(
+    (a) => !["cleared", "passed", "archived"].includes(String(a.status || "open").toLowerCase())
+  ).length;
+  return { arenasCount: arenas.length, openArenasCount };
+}
+function buildPolicyFallbackFromProfile(profile, domain2 = null) {
+  const cal = profile?.calibration || {};
+  const ov = profile?.userOverrides || {};
+  const gs = profile?.globalStats || {};
+  const aff = profile?.affectiveState || {};
+  const affectState = String(aff.state || "flow");
+  const domainsMap = profile?.domains && typeof profile.domains === "object" ? profile.domains : {};
+  const domKey = domain2 && domainsMap[domain2] ? domain2 : Object.keys(domainsMap)[0] || domain2 || "General";
+  const domElo = Number(domainsMap[domKey]?.elo ?? gs.elo ?? 1450);
+  let scaffoldingMode = "standard";
+  if (affectState === "overloaded_frustrated") {
+    scaffoldingMode = "worked_example_parsons";
+  } else if (domElo < 1300) {
+    scaffoldingMode = "worked_example_parsons";
+  } else if (domElo < 1500) {
+    scaffoldingMode = "faded";
+  } else if (domElo >= 1700) {
+    scaffoldingMode = "challenge_transfer";
+  }
+  if (typeof ov.scaffoldingMode === "string" && ov.scaffoldingMode) {
+    scaffoldingMode = ov.scaffoldingMode;
+  }
+  const densityWords = { terse: 105, standard: 135, rich: 155 };
+  let maxProseWords = densityWords[cal.proseDensity] || 135;
+  if (affectState === "fatigued" || affectState === "overloaded_frustrated") {
+    maxProseWords = Math.min(maxProseWords, 110);
+  }
+  if (typeof ov.maxProseWords === "number" && Number.isFinite(ov.maxProseWords)) {
+    maxProseWords = Math.max(60, Math.min(160, Math.round(ov.maxProseWords)));
+  }
+  const allowWorkedExample = scaffoldingMode === "worked_example_parsons" || scaffoldingMode === "faded";
+  let allowProductiveFailure = affectState !== "overloaded_frustrated" && affectState !== "fatigued" && domElo >= 1350;
+  if (typeof ov.allowProductiveFailure === "boolean") {
+    allowProductiveFailure = ov.allowProductiveFailure;
+  }
+  return {
+    domain: domKey,
+    scaffoldingMode,
+    allowWorkedExample,
+    allowProductiveFailure,
+    maxProseWords,
+    targetSuccessRate: Number(cal.targetSuccessRate ?? 0.85),
+    requirePredictionFirst: affectState === "gaming_rushing" || domElo >= 1450,
+    affectState,
+    affectIntervention: affectState === "overloaded_frustrated" ? "step_down_worked_bridge" : affectState === "fatigued" ? "offer_calm_wrapup" : affectState === "gaming_rushing" ? "require_1line_why" : affectState === "bored_underchallenged" ? "accelerate_transfer" : "none"
+  };
+}
+function loadLearnerProfileSummary(workspaceRoot, kgDir, domain2 = null) {
+  const raw = readJsonSafe(path.join(kgDir, "learner-profile.json"), null);
+  const domainsOut = {};
+  if (raw?.domains && typeof raw.domains === "object") {
+    for (const [domName, info] of Object.entries(raw.domains)) {
+      if (!info || typeof info !== "object") continue;
+      const elo = Math.round(Number(info.elo ?? 1450));
+      domainsOut[domName] = {
+        elo,
+        band: info.expertiseBand || eloToBand(elo),
+        events: Number(info.events ?? info.n ?? 0)
+      };
+    }
+  }
+  const globalElo = Math.round(Number(raw?.globalStats?.elo ?? 1450));
+  const affectState = String(raw?.affectiveState?.state || "flow");
+  const learnerProfile = {
+    exists: Boolean(raw),
+    calibrated: Boolean(raw?.calibration?.completed),
+    globalElo,
+    globalBand: eloToBand(globalElo),
+    totalEvents: Number(raw?.globalStats?.totalEvents ?? 0),
+    affectState,
+    domains: domainsOut,
+    failureDna: raw?.failureDna || null,
+    userOverrides: {
+      scaffoldingMode: raw?.userOverrides?.scaffoldingMode ?? null,
+      allowProductiveFailure: typeof raw?.userOverrides?.allowProductiveFailure === "boolean" ? raw.userOverrides.allowProductiveFailure : null,
+      maxProseWords: typeof raw?.userOverrides?.maxProseWords === "number" ? raw.userOverrides.maxProseWords : null
+    },
+    calibration: {
+      entryRamp: raw?.calibration?.entryRamp || "balanced",
+      challengeAppetite: raw?.calibration?.challengeAppetite || "balanced",
+      proseDensity: raw?.calibration?.proseDensity || "standard",
+      sessionTargetMinutes: Number(raw?.calibration?.sessionTargetMinutes ?? 30)
+    }
+  };
+  const compiled = raw?.compiledPolicy && typeof raw.compiledPolicy === "object" ? {
+    domain: domain2 || raw.compiledPolicy.domain || "General",
+    scaffoldingMode: raw.compiledPolicy.scaffoldingMode || "standard",
+    allowWorkedExample: Boolean(raw.compiledPolicy.allowWorkedExample),
+    allowProductiveFailure: Boolean(raw.compiledPolicy.allowProductiveFailure),
+    maxProseWords: Number(raw.compiledPolicy.maxProseWords ?? 135),
+    targetSuccessRate: Number(raw.compiledPolicy.targetSuccessRate ?? 0.85),
+    requirePredictionFirst: Boolean(raw.compiledPolicy.requirePredictionFirst),
+    affectState: raw.compiledPolicy.affectState || affectState,
+    affectIntervention: raw.compiledPolicy.affectIntervention || "none"
+  } : buildPolicyFallbackFromProfile(raw, domain2);
+  return { rawProfile: raw, learnerProfile, teachingPolicy: compiled };
 }
 function appendJsonlSafe(filePath, obj) {
   fs.mkdirSync(path.dirname(filePath), { recursive: true });
@@ -23210,6 +23659,15 @@ function loadWorkspaceState(workspaceRoot, section = "all") {
   });
   const { chapterTrackers, activeChapter } = loadChapterTrackers(workspaceRoot);
   const calibration = computeCalibrationSummary(revlog);
+  const { rawProfile, learnerProfile, teachingPolicy } = loadLearnerProfileSummary(
+    workspaceRoot,
+    kgDir,
+    activeChapter?.subject || null
+  );
+  const pendingPins = loadWhiteboardPendingPins(kgDir);
+  const { dueForksCount } = loadDueForksSummary(kgDir, today);
+  const { arenasCount, openArenasCount } = loadArenasSummary(kgDir);
+  const coldStartDays = computeColdStartDays(rawProfile, revlog, mistakes);
   const stats = {
     today,
     totalPropositions: propositions.length,
@@ -23223,12 +23681,23 @@ function loadWorkspaceState(workspaceRoot, section = "all") {
     trackersCount: chapterTrackers.length,
     activeChapterPct: activeChapter ? activeChapter.pct : null,
     activeChapterSlug: activeChapter ? activeChapter.slug : null,
-    brierScore: calibration.brierScore
+    brierScore: calibration.brierScore,
+    dueForksCount,
+    arenasCount,
+    openArenasCount,
+    coldStartDays,
+    pendingPinsCount: pendingPins.length
   };
   const payload = {
     workspaceName: path.basename(workspaceRoot),
     stats,
-    calibration
+    calibration,
+    learnerProfile,
+    teachingPolicy,
+    pendingPins,
+    dueForksCount,
+    arenasCount,
+    coldStartDays
   };
   if (section === "all" || section === "autopilot") {
     payload.chapterTrackers = chapterTrackers;
@@ -23315,7 +23784,7 @@ function findSimilarFallbackJs(props, query) {
   hits.sort((a, b) => b.score - a.score || String(a.id).localeCompare(String(b.id)));
   return hits.slice(0, 3);
 }
-function rateFlashcard(workspaceRoot, { propId, rating, cueId, misconception, confidence, durationMs }) {
+function rateFlashcard(workspaceRoot, { propId, rating, cueId, misconception, confidence, durationMs, hintsUsed }) {
   const cleanId = typeof propId === "string" ? propId.trim() : "";
   const cleanRating = typeof rating === "string" ? rating.trim().toLowerCase() : "";
   if (!cleanId || !/^[A-Za-z0-9._:/-]+$/.test(cleanId)) {
@@ -23332,7 +23801,8 @@ function rateFlashcard(workspaceRoot, { propId, rating, cueId, misconception, co
   }
   const normConf = normalizeConfidence(confidence);
   const cleanDur = typeof durationMs === "number" && Number.isFinite(durationMs) && durationMs >= 0 ? Math.round(durationMs) : null;
-  const buildArgs = ({ includeCue, includeV2Flags }) => {
+  const cleanHints = typeof hintsUsed === "number" && Number.isFinite(hintsUsed) && hintsUsed >= 0 ? Math.max(0, Math.min(5, Math.round(hintsUsed))) : null;
+  const buildArgs = ({ includeCue, includeV2Flags, includeHints }) => {
     const argv = ["-B", srsScript, "--kg-dir", kgDir, "review", cleanId, "--rating", cleanRating, "--no-sync"];
     if (includeCue && typeof cueId === "string" && cueId.trim()) {
       argv.push("--cue-id", cueId.trim());
@@ -23346,12 +23816,17 @@ function rateFlashcard(workspaceRoot, { propId, rating, cueId, misconception, co
     if (includeV2Flags && cleanDur !== null) {
       argv.push("--duration-ms", String(cleanDur));
     }
+    if (includeV2Flags && includeHints && cleanHints !== null) {
+      argv.push("--hints", String(cleanHints));
+    }
     return argv;
   };
+  const pyEnv = buildPythonEnv(workspaceRoot);
   let stdout;
   try {
-    stdout = execFileSync(pythonBin, buildArgs({ includeCue: true, includeV2Flags: true }), {
+    stdout = execFileSync(pythonBin, buildArgs({ includeCue: true, includeV2Flags: true, includeHints: true }), {
       cwd: fs.existsSync(workspaceRoot) ? workspaceRoot : process.cwd(),
+      env: pyEnv,
       encoding: "utf8",
       timeout: 15e3
     });
@@ -23359,12 +23834,18 @@ function rateFlashcard(workspaceRoot, { propId, rating, cueId, misconception, co
     const stderr = String(err?.stderr || err?.message || "");
     if (stderr.includes("unrecognized arguments")) {
       const retryIncludeCue = !(cueId && stderr.includes("--cue-id"));
+      const retryIncludeV2 = !stderr.includes("--confidence") && !stderr.includes("--duration-ms");
       try {
-        stdout = execFileSync(pythonBin, buildArgs({ includeCue: retryIncludeCue, includeV2Flags: false }), {
-          cwd: fs.existsSync(workspaceRoot) ? workspaceRoot : process.cwd(),
-          encoding: "utf8",
-          timeout: 15e3
-        });
+        stdout = execFileSync(
+          pythonBin,
+          buildArgs({ includeCue: retryIncludeCue, includeV2Flags: retryIncludeV2, includeHints: false }),
+          {
+            cwd: fs.existsSync(workspaceRoot) ? workspaceRoot : process.cwd(),
+            env: pyEnv,
+            encoding: "utf8",
+            timeout: 15e3
+          }
+        );
       } catch (retryErr) {
         return { ok: false, error: `srs_engine.py failed: ${String(retryErr?.stderr || retryErr?.message || retryErr)}` };
       }
@@ -23698,6 +24179,15 @@ function getFrontier(workspaceRoot, { limit = 10, compress = true } = {}) {
     return lapses >= 4 || diff >= 8.5;
   }).length;
   const readingQueueDueCount = readingQueue.filter((r) => String(r.stage || "queued") !== "crystallized").length;
+  const { rawProfile, learnerProfile, teachingPolicy } = loadLearnerProfileSummary(
+    workspaceRoot,
+    kgDir,
+    activeChapter?.subject || null
+  );
+  const { dueForks, dueForksCount } = loadDueForksSummary(kgDir, today);
+  const { arenasCount, openArenasCount } = loadArenasSummary(kgDir);
+  const coldStartDays = computeColdStartDays(rawProfile, revlog, mistakes);
+  const pendingPins = loadWhiteboardPendingPins(kgDir);
   return {
     ok: true,
     today,
@@ -23712,6 +24202,14 @@ function getFrontier(workspaceRoot, { limit = 10, compress = true } = {}) {
     calibration,
     leechesCount,
     readingQueueDueCount,
+    learnerProfile,
+    teachingPolicy,
+    dueForks,
+    dueForksCount,
+    arenasCount,
+    openArenasCount,
+    coldStartDays,
+    pendingPins,
     stats: {
       totalPropositions: propositions.length,
       totalChains: chains.length,
@@ -23720,7 +24218,7 @@ function getFrontier(workspaceRoot, { limit = 10, compress = true } = {}) {
     }
   };
 }
-function logReview(workspaceRoot, { propId, rating, confidence, cueId, misconception, durationMs }) {
+function logReview(workspaceRoot, { propId, rating, confidence, cueId, misconception, durationMs, hintsUsed }) {
   const kgDir = resolveKgDir(workspaceRoot);
   const revlogPath = path.join(kgDir, "revlog.jsonl");
   const beforeSize = fs.existsSync(revlogPath) ? fs.statSync(revlogPath).size : 0;
@@ -23730,11 +24228,13 @@ function logReview(workspaceRoot, { propId, rating, confidence, cueId, misconcep
     cueId,
     misconception,
     confidence,
-    durationMs
+    durationMs,
+    hintsUsed
   });
   if (!rated.ok) return rated;
   const normConf = normalizeConfidence(confidence);
   const cleanRating = String(rating || "").trim().toLowerCase();
+  const cleanHints = typeof hintsUsed === "number" && Number.isFinite(hintsUsed) && hintsUsed >= 0 ? Math.max(0, Math.min(5, Math.round(hintsUsed))) : 0;
   const correct = cleanRating === "good" || cleanRating === "easy";
   const hypercorrection = Boolean(
     rated.result?.hypercorrection || normConf !== null && normConf >= 0.75 && !correct
@@ -23749,6 +24249,7 @@ function logReview(workspaceRoot, { propId, rating, confidence, cueId, misconcep
         ts: (/* @__PURE__ */ new Date()).toISOString(),
         rating: cleanRating,
         correct,
+        hintsUsed: cleanHints,
         ...normConf !== null ? { learnerConfidence: normConf } : {},
         ...typeof durationMs === "number" && Number.isFinite(durationMs) ? { durationMs: Math.round(durationMs) } : {},
         hypercorrection
@@ -23767,6 +24268,7 @@ function logReview(workspaceRoot, { propId, rating, confidence, cueId, misconcep
     difficulty: rated.result?.difficulty ?? null,
     bktMastery: rated.result?.bktMastery ?? null,
     nextReview: rated.result?.nextReview || null,
+    hintsUsed: cleanHints,
     fireCredits: rated.result?.fireCredits || [],
     fireRefreshedCount: rated.result?.fireRefreshedCount || 0,
     fireSummary: rated.result?.fireSummary || null,
@@ -23774,6 +24276,411 @@ function logReview(workspaceRoot, { propId, rating, confidence, cueId, misconcep
     revlogAppended,
     synced: rated.synced
   };
+}
+function planNextMove(workspaceRoot, { energy, domain: domain2, event } = {}) {
+  const pyBin = resolvePythonBin(workspaceRoot);
+  const pyCode = [
+    "import json, sys",
+    "from syntopik.brainstem import plan_next_move",
+    "req = json.loads(sys.stdin.read() or '{}')",
+    "res = plan_next_move(req.get('workspace'), event=req.get('event'), energy=req.get('energy'), domain=req.get('domain'))",
+    "print(json.dumps(res, ensure_ascii=False))"
+  ].join("\n");
+  try {
+    const out = execFileSync(pyBin, ["-B", "-c", pyCode], {
+      cwd: fs.existsSync(workspaceRoot) ? workspaceRoot : process.cwd(),
+      env: buildPythonEnv(workspaceRoot),
+      input: JSON.stringify({
+        workspace: workspaceRoot,
+        energy: energy ?? null,
+        domain: domain2 ?? null,
+        event: event ?? null
+      }),
+      encoding: "utf8",
+      timeout: 12e3
+    });
+    const parsed = JSON.parse(out);
+    if (parsed && typeof parsed === "object" && parsed.ok) {
+      return parsed;
+    }
+  } catch {
+  }
+  const kgDir = resolveKgDir(workspaceRoot);
+  const today = (/* @__PURE__ */ new Date()).toISOString().slice(0, 10);
+  const propositions = readJsonl(path.join(kgDir, "propositions.jsonl"));
+  const chains = readJsonl(path.join(kgDir, "chains.jsonl"));
+  const revlog = readJsonl(path.join(kgDir, "revlog.jsonl"));
+  const mistakes = readJsonl(path.join(kgDir, "mistakes.jsonl"));
+  const { activeChapter } = loadChapterTrackers(workspaceRoot);
+  const effDomain = domain2 || activeChapter?.subject || null;
+  const { rawProfile, learnerProfile, teachingPolicy } = loadLearnerProfileSummary(
+    workspaceRoot,
+    kgDir,
+    effDomain
+  );
+  const pendingPins = loadWhiteboardPendingPins(kgDir).slice(0, 3);
+  const coldStartDays = computeColdStartDays(rawProfile, revlog, mistakes);
+  const { dueForks, dueForksCount } = loadDueForksSummary(kgDir, today);
+  const { openArenasCount } = loadArenasSummary(kgDir);
+  const rawDue = propositions.filter((p2) => {
+    if (p2.archived || p2.suspended) return false;
+    const st = String(p2.status || "planned");
+    const nr = typeof p2.nextReview === "string" ? p2.nextReview : null;
+    return st === "misconception" || st === "shaky" || nr !== null && nr <= today;
+  }).map((p2) => ({
+    id: p2.id,
+    title: p2.title || p2.id,
+    status: p2.status || "planned",
+    nextReview: p2.nextReview || null
+  }));
+  const comp = compressDueItemsJs(rawDue, chains);
+  const dueSelected = comp.items;
+  const alerts = [];
+  if (coldStartDays >= 4) alerts.push(`${coldStartDays}d away: calm re-entry`);
+  if (dueForksCount > 0) alerts.push(`${dueForksCount} blunder fork(s) due`);
+  if (openArenasCount > 0) alerts.push(`${openArenasCount} open arena(s)`);
+  let recommendedMode = "teach_frontier";
+  let targetNodeId = null;
+  let rationale = "Workspace clear; drop sources or start a new chapter.";
+  let exactCmd = "syntopik drop <source>";
+  let skillHint = "topic-onboarding";
+  let whiteboardHint = "Ready for new topic scope or derivation frame.";
+  const skipCal = event === "skip_calibration" || Boolean(event && typeof event === "object" && event.skipCalibration);
+  if (pendingPins.length > 0) {
+    const p0 = pendingPins[0];
+    recommendedMode = "whiteboard_pin_answer";
+    rationale = `Learner pinned whiteboard step ${p0.stepIndex}: ${p0.note}`.slice(0, 130);
+    exactCmd = "syntopik board status --json";
+    skillHint = "teach-chapter";
+    whiteboardHint = `Resolve pin ${p0.id} directly on step ${p0.stepIndex} before advancing.`;
+  } else if (learnerProfile.totalEvents === 0 && !learnerProfile.calibrated && !skipCal) {
+    recommendedMode = "onboarding_calibration";
+    rationale = "First-time uncalibrated learner; offer optional 2-min non-VARK calibration (skippable).";
+    exactCmd = "syntopik profile calibrate --json";
+    skillHint = "topic-onboarding";
+    whiteboardHint = "Optional onboarding card (entryRamp, challengeAppetite, domainFluency).";
+  } else if (coldStartDays >= 4) {
+    recommendedMode = "cold_start_reentry";
+    targetNodeId = dueSelected[0]?.id || null;
+    rationale = `${coldStartDays} days away; serve guilt-free re-entry brief & 1 anchor recall.`;
+    exactCmd = "syntopik review --recover --daily-cap 15";
+    skillHint = "knowledge-graph";
+    whiteboardHint = "Push 1 calm anchor summary frame; zero backlog guilt.";
+  } else if (learnerProfile.affectState === "fatigued") {
+    recommendedMode = "calm_wrapup";
+    targetNodeId = dueSelected[0]?.id || null;
+    rationale = "Session fatigue cliff detected; run 1 low-energy consolidation & offer guilt-free stop.";
+    exactCmd = "syntopik review --energy low";
+    skillHint = "chapter-autopilot";
+    whiteboardHint = "Push concise summary frame and close session cleanly.";
+  } else if (learnerProfile.affectState === "overloaded_frustrated") {
+    recommendedMode = "bridge_worked_example";
+    targetNodeId = dueSelected[0]?.id || null;
+    rationale = "Overload streak detected; step down scaffolding to <=5-step worked bridge.";
+    exactCmd = "syntopik profile policy --json";
+    skillHint = "teach-chapter";
+    whiteboardHint = "Push step-by-step worked micro-example frame (<=110w prose).";
+  } else if (dueForks.length > 0) {
+    recommendedMode = "fork_replay";
+    targetNodeId = dueForks[0].propId || dueForks[0].id;
+    rationale = `Due Blunder Fork '${dueForks[0].id}' ready for mutated Woodpecker replay.`;
+    exactCmd = "syntopik run fork_replay due --json";
+    skillHint = "practice-drill";
+    whiteboardHint = `Load Blunder Fork '${dueForks[0].id}' pre-blunder FEN frame.`;
+  } else if (dueSelected.length > 0) {
+    recommendedMode = "fire_review";
+    targetNodeId = dueSelected[0].id;
+    rationale = `Due FIRe/SRC review '${dueSelected[0].id}' (${dueSelected[0].status}).`;
+    exactCmd = "syntopik review --json";
+    skillHint = "knowledge-graph";
+    whiteboardHint = `Push cold-recall prediction_gate for '${dueSelected[0].id}'.`;
+  } else if (activeChapter) {
+    const nextTopic = (activeChapter.topics || []).find((t) => t.status !== "mastered");
+    targetNodeId = nextTopic?.propIds?.[0] || nextTopic?.id || null;
+    rationale = `Teach frontier topic '${String(nextTopic?.title || activeChapter.title).slice(0, 44)}' via ${teachingPolicy.scaffoldingMode}.`;
+    exactCmd = `syntopik run chapter_tracker next --slug ${activeChapter.slug}`;
+    skillHint = "teach-chapter";
+    whiteboardHint = `Push derivation_step for '${targetNodeId || activeChapter.slug}'.`;
+  }
+  return {
+    ok: true,
+    recommendedMode,
+    targetNodeId,
+    chapterSlug: activeChapter?.slug || null,
+    rationale,
+    teachingPolicy,
+    policyConstraints: [`<= ${teachingPolicy.maxProseWords}w prose; 1 demand/turn`],
+    exactCmd,
+    skillHint,
+    whiteboardHint,
+    pendingPins,
+    alerts: alerts.slice(0, 3)
+  };
+}
+function pushWhiteboardStep(workspaceRoot, stepArgs) {
+  const kgDir = resolveKgDir(workspaceRoot);
+  fs.mkdirSync(kgDir, { recursive: true });
+  const pyBin = resolvePythonBin(workspaceRoot);
+  const frameSpec = {
+    ...stepArgs.id ? { id: stepArgs.id } : {},
+    kind: stepArgs.kind,
+    title: stepArgs.title,
+    body: stepArgs.body || "",
+    ...stepArgs.latex ? { latex: stepArgs.latex } : {},
+    ...stepArgs.propId ? { propId: stepArgs.propId } : {},
+    ...stepArgs.stepIndex !== void 0 ? { stepIndex: stepArgs.stepIndex } : {},
+    locked: stepArgs.locked,
+    ...stepArgs.prompt ? { prompt: stepArgs.prompt } : {},
+    ...stepArgs.revealedBody ? { revealedBody: stepArgs.revealedBody } : {},
+    ...stepArgs.expectedAnswer !== void 0 ? { expectedAnswer: stepArgs.expectedAnswer } : {},
+    ...stepArgs.gate ? { gate: stepArgs.gate } : {},
+    payload: stepArgs.payload || {},
+    ...stepArgs.sessionTitle ? { sessionTitle: stepArgs.sessionTitle } : {}
+  };
+  const pyCode = [
+    "import json, sys",
+    "from syntopik.whiteboard import push_frame, resolve_pin, get_session",
+    "req = json.loads(sys.stdin.read() or '{}')",
+    "kg_dir = req['kgDir']",
+    "if req.get('resolvePinId'):",
+    "    try:",
+    "        resolve_pin(kg_dir, req['resolvePinId'], resolution=req.get('resolution'))",
+    "    except KeyError:",
+    "        pass",
+    "pushed = push_frame(kg_dir, req['frame'])",
+    "sess = pushed.get('session') or get_session(kg_dir)",
+    "fr = pushed.get('frame') or {}",
+    "out = {",
+    "    'ok': True,",
+    "    'revision': pushed.get('revision', sess.get('revision', 0)),",
+    "    'frameId': fr.get('id'),",
+    "    'kind': fr.get('kind'),",
+    "    'title': fr.get('title'),",
+    "    'stepIndex': fr.get('stepIndex'),",
+    "    'locked': bool(fr.get('locked')),",
+    "    'frameCount': sess.get('frameCount', len(sess.get('frames') or [])),",
+    "    'pendingPins': sess.get('pendingPins') or [],",
+    "    'pendingPinCount': sess.get('pendingPinCount', 0),",
+    "}",
+    "print(json.dumps(out, ensure_ascii=False))"
+  ].join("\n");
+  try {
+    const out = execFileSync(pyBin, ["-B", "-c", pyCode], {
+      cwd: fs.existsSync(workspaceRoot) ? workspaceRoot : process.cwd(),
+      env: buildPythonEnv(workspaceRoot),
+      input: JSON.stringify({
+        kgDir,
+        frame: frameSpec,
+        resolvePinId: stepArgs.resolvePinId || null,
+        resolution: stepArgs.resolution || null
+      }),
+      encoding: "utf8",
+      timeout: 12e3
+    });
+    const parsed = JSON.parse(out);
+    if (parsed && parsed.ok) {
+      return parsed;
+    }
+  } catch {
+  }
+  const wbPath = path.join(kgDir, "whiteboard-session.json");
+  const nowIso = (/* @__PURE__ */ new Date()).toISOString();
+  const prev = readJsonSafe(wbPath, null);
+  const session = prev && typeof prev === "object" ? {
+    schemaVersion: 1,
+    sessionId: String(prev.sessionId || `wb-${crypto.randomBytes(4).toString("hex")}`),
+    revision: Number(prev.revision || 0),
+    title: String(prev.title || ""),
+    activeFrameId: prev.activeFrameId || null,
+    frames: Array.isArray(prev.frames) ? [...prev.frames] : [],
+    pins: Array.isArray(prev.pins) ? [...prev.pins] : [],
+    updatedAt: prev.updatedAt || nowIso
+  } : {
+    schemaVersion: 1,
+    sessionId: `wb-${crypto.randomBytes(4).toString("hex")}`,
+    revision: 0,
+    title: "",
+    activeFrameId: null,
+    frames: [],
+    pins: [],
+    updatedAt: nowIso
+  };
+  if (stepArgs.resolvePinId) {
+    for (const p2 of session.pins) {
+      if (p2 && String(p2.id) === stepArgs.resolvePinId) {
+        p2.resolved = true;
+        p2.resolvedAt = nowIso;
+        if (stepArgs.resolution) p2.resolution = stepArgs.resolution;
+      }
+    }
+  }
+  const nextRev = session.revision + 1;
+  const fid = stepArgs.id || `fr-${String(nextRev).padStart(4, "0")}-${crypto.randomBytes(2).toString("hex")}`;
+  const isGate = stepArgs.kind === "prediction_gate";
+  const locked = isGate ? Boolean(stepArgs.locked ?? true) : Boolean(stepArgs.locked ?? false);
+  const gateObj = isGate ? {
+    prompt: stepArgs.prompt || stepArgs.title || "Commit your prediction before revealing.",
+    revealedBody: stepArgs.revealedBody || stepArgs.body || "",
+    expectedAnswer: stepArgs.expectedAnswer ?? null,
+    prediction: stepArgs.gate?.prediction ?? null,
+    confidence: stepArgs.gate?.confidence ?? null,
+    unlockedAt: stepArgs.gate?.unlockedAt ?? null
+  } : null;
+  const entry = {
+    id: fid,
+    seq: nextRev,
+    kind: stepArgs.kind,
+    title: stepArgs.title,
+    body: isGate && locked ? "" : stepArgs.body || "",
+    latex: stepArgs.latex || null,
+    propId: stepArgs.propId || null,
+    stepIndex: stepArgs.stepIndex !== void 0 ? stepArgs.stepIndex : session.frames.length,
+    locked,
+    gate: gateObj,
+    payload: stepArgs.payload || {},
+    createdAt: nowIso,
+    updatedAt: nowIso
+  };
+  if (stepArgs.sessionTitle) session.title = stepArgs.sessionTitle;
+  const existingIdx = session.frames.findIndex((f2) => f2 && String(f2.id) === fid);
+  if (existingIdx >= 0) {
+    entry.createdAt = session.frames[existingIdx].createdAt || nowIso;
+    session.frames[existingIdx] = entry;
+  } else {
+    session.frames.push(entry);
+    if (session.frames.length > 200) session.frames = session.frames.slice(-200);
+  }
+  session.revision = nextRev;
+  session.activeFrameId = fid;
+  session.updatedAt = nowIso;
+  writeJsonAtomic(wbPath, session);
+  const pendingPins = session.pins.filter((p2) => p2 && !p2.resolved);
+  return {
+    ok: true,
+    revision: session.revision,
+    frameId: fid,
+    kind: entry.kind,
+    title: entry.title,
+    stepIndex: entry.stepIndex,
+    locked: entry.locked,
+    frameCount: session.frames.length,
+    pendingPins,
+    pendingPinCount: pendingPins.length
+  };
+}
+function updateLearnerProfile(workspaceRoot, { op, overrides = {}, calibration = {} }) {
+  const kgDir = resolveKgDir(workspaceRoot);
+  fs.mkdirSync(kgDir, { recursive: true });
+  const pyBin = resolvePythonBin(workspaceRoot);
+  const pyCode = [
+    "import json, sys",
+    "from pathlib import Path",
+    "from syntopik.learner_model import load_profile, save_profile, apply_tier1_calibration, apply_user_overrides",
+    "req = json.loads(sys.stdin.read() or '{}')",
+    "kg = Path(req['kgDir'])",
+    "op = req.get('op', 'override')",
+    "if op == 'reset':",
+    "    p = kg / 'learner-profile.json'",
+    "    if p.exists(): p.unlink()",
+    "    prof = load_profile(kg)",
+    "    save_profile(kg, prof)",
+    "elif op == 'calibrate':",
+    "    prof = load_profile(kg)",
+    "    c = req.get('calibration') or {}",
+    "    apply_tier1_calibration(prof, entry_ramp=c.get('entryRamp', 'balanced'), challenge_appetite=c.get('challengeAppetite', 'balanced'), domain_fluency=c.get('domainFluency'), session_minutes=c.get('sessionMinutes', 30), prose_density=c.get('proseDensity', 'standard'))",
+    "    save_profile(kg, prof)",
+    "else:",
+    "    apply_user_overrides(kg, req.get('overrides') or {})",
+    "print(json.dumps({'ok': True, 'op': op}))"
+  ].join("\n");
+  let updatedViaPython = false;
+  try {
+    const out = execFileSync(pyBin, ["-B", "-c", pyCode], {
+      cwd: fs.existsSync(workspaceRoot) ? workspaceRoot : process.cwd(),
+      env: buildPythonEnv(workspaceRoot),
+      input: JSON.stringify({ kgDir, op, overrides, calibration }),
+      encoding: "utf8",
+      timeout: 12e3
+    });
+    const parsed = JSON.parse(out);
+    updatedViaPython = Boolean(parsed?.ok);
+  } catch {
+    updatedViaPython = false;
+  }
+  if (!updatedViaPython) {
+    const profPath = path.join(kgDir, "learner-profile.json");
+    const nowIso = (/* @__PURE__ */ new Date()).toISOString();
+    const prof = op === "reset" ? {
+      schemaVersion: 1,
+      updatedAt: nowIso,
+      calibration: {
+        completed: false,
+        entryRamp: "balanced",
+        challengeAppetite: "balanced",
+        targetSuccessRate: 0.85,
+        sessionTargetMinutes: 30,
+        proseDensity: "standard"
+      },
+      userOverrides: {
+        scaffoldingMode: null,
+        allowProductiveFailure: null,
+        maxProseWords: null
+      },
+      globalStats: { elo: 1450, totalEvents: 0 },
+      domains: {},
+      affectiveState: { state: "flow" }
+    } : readJsonSafe(profPath, {
+      schemaVersion: 1,
+      updatedAt: nowIso,
+      calibration: {
+        completed: false,
+        entryRamp: "balanced",
+        challengeAppetite: "balanced",
+        targetSuccessRate: 0.85,
+        sessionTargetMinutes: 30,
+        proseDensity: "standard"
+      },
+      userOverrides: {
+        scaffoldingMode: null,
+        allowProductiveFailure: null,
+        maxProseWords: null
+      },
+      globalStats: { elo: 1450, totalEvents: 0 },
+      domains: {},
+      affectiveState: { state: "flow" }
+    });
+    if (op === "override") {
+      prof.userOverrides = { ...prof.userOverrides || {}, ...overrides };
+    } else if (op === "calibrate") {
+      const targetMap = { guided: 0.88, balanced: 0.85, adversarial: 0.78 };
+      prof.calibration = {
+        ...prof.calibration || {},
+        completed: true,
+        completedAt: nowIso,
+        ...calibration.entryRamp ? { entryRamp: calibration.entryRamp } : {},
+        ...calibration.challengeAppetite ? {
+          challengeAppetite: calibration.challengeAppetite,
+          targetSuccessRate: targetMap[calibration.challengeAppetite] ?? 0.85
+        } : {},
+        ...calibration.proseDensity ? { proseDensity: calibration.proseDensity } : {},
+        ...calibration.sessionMinutes ? { sessionTargetMinutes: calibration.sessionMinutes } : {}
+      };
+      if (calibration.domainFluency) {
+        const eloMap = { 0: 1150, 1: 1350, 2: 1550, 3: 1750 };
+        prof.domains = prof.domains || {};
+        for (const [dom, lvl] of Object.entries(calibration.domainFluency)) {
+          const elo = eloMap[lvl] ?? 1450;
+          prof.domains[dom] = { ...prof.domains[dom] || {}, elo, expertiseBand: eloToBand(elo) };
+        }
+      }
+    }
+    prof.compiledPolicy = buildPolicyFallbackFromProfile(prof);
+    prof.updatedAt = nowIso;
+    writeJsonAtomic(profPath, prof);
+  }
+  const synced = syncGraphQuiet(workspaceRoot, kgDir);
+  const { learnerProfile, teachingPolicy } = loadLearnerProfileSummary(workspaceRoot, kgDir);
+  return { ok: true, op, synced, learnerProfile, teachingPolicy };
 }
 function saveSketchPng(workspaceRoot, { dataUrl, label }) {
   if (typeof dataUrl !== "string") {
@@ -23958,6 +24865,16 @@ function sanitizePracticePatch(patch) {
       count += 1;
     }
     out.fadedBlanks = cleanBlanks;
+  }
+  if (patch.blackoutAnswers && typeof patch.blackoutAnswers === "object" && !Array.isArray(patch.blackoutAnswers)) {
+    const cleanAnswers = {};
+    let count = 0;
+    for (const [k, v2] of Object.entries(patch.blackoutAnswers)) {
+      if (count >= 60) break;
+      cleanAnswers[String(k).slice(0, 120)] = String(v2 ?? "").slice(0, 600);
+      count += 1;
+    }
+    out.blackoutAnswers = cleanAnswers;
   }
   return out;
 }
@@ -24337,7 +25254,7 @@ var PRACTICE_INPUT_SCHEMA = {
     statement: { type: "string" },
     mode: {
       type: "string",
-      enum: ["standard", "parsons", "faded", "recall", "discrimination", "composition"]
+      enum: ["standard", "parsons", "faded", "blackout", "recall", "discrimination", "composition"]
     },
     blocks: {
       type: "array",
@@ -24356,6 +25273,26 @@ var PRACTICE_INPUT_SCHEMA = {
       type: "array",
       items: { type: "string" }
     },
+    steps: {
+      type: "array",
+      description: "Clean-Room Derivation Reconstruction steps for mode='blackout' (expectedExpr & hidden expr are sealed server-side until conclude).",
+      items: {
+        type: "object",
+        properties: {
+          id: { type: "string" },
+          label: { type: "string" },
+          role: { type: "string", enum: ["axiom", "step", "theorem"] },
+          expr: { type: "string" },
+          expectedExpr: { type: "string" },
+          hidden: { type: "boolean" },
+          dependsOn: { type: "array", items: { type: "string" } },
+          note: { type: "string" }
+        },
+        required: ["id"]
+      }
+    },
+    derivationId: { type: "string" },
+    blackoutLevel: { type: "integer", enum: [1, 2, 3] },
     targets: { type: "array", items: { type: "string" } },
     modelSolution: { type: "string" },
     outcome: {
@@ -24420,9 +25357,66 @@ var LOG_REVIEW_SCHEMA = {
     confidence: { type: "number", description: "Optional learner confidence (0..1 or 0..100)." },
     cueId: { type: "string", description: "Optional specific cue ID reviewed." },
     misconception: { type: "boolean", description: "Flag as active misconception when rating is 'again'." },
-    durationMs: { type: "number", description: "Optional response duration in milliseconds." }
+    durationMs: { type: "number", description: "Optional response duration in milliseconds." },
+    hintsUsed: { type: "integer", description: "Optional hints used (0..5) for silent Tier-3 learner adaptation." }
   },
   required: ["propId", "rating"]
+};
+var NEXT_MOVE_SCHEMA = {
+  type: "object",
+  properties: {
+    energy: { type: "string", enum: ["low", "normal", "deep"], description: "Optional cognitive energy mode." },
+    domain: { type: "string", description: "Optional subject/domain focus." },
+    event: {
+      oneOf: [{ type: "string" }, { type: "object" }],
+      description: "Optional recent event context (e.g. 'skip_calibration' or {kind:'miss', propId:'...'})."
+    }
+  }
+};
+var WHITEBOARD_STEP_SCHEMA = {
+  type: "object",
+  properties: {
+    kind: {
+      type: "string",
+      enum: ["derivation_step", "prediction_gate", "explore_widget", "diagram_callout", "summary"],
+      description: "Whiteboard frame kind (default: derivation_step)."
+    },
+    title: { type: "string", description: "Concise frame title." },
+    body: { type: "string", description: "Concise Markdown body (locked server-side when kind='prediction_gate')." },
+    latex: { type: "string", description: "Optional display LaTeX equation." },
+    propId: { type: "string", description: "Optional linked proposition ID." },
+    stepIndex: { type: "integer", description: "Optional 0-based step index." },
+    locked: { type: "boolean", description: "Lock frame behind prediction gate (default true for prediction_gate)." },
+    prompt: { type: "string", description: "Prompt shown on locked prediction_gate frames." },
+    revealedBody: { type: "string", description: "Body revealed once prediction_gate is unlocked." },
+    expectedAnswer: { type: "string", description: "Optional expected prediction for gate comparison." },
+    payload: { type: "object", description: "Optional structured payload (e.g., :::explore lab spec)." },
+    sessionTitle: { type: "string", description: "Optional whiteboard session heading." },
+    id: { type: "string", description: "Optional explicit frame ID (updates frame in-place if repeated)." },
+    resolvePinId: { type: "string", description: "Optional learner pin ID resolved by this step." },
+    resolution: { type: "string", description: "Optional short resolution note for resolvePinId." }
+  }
+};
+var UPDATE_PROFILE_SCHEMA = {
+  type: "object",
+  properties: {
+    op: { type: "string", enum: ["override", "calibrate", "reset"] },
+    scaffoldingMode: {
+      anyOf: [
+        { type: "string", enum: ["worked_example_parsons", "faded", "standard", "challenge_transfer", "auto", "clear"] },
+        { type: "null" }
+      ]
+    },
+    allowProductiveFailure: { anyOf: [{ type: "boolean" }, { type: "null" }] },
+    maxProseWords: { anyOf: [{ type: "integer" }, { type: "null" }] },
+    clearOverrides: { type: "boolean" },
+    userOverrides: { type: "object" },
+    entryRamp: { type: "string", enum: ["intuition_first", "balanced", "formalism_first"] },
+    challengeAppetite: { type: "string", enum: ["guided", "balanced", "adversarial"] },
+    proseDensity: { type: "string", enum: ["terse", "standard", "rich"] },
+    sessionMinutes: { type: "integer" },
+    domainFluency: { type: "object" }
+  }
 };
 function makeAppToolPair(suffix, title, description, inputSchema) {
   return [
@@ -24455,7 +25449,7 @@ var TOOLS = [
   {
     name: "synt_practice_card",
     title: "Syntopik Practice Problem Card",
-    description: "Pose a practice problem (standard, parsons, or faded block ordering; locking modelSolution & canonicalOrder hidden server-side with a 1-active-problem gate) or conclude it to reveal the committed modelSolution verbatim with verdict and Pause Law.",
+    description: "Pose a practice problem (standard, parsons, faded, or blackout derivation reconstruction; sealing modelSolution, canonicalOrder, and blackout answers server-side with a 1-active-problem gate) or conclude to reveal verbatim with verdict and Pause Law.",
     inputSchema: PRACTICE_INPUT_SCHEMA,
     _meta: {
       ui: { resourceUri: "ui://syntopik/practice-card.html" }
@@ -24464,7 +25458,7 @@ var TOOLS = [
   {
     name: "synt_lesson_studio",
     title: "Syntopik Studio",
-    description: "Open or update the live Syntopik Studio pane (Autopilot progress, Plan DAG, Knowledge Graph, zero-token FSRS-6 Flashcards w/ Image Occlusion, Mistake Traps). All arguments optional.",
+    description: "Open or update the live Syntopik Studio pane (Autopilot + Active TeachingPolicy strip, Plan DAG, Knowledge Graph, zero-token FSRS-6 Flashcards w/ Image Occlusion, Mistake Traps). All arguments optional.",
     inputSchema: STUDIO_INPUT_SCHEMA,
     _meta: {
       ui: { resourceUri: "ui://syntopik/studio-pane.html" },
@@ -24476,7 +25470,19 @@ var TOOLS = [
       }
     }
   },
-  // --- Ambient Cross-Session Headless Knowledge Tools (3, zero UI spawned) ---
+  // --- Ambient Cross-Session Headless Knowledge & Teacher Tools (5, zero UI spawned) ---
+  {
+    name: "synt_next_move",
+    title: "Syntopik Pedagogical Brainstem (Next Optimal Move)",
+    description: "Return the compact <=180-token Action Envelope fusing FSRS-6/FIRe, Learner Psychology TeachingPolicy, causal root-cause probes, Blunder Forks, and live whiteboard learner pins.",
+    inputSchema: NEXT_MOVE_SCHEMA
+  },
+  {
+    name: "synt_whiteboard_step",
+    title: "Push Live AI Whiteboard Frame",
+    description: "Push a progressive frame (derivation_step, prediction_gate, explore_widget, diagram_callout, or summary) to knowledge-graph/whiteboard-session.json and return any unresolved learner pendingPins.",
+    inputSchema: WHITEBOARD_STEP_SCHEMA
+  },
   {
     name: "synt_capture_concept",
     title: "Capture Concept to Syntopik Knowledge Graph",
@@ -24485,14 +25491,14 @@ var TOOLS = [
   },
   {
     name: "synt_get_frontier",
-    title: "Get Syntopik Study Frontier & Calibration",
-    description: "Ambient headless query: return FIRe-compressed due propositions, active Chapter Autopilot next action, top 3 recurring mistake traps, and rolling Brier calibration summary.",
+    title: "Get Syntopik Study Frontier & Learner Policy",
+    description: "Ambient headless query: return FIRe-compressed due items, active Autopilot, learnerProfile, Active TeachingPolicy, dueForks, arenasCount, coldStartDays, pendingPins, traps, and Brier calibration.",
     inputSchema: GET_FRONTIER_SCHEMA
   },
   {
     name: "synt_log_review",
     title: "Log FSRS-6 + FIRe Concept Review",
-    description: "Ambient headless review: run srs_engine.py review with FIRe implicit prerequisite propagation and revlog.jsonl persistence, returning updated stability, BKT mastery, and fireCredits.",
+    description: "Ambient headless review: run srs_engine.py review with FIRe propagation, optional hintsUsed (0..5) & durationMs for Tier-3 learner psychology updates, and revlog.jsonl persistence.",
     inputSchema: LOG_REVIEW_SCHEMA
   },
   // Backwards-compatible mlh_* aliases
@@ -24578,6 +25584,12 @@ var TOOLS = [
       },
       required: ["op", "kind"]
     }
+  ),
+  ...makeAppToolPair(
+    "update_profile",
+    "Update Learner Profile & TeachingPolicy Overrides",
+    "App-only: update Tier-1 calibration or transparent userOverrides in knowledge-graph/learner-profile.json.",
+    UPDATE_PROFILE_SCHEMA
   )
 ];
 function toolError(message) {
@@ -24628,6 +25640,26 @@ function formatTerminalParsonsText(record2, safeShuffledBlocks) {
   lines.push("");
   lines.push(
     isFaded ? 'Ask the learner for the ordered letters (e.g., B, A, D \u2014 omitting distractors) plus values for each ___ blank before calling action="conclude".' : 'Ask the learner for the ordered letters (e.g., B, A, D \u2014 omitting distractors) before calling action="conclude".'
+  );
+  return lines.join("\n");
+}
+function formatTerminalBlackoutText(record2, safeSteps) {
+  const hiddenIds = safeSteps.filter((s) => s.hidden).map((s) => s.id);
+  const lines = [
+    `Practice problem posed (id=${record2.problemId}, DERIVATION BLACKOUT L${record2.blackoutLevel || 1}) \u2014 Terminal fallback (expected expressions & committed modelSolution sealed server-side):`,
+    "",
+    record2.statement,
+    "",
+    "Derivation steps (reconstruct every [HIDDEN] step cleanly):"
+  ];
+  for (const st of safeSteps) {
+    const depTag = Array.isArray(st.dependsOn) && st.dependsOn.length > 0 ? ` (from ${st.dependsOn.join(", ")})` : "";
+    const body = st.hidden ? "[HIDDEN \u2014 reconstruct]" : st.expr;
+    lines.push(`- [${st.id} \xB7 ${st.role}] ${st.label}${depTag}: ${body}`);
+  }
+  lines.push("");
+  lines.push(
+    `Ask the learner to reconstruct hidden step(s) ${hiddenIds.join(", ")} (or request R0\u2013R5 hints) before calling action="conclude".`
   );
   return lines.join("\n");
 }
@@ -24718,8 +25750,12 @@ function handlePracticeCard(rawArgs, toolName, hasUiExtension) {
       statement: v2.statement,
       mode: v2.mode || null,
       isParsonsMode: v2.isParsonsMode,
+      isBlackoutMode: v2.isBlackoutMode,
       blocks: v2.blocks,
       canonicalOrder: v2.canonicalOrder,
+      steps: v2.steps,
+      derivationId: v2.derivationId,
+      blackoutLevel: v2.blackoutLevel,
       shuffleSeed,
       targets: v2.targets,
       modelSolution: v2.modelSolution,
@@ -24739,8 +25775,22 @@ function handlePracticeCard(rawArgs, toolName, hasUiExtension) {
       }));
       safeShuffledBlocks = seededShuffleOptions(stripped, shuffleSeed);
     }
+    let safeBlackoutSteps = null;
+    if (v2.isBlackoutMode && Array.isArray(v2.steps)) {
+      safeBlackoutSteps = v2.steps.map((s) => ({
+        id: s.id,
+        label: s.label,
+        role: s.role,
+        dependsOn: Array.isArray(s.dependsOn) ? [...s.dependsOn] : [],
+        hidden: Boolean(s.hidden),
+        expr: s.hidden ? null : s.expr
+      }));
+    }
     let textMsg;
-    if (v2.isParsonsMode && safeShuffledBlocks) {
+    if (v2.isBlackoutMode && safeBlackoutSteps) {
+      const hiddenCount = safeBlackoutSteps.filter((s) => s.hidden).length;
+      textMsg = hasUiExtension ? `Practice blackout derivation posed (id=${record3.problemId}, L${record3.blackoutLevel || 1}, ${hiddenCount}/${safeBlackoutSteps.length} steps hidden). Expected step expressions & modelSolution sealed server-side; awaiting reconstruction.` : formatTerminalBlackoutText(record3, safeBlackoutSteps);
+    } else if (v2.isParsonsMode && safeShuffledBlocks) {
       textMsg = hasUiExtension ? `Practice ${v2.mode} problem posed (id=${record3.problemId}, ${safeShuffledBlocks.length} shuffled blocks). Committed solution & target block order locked server-side; awaiting learner ordering.` : formatTerminalParsonsText(record3, safeShuffledBlocks);
     } else {
       textMsg = hasUiExtension ? `Practice problem posed (id=${record3.problemId}). Committed modelSolution locked server-side; awaiting learner attempt or hint request.` : [
@@ -24757,6 +25807,13 @@ function handlePracticeCard(rawArgs, toolName, hasUiExtension) {
       problemId: record3.problemId,
       statement: record3.statement,
       hasHiddenSolution: true,
+      ...v2.isBlackoutMode && safeBlackoutSteps ? {
+        cardMode: "blackout",
+        derivationId: record3.derivationId,
+        blackoutLevel: record3.blackoutLevel,
+        steps: safeBlackoutSteps,
+        hiddenStepIds: safeBlackoutSteps.filter((s) => s.hidden).map((s) => s.id)
+      } : {},
       ...v2.isParsonsMode && safeShuffledBlocks ? {
         cardMode: v2.mode,
         blocks: safeShuffledBlocks,
@@ -24803,6 +25860,12 @@ function handlePracticeCard(rawArgs, toolName, hasUiExtension) {
       missClass,
       retest,
       modelSolution: record2.modelSolution,
+      ...record2.isBlackoutMode ? {
+        cardMode: "blackout",
+        derivationId: record2.derivationId || null,
+        blackoutLevel: record2.blackoutLevel || 1,
+        steps: Array.isArray(record2.steps) ? record2.steps : []
+      } : {},
       ...record2.isParsonsMode ? { cardMode: record2.mode } : {},
       ...Array.isArray(record2.canonicalOrder) ? { canonicalOrder: record2.canonicalOrder } : {},
       ...Array.isArray(record2.blocks) ? { blocks: record2.blocks } : {}
@@ -24857,7 +25920,7 @@ function handleLessonStudio(rawArgs, toolName) {
 }
 function createServer() {
   const server = new Server(
-    { name: "syntopik-studio", version: "2.0.0" },
+    { name: "syntopik-studio", version: "3.0.0" },
     { capabilities: { tools: {}, resources: {} } }
   );
   server.setRequestHandler(ListToolsRequestSchema, async () => ({
@@ -24916,6 +25979,34 @@ function createServer() {
         case "synt_lesson_studio":
         case "mlh_lesson_studio":
           return handleLessonStudio(args, name);
+        case "synt_next_move": {
+          const checked = validateNextMoveArgs(args);
+          if (!checked.ok) return toolError(`Invalid synt_next_move arguments: ${checked.error}`);
+          const res = planNextMove(WORKSPACE_ROOT, checked.value);
+          if (!res.ok) return toolError(res.error || "planNextMove failed.");
+          const structuredContent = {
+            kind: "synt_next_move",
+            ...res
+          };
+          return {
+            content: [{ type: "text", text: JSON.stringify(structuredContent) }],
+            structuredContent
+          };
+        }
+        case "synt_whiteboard_step": {
+          const checked = validateWhiteboardStepArgs(args);
+          if (!checked.ok) return toolError(`Invalid synt_whiteboard_step arguments: ${checked.error}`);
+          const res = pushWhiteboardStep(WORKSPACE_ROOT, checked.value);
+          if (!res.ok) return toolError(res.error || "pushWhiteboardStep failed.");
+          const structuredContent = {
+            kind: "synt_whiteboard_step",
+            ...res
+          };
+          return {
+            content: [{ type: "text", text: JSON.stringify(structuredContent) }],
+            structuredContent
+          };
+        }
         case "synt_capture_concept": {
           const res = captureConcept(WORKSPACE_ROOT, args);
           if (!res.ok) return toolError(res.error);
@@ -25042,6 +26133,21 @@ function createServer() {
             id: id || "default",
             found: saved !== null,
             state: saved
+          };
+          return {
+            content: [{ type: "text", text: JSON.stringify(structuredContent) }],
+            structuredContent
+          };
+        }
+        case "synt_app_update_profile":
+        case "mlh_app_update_profile": {
+          const checked = validateProfileUpdateArgs(args);
+          if (!checked.ok) return toolError(`Invalid ${name} arguments: ${checked.error}`);
+          const res = updateLearnerProfile(WORKSPACE_ROOT, checked.value);
+          if (!res.ok) return toolError(res.error || "Profile update failed.");
+          const structuredContent = {
+            kind: `${pfx}_app_profile_updated`,
+            ...res
           };
           return {
             content: [{ type: "text", text: JSON.stringify(structuredContent) }],

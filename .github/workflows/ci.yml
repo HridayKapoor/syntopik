@@ -1,4 +1,4 @@
-name: Syntopik Core CI
+name: Syntopik v3.0 Core CI
 
 on:
   push:
@@ -18,10 +18,16 @@ jobs:
   core-verify:
     name: Core Stdlib + Node (${{ matrix.os }})
     runs-on: ${{ matrix.os }}
+    defaults:
+      run:
+        shell: bash
+    env:
+      PYTHONUTF8: "1"
+      PYTHONDONTWRITEBYTECODE: "1"
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, macos-latest]
+        os: [ubuntu-latest, macos-latest, windows-latest]
 
     steps:
       - name: Checkout repository
@@ -38,11 +44,11 @@ jobs:
           node-version: "22"
 
       - name: Fresh-clone bootstrap (setup_harness.py)
-        run: python3 -B scripts/setup_harness.py auto --json
+        run: python -B scripts/setup_harness.py auto --json
 
-      - name: Core health doctor (0 warn, 0 fail)
+      - name: Core health doctor (0 warn, 0 fail & <=9,500 B rule budget)
         run: |
-          python3 -B - <<'PY'
+          python -B - <<'PY'
           import json, subprocess, sys
           proc = subprocess.run(
               [sys.executable, "-B", "scripts/study_doctor.py", "--core-only", "--json"],
@@ -57,18 +63,24 @@ jobs:
           assert report.get("healthy") is True, f"Doctor unhealthy: {report.get('summary')}"
           assert report["summary"]["warn"] == 0, f"Doctor warnings: {[c for c in report['checks'] if c['status'] == 'warn']}"
           assert report["summary"]["fail"] == 0, f"Doctor failures: {[c for c in report['checks'] if c['status'] == 'fail']}"
+          budget_checks = [c for c in report["checks"] if "Rule Budget" in c.get("name", "")]
+          assert budget_checks, "Missing Rule Budget check in study_doctor report"
+          bc = budget_checks[0]
+          assert bc["status"] == "ok" and bc.get("bytes", 99999) <= 9500, f"Rule budget exceeded: {bc}"
+          print(f"Doctor OK: {report['summary']['ok']}/{report['summary']['total']} ok, rule budget {bc['bytes']}/9500 B")
           PY
 
       - name: Python & Node syntax / warning gate
         run: |
-          python3 -B -W error::SyntaxWarning - <<'PY'
+          python -B -W error::SyntaxWarning - <<'PY'
           import pathlib, py_compile, tempfile, warnings
           py_files = (
               sorted(pathlib.Path("syntopik").glob("*.py"))
               + sorted(pathlib.Path("scripts").glob("*.py"))
+              + sorted(pathlib.Path("benchmarks").glob("*.py"))
               + sorted(pathlib.Path("tests").glob("*.py"))
           )
-          assert len(py_files) >= 43, f"Expected >=43 Python files, found {len(py_files)}"
+          assert len(py_files) >= 55, f"Expected >=55 Python files, found {len(py_files)}"
           with tempfile.TemporaryDirectory(prefix="synt-ci-pyc-") as tmp:
               tmp_dir = pathlib.Path(tmp)
               for idx, path in enumerate(py_files):
@@ -84,9 +96,66 @@ jobs:
             scripts/sync-graph.mjs \
             mcp-app/mlh-studio/dist/server.mjs
 
+      - name: TutorBench pedagogical linter (40/40 PASS)
+        run: |
+          python -B - <<'PY'
+          import json, subprocess, sys
+          proc = subprocess.run(
+              [sys.executable, "-B", "scripts/pedagogy_eval.py", "bench", "--json"],
+              capture_output=True, text=True, check=False,
+          )
+          if proc.returncode != 0:
+              print(proc.stdout)
+              print(proc.stderr, file=sys.stderr)
+              sys.exit(proc.returncode)
+          res = json.loads(proc.stdout)
+          assert res.get("ok") is True, f"TutorBench failed: {res.get('passed')}/{res.get('total')}"
+          assert res.get("total") == 40 and res.get("passed") == 40, f"Expected 40/40 PASS, got {res.get('passed')}/{res.get('total')}"
+          print(f"TutorBench OK: {res['passed']}/{res['total']} PASS across {len(res.get('byRubric', {}))} rubrics")
+          PY
+
+      - name: Syntopik-Eval 60-day cognitive ablation benchmark (7/7 gates)
+        run: |
+          python -B - <<'PY'
+          import json, subprocess, sys
+          proc = subprocess.run(
+              [sys.executable, "-B", "benchmarks/syntopik_bench.py", "--days", "60", "--seed", "42", "--check", "--json"],
+              capture_output=True, text=True, check=False,
+          )
+          if proc.returncode != 0:
+              print(proc.stdout)
+              print(proc.stderr, file=sys.stderr)
+              sys.exit(proc.returncode)
+          res = json.loads(proc.stdout)
+          gates = res.get("gates") or {}
+          assert gates.get("ok") is True, f"Syntopik-Eval gates failed: {gates}"
+          assert gates.get("passed") == 7 and gates.get("total") == 7, f"Expected 7/7 gates, got {gates.get('passed')}/{gates.get('total')}"
+          print(f"Syntopik-Eval OK: {gates['passed']}/{gates['total']} gates PASS ({res.get('elapsedMs')} ms)")
+          PY
+
+      - name: Zero-PII starter packs verification (3/3 PASS)
+        run: |
+          python -B - <<'PY'
+          import json, subprocess, sys
+          proc = subprocess.run(
+              [sys.executable, "-B", "scripts/build_starter_packs.py", "--verify-only", "--json"],
+              capture_output=True, text=True, check=False,
+          )
+          if proc.returncode != 0:
+              print(proc.stdout)
+              print(proc.stderr, file=sys.stderr)
+              sys.exit(proc.returncode)
+          res = json.loads(proc.stdout)
+          assert res.get("ok") is True, f"Starter pack verification failed: {res}"
+          assert res.get("verifiedCount") == 3 and res.get("passedCount") == 3, f"Expected 3/3 packs, got {res.get('passedCount')}/{res.get('verifiedCount')}"
+          for item in res.get("verified", []):
+              assert item.get("ok") is True and item.get("zeroPiiVerified") is True, f"Pack failed zero-PII verify: {item}"
+          print(f"Starter Packs OK: {res['passedCount']}/{res['verifiedCount']} zero-PII verified")
+          PY
+
       - name: Unified CLI & Node wrapper smoke check
         run: |
-          python3 -B - <<'PY'
+          python -B - <<'PY'
           import json, subprocess, sys
           proc = subprocess.run(
               [sys.executable, "-B", "-m", "syntopik.cli", "doctor", "--core-only", "--json"],
@@ -102,35 +171,198 @@ jobs:
           node bin/syntopik.mjs --help > /dev/null
           node bin/syntopik.mjs --version
 
+      - name: Wheel build & fresh-venv E2E install test
+        run: |
+          python -B - <<'PY'
+          import json, os, pathlib, subprocess, sys, tempfile
+
+          repo_root = pathlib.Path(".").resolve()
+          subprocess.run(
+              [sys.executable, "-m", "pip", "install", "--quiet", "--upgrade", "build", "hatchling"],
+              check=True,
+          )
+          with tempfile.TemporaryDirectory(prefix="synt-ci-wheel-") as tmp:
+              tmp_dir = pathlib.Path(tmp)
+              dist_dir = tmp_dir / "dist"
+              venv_dir = tmp_dir / "venv"
+              ws_dir = tmp_dir / "workspace"
+              cwd_dir = tmp_dir / "isolated-cwd"
+              cwd_dir.mkdir(parents=True, exist_ok=True)
+
+              subprocess.run(
+                  [sys.executable, "-m", "build", "--wheel", "--no-isolation", "--outdir", str(dist_dir), str(repo_root)],
+                  check=True,
+              )
+              wheels = sorted(dist_dir.glob("syntopik-*.whl"))
+              assert len(wheels) == 1, f"Expected 1 built wheel, found {wheels}"
+
+              subprocess.run([sys.executable, "-m", "venv", str(venv_dir)], check=True)
+              if os.name == "nt":
+                  venv_py = venv_dir / "Scripts" / "python.exe"
+                  synt_bin = venv_dir / "Scripts" / "syntopik.exe"
+              else:
+                  venv_py = venv_dir / "bin" / "python"
+                  synt_bin = venv_dir / "bin" / "syntopik"
+
+              subprocess.run(
+                  [str(venv_py), "-m", "pip", "install", "--quiet", "--no-deps", str(wheels[0])],
+                  check=True,
+              )
+              assert synt_bin.is_file(), f"Console script missing: {synt_bin}"
+
+              env = dict(os.environ)
+              env["SYNT_WORKSPACE"] = str(ws_dir)
+              env["PYTHONUTF8"] = "1"
+              env["PYTHONDONTWRITEBYTECODE"] = "1"
+
+              def run_cli(*args):
+                  p = subprocess.run(
+                      [str(synt_bin), *args],
+                      cwd=str(cwd_dir),
+                      env=env,
+                      capture_output=True,
+                      text=True,
+                      check=False,
+                  )
+                  assert p.returncode == 0, f"syntopik {' '.join(args)} failed ({p.returncode}):\nSTDOUT:\n{p.stdout}\nSTDERR:\n{p.stderr}"
+                  return p.stdout
+
+              ver = run_cli("--version").strip()
+              assert "3.0.0" in ver, f"Unexpected wheel version output: {ver!r}"
+
+              init_out = json.loads(run_cli("init", "--workspace", str(ws_dir), "--json"))
+              assert init_out.get("ok") is True, f"wheel init failed: {init_out}"
+
+              demo_out = json.loads(run_cli("demo", "--pack", "raft-consensus", "--workspace", str(ws_dir), "--json"))
+              assert demo_out.get("ok") is True, f"wheel demo failed: {demo_out}"
+              assert "raft-consensus.syntopik-pack.zip" in (demo_out.get("importedPacks") or []), f"Pack missing: {demo_out}"
+
+              next_out = json.loads(run_cli("next", "--workspace", str(ws_dir), "--json"))
+              assert next_out.get("recommendedMode"), f"wheel next failed: {next_out}"
+
+              doc_out = json.loads(run_cli("doctor", "--core-only", "--workspace", str(ws_dir), "--json"))
+              assert doc_out.get("healthy") is True, f"wheel doctor unhealthy: {doc_out}"
+              assert doc_out["summary"]["fail"] == 0, f"wheel doctor failures: {doc_out['checks']}"
+              print(f"Wheel E2E OK ({wheels[0].name}): {ver}, next={next_out['recommendedMode']}, doctor={doc_out['summary']['ok']}/{doc_out['summary']['total']} ok")
+          PY
+
+      - name: npm pack & attach E2E smoke test
+        run: |
+          python -B - <<'PY'
+          import json, os, pathlib, shutil, subprocess, tarfile, tempfile
+
+          repo_root = pathlib.Path(".").resolve()
+          npm_bin = shutil.which("npm")
+          node_bin = shutil.which("node")
+          git_bin = shutil.which("git")
+          assert npm_bin and node_bin and git_bin, f"Missing tools: npm={npm_bin}, node={node_bin}, git={git_bin}"
+
+          with tempfile.TemporaryDirectory(prefix="synt-ci-npm-") as tmp:
+              tmp_dir = pathlib.Path(tmp)
+              pack_proc = subprocess.run(
+                  [npm_bin, "pack", "--pack-destination", str(tmp_dir)],
+                  cwd=str(repo_root),
+                  capture_output=True,
+                  text=True,
+                  check=False,
+              )
+              assert pack_proc.returncode == 0, f"npm pack failed:\n{pack_proc.stdout}\n{pack_proc.stderr}"
+              tarballs = sorted(tmp_dir.glob("syntopik-*.tgz"))
+              assert len(tarballs) == 1, f"Expected 1 npm tarball, found {tarballs}"
+
+              required_members = [
+                  "package/bin/syntopik.mjs",
+                  "package/packs/raft-consensus.syntopik-pack.zip",
+                  "package/packs/shm-physics.syntopik-pack.zip",
+                  "package/packs/transformers-attention.syntopik-pack.zip",
+                  "package/mcp-app/mlh-studio/dist/server.mjs",
+                  "package/AGENTS.md",
+                  "package/GEMINI.md",
+                  "package/benchmarks/syntopik_bench.py",
+              ]
+              unpack_dir = tmp_dir / "unpacked"
+              unpack_dir.mkdir(parents=True, exist_ok=True)
+              with tarfile.open(tarballs[0], "r:gz") as tf:
+                  names = set(tf.getnames())
+                  missing = [m for m in required_members if m not in names]
+                  assert not missing, f"npm tarball missing required files: {missing}"
+                  tf.extractall(unpack_dir, filter="data")
+
+              cli_mjs = unpack_dir / "package" / "bin" / "syntopik.mjs"
+              ver_proc = subprocess.run([node_bin, str(cli_mjs), "--version"], capture_output=True, text=True, check=True)
+              assert "3.0.0" in ver_proc.stdout, f"Unexpected npm CLI version: {ver_proc.stdout!r}"
+
+              host_repo = tmp_dir / "host-repo"
+              host_repo.mkdir(parents=True, exist_ok=True)
+              subprocess.run([git_bin, "init", "-q"], cwd=str(host_repo), check=True)
+              (host_repo / "AGENTS.md").write_text("# Existing Host Rules\n", encoding="utf-8")
+
+              attach_proc = subprocess.run(
+                  [node_bin, str(cli_mjs), "attach", str(host_repo), "--harness", "auto", "--vault", "local", "--copy-skills", "--json"],
+                  cwd=str(tmp_dir),
+                  capture_output=True,
+                  text=True,
+                  check=False,
+              )
+              assert attach_proc.returncode == 0, f"npm attach failed:\n{attach_proc.stdout}\n{attach_proc.stderr}"
+              attach_res = json.loads(attach_proc.stdout)
+              assert attach_res.get("ok") is True, f"attach returned error: {attach_res}"
+              assert (host_repo / "AGENTS.md").read_text(encoding="utf-8") == "# Existing Host Rules\n", "attach modified host AGENTS.md!"
+              assert (host_repo / ".syntopik" / "knowledge-graph" / "propositions.jsonl").is_file(), "local vault not initialized"
+              assert attach_res.get("gitExclude", {}).get("updated") is True, f".git/info/exclude not updated: {attach_res}"
+              print(f"npm pack E2E OK ({tarballs[0].name}, {len(names)} files): {ver_proc.stdout.strip()}, attach OK")
+          PY
+
       - name: Pure-stdlib & Node sandboxed unittest suite
         env:
           PYTHONPATH: tests
         run: |
-          python3 -B -m unittest -v \
-            test_harness.TestSyntaxAndCLI.test_all_python_scripts_compile_without_syntax_warnings \
-            test_harness.TestSyntaxAndCLI.test_all_node_scripts_syntax_check \
-            test_harness.TestHooksSkillsBudget \
-            test_harness.TestExamRunner \
-            test_harness.TestMcpAppStudio \
-            test_harness.TestP3BackupAndHubSync \
-            test_harness.TestSelfImproveAndDoctor.test_p0_and_p1_skills_exist_with_valid_frontmatter \
-            test_harness.TestEdunitiPyqBank \
-            test_harness.TestSetupHarnessFreshClone \
-            test_harness.TestCodeVerifyEngine \
-            test_harness.TestResearchScout \
-            test_harness.TestUniversalAutopilot \
-            test_harness.TestTriProtocolHooksAndMcp \
-            test_harness.TestGitHubHygieneAndPortability \
-            test_harness.TestFireCalibrationAndStdlibCore \
-            test_harness.TestUniversalIngestObsidianAndPedagogy \
-            test_harness.TestMoonshotEnginesAndPocketPacks \
-            test_harness.TestLocalStudioServerLive \
-            test_harness.TestPackagingAttachAndAmbientMcp \
-            test_harness.TestV2ContextDietAndHygiene
+          python -B - <<'PY'
+          import sys, unittest
+          import test_harness
+
+          targets = [
+              "test_harness.TestSyntaxAndCLI.test_all_python_scripts_compile_without_syntax_warnings",
+              "test_harness.TestSyntaxAndCLI.test_all_node_scripts_syntax_check",
+              "test_harness.TestHooksSkillsBudget",
+              "test_harness.TestExamRunner",
+              "test_harness.TestMcpAppStudio",
+              "test_harness.TestP3BackupAndHubSync",
+              "test_harness.TestSelfImproveAndDoctor.test_p0_and_p1_skills_exist_with_valid_frontmatter",
+              "test_harness.TestEdunitiPyqBank",
+              "test_harness.TestSetupHarnessFreshClone",
+              "test_harness.TestCodeVerifyEngine",
+              "test_harness.TestResearchScout",
+              "test_harness.TestUniversalAutopilot",
+              "test_harness.TestTriProtocolHooksAndMcp",
+              "test_harness.TestGitHubHygieneAndPortability",
+              "test_harness.TestFireCalibrationAndStdlibCore",
+              "test_harness.TestUniversalIngestObsidianAndPedagogy",
+              "test_harness.TestMoonshotEnginesAndPocketPacks",
+              "test_harness.TestLocalStudioServerLive",
+              "test_harness.TestPackagingAttachAndAmbientMcp",
+              "test_harness.TestV2ContextDietAndHygiene",
+              "test_harness.TestLearnerPsychologyAndBrainstem",
+              "test_harness.TestV3PedagogyAndWorkMentor",
+              "test_harness.TestV3ServerHooksMcpAndWindowsPortability",
+              "test_harness.TestSyntopikEvalAndStarterPacks",
+          ]
+
+          loader = unittest.TestLoader()
+          suite = unittest.TestSuite()
+          for target in targets:
+              suite.addTests(loader.loadTestsFromName(target))
+
+          runner = unittest.TextTestRunner(verbosity=2)
+          result = runner.run(suite)
+          if not result.wasSuccessful():
+              sys.exit(1)
+          print(f"Bare-stdlib unittest suite OK: {result.testsRun} test(s) passed")
+          PY
 
       - name: Public release hygiene & config gate
         run: |
-          python3 -B - <<'PY'
+          python -B - <<'PY'
           import json, pathlib, re, subprocess, tomllib
 
           root = pathlib.Path(".").resolve()
@@ -140,7 +372,7 @@ jobs:
               r"(?:/(?:Users|home)/[A-Za-z0-9._-]+(?:/|[\"'\s]|$)|C:\\Users\\[A-Za-z0-9._-]+\\)"
           )
           tracked = subprocess.check_output(["git", "ls-files"], text=True).splitlines()
-          assert len(tracked) >= 40, f"Unexpectedly few tracked files: {len(tracked)}"
+          assert len(tracked) >= 50, f"Unexpectedly few tracked files: {len(tracked)}"
 
           # Ensure personal learner ledgers are never tracked in git
           forbidden_tracked = {
@@ -157,6 +389,11 @@ jobs:
               "knowledge-graph/arenas.jsonl",
               "knowledge-graph/decisions.jsonl",
               "knowledge-graph/blitz-sessions.json",
+              "knowledge-graph/learner-profile.json",
+              "knowledge-graph/whiteboard-session.json",
+              "knowledge-graph/derivations.jsonl",
+              "knowledge-graph/evidence-ledger.jsonl",
+              "knowledge-graph/viva-sessions.jsonl",
               "knowledge-graph/review-queue.md",
               "knowledge-graph/graph-data.js",
           }
@@ -179,37 +416,47 @@ jobs:
                   leaks.append(f"{rel}: {token.strip()!r}")
           assert not leaks, f"Personal home-directory leaks detected: {leaks}"
 
-          # 2. Always-on rule budget & CLAUDE.md import invariant
+          # 2. Always-on rule budget (<= 9,500 B unified ceiling) & @AGENTS.md imports
           claude_text = (root / "CLAUDE.md").read_text(encoding="utf-8")
           assert claude_text.startswith("@AGENTS.md"), "CLAUDE.md must start with '@AGENTS.md'"
           assert not claude_text.lstrip().startswith("---"), "CLAUDE.md must not have YAML frontmatter"
 
+          gemini_text = (root / "GEMINI.md").read_text(encoding="utf-8")
+          assert gemini_text.startswith("@AGENTS.md"), "GEMINI.md must start with '@AGENTS.md'"
+
           agents_bytes = (root / "AGENTS.md").read_bytes()
           gemini_bytes = (root / "GEMINI.md").read_bytes()
           combined = len(agents_bytes) + len(gemini_bytes)
-          assert combined <= 9600, f"GEMINI.md + AGENTS.md ({combined} B) exceeds 9,600 B ceiling"
+          assert combined <= 9500, f"GEMINI.md + AGENTS.md ({combined} B) exceeds 9,500 B ceiling"
           for name, raw in (("AGENTS.md", agents_bytes), ("GEMINI.md", gemini_bytes)):
               assert len(raw) < 24576, f"{name} exceeds 24 KB limit"
               assert not raw.decode("utf-8").lstrip().startswith("---"), f"{name} must not have YAML frontmatter"
 
-          # 3. Validate TOML & JSON multi-harness, packaging & plugin configuration files
+          # 3. Validate TOML & JSON configs and enforce Windows-safe hook commands (zero POSIX-only syntax)
           for toml_rel in (".codex/config.toml", "pyproject.toml"):
               tomllib.loads((root / toml_rel).read_text(encoding="utf-8"))
-          for json_rel in (
-              "package.json",
+          hook_configs = (
               ".agents/hooks.json",
               ".claude/settings.json",
               ".codex/hooks.json",
               ".mcp.json",
+              ".claude-plugin/hooks.json",
+          )
+          for json_rel in (
+              "package.json",
+              *hook_configs,
               ".claude-plugin/plugin.json",
               ".claude-plugin/marketplace.json",
-              ".claude-plugin/hooks.json",
               "gemini-extension.json",
               "mcp-app/mlh-studio/plugin.json",
               "mcp-app/mlh-studio/mcp_config.json",
               "knowledge-graph/reagents.json",
           ):
-              json.loads((root / json_rel).read_text(encoding="utf-8"))
+              raw_text = (root / json_rel).read_text(encoding="utf-8")
+              json.loads(raw_text)
+              if json_rel in hook_configs:
+                  for forbidden_posix in ("SYNT_WORKSPACE=", "$(git rev-parse", "${CLAUDE_PLUGIN_ROOT:-", "${VAR:-"):
+                      assert forbidden_posix not in raw_text, f"Windows-breaking POSIX token {forbidden_posix!r} in {json_rel}"
 
-          print(f"Hygiene gate OK: {len(tracked)} tracked files, rules={combined} B (<=9600 B), configs valid.")
+          print(f"Hygiene gate OK: {len(tracked)} tracked files, rules={combined}/9500 B, configs Windows-safe & valid.")
           PY

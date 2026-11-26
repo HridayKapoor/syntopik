@@ -1303,6 +1303,195 @@ def find_confusables(
     return pairs_out[: max(0, int(top))]
 
 
+def compute_sunset_plan(
+    kg_dir: Path | str | None,
+    chapter_slug: str,
+    *,
+    keep_ratio: float = 0.20,
+    target_retention: float = 0.80,
+) -> dict[str, Any]:
+    """Separate a completed chapter's propositions into ~20% high-centrality `keepAxioms`
+    (with `targetRetention: 0.80`) and ~80% `archiveLeaves` (`archived: true`) using
+    out-degree, downstream/cross-chapter reach, reverse PageRank, and Brandes betweenness.
+    """
+    slug_raw = str(chapter_slug or "").strip()
+    if not slug_raw:
+        raise ValueError("chapter_slug cannot be empty.")
+    slug_low = re.sub(r"[^a-z0-9]+", "-", slug_raw.lower()).strip("-") or slug_raw.lower()
+    slug_words = slug_low.replace("-", " ")
+
+    resolved_kg, _props_file, _chains_file = resolve_kg_paths(kg_dir)
+    G, props, _norm_chains = load_knowledge_graph(resolved_kg)
+
+    # Optionally include propIds listed in chapters/<slug>-tracker.json when present
+    tracker_prop_ids: set[str] = set()
+    tracker_chapter_title = ""
+    tracker_path = resolved_kg.parent / "chapters" / f"{slug_low}-tracker.json"
+    if tracker_path.is_file():
+        try:
+            tr_obj = json.loads(tracker_path.read_text(encoding="utf-8"))
+            if isinstance(tr_obj, dict):
+                tracker_chapter_title = str(tr_obj.get("title") or "").strip().lower()
+                for t in tr_obj.get("topics") or []:
+                    if isinstance(t, dict):
+                        for pid in t.get("propIds") or []:
+                            if str(pid).strip():
+                                tracker_prop_ids.add(str(pid).strip())
+        except Exception:
+            pass
+
+    matched_props: list[dict[str, Any]] = []
+    for p in props:
+        pid = str(p.get("id") or "").strip()
+        if not pid:
+            continue
+        chap = str(p.get("chapter") or "").strip()
+        chap_low = chap.lower()
+        chap_slug = re.sub(r"[^a-z0-9]+", "-", chap_low).strip("-")
+        pid_low = pid.lower()
+        is_match = (
+            pid in tracker_prop_ids
+            or chap_slug == slug_low
+            or slug_low in chap_slug
+            or slug_words in chap_low
+            or slug_low in pid_low
+            or (bool(tracker_chapter_title) and tracker_chapter_title[:12] in chap_low)
+        )
+        if is_match:
+            matched_props.append(p)
+
+    if not matched_props:
+        return {
+            "ok": True,
+            "chapterSlug": slug_low,
+            "matchedCount": 0,
+            "keepCount": 0,
+            "archiveCount": 0,
+            "keepRatio": round(float(keep_ratio), 3),
+            "targetRetention": round(float(target_retention), 3),
+            "keepAxioms": [],
+            "archiveLeaves": [],
+            "summary": f"No propositions matched chapter '{slug_raw}'.",
+        }
+
+    rev_pr = _safe_reverse_pagerank(G)
+    betweenness = _graph_betweenness(G)
+    eff_retention = round(max(0.50, min(0.95, float(target_retention))), 3)
+
+    scored: list[dict[str, Any]] = []
+    for p in matched_props:
+        pid = str(p["id"])
+        ch_low = str(p.get("chapter") or "").strip().lower()
+        out_deg = int(G.out_degree(pid)) if pid in G else 0
+        desc = _graph_descendants(G, pid) if pid in G else set()
+        cross_ch = sorted(
+            {
+                str(G.nodes[d].get("chapter") or "").strip()
+                for d in desc
+                if str(G.nodes[d].get("chapter") or "").strip()
+                and str(G.nodes[d].get("chapter") or "").strip().lower() != ch_low
+                and str(G.nodes[d].get("chapter") or "").strip().lower() != "unknown"
+            }
+        )
+        pr_val = float(rev_pr.get(pid, 0.0))
+        bw_val = float(betweenness.get(pid, 0.0))
+        kind_low = str(p.get("kind") or "derivation").strip().lower()
+        is_foundational = kind_low in FOUNDATIONAL_KINDS
+
+        scored.append(
+            {
+                "id": pid,
+                "title": str(p.get("title") or pid),
+                "subject": str(p.get("subject") or "General"),
+                "chapter": str(p.get("chapter") or "General"),
+                "kind": kind_low,
+                "status": str(p.get("status") or "planned").lower(),
+                "outDegree": out_deg,
+                "downstreamDescendants": len(desc),
+                "crossChapterReach": len(cross_ch),
+                "crossChapters": cross_ch,
+                "reversePageRank": round(pr_val, 5),
+                "betweenness": round(bw_val, 5),
+                "isFoundational": is_foundational,
+            }
+        )
+
+    max_out = max((x["outDegree"] for x in scored), default=0)
+    max_desc = max((x["downstreamDescendants"] for x in scored), default=0)
+    max_cross = max((x["crossChapterReach"] for x in scored), default=0)
+    max_pr = max((x["reversePageRank"] for x in scored), default=0.0)
+    max_bw = max((x["betweenness"] for x in scored), default=0.0)
+
+    for x in scored:
+        n_out = (x["outDegree"] / max_out) if max_out > 0 else 0.0
+        n_desc = (x["downstreamDescendants"] / max_desc) if max_desc > 0 else 0.0
+        n_cross = (x["crossChapterReach"] / max_cross) if max_cross > 0 else 0.0
+        n_pr = (x["reversePageRank"] / max_pr) if max_pr > 0 else 0.0
+        n_bw = (x["betweenness"] / max_bw) if max_bw > 0 else 0.0
+        cent = 0.60 * n_pr + 0.40 * n_bw
+        score = 0.30 * n_out + 0.25 * n_cross + 0.25 * cent + 0.15 * n_desc + (0.15 if x["isFoundational"] else 0.0)
+        x["sunsetScore"] = round(score, 4)
+
+    scored.sort(
+        key=lambda x: (
+            -x["sunsetScore"],
+            -x["crossChapterReach"],
+            -x["outDegree"],
+            -x["downstreamDescendants"],
+            x["id"],
+        )
+    )
+
+    n_total = len(scored)
+    keep_n = max(1, min(n_total, int(round(n_total * max(0.05, min(0.50, float(keep_ratio)))))))
+    if n_total >= 4 and keep_n == n_total:
+        keep_n = max(1, n_total - 1)
+
+    keep_axioms: list[dict[str, Any]] = []
+    archive_leaves: list[dict[str, Any]] = []
+    for idx, item in enumerate(scored):
+        if idx < keep_n:
+            keep_axioms.append(
+                {
+                    **item,
+                    "archived": False,
+                    "targetRetention": eff_retention,
+                    "reason": (
+                        f"Core axiom retained at R={int(round(eff_retention * 100))}% "
+                        f"(outDeg={item['outDegree']}, crossCh={item['crossChapterReach']}, score={item['sunsetScore']})."
+                    ),
+                }
+            )
+        else:
+            archive_leaves.append(
+                {
+                    **item,
+                    "archived": True,
+                    "reason": (
+                        f"Leaf/derivative archived after semester sunset "
+                        f"(outDeg={item['outDegree']}, crossCh={item['crossChapterReach']}, score={item['sunsetScore']})."
+                    ),
+                }
+            )
+
+    actual_ratio = round(len(keep_axioms) / n_total, 3) if n_total else 0.0
+    return {
+        "ok": True,
+        "chapterSlug": slug_low,
+        "matchedCount": n_total,
+        "keepCount": len(keep_axioms),
+        "archiveCount": len(archive_leaves),
+        "keepRatio": actual_ratio,
+        "targetRetention": eff_retention,
+        "keepAxioms": keep_axioms,
+        "archiveLeaves": archive_leaves,
+        "summary": (
+            f"Sunset '{slug_low}': keep {len(keep_axioms)}/{n_total} core axiom(s) at R={int(round(eff_retention * 100))}% "
+            f"and archive {len(archive_leaves)} leaf/derivative node(s)."
+        ),
+    }
+
+
 # ---------------------------------------------------------------------------
 # CLI reporting & entrypoint
 # ---------------------------------------------------------------------------
@@ -1395,12 +1584,31 @@ def _render_human_report(payload: dict[str, Any]) -> str:
                 lines.append(f"     {cf['contrastPrompt']}")
         lines.append("")
 
+    if "sunset" in payload:
+        ss = payload["sunset"]
+        lines.append(f"## Semester Sunset Plan: `{ss['chapterSlug']}`")
+        lines.append(f"  {ss['summary']}")
+        if ss["keepAxioms"]:
+            lines.append(f"  Keep Axioms ({len(ss['keepAxioms'])} @ R={int(round(ss['targetRetention'] * 100))}%):")
+            for item in ss["keepAxioms"]:
+                lines.append(
+                    f"    - [KEEP] {item['id']} (score={item['sunsetScore']}, out={item['outDegree']}, "
+                    f"crossCh={item['crossChapterReach']}): {item['title']}"
+                )
+        if ss["archiveLeaves"]:
+            lines.append(f"  Archive Leaves ({len(ss['archiveLeaves'])}):")
+            for item in ss["archiveLeaves"][:15]:
+                lines.append(
+                    f"    - [ARCHIVE] {item['id']} (score={item['sunsetScore']}, out={item['outDegree']}): {item['title']}"
+                )
+        lines.append("")
+
     return "\n".join(lines).rstrip()
 
 
 def main(argv: list[str] | None = None) -> None:
     parser = argparse.ArgumentParser(
-        description="Syntopik Knowledge Graph Intelligence: bottlenecks, memorized islands, cycle-safe study paths, synthesis combos, and lookalike confusables."
+        description="Syntopik Knowledge Graph Intelligence: bottlenecks, memorized islands, cycle-safe study paths, synthesis combos, lookalike confusables, and semester sunset plans."
     )
     parser.add_argument("--kg-dir", help="Override knowledge-graph directory (or SYNT_KG_DIR / MLH_KG_DIR)")
     parser.add_argument("--bottlenecks", action="store_true", help="Rank shaky/misconception/low-BKT foundation bottlenecks")
@@ -1408,6 +1616,7 @@ def main(argv: list[str] | None = None) -> None:
     parser.add_argument("--path-to", dest="path_to", metavar="TARGET_ID", help="Compute cycle-safe topological prerequisite sequence to TARGET_ID")
     parser.add_argument("--combos", action="store_true", help="Generate integrative multi-concept synthesis pairs from solid nodes")
     parser.add_argument("--confusables", action="store_true", help="Detect high-similarity lookalike pairs with divergent governing premises")
+    parser.add_argument("--sunset", metavar="SLUG", help="Compute Semester Sunset plan (~20%% core axioms @ R=80%%, ~80%% archived leaves) for chapter SLUG")
     parser.add_argument("--all", action="store_true", help="Run bottlenecks, islands, combos, and confusables together")
     parser.add_argument("--top", type=int, default=None, help="Max results (default: 10 for bottlenecks, 8 for combos/confusables)")
     parser.add_argument("--bkt-threshold", type=float, default=0.65, help="Low-BKT threshold for bottleneck detection (default: 0.65)")
@@ -1419,7 +1628,8 @@ def main(argv: list[str] | None = None) -> None:
     run_c = args.combos or args.all
     run_cf = args.confusables or args.all
     run_p = bool(args.path_to)
-    if not (run_b or run_i or run_c or run_cf or run_p):
+    run_ss = bool(args.sunset)
+    if not (run_b or run_i or run_c or run_cf or run_p or run_ss):
         run_b = run_i = run_c = run_cf = True
 
     kg_dir, _props_file, _chains_file = resolve_kg_paths(args.kg_dir)
@@ -1457,12 +1667,15 @@ def main(argv: list[str] | None = None) -> None:
         top_cf = args.top if args.top is not None else 8
         payload["confusables"] = find_confusables(G, kg_dir=kg_dir, top=top_cf)
 
+    if run_ss:
+        payload["sunset"] = compute_sunset_plan(kg_dir, args.sunset)
+
     if args.json:
         print(json.dumps(payload, indent=2, ensure_ascii=False))
     else:
         print(_render_human_report(payload))
 
-    if run_p and not payload["pathTo"]["found"] and not (run_b or run_i or run_c or run_cf):
+    if run_p and not payload["pathTo"]["found"] and not (run_b or run_i or run_c or run_cf or run_ss):
         sys.exit(1)
 
 

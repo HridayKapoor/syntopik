@@ -251,7 +251,9 @@ _SAFE_MATH_FUNCS: dict[str, Any] = {
 _MAX_EXPR_LEN = 512
 _MAX_AST_NODES = 200
 _MAX_AST_DEPTH = 32
-_MAX_EXPONENT = 1000
+_MAX_EXPONENT = 32
+_MAX_COMPOUND_EXPONENT = 16
+_MAX_SYMPY_COMPOUND_EXPONENT = 8
 _MAX_POWER_LOG10 = 300.0
 _MAX_INT_BITS = 1024
 _IDENT_RE = re.compile(r"^[A-Za-z][A-Za-z0-9_]*$")
@@ -426,6 +428,64 @@ def _contains_pow(node: ast.AST) -> bool:
     return any(isinstance(n, ast.BinOp) and isinstance(n.op, ast.Pow) for n in ast.walk(node))
 
 
+def _is_atomic_base(node: ast.AST) -> bool:
+    if isinstance(node, (ast.Name, ast.Constant)):
+        return True
+    if isinstance(node, ast.UnaryOp) and isinstance(node.op, (ast.UAdd, ast.USub)):
+        return isinstance(node.operand, (ast.Name, ast.Constant))
+    return False
+
+
+def _contains_add_sub(node: ast.AST) -> bool:
+    return any(isinstance(n, ast.BinOp) and isinstance(n.op, (ast.Add, ast.Sub)) for n in ast.walk(node))
+
+
+def _estimate_poly_degree(node: ast.AST) -> int:
+    if isinstance(node, ast.Expression):
+        return _estimate_poly_degree(node.body)
+    if isinstance(node, ast.Constant):
+        return 0
+    if isinstance(node, ast.Name):
+        return 0 if node.id in _SAFE_MATH_FUNCS else 1
+    if isinstance(node, ast.UnaryOp):
+        return _estimate_poly_degree(node.operand)
+    if isinstance(node, ast.Call):
+        return max((_estimate_poly_degree(a) for a in node.args), default=0)
+    if isinstance(node, ast.BinOp):
+        ld = _estimate_poly_degree(node.left)
+        rd = _estimate_poly_degree(node.right)
+        if isinstance(node.op, (ast.Add, ast.Sub)):
+            return max(ld, rd)
+        if isinstance(node.op, ast.Mult):
+            return min(1000, ld + rd)
+        if isinstance(node.op, (ast.Div, ast.FloorDiv, ast.Mod)):
+            return max(ld, rd)
+        if isinstance(node.op, ast.Pow):
+            exp_val = _try_const_numeric(node.right)
+            if exp_val is not None:
+                return min(1000, int(math.ceil(abs(float(exp_val)))) * max(1, ld))
+            return 1000
+    return 0
+
+
+def _has_high_symbolic_expansion_risk(parsed: ast.AST) -> bool:
+    """Return True if SymPy simplify()/expand() could experience polynomial blowup."""
+    has_add_sub = _contains_add_sub(parsed)
+    for node in ast.walk(parsed):
+        if isinstance(node, ast.BinOp) and isinstance(node.op, ast.Pow):
+            exp_val = _try_const_numeric(node.right)
+            if not _is_atomic_base(node.left):
+                if exp_val is None or abs(float(exp_val)) > _MAX_SYMPY_COMPOUND_EXPONENT:
+                    return True
+                if _contains_pow(node.left) and abs(float(exp_val)) > 2:
+                    return True
+            elif exp_val is None or abs(float(exp_val)) > _MAX_COMPOUND_EXPONENT:
+                return True
+    if has_add_sub and _estimate_poly_degree(parsed) > _MAX_COMPOUND_EXPONENT:
+        return True
+    return False
+
+
 def _check_ast_depth(node: ast.AST, depth: int = 0) -> None:
     if depth > _MAX_AST_DEPTH:
         raise ValueError("Math expression nesting depth exceeds safe limit.")
@@ -473,15 +533,21 @@ def validate_math_expr_ast(expr: str) -> ast.Expression:
             if any(isinstance(arg, ast.Starred) for arg in node.args):
                 raise ValueError("Starred arguments are disallowed in math expressions")
         elif isinstance(node, ast.BinOp) and isinstance(node.op, ast.Pow):
+            if _contains_pow(node.right):
+                raise ValueError("Nested exponentiation in exponent is disallowed.")
             exp_val = _try_const_numeric(node.right)
+            atomic_base = _is_atomic_base(node.left)
             if exp_val is not None:
-                if not math.isfinite(float(exp_val)) or abs(float(exp_val)) > _MAX_EXPONENT:
-                    raise ValueError(f"Exponent exceeds safe limit (|exp| <= {_MAX_EXPONENT}).")
+                max_exp = _MAX_EXPONENT if atomic_base else _MAX_COMPOUND_EXPONENT
+                if not math.isfinite(float(exp_val)) or abs(float(exp_val)) > max_exp:
+                    raise ValueError(f"Exponent exceeds safe limit (|exp| <= {max_exp}).")
+                if not atomic_base and _contains_pow(node.left) and abs(float(exp_val)) > 4:
+                    raise ValueError("Nested compound exponentiation exceeds safe limit.")
                 base_val = _try_const_numeric(node.left)
                 if base_val is not None:
                     _safe_pow(base_val, exp_val)
-            elif _contains_pow(node.right):
-                raise ValueError("Nested exponentiation in exponent is disallowed.")
+            elif not atomic_base and _contains_pow(node.left):
+                raise ValueError("Nested compound exponentiation with symbolic exponent is disallowed.")
     return parsed
 
 
@@ -604,74 +670,81 @@ def _math_equivalent(expr_a: str, expr_b: str, *, tol: float = 1e-6, _depth: int
 
     # Mandatory strict math-only AST validation BEFORE touching SymPy or numeric eval
     try:
-        validate_math_expr_ast(prep_a)
-        validate_math_expr_ast(prep_b)
+        parsed_a = validate_math_expr_ast(prep_a)
+        parsed_b = validate_math_expr_ast(prep_b)
     except ValueError:
         return False
 
-    # Try lazy SymPy if available (with zero __builtins__ in global_dict)
-    try:
-        import sympy as sp  # type: ignore[import-not-found]
-        from sympy.parsing.sympy_parser import (  # type: ignore[import-not-found]
-            auto_number,
-            auto_symbol,
-            parse_expr,
-        )
-
-        tr = (auto_symbol, auto_number)
-        safe_global: dict[str, Any] = {
-            "__builtins__": {},
-            "Symbol": sp.Symbol,
-            "Integer": sp.Integer,
-            "Float": sp.Float,
-            "Rational": sp.Rational,
-            "Number": sp.Number,
-            "pi": sp.pi,
-            "e": sp.E,
-            "E": sp.E,
-            "oo": sp.oo,
-            "tau": 2 * sp.pi,
-            "sin": sp.sin,
-            "cos": sp.cos,
-            "tan": sp.tan,
-            "asin": sp.asin,
-            "acos": sp.acos,
-            "atan": sp.atan,
-            "sinh": sp.sinh,
-            "cosh": sp.cosh,
-            "tanh": sp.tanh,
-            "exp": sp.exp,
-            "log": sp.log,
-            "ln": sp.log,
-            "sqrt": sp.sqrt,
-            "abs": sp.Abs,
-            "Abs": sp.Abs,
-            "floor": sp.floor,
-            "ceil": sp.ceiling,
-            "ceiling": sp.ceiling,
-        }
-        safe_local: dict[str, Any] = {
-            k: safe_global[k]
-            for k in (
-                "pi", "e", "E", "oo", "tau",
-                "sin", "cos", "tan", "asin", "acos", "atan",
-                "sinh", "cosh", "tanh", "exp", "log", "ln", "sqrt",
-                "abs", "Abs", "floor", "ceil", "ceiling",
+    # Try lazy SymPy ONLY when symbolic expansion risk is bounded (avoid polynomial CPU blowup)
+    skip_sympy = _has_high_symbolic_expansion_risk(parsed_a) or _has_high_symbolic_expansion_risk(parsed_b)
+    if not skip_sympy:
+        try:
+            import sympy as sp  # type: ignore[import-not-found]
+            from sympy.parsing.sympy_parser import (  # type: ignore[import-not-found]
+                auto_number,
+                auto_symbol,
+                parse_expr,
             )
-        }
-        sa = parse_expr(prep_a, local_dict=safe_local, global_dict=safe_global, transformations=tr)
-        sb = parse_expr(prep_b, local_dict=safe_local, global_dict=safe_global, transformations=tr)
-        diff = sp.simplify(sa - sb)
-        if diff == 0:
-            return True
-        if not diff.free_symbols:
-            try:
-                return abs(complex(sp.N(diff, 12))) <= tol
-            except Exception:
+
+            tr = (auto_symbol, auto_number)
+            safe_global: dict[str, Any] = {
+                "__builtins__": {},
+                "Symbol": sp.Symbol,
+                "Integer": sp.Integer,
+                "Float": sp.Float,
+                "Rational": sp.Rational,
+                "Number": sp.Number,
+                "pi": sp.pi,
+                "e": sp.E,
+                "E": sp.E,
+                "oo": sp.oo,
+                "tau": 2 * sp.pi,
+                "sin": sp.sin,
+                "cos": sp.cos,
+                "tan": sp.tan,
+                "asin": sp.asin,
+                "acos": sp.acos,
+                "atan": sp.atan,
+                "sinh": sp.sinh,
+                "cosh": sp.cosh,
+                "tanh": sp.tanh,
+                "exp": sp.exp,
+                "log": sp.log,
+                "ln": sp.log,
+                "sqrt": sp.sqrt,
+                "abs": sp.Abs,
+                "Abs": sp.Abs,
+                "floor": sp.floor,
+                "ceil": sp.ceiling,
+                "ceiling": sp.ceiling,
+            }
+            safe_local: dict[str, Any] = {
+                k: safe_global[k]
+                for k in (
+                    "pi", "e", "E", "oo", "tau",
+                    "sin", "cos", "tan", "asin", "acos", "atan",
+                    "sinh", "cosh", "tanh", "exp", "log", "ln", "sqrt",
+                    "abs", "Abs", "floor", "ceil", "ceiling",
+                )
+            }
+            sa = parse_expr(prep_a, local_dict=safe_local, global_dict=safe_global, transformations=tr)
+            sb = parse_expr(prep_b, local_dict=safe_local, global_dict=safe_global, transformations=tr)
+            diff_raw = sa - sb
+            if diff_raw == 0:
+                return True
+            # Guard against expensive symbolic simplify() on complex expressions; fall back to numeric sampling
+            if int(diff_raw.count_ops()) <= 120:
+                diff = sp.simplify(diff_raw)
+                if diff == 0:
+                    return True
+                if not diff.free_symbols:
+                    try:
+                        return abs(complex(sp.N(diff, 12))) <= tol
+                    except Exception:
+                        return False
                 return False
-        return False
-    except Exception:
-        pass
+        except Exception:
+            pass
 
     # Pure-stdlib randomized multi-point numeric equivalence check
     syms_a = _extract_math_symbols(prep_a)
@@ -1259,6 +1332,26 @@ def check_fork_move(
     fork["updatedAt"] = _now_iso()
     forks[target_idx] = fork
     save_forks(forks, workspace=workspace, kg_dir=kg_dir)
+
+    try:
+        from syntopik.learner_model import record_telemetry_event
+
+        record_telemetry_event(
+            kdir,
+            domain=str(fork.get("subject") or "General"),
+            prop_id=str(fork.get("propId") or "") or None,
+            kind="fork",
+            correct=bool(is_win),
+            difficulty=1550,
+            confidence=None,
+            duration_ms=int(latency_ms) if latency_ms is not None and int(latency_ms) >= 0 else None,
+            hints_used=1 if reveal_fix else 0,
+            mistake_category="misconception" if is_blunder else None,
+            pf_outcome=None,
+            skipped=False,
+        )
+    except Exception:
+        pass
 
     latency_trend: dict[str, Any] = {
         "samples": len(history),

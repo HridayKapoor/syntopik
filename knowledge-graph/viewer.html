@@ -352,6 +352,58 @@
 
   .node-group { cursor: pointer; transition: opacity 0.15s; }
   .node-group.dimmed { opacity: 0.34; }
+  .node-suspect-glow {
+    fill: var(--shaky-bg);
+    stroke: none;
+    pointer-events: none;
+  }
+  .node-suspect-halo {
+    fill: none;
+    stroke: var(--shaky);
+    stroke-width: 1.85;
+    stroke-opacity: 0.78;
+    stroke-dasharray: 6 3;
+    pointer-events: none;
+  }
+  .legend-halo {
+    display: inline-block;
+    width: 13px;
+    height: 13px;
+    border-radius: 4px;
+    border: 1.7px dashed var(--shaky);
+    background: var(--shaky-bg);
+  }
+  .pill.tier-t1 { color: var(--planned); background: var(--planned-bg); border-color: transparent; }
+  .pill.tier-t2 { color: var(--accent); background: var(--accent-bg); border-color: transparent; }
+  .pill.tier-t3 { color: var(--edge-generalizes); background: rgba(78, 159, 150, 0.14); border-color: transparent; }
+  .pill.tier-t4 { color: var(--solid); background: var(--solid-bg); border-color: transparent; }
+  .causal-box {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-left: 3px solid var(--shaky);
+    border-radius: 9px;
+    padding: 10px 12px;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    font-size: 12px;
+    color: var(--text-2);
+  }
+  .causal-box.clean {
+    border-left-color: var(--solid);
+  }
+  .causal-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 6px;
+    flex-wrap: wrap;
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: var(--muted);
+  }
   .node-bg {
     fill: var(--bg-card);
     stroke: var(--border-strong);
@@ -744,6 +796,7 @@
         <span class="legend-item"><span class="legend-line" style="background:var(--edge-generalizes)"></span>generalizes</span>
         <span class="legend-item"><span class="legend-line" style="border-top:2px dashed var(--edge-contrasts);height:0"></span>contrasts</span>
         <span class="legend-item"><span class="legend-joint">∧</span>joint</span>
+        <span class="legend-item"><span class="legend-halo"></span>causal suspect</span>
       </div>
     </div>
 
@@ -771,6 +824,9 @@
   const SVG_NS = "http://www.w3.org/2000/svg";
 
   let data = { propositions: [], chains: [] };
+  let rootCauseHotspots = { byProp: {}, blastRadius: [] };
+  let evidenceSummary = { propositions: {}, tierCounts: { T1: 0, T2: 0, T3: 0, T4: 0 }, verifiedTransferPct: 0 };
+  let liveRootCauseCache = new Map();
   let view = { x: 40, y: 40, k: 1 };
   let layoutMode = "layered"; // "layered" | "clustered"
   let selectedId = null;
@@ -872,6 +928,100 @@
     return getLapses(n) >= 4 || (diff !== null && diff >= 8.5);
   }
 
+  function hydrateV3Meta(stateObj) {
+    const hub = stateObj && typeof stateObj === "object" ? (stateObj.hub || stateObj) : (window.__STUDY_HUB__ || {});
+    const rc = (stateObj && stateObj.rootCauseHotspots) || (hub && hub.rootCauseHotspots) || null;
+    if (rc && typeof rc === "object") {
+      rootCauseHotspots = {
+        byProp: rc.byProp && typeof rc.byProp === "object" ? rc.byProp : {},
+        blastRadius: Array.isArray(rc.blastRadius) ? rc.blastRadius : [],
+      };
+    } else {
+      rootCauseHotspots = { byProp: {}, blastRadius: [] };
+    }
+    const ev = (stateObj && stateObj.evidenceSummary) || (hub && hub.evidenceSummary) || null;
+    if (ev && typeof ev === "object") {
+      evidenceSummary = {
+        propositions: ev.propositions && typeof ev.propositions === "object" ? ev.propositions : {},
+        tierCounts: ev.tierCounts && typeof ev.tierCounts === "object" ? ev.tierCounts : { T1: 0, T2: 0, T3: 0, T4: 0 },
+        verifiedTransferPct: typeof ev.verifiedTransferPct === "number" ? ev.verifiedTransferPct : 0,
+      };
+    } else {
+      evidenceSummary = { propositions: {}, tierCounts: { T1: 0, T2: 0, T3: 0, T4: 0 }, verifiedTransferPct: 0 };
+    }
+  }
+
+  function getCausalSuspectScore(nodeId) {
+    if (!nodeId) return 0;
+    const raw = rootCauseHotspots?.byProp?.[nodeId];
+    if (typeof raw === "number" && Number.isFinite(raw)) return raw;
+    if (raw && typeof raw === "object") {
+      const v = raw.suspectRootScore ?? raw.score ?? raw.posterior;
+      if (typeof v === "number" && Number.isFinite(v)) return v;
+    }
+    return 0;
+  }
+
+  function getBlastEntry(nodeId) {
+    if (!nodeId || !Array.isArray(rootCauseHotspots?.blastRadius)) return null;
+    return rootCauseHotspots.blastRadius.find((b) => b && (b.propId === nodeId || b.id === nodeId)) || null;
+  }
+
+  function getEvidenceInfo(n) {
+    const entry = n?.id ? evidenceSummary?.propositions?.[n.id] : null;
+    let tier = null;
+    let sources = [];
+    let tierLabel = "";
+    if (entry && typeof entry === "object") {
+      if (typeof entry.tier === "number" && Number.isFinite(entry.tier)) tier = entry.tier;
+      else if (typeof entry.tier === "string") {
+        const m = entry.tier.match(/([1-4])/u);
+        if (m) tier = Number(m[1]);
+      }
+      if (Array.isArray(entry.sources)) sources = entry.sources.map(String);
+      if (typeof entry.tierLabel === "string") tierLabel = entry.tierLabel;
+    }
+    if (tier === null) {
+      const rawT = n?.evidenceTier ?? n?.tier;
+      if (typeof rawT === "number" && rawT >= 1 && rawT <= 4) tier = Math.round(rawT);
+      else if (typeof rawT === "string") {
+        const m = rawT.match(/([1-4])/u);
+        if (m) tier = Number(m[1]);
+      }
+    }
+    if (tier === null) {
+      tier = (n?.lastReviewed || (n?.fsrs && Number(n.fsrs.reps) > 0)) ? 2 : 1;
+    }
+    const clamped = Math.max(1, Math.min(4, tier));
+    const labels = {
+      1: "T1 Exposure",
+      2: "T2 Cold Recall",
+      3: "T3 Mechanistic Transfer",
+      4: "T4 Original Synthesis",
+    };
+    return {
+      tier: clamped,
+      tag: `T${clamped}`,
+      cls: `tier-t${clamped}`,
+      label: tierLabel || labels[clamped],
+      sources,
+    };
+  }
+
+  async function fetchLiveRootCause(nodeId) {
+    if (!liveCaps.live || !nodeId) return;
+    try {
+      const res = await fetch(`/api/root-cause?nodeId=${encodeURIComponent(nodeId)}`, { cache: "no-store" });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const payload = await res.json();
+      liveRootCauseCache.set(nodeId, payload);
+      const curNode = data.propositions.find((p) => p.id === nodeId);
+      if (curNode && selectedId === nodeId) renderInspector(curNode);
+    } catch (err) {
+      showToast(`Causal probe unavailable: ${err?.message || "offline"}`);
+    }
+  }
+
   function updateLiveStatusUI() {
     const pill = document.getElementById("liveStatusPill");
     if (!pill) return;
@@ -902,7 +1052,7 @@
   }
 
   async function probeLiveCapabilities() {
-    if (window.location.protocol === "file:") {
+    if (window.location.protocol === "file:" && !window.__SYNTOPIK_SHIM__) {
       liveCaps = { live: false, token: "", version: "", workspaceName: "", lan: null };
       updateLiveStatusUI();
       return false;
@@ -912,9 +1062,10 @@
       if (!res.ok) throw new Error("unavailable");
       const caps = await res.json();
       if (caps && caps.live) {
+        const metaTok = document.querySelector('meta[name="syntopik-token"]')?.getAttribute("content") || "";
         liveCaps = {
           live: true,
-          token: String(caps.token || ""),
+          token: String(caps.token || metaTok || ""),
           version: String(caps.version || ""),
           workspaceName: String(caps.workspaceName || ""),
           lan: caps.lan || null,
@@ -942,6 +1093,7 @@
         propositions: Array.isArray(g.propositions) ? g.propositions : [],
         chains: normalizeChains(g.chains),
       };
+      hydrateV3Meta(state);
       populateFilters();
       render(shouldFit);
       return true;
@@ -1693,10 +1845,33 @@
       const stab = getStability(n);
       const cd = getCountdown(n);
       const sColor = statusVar(n.status);
+      const suspectScore = getCausalSuspectScore(n.id);
+      const evInfo = getEvidenceInfo(n);
 
       const titleTip = document.createElementNS(SVG_NS, "title");
-      titleTip.textContent = `${n.title || n.id}\nStatus: ${n.status || "planned"} · BKT: ${bktPct !== null ? bktPct + "%" : "—"} · FSRS S: ${formatStability(stab)} · ${cd.text}`;
+      titleTip.textContent = `${n.title || n.id}\nStatus: ${n.status || "planned"} · ${evInfo.label} · BKT: ${bktPct !== null ? bktPct + "%" : "—"} · FSRS S: ${formatStability(stab)} · ${cd.text}${suspectScore >= 0.35 ? `\nCausal Suspect Root: ${Math.round(suspectScore * 100)}%` : ""}`;
       g.appendChild(titleTip);
+
+      // Subtle amber causal-suspect halo when rootCauseHotspots.byProp[node.id] >= 0.35
+      if (suspectScore >= 0.35) {
+        const glow = document.createElementNS(SVG_NS, "rect");
+        glow.setAttribute("class", "node-suspect-glow");
+        glow.setAttribute("x", "-5");
+        glow.setAttribute("y", "-5");
+        glow.setAttribute("width", String(NODE_W + 10));
+        glow.setAttribute("height", String(NODE_H + 10));
+        glow.setAttribute("rx", "15");
+        g.appendChild(glow);
+
+        const halo = document.createElementNS(SVG_NS, "rect");
+        halo.setAttribute("class", "node-suspect-halo");
+        halo.setAttribute("x", "-3.5");
+        halo.setAttribute("y", "-3.5");
+        halo.setAttribute("width", String(NODE_W + 7));
+        halo.setAttribute("height", String(NODE_H + 7));
+        halo.setAttribute("rx", "13.5");
+        g.appendChild(halo);
+      }
 
       // Card body
       const rect = document.createElementNS(SVG_NS, "rect");
@@ -1742,12 +1917,12 @@
       titleEl.textContent = truncate(n.title || n.id, 30);
       g.appendChild(titleEl);
 
-      // Bottom row: BKT progress bar + percentage + FSRS stability
+      // Bottom row: BKT progress bar + percentage + Evidence Tier + FSRS stability
       const bktLabel = document.createElementNS(SVG_NS, "text");
       bktLabel.setAttribute("class", "node-meta");
       bktLabel.setAttribute("x", "14");
       bktLabel.setAttribute("y", "61");
-      bktLabel.textContent = bktPct !== null ? `BKT ${bktPct}%` : "BKT —";
+      bktLabel.textContent = `${bktPct !== null ? `BKT ${bktPct}%` : "BKT —"} · ${evInfo.tag}`;
       g.appendChild(bktLabel);
 
       const stabLabel = document.createElementNS(SVG_NS, "text");
@@ -1824,6 +1999,15 @@
     }
     const avgBkt = bkts.length ? Math.round((bkts.reduce((a, b) => a + b, 0) / bkts.length) * 100) : null;
     const dueList = visibleNodes.filter(isNodeDue).slice(0, 8);
+    const tierTotals = { T1: 0, T2: 0, T3: 0, T4: 0 };
+    const suspectList = [];
+    for (const n of visibleNodes) {
+      const ev = getEvidenceInfo(n);
+      if (ev.tag in tierTotals) tierTotals[ev.tag] += 1;
+      const sc = getCausalSuspectScore(n.id);
+      if (sc >= 0.35) suspectList.push({ node: n, score: sc, blast: getBlastEntry(n.id) });
+    }
+    suspectList.sort((a, b) => b.score - a.score);
 
     document.getElementById("inspector").innerHTML = `
       <div>
@@ -1833,6 +2017,15 @@
           <span class="pill shaky"><span class="dot" style="background:var(--shaky)"></span>${counts.shaky} Shaky</span>
           <span class="pill misconception"><span class="dot" style="background:var(--misconception)"></span>${counts.misconception} Misconception</span>
           <span class="pill planned"><span class="dot" style="background:var(--planned)"></span>${counts.planned} Planned</span>
+        </div>
+      </div>
+      <div>
+        <div class="section-heading">4-Tier Evidence Depth</div>
+        <div class="detail-meta">
+          <span class="pill tier-t1">T1 ${tierTotals.T1}</span>
+          <span class="pill tier-t2">T2 ${tierTotals.T2}</span>
+          <span class="pill tier-t3">T3 ${tierTotals.T3}</span>
+          <span class="pill tier-t4">T4 ${tierTotals.T4}</span>
         </div>
       </div>
       <div class="summary-grid">
@@ -1847,7 +2040,23 @@
           <span class="metric-sub">${dueCount > 0 ? "Needs review" : "All caught up"}</span>
         </div>
       </div>
-      <p class="detail-body">Click any node in the graph to inspect its <strong>BKT mastery probability</strong>, <strong>FSRS stability &amp; review countdown</strong>, misconception notes, and full prerequisite/unlock dependency chain.</p>
+      <p class="detail-body">Click any node in the graph to inspect its <strong>BKT mastery probability</strong>, <strong>4-tier evidence depth (T1–T4)</strong>, <strong>causal blast radius</strong>, and full prerequisite/unlock dependency chain.</p>
+      ${suspectList.length ? `
+        <div>
+          <div class="section-heading">Causal Suspect Hotspots (${suspectList.length})</div>
+          <ul class="edge-list">
+            ${suspectList.slice(0, 5).map(({ node, score, blast }) => `
+              <li class="edge-item clickable" data-jump="${esc(node.id)}" style="border-left:3px solid var(--shaky);">
+                <div class="edge-item-head">
+                  <span class="edge-item-title">${esc(node.title || node.id)}</span>
+                  <span class="pill shaky">${Math.round(score * 100)}% suspect</span>
+                </div>
+                <span class="edge-item-why">${blast ? esc(blast.summary || `${blast.downstreamCount || 0} downstream · ${blast.weakDownstreamCount || 0} weak`) : "Elevated Bayesian upstream fault probability"}</span>
+              </li>
+            `).join("")}
+          </ul>
+        </div>
+      ` : ""}
       ${dueList.length ? `
         <div>
           <div class="section-heading">Priority Review Queue (${dueList.length})</div>
@@ -1889,6 +2098,10 @@
     const lapses = getLapses(n);
     const implicitCredit = getImplicitCredit(n);
     const leech = isLeech(n);
+    const evInfo = getEvidenceInfo(n);
+    const suspectScore = getCausalSuspectScore(n.id);
+    const blast = getBlastEntry(n.id);
+    const liveRc = liveRootCauseCache.get(n.id) || null;
     const boundaryConditions = Array.isArray(n.boundaryConditions)
       ? n.boundaryConditions.filter((bc) => bc !== null && bc !== undefined && String(typeof bc === "string" ? bc : (bc.lemma || bc.condition || bc.text || bc.note || "")).trim())
       : [];
@@ -1957,6 +2170,8 @@
       </div>
       <div class="detail-meta">
         <span class="pill ${statusCls}"><span class="dot" style="background:${statusVar(n.status)}"></span>${esc(n.status || "planned")}</span>
+        <span class="pill ${evInfo.cls}" title="4-Tier Epistemic Evidence Depth">${esc(evInfo.label)}</span>
+        ${suspectScore >= 0.35 ? `<span class="pill shaky" title="Bayesian Noisy-OR Causal Root-Cause Suspect Score">Causal Suspect ${Math.round(suspectScore * 100)}%</span>` : ""}
         ${leech ? `<span class="pill shaky" title="Repeated lapses or high difficulty — re-derive or split into smaller ideas">Leech</span>` : ""}
         ${n.kind ? `<span class="pill">${esc(n.kind)}</span>` : ""}
         ${n.subject ? `<span class="pill">${esc(n.subject)}</span>` : ""}
@@ -1964,6 +2179,27 @@
       </div>
       <div><code>${esc(n.id)}</code></div>
       ${aliases.length ? `<div class="edge-item-why">Aliases: ${aliases.map((a) => esc(a)).join(" · ")}</div>` : ""}
+
+      <div class="causal-box ${suspectScore >= 0.35 || blast ? "" : "clean"}">
+        <div class="causal-head">
+          <span>Evidence &amp; Causal Blast Radius</span>
+          <span class="pill ${evInfo.cls}">${esc(evInfo.tag)}</span>
+        </div>
+        <div><strong>${esc(evInfo.label)}</strong>${evInfo.sources.length ? ` · Verified via ${esc(evInfo.sources.join(", "))}` : " · Upgrade via Viva, Derivation Cut, or Arena."}</div>
+        ${blast ? `
+          <div>${esc(blast.summary || `Impacts ${blast.downstreamCount ?? 0} downstream node(s) (${blast.weakDownstreamCount ?? 0} weak, ${blast.downstreamMissCount ?? 0} misses).`)}</div>
+          ${Array.isArray(blast.weakDownstreamIds) && blast.weakDownstreamIds.length ? `
+            <div class="joint-premises-row">
+              <span class="edge-item-why">Weak downstream:</span>
+              ${blast.weakDownstreamIds.slice(0, 5).map((pid) => renderPremiseChip(pid)).join("")}
+            </div>
+          ` : ""}
+        ` : (suspectScore >= 0.35 ? `<div>Elevated root-cause posterior (<strong>${Math.round(suspectScore * 100)}%</strong>) explaining downstream misses.</div>` : `<div>No upstream causal fault alerts on this node.</div>`)}
+        ${liveRc && liveRc.bestProbe ? `
+          <div class="edge-item-why">Best ΔH diagnostic probe: <code>${esc(liveRc.bestProbe.propId || liveRc.bestProbe.id || "")}</code> (${typeof liveRc.bestProbe.expectedInfoGainBits === "number" ? `${liveRc.bestProbe.expectedInfoGainBits.toFixed(2)} bits` : "ranked #1"})</div>
+        ` : ""}
+        ${liveCaps.live ? `<button type="button" id="runCausalProbeBtn" style="align-self:flex-start;padding:4px 8px;font-size:11px;">Run Causal ΔH Diagnosis</button>` : ""}
+      </div>
 
       <div class="summary-grid">
         <div class="metric-box">
@@ -2074,6 +2310,10 @@
       const prompt = `Drill me on ${n.id} ("${n.title || n.id}") without spoilers using fresh scenarios, verify my reasoning, and update my FSRS + BKT rating with scripts/srs_engine.py.`;
       copyText(prompt, "Copied concept drill prompt ✓");
     });
+    const causalProbeBtn = document.getElementById("runCausalProbeBtn");
+    if (causalProbeBtn) {
+      causalProbeBtn.addEventListener("click", () => fetchLiveRootCause(n.id));
+    }
     const confSlider = document.getElementById("inspectorConfSlider");
     const confVal = document.getElementById("inspectorConfVal");
     if (confSlider && confVal) {
@@ -2147,12 +2387,14 @@
     applyTheme(safeStorageGet("study-harness-theme") || "dark");
 
     let rawData = null;
+    let liveStateObj = null;
     const isLive = await probeLiveCapabilities();
     if (isLive) {
       try {
         const res = await fetch("/api/state", { cache: "no-store" });
         if (res.ok) {
           const st = await res.json();
+          liveStateObj = st;
           if (st && st.graph) rawData = st.graph;
         }
       } catch { /* fall back below */ }
@@ -2176,6 +2418,7 @@
       propositions: Array.isArray(rawData.propositions) ? rawData.propositions : [],
       chains: normalizeChains(rawData.chains),
     };
+    hydrateV3Meta(liveStateObj || window.__STUDY_HUB__ || null);
 
     populateFilters();
     const params = new URLSearchParams(window.location.search);

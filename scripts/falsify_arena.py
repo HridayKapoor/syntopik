@@ -145,7 +145,9 @@ _SYMBOLIC_ARENA_OPS: frozenset[str] = frozenset({"diff", "integrate", "simplify"
 _MAX_EXPR_LEN = 512
 _MAX_AST_NODES = 200
 _MAX_AST_DEPTH = 32
-_MAX_EXPONENT = 1000
+_MAX_EXPONENT = 32
+_MAX_COMPOUND_EXPONENT = 16
+_MAX_SYMPY_COMPOUND_EXPONENT = 8
 _MAX_POWER_LOG10 = 300.0
 _MAX_INT_BITS = 1024
 _IDENT_RE = re.compile(r"^[A-Za-z][A-Za-z0-9_]*$")
@@ -398,6 +400,64 @@ def _contains_pow(node: ast.AST) -> bool:
     return any(isinstance(n, ast.BinOp) and isinstance(n.op, ast.Pow) for n in ast.walk(node))
 
 
+def _is_atomic_base(node: ast.AST) -> bool:
+    if isinstance(node, (ast.Name, ast.Constant)):
+        return True
+    if isinstance(node, ast.UnaryOp) and isinstance(node.op, (ast.UAdd, ast.USub)):
+        return isinstance(node.operand, (ast.Name, ast.Constant))
+    return False
+
+
+def _contains_add_sub(node: ast.AST) -> bool:
+    return any(isinstance(n, ast.BinOp) and isinstance(n.op, (ast.Add, ast.Sub)) for n in ast.walk(node))
+
+
+def _estimate_poly_degree(node: ast.AST) -> int:
+    if isinstance(node, ast.Expression):
+        return _estimate_poly_degree(node.body)
+    if isinstance(node, ast.Constant):
+        return 0
+    if isinstance(node, ast.Name):
+        return 0 if node.id in _STRICT_MATH_NS else 1
+    if isinstance(node, ast.UnaryOp):
+        return _estimate_poly_degree(node.operand)
+    if isinstance(node, ast.Call):
+        return max((_estimate_poly_degree(a) for a in node.args), default=0)
+    if isinstance(node, ast.BinOp):
+        ld = _estimate_poly_degree(node.left)
+        rd = _estimate_poly_degree(node.right)
+        if isinstance(node.op, (ast.Add, ast.Sub)):
+            return max(ld, rd)
+        if isinstance(node.op, ast.Mult):
+            return min(1000, ld + rd)
+        if isinstance(node.op, (ast.Div, ast.FloorDiv, ast.Mod)):
+            return max(ld, rd)
+        if isinstance(node.op, ast.Pow):
+            exp_val = _try_const_numeric(node.right)
+            if exp_val is not None:
+                return min(1000, int(math.ceil(abs(float(exp_val)))) * max(1, ld))
+            return 1000
+    return 0
+
+
+def _has_high_symbolic_expansion_risk(parsed: ast.AST) -> bool:
+    """Return True if SymPy simplify()/expand() could experience polynomial blowup."""
+    has_add_sub = _contains_add_sub(parsed)
+    for node in ast.walk(parsed):
+        if isinstance(node, ast.BinOp) and isinstance(node.op, ast.Pow):
+            exp_val = _try_const_numeric(node.right)
+            if not _is_atomic_base(node.left):
+                if exp_val is None or abs(float(exp_val)) > _MAX_SYMPY_COMPOUND_EXPONENT:
+                    return True
+                if _contains_pow(node.left) and abs(float(exp_val)) > 2:
+                    return True
+            elif exp_val is None or abs(float(exp_val)) > _MAX_COMPOUND_EXPONENT:
+                return True
+    if has_add_sub and _estimate_poly_degree(parsed) > _MAX_COMPOUND_EXPONENT:
+        return True
+    return False
+
+
 def _check_ast_depth(node: ast.AST, depth: int = 0) -> None:
     if depth > _MAX_AST_DEPTH:
         raise ValueError("Expression nesting depth exceeds safe limit.")
@@ -447,15 +507,21 @@ def validate_math_expr_ast(expr: str, *, allow_symbolic_ops: bool = False) -> as
             if any(isinstance(arg, ast.Starred) for arg in node.args):
                 raise ValueError("Starred arguments are disallowed in math expressions.")
         elif isinstance(node, ast.BinOp) and isinstance(node.op, ast.Pow):
+            if _contains_pow(node.right):
+                raise ValueError("Nested exponentiation in exponent is disallowed.")
             exp_val = _try_const_numeric(node.right)
+            atomic_base = _is_atomic_base(node.left)
             if exp_val is not None:
-                if not math.isfinite(float(exp_val)) or abs(float(exp_val)) > _MAX_EXPONENT:
-                    raise ValueError(f"Exponent exceeds safe limit (|exp| <= {_MAX_EXPONENT}).")
+                max_exp = _MAX_EXPONENT if atomic_base else _MAX_COMPOUND_EXPONENT
+                if not math.isfinite(float(exp_val)) or abs(float(exp_val)) > max_exp:
+                    raise ValueError(f"Exponent exceeds safe limit (|exp| <= {max_exp}).")
+                if not atomic_base and _contains_pow(node.left) and abs(float(exp_val)) > 4:
+                    raise ValueError("Nested compound exponentiation exceeds safe limit.")
                 base_val = _try_const_numeric(node.left)
                 if base_val is not None:
                     _safe_pow(base_val, exp_val)
-            elif _contains_pow(node.right):
-                raise ValueError("Nested exponentiation in exponent is disallowed.")
+            elif not atomic_base and _contains_pow(node.left):
+                raise ValueError("Nested compound exponentiation with symbolic exponent is disallowed.")
     return parsed
 
 
@@ -613,11 +679,18 @@ def _safe_eval_expr(expr: str, env: dict[str, Any], *, allow_predicates: bool = 
             if node.id not in env and node.id not in _SAFE_MATH_NS:
                 raise ValueError(f"Unknown variable: {node.id}")
         if isinstance(node, ast.BinOp) and isinstance(node.op, ast.Pow):
-            exp_val = _try_const_numeric(node.right)
-            if exp_val is not None and (not math.isfinite(float(exp_val)) or abs(float(exp_val)) > _MAX_EXPONENT):
-                raise ValueError(f"Exponent exceeds safe limit (|exp| <= {_MAX_EXPONENT}).")
-            if exp_val is None and _contains_pow(node.right):
+            if _contains_pow(node.right):
                 raise ValueError("Nested exponentiation in exponent is disallowed.")
+            exp_val = _try_const_numeric(node.right)
+            atomic_base = _is_atomic_base(node.left)
+            if exp_val is not None:
+                max_exp = _MAX_EXPONENT if atomic_base else _MAX_COMPOUND_EXPONENT
+                if not math.isfinite(float(exp_val)) or abs(float(exp_val)) > max_exp:
+                    raise ValueError(f"Exponent exceeds safe limit (|exp| <= {max_exp}).")
+                if not atomic_base and _contains_pow(node.left) and abs(float(exp_val)) > 4:
+                    raise ValueError("Nested compound exponentiation exceeds safe limit.")
+            elif not atomic_base and _contains_pow(node.left):
+                raise ValueError("Nested compound exponentiation with symbolic exponent is disallowed.")
     ns = dict(_SAFE_MATH_NS)
     ns.update(env)
     return _eval_ast_node(parsed, ns, allow_predicates=True)
@@ -651,12 +724,24 @@ def _validate_math_env(env: dict[str, Any]) -> dict[str, Any]:
     return clean
 
 
+def _env_has_expansion_risk(val: Any) -> bool:
+    if isinstance(val, str):
+        parsed = validate_math_expr_ast(_prep_expr(val), allow_symbolic_ops=False)
+        return _has_high_symbolic_expansion_risk(parsed)
+    if isinstance(val, list):
+        return any(_env_has_expansion_risk(item) for item in val)
+    return False
+
+
 def _try_sympy_eval(expr: str, raw_env: dict[str, Any]) -> tuple[bool, Any]:
     """Evaluate `expr` with SymPy ONLY after strict math-only AST validation and zero-builtins global_dict."""
     try:
         clean_env = _validate_math_env(raw_env)
         prep_main = _prep_expr(expr)
-        validate_math_expr_ast(prep_main, allow_symbolic_ops=True)
+        parsed_main = validate_math_expr_ast(prep_main, allow_symbolic_ops=True)
+        high_expansion_risk = _has_high_symbolic_expansion_risk(parsed_main) or any(
+            _env_has_expansion_risk(v) for v in clean_env.values()
+        )
 
         import sympy as sp  # type: ignore[import-not-found]
         from sympy.parsing.sympy_parser import (  # type: ignore[import-not-found]
@@ -731,18 +816,31 @@ def _try_sympy_eval(expr: str, raw_env: dict[str, Any]) -> tuple[bool, Any]:
         for k, v in clean_env.items():
             learner_local[k] = _to_sympy_val(v, learner_local)
 
+        def _guarded_simplify(obj: Any) -> Any:
+            if high_expansion_risk:
+                return obj
+            if hasattr(obj, "count_ops") and int(obj.count_ops()) > 120:
+                return obj
+            if hasattr(obj, "atoms"):
+                for pw in obj.atoms(sp.Pow):
+                    base_e, exp_e = pw.as_base_exp()
+                    if not base_e.is_Atom:
+                        if not exp_e.is_Number or abs(float(exp_e)) > _MAX_SYMPY_COMPOUND_EXPONENT:
+                            return obj
+            return sp.simplify(obj)
+
         arena_local: dict[str, Any] = {
             **learner_local,
             "diff": sp.diff,
             "integrate": sp.integrate,
-            "simplify": sp.simplify,
+            "simplify": _guarded_simplify,
             "Matrix": sp.Matrix,
             "det": lambda m: sp.Matrix(m).det(),
             "trace": lambda m: sp.Matrix(m).trace(),
         }
 
         res = _parse_validated(prep_main, arena_local, allow_sym_ops=True)
-        res = sp.simplify(res)
+        res = _guarded_simplify(res)
         if isinstance(res, sp.MatrixBase):
             return True, [[float(sp.N(el, 12)) for el in res.row(r)] for r in range(res.rows)]
         if hasattr(res, "free_symbols") and not res.free_symbols:

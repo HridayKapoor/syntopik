@@ -30,6 +30,13 @@ const state = {
   topCategories: [],
   chapterTrackers: [],
   activeChapter: null,
+  learnerProfile: null,
+  teachingPolicy: null,
+  pendingPins: [],
+  dueForksCount: 0,
+  arenasCount: 0,
+  coldStartDays: 0,
+  profileBusy: false,
   apBusy: false,
   apToast: "",
   apToastKind: "info",
@@ -486,6 +493,133 @@ async function triggerContinueAutopilot() {
   render();
 }
 
+async function applyProfileOverride(patch) {
+  if (!state.caps?.canCallTools || state.profileBusy) return;
+  state.profileBusy = true;
+  state.apToast = "";
+  render();
+  try {
+    const res = await bridge.app.callServerTool({
+      name: "synt_app_update_profile",
+      arguments: { op: "override", ...patch },
+    });
+    if (res?.isError) {
+      state.apToast = res?.content?.[0]?.text || "Policy override failed.";
+      state.apToastKind = "danger";
+    } else if (res?.structuredContent) {
+      const sc = res.structuredContent;
+      if (sc.learnerProfile) state.learnerProfile = sc.learnerProfile;
+      if (sc.teachingPolicy) state.teachingPolicy = sc.teachingPolicy;
+      const scaf = state.teachingPolicy?.scaffoldingMode || "auto";
+      state.apToast = `TeachingPolicy updated (${scaf}) ✓`;
+      state.apToastKind = "success";
+    }
+  } catch (err) {
+    state.apToast = `Policy override error: ${err?.message || String(err)}`;
+    state.apToastKind = "danger";
+  }
+  state.profileBusy = false;
+  render();
+}
+
+function affectBadgeMeta(affect) {
+  const key = String(affect || "flow").toLowerCase();
+  if (key === "flow") return { label: "flow", cls: "badge-success" };
+  if (key === "productive_confusion") return { label: "productive confusion", cls: "badge-info" };
+  if (key === "overloaded_frustrated") return { label: "overloaded", cls: "badge-warning" };
+  if (key === "fatigued") return { label: "fatigued", cls: "badge-warning" };
+  if (key === "gaming_rushing") return { label: "rushing", cls: "badge-danger" };
+  if (key === "bored_underchallenged") return { label: "underchallenged", cls: "badge-info" };
+  return { label: key.replace(/_/g, " "), cls: "" };
+}
+
+function renderPolicyStrip(container, tracker) {
+  const prof = state.learnerProfile;
+  const pol = state.teachingPolicy;
+  if (!prof && !pol) return;
+
+  const strip = document.createElement("div");
+  strip.className = "list-item policy-strip";
+
+  const activeSubject = tracker?.subject || pol?.domain || "";
+  const domInfo =
+    activeSubject && prof?.domains && prof.domains[activeSubject]
+      ? { name: activeSubject, ...prof.domains[activeSubject] }
+      : { name: "Global", elo: prof?.globalElo ?? 1450, band: prof?.globalBand || "intermediate" };
+  const aff = affectBadgeMeta(pol?.affectState || prof?.affectState || "flow");
+  const scafMode = pol?.scaffoldingMode || "standard";
+  const maxWords = pol?.maxProseWords ?? 135;
+  const pfOn = Boolean(pol?.allowProductiveFailure);
+  const ov = prof?.userOverrides || {};
+
+  const top = document.createElement("div");
+  top.className = "row-between";
+  top.innerHTML = `
+    <div class="row">
+      <strong style="font-size:12px">Teaching Policy</strong>
+      <span class="badge badge-info">${escapeHtml(domInfo.name)} Elo ${escapeHtml(String(domInfo.elo))}</span>
+      <span class="badge ${aff.cls}">${escapeHtml(aff.label)}</span>
+    </div>
+    <span class="mono-tag">${escapeHtml(scafMode)} · &lt;=${escapeHtml(String(maxWords))}w · PF ${pfOn ? "on" : "off"}</span>
+  `;
+  strip.append(top);
+
+  const signalPills = [];
+  if (Array.isArray(state.pendingPins) && state.pendingPins.length > 0) {
+    signalPills.push(`<span class="badge badge-warning">${state.pendingPins.length} board pin${state.pendingPins.length === 1 ? "" : "s"}</span>`);
+  }
+  if (state.dueForksCount > 0) {
+    signalPills.push(`<span class="badge badge-danger">${state.dueForksCount} blunder fork${state.dueForksCount === 1 ? "" : "s"} due</span>`);
+  }
+  if (state.coldStartDays >= 4) {
+    signalPills.push(`<span class="badge badge-info">${state.coldStartDays}d away · calm re-entry</span>`);
+  }
+  if (signalPills.length > 0) {
+    const sigRow = document.createElement("div");
+    sigRow.className = "row";
+    sigRow.innerHTML = signalPills.join("");
+    strip.append(sigRow);
+  }
+
+  const controls = document.createElement("div");
+  controls.className = "policy-pills";
+  const scafChoices = [
+    { val: null, label: "Auto" },
+    { val: "worked_example_parsons", label: "Worked" },
+    { val: "faded", label: "Faded" },
+    { val: "standard", label: "Std" },
+    { val: "challenge_transfer", label: "Transfer" },
+  ];
+  for (const ch of scafChoices) {
+    const btn = document.createElement("button");
+    btn.type = "button";
+    const isActive = (ov.scaffoldingMode ?? null) === ch.val;
+    btn.className = `btn btn-sm policy-pill${isActive ? " btn-primary" : ""}`;
+    btn.disabled = state.profileBusy || (state.connected && !state.caps?.canCallTools);
+    btn.textContent = ch.label;
+    btn.title = ch.val ? `Override scaffoldingMode=${ch.val}` : "Auto Kalyuga Expertise-Reversal scaffolding";
+    btn.addEventListener("click", () => applyProfileOverride({ scaffoldingMode: ch.val }));
+    controls.append(btn);
+  }
+
+  const pfBtn = document.createElement("button");
+  pfBtn.type = "button";
+  const pfState = ov.allowProductiveFailure;
+  pfBtn.className = `btn btn-sm policy-pill${pfState !== null && pfState !== undefined ? " btn-info" : ""}`;
+  pfBtn.disabled = state.profileBusy || (state.connected && !state.caps?.canCallTools);
+  pfBtn.textContent =
+    pfState === true ? "PF: On" : pfState === false ? "PF: Off" : "PF: Auto";
+  pfBtn.title = "Cycle Productive Failure override (Auto -> On -> Off)";
+  pfBtn.addEventListener("click", () => {
+    const nextVal = pfState === null || pfState === undefined ? true : pfState === true ? false : null;
+    applyProfileOverride({ allowProductiveFailure: nextVal });
+  });
+  controls.append(pfBtn);
+
+  strip.append(controls);
+  container.append(strip);
+}
+
 function renderAutopilotTab(container) {
   const tracker = state.activeChapter || state.chapterTrackers.find((t) => t.active) || null;
 
@@ -504,6 +638,8 @@ function renderAutopilotTab(container) {
     container.append(warn);
   }
 
+  renderPolicyStrip(container, tracker);
+
   if (!tracker) {
     const empty = document.createElement("div");
     empty.className = "empty-state";
@@ -515,7 +651,7 @@ function renderAutopilotTab(container) {
       box.className = "list-item";
       box.innerHTML = `<strong style="font-size:12px">Saved Chapter Trackers (${state.chapterTrackers.length})</strong>` +
         state.chapterTrackers
-          .map((t) => `<div class="row-between"><span>${escapeHtml(t.title)} <span class="subtle">(${escapeHtml(t.subject)})</span></span><span class="badge">${t.pct}%</span></div>`)
+          .map((t) => `<div class="row-between"><span>${escapeHtml(t.title)} <span class="subtle">(${escapeHtml(t.subject)})</span></span><span class="badge">${escapeHtml(String(t.pct ?? 0))}%</span></div>`)
           .join("");
       container.append(box);
     }
@@ -530,8 +666,8 @@ function renderAutopilotTab(container) {
   topMeta.innerHTML = `
     <div class="row">
       <span class="badge badge-info">${escapeHtml(tracker.subject || "General")}</span>
-      <span class="badge badge-success">${tracker.pct ?? 0}%</span>
-      ${tracker.doubtCount > 0 ? `<span class="badge badge-warning">${tracker.doubtCount} doubt${tracker.doubtCount === 1 ? "" : "s"}</span>` : ""}
+      <span class="badge badge-success">${escapeHtml(String(tracker.pct ?? 0))}%</span>
+      ${Number(tracker.doubtCount) > 0 ? `<span class="badge badge-warning">${Number(tracker.doubtCount)} doubt${Number(tracker.doubtCount) === 1 ? "" : "s"}</span>` : ""}
     </div>
     <span class="mono-tag">${escapeHtml(tracker.slug)}</span>
   `;
@@ -915,6 +1051,49 @@ function extractOcclusionSpec(card) {
   };
 }
 
+function isSafeOcclusionDataUri(raw) {
+  const s = String(raw || "").trim().replace(/\s+/gu, "");
+  if (!s) return "";
+  if (/^data:image\/(?:png|jpeg|jpg|webp|gif);base64,[A-Za-z0-9+/=]+$/iu.test(s)) {
+    return s;
+  }
+  const svgMatch = /^data:image\/svg\+xml;base64,([A-Za-z0-9+/=]+)$/iu.exec(s);
+  if (svgMatch) {
+    try {
+      const decoded = typeof atob === "function" ? atob(svgMatch[1]) : "";
+      const decodedNoNs = decoded.replace(
+        /\bxmlns(?::xlink)?\s*=\s*(?:"http:\/\/www\.w3\.org\/(?:2000\/svg|1999\/xlink)"|'http:\/\/www\.w3\.org\/(?:2000\/svg|1999\/xlink)')/giu,
+        ""
+      );
+      if (
+        decoded &&
+        /<svg\b/iu.test(decoded) &&
+        !/<(?:script|foreignObject|iframe|object|embed)\b/iu.test(decoded) &&
+        !/\bon[a-z]+\s*=/iu.test(decoded) &&
+        !/(?:javascript:|vbscript:|https?:\/\/)/iu.test(decodedNoNs)
+      ) {
+        return s;
+      }
+    } catch {
+      return "";
+    }
+  }
+  return "";
+}
+
+function resolveSafeOcclusionImageHref(occSpec) {
+  if (!occSpec || typeof occSpec !== "object") return "";
+  if (occSpec.dataUri) {
+    const safeData = isSafeOcclusionDataUri(occSpec.dataUri);
+    if (safeData) return safeData;
+  }
+  if (occSpec.src) {
+    const safeData = isSafeOcclusionDataUri(occSpec.src);
+    if (safeData) return safeData;
+  }
+  return "";
+}
+
 function renderOcclusionWidget(occSpec) {
   const wrap = document.createElement("div");
   wrap.className = "io-stage";
@@ -951,11 +1130,12 @@ function renderOcclusionWidget(occSpec) {
   bar.append(info, toggleAllBtn);
   wrap.append(bar);
 
-  const hasBgImage = Boolean(occSpec.dataUri);
+  const safeImgHref = resolveSafeOcclusionImageHref(occSpec);
+  const hasBgImage = Boolean(safeImgHref);
   const svgParts = [];
   if (hasBgImage) {
     svgParts.push(
-      `<image href="${escapeHtml(occSpec.dataUri)}" x="0" y="0" width="${W}" height="${H}" preserveAspectRatio="xMidYMid meet" />`
+      `<image href="${escapeHtml(safeImgHref)}" x="0" y="0" width="${W}" height="${H}" preserveAspectRatio="xMidYMid meet" />`
     );
   } else {
     svgParts.push(
@@ -1338,6 +1518,12 @@ function applyStatePayload(sc, allowTabSwitch = true) {
   }
   if (Array.isArray(sc.chapterTrackers)) state.chapterTrackers = sc.chapterTrackers;
   if ("activeChapter" in sc) state.activeChapter = sc.activeChapter || null;
+  if (sc.learnerProfile && typeof sc.learnerProfile === "object") state.learnerProfile = sc.learnerProfile;
+  if (sc.teachingPolicy && typeof sc.teachingPolicy === "object") state.teachingPolicy = sc.teachingPolicy;
+  if (Array.isArray(sc.pendingPins)) state.pendingPins = sc.pendingPins;
+  if (typeof sc.dueForksCount === "number") state.dueForksCount = sc.dueForksCount;
+  if (typeof sc.arenasCount === "number") state.arenasCount = sc.arenasCount;
+  if (typeof sc.coldStartDays === "number") state.coldStartDays = sc.coldStartDays;
   if (Array.isArray(sc.propositions)) state.propositions = sc.propositions;
   if (Array.isArray(sc.chains)) state.chains = sc.chains;
   if (Array.isArray(sc.flashcards)) state.flashcards = sc.flashcards;

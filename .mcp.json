@@ -4,8 +4,7 @@
       "type": "stdio",
       "command": "node",
       "args": [
-        "${CLAUDE_PLUGIN_ROOT:-.}/mcp-app/mlh-studio/dist/server.mjs",
-        "--workspace=${CLAUDE_PROJECT_DIR:-.}"
+        "./mcp-app/mlh-studio/dist/server.mjs"
       ]
     }
   }

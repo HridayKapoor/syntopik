@@ -41,7 +41,7 @@ def _silence_stdout():
     sys_stdout = io.StringIO()
     saved_fd = os.dup(1)
     try:
-        with open(os.devnull, "w") as devnull:
+        with open(os.devnull, "w", encoding="utf-8") as devnull:
             os.dup2(devnull.fileno(), 1)
             with contextlib.redirect_stdout(sys_stdout):
                 yield

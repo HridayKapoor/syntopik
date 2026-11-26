@@ -89,6 +89,239 @@ function writeJsonlAtomic(filePath, rows) {
   fs.renameSync(tmp, filePath);
 }
 
+function readJsonSafe(filePath, fallback = null) {
+  try {
+    if (!fs.existsSync(filePath)) return fallback;
+    const parsed = JSON.parse(fs.readFileSync(filePath, "utf8"));
+    return parsed && typeof parsed === "object" ? parsed : fallback;
+  } catch {
+    return fallback;
+  }
+}
+
+function writeJsonAtomic(filePath, data) {
+  fs.mkdirSync(path.dirname(filePath), { recursive: true });
+  const tmp = path.join(
+    path.dirname(filePath),
+    `.${path.basename(filePath)}.${process.pid}.${crypto.randomBytes(4).toString("hex")}.tmp`
+  );
+  fs.writeFileSync(tmp, `${JSON.stringify(data, null, 2)}\n`, "utf8");
+  fs.renameSync(tmp, filePath);
+}
+
+function buildPythonEnv(workspaceRoot) {
+  const pkgRoot = resolvePackageRoot();
+  const roots = [pkgRoot];
+  if (workspaceRoot && fs.existsSync(path.join(workspaceRoot, "syntopik"))) {
+    roots.unshift(path.resolve(workspaceRoot));
+  }
+  const existing = process.env.PYTHONPATH || "";
+  const uniqueRoots = [...new Set(roots.filter(Boolean))];
+  return {
+    ...process.env,
+    PYTHONDONTWRITEBYTECODE: "1",
+    PYTHONPATH: existing ? `${uniqueRoots.join(path.delimiter)}${path.delimiter}${existing}` : uniqueRoots.join(path.delimiter),
+  };
+}
+
+function eloToBand(elo) {
+  const v = Number(elo) || 1450;
+  if (v < 1250) return "novice";
+  if (v < 1450) return "developing";
+  if (v < 1700) return "intermediate";
+  return "advanced";
+}
+
+function computeColdStartDays(profile, revlog, mistakes) {
+  let latestMs = null;
+  const consider = (tsVal) => {
+    if (typeof tsVal !== "string" || !tsVal.trim()) return;
+    const parsed = Date.parse(tsVal.trim().length === 10 ? `${tsVal.trim()}T12:00:00Z` : tsVal.trim());
+    if (Number.isFinite(parsed) && (latestMs === null || parsed > latestMs)) {
+      latestMs = parsed;
+    }
+  };
+  consider(profile?.affectiveState?.lastEventAt);
+  for (const ev of (Array.isArray(profile?.recentEvents) ? profile.recentEvents : []).slice(-5)) {
+    consider(ev?.ts);
+  }
+  for (const r of revlog.slice(-10)) {
+    consider(r?.ts || r?.reviewedAt || r?.date);
+  }
+  for (const m of mistakes.slice(-5)) {
+    consider(m?.ts || m?.date);
+  }
+  if (latestMs === null) return 0;
+  return Math.max(0, Math.floor((Date.now() - latestMs) / 86400000));
+}
+
+function loadWhiteboardPendingPins(kgDir) {
+  const wb = readJsonSafe(path.join(kgDir, "whiteboard-session.json"), null);
+  if (!wb || !Array.isArray(wb.pins)) return [];
+  return wb.pins
+    .filter((p) => p && typeof p === "object" && !p.resolved)
+    .map((p, idx) => ({
+      id: String(p.id || `pin-${idx + 1}`),
+      frameId: p.frameId || null,
+      stepIndex: typeof p.stepIndex === "number" ? p.stepIndex : 0,
+      note: String(p.note || "").trim().slice(0, 140),
+      createdAt: p.createdAt || null,
+    }));
+}
+
+function loadDueForksSummary(kgDir, today) {
+  const forks = readJsonl(path.join(kgDir, "forks.jsonl"));
+  const due = forks
+    .filter((f) => {
+      const st = String(f.status || "due").toLowerCase();
+      if (st === "archived" || st === "mastered" || st === "retired") return false;
+      const nr = typeof f.nextReview === "string" ? f.nextReview.slice(0, 10) : null;
+      return !nr || nr <= today || st === "due";
+    })
+    .map((f) => ({
+      id: String(f.id || ""),
+      propId: f.propId || null,
+      domain: f.domain || f.subject || "General",
+      chapter: f.chapter || "",
+      status: f.status || "due",
+      nextReview: f.nextReview || null,
+    }))
+    .filter((f) => f.id);
+  return { dueForks: due.slice(0, 5), dueForksCount: due.length, totalForks: forks.length };
+}
+
+function loadArenasSummary(kgDir) {
+  const arenas = readJsonl(path.join(kgDir, "arenas.jsonl"));
+  const openArenasCount = arenas.filter(
+    (a) => !["cleared", "passed", "archived"].includes(String(a.status || "open").toLowerCase())
+  ).length;
+  return { arenasCount: arenas.length, openArenasCount };
+}
+
+function buildPolicyFallbackFromProfile(profile, domain = null) {
+  const cal = profile?.calibration || {};
+  const ov = profile?.userOverrides || {};
+  const gs = profile?.globalStats || {};
+  const aff = profile?.affectiveState || {};
+  const affectState = String(aff.state || "flow");
+  const domainsMap = profile?.domains && typeof profile.domains === "object" ? profile.domains : {};
+  const domKey = domain && domainsMap[domain] ? domain : Object.keys(domainsMap)[0] || domain || "General";
+  const domElo = Number(domainsMap[domKey]?.elo ?? gs.elo ?? 1450);
+
+  let scaffoldingMode = "standard";
+  if (affectState === "overloaded_frustrated") {
+    scaffoldingMode = "worked_example_parsons";
+  } else if (domElo < 1300) {
+    scaffoldingMode = "worked_example_parsons";
+  } else if (domElo < 1500) {
+    scaffoldingMode = "faded";
+  } else if (domElo >= 1700) {
+    scaffoldingMode = "challenge_transfer";
+  }
+  if (typeof ov.scaffoldingMode === "string" && ov.scaffoldingMode) {
+    scaffoldingMode = ov.scaffoldingMode;
+  }
+
+  const densityWords = { terse: 105, standard: 135, rich: 155 };
+  let maxProseWords = densityWords[cal.proseDensity] || 135;
+  if (affectState === "fatigued" || affectState === "overloaded_frustrated") {
+    maxProseWords = Math.min(maxProseWords, 110);
+  }
+  if (typeof ov.maxProseWords === "number" && Number.isFinite(ov.maxProseWords)) {
+    maxProseWords = Math.max(60, Math.min(160, Math.round(ov.maxProseWords)));
+  }
+
+  const allowWorkedExample = scaffoldingMode === "worked_example_parsons" || scaffoldingMode === "faded";
+  let allowProductiveFailure =
+    affectState !== "overloaded_frustrated" && affectState !== "fatigued" && domElo >= 1350;
+  if (typeof ov.allowProductiveFailure === "boolean") {
+    allowProductiveFailure = ov.allowProductiveFailure;
+  }
+
+  return {
+    domain: domKey,
+    scaffoldingMode,
+    allowWorkedExample,
+    allowProductiveFailure,
+    maxProseWords,
+    targetSuccessRate: Number(cal.targetSuccessRate ?? 0.85),
+    requirePredictionFirst: affectState === "gaming_rushing" || domElo >= 1450,
+    affectState,
+    affectIntervention:
+      affectState === "overloaded_frustrated"
+        ? "step_down_worked_bridge"
+        : affectState === "fatigued"
+          ? "offer_calm_wrapup"
+          : affectState === "gaming_rushing"
+            ? "require_1line_why"
+            : affectState === "bored_underchallenged"
+              ? "accelerate_transfer"
+              : "none",
+  };
+}
+
+export function loadLearnerProfileSummary(workspaceRoot, kgDir, domain = null) {
+  const raw = readJsonSafe(path.join(kgDir, "learner-profile.json"), null);
+  const domainsOut = {};
+  if (raw?.domains && typeof raw.domains === "object") {
+    for (const [domName, info] of Object.entries(raw.domains)) {
+      if (!info || typeof info !== "object") continue;
+      const elo = Math.round(Number(info.elo ?? 1450));
+      domainsOut[domName] = {
+        elo,
+        band: info.expertiseBand || eloToBand(elo),
+        events: Number(info.events ?? info.n ?? 0),
+      };
+    }
+  }
+  const globalElo = Math.round(Number(raw?.globalStats?.elo ?? 1450));
+  const affectState = String(raw?.affectiveState?.state || "flow");
+  const learnerProfile = {
+    exists: Boolean(raw),
+    calibrated: Boolean(raw?.calibration?.completed),
+    globalElo,
+    globalBand: eloToBand(globalElo),
+    totalEvents: Number(raw?.globalStats?.totalEvents ?? 0),
+    affectState,
+    domains: domainsOut,
+    failureDna: raw?.failureDna || null,
+    userOverrides: {
+      scaffoldingMode: raw?.userOverrides?.scaffoldingMode ?? null,
+      allowProductiveFailure:
+        typeof raw?.userOverrides?.allowProductiveFailure === "boolean"
+          ? raw.userOverrides.allowProductiveFailure
+          : null,
+      maxProseWords:
+        typeof raw?.userOverrides?.maxProseWords === "number"
+          ? raw.userOverrides.maxProseWords
+          : null,
+    },
+    calibration: {
+      entryRamp: raw?.calibration?.entryRamp || "balanced",
+      challengeAppetite: raw?.calibration?.challengeAppetite || "balanced",
+      proseDensity: raw?.calibration?.proseDensity || "standard",
+      sessionTargetMinutes: Number(raw?.calibration?.sessionTargetMinutes ?? 30),
+    },
+  };
+
+  const compiled =
+    raw?.compiledPolicy && typeof raw.compiledPolicy === "object"
+      ? {
+          domain: domain || raw.compiledPolicy.domain || "General",
+          scaffoldingMode: raw.compiledPolicy.scaffoldingMode || "standard",
+          allowWorkedExample: Boolean(raw.compiledPolicy.allowWorkedExample),
+          allowProductiveFailure: Boolean(raw.compiledPolicy.allowProductiveFailure),
+          maxProseWords: Number(raw.compiledPolicy.maxProseWords ?? 135),
+          targetSuccessRate: Number(raw.compiledPolicy.targetSuccessRate ?? 0.85),
+          requirePredictionFirst: Boolean(raw.compiledPolicy.requirePredictionFirst),
+          affectState: raw.compiledPolicy.affectState || affectState,
+          affectIntervention: raw.compiledPolicy.affectIntervention || "none",
+        }
+      : buildPolicyFallbackFromProfile(raw, domain);
+
+  return { rawProfile: raw, learnerProfile, teachingPolicy: compiled };
+}
+
 function appendJsonlSafe(filePath, obj) {
   fs.mkdirSync(path.dirname(filePath), { recursive: true });
   fs.appendFileSync(filePath, `${JSON.stringify(obj)}\n`, "utf8");
@@ -632,6 +865,15 @@ export function loadWorkspaceState(workspaceRoot, section = "all") {
 
   const { chapterTrackers, activeChapter } = loadChapterTrackers(workspaceRoot);
   const calibration = computeCalibrationSummary(revlog);
+  const { rawProfile, learnerProfile, teachingPolicy } = loadLearnerProfileSummary(
+    workspaceRoot,
+    kgDir,
+    activeChapter?.subject || null
+  );
+  const pendingPins = loadWhiteboardPendingPins(kgDir);
+  const { dueForksCount } = loadDueForksSummary(kgDir, today);
+  const { arenasCount, openArenasCount } = loadArenasSummary(kgDir);
+  const coldStartDays = computeColdStartDays(rawProfile, revlog, mistakes);
 
   const stats = {
     today,
@@ -647,12 +889,23 @@ export function loadWorkspaceState(workspaceRoot, section = "all") {
     activeChapterPct: activeChapter ? activeChapter.pct : null,
     activeChapterSlug: activeChapter ? activeChapter.slug : null,
     brierScore: calibration.brierScore,
+    dueForksCount,
+    arenasCount,
+    openArenasCount,
+    coldStartDays,
+    pendingPinsCount: pendingPins.length,
   };
 
   const payload = {
     workspaceName: path.basename(workspaceRoot),
     stats,
     calibration,
+    learnerProfile,
+    teachingPolicy,
+    pendingPins,
+    dueForksCount,
+    arenasCount,
+    coldStartDays,
   };
 
   if (section === "all" || section === "autopilot") {
@@ -760,7 +1013,10 @@ function findSimilarFallbackJs(props, query) {
   return hits.slice(0, 3);
 }
 
-export function rateFlashcard(workspaceRoot, { propId, rating, cueId, misconception, confidence, durationMs }) {
+export function rateFlashcard(
+  workspaceRoot,
+  { propId, rating, cueId, misconception, confidence, durationMs, hintsUsed }
+) {
   const cleanId = typeof propId === "string" ? propId.trim() : "";
   const cleanRating = typeof rating === "string" ? rating.trim().toLowerCase() : "";
   if (!cleanId || !/^[A-Za-z0-9._:/-]+$/.test(cleanId)) {
@@ -783,8 +1039,12 @@ export function rateFlashcard(workspaceRoot, { propId, rating, cueId, misconcept
     typeof durationMs === "number" && Number.isFinite(durationMs) && durationMs >= 0
       ? Math.round(durationMs)
       : null;
+  const cleanHints =
+    typeof hintsUsed === "number" && Number.isFinite(hintsUsed) && hintsUsed >= 0
+      ? Math.max(0, Math.min(5, Math.round(hintsUsed)))
+      : null;
 
-  const buildArgs = ({ includeCue, includeV2Flags }) => {
+  const buildArgs = ({ includeCue, includeV2Flags, includeHints }) => {
     const argv = ["-B", srsScript, "--kg-dir", kgDir, "review", cleanId, "--rating", cleanRating, "--no-sync"];
     if (includeCue && typeof cueId === "string" && cueId.trim()) {
       argv.push("--cue-id", cueId.trim());
@@ -798,13 +1058,18 @@ export function rateFlashcard(workspaceRoot, { propId, rating, cueId, misconcept
     if (includeV2Flags && cleanDur !== null) {
       argv.push("--duration-ms", String(cleanDur));
     }
+    if (includeV2Flags && includeHints && cleanHints !== null) {
+      argv.push("--hints", String(cleanHints));
+    }
     return argv;
   };
 
+  const pyEnv = buildPythonEnv(workspaceRoot);
   let stdout;
   try {
-    stdout = execFileSync(pythonBin, buildArgs({ includeCue: true, includeV2Flags: true }), {
+    stdout = execFileSync(pythonBin, buildArgs({ includeCue: true, includeV2Flags: true, includeHints: true }), {
       cwd: fs.existsSync(workspaceRoot) ? workspaceRoot : process.cwd(),
+      env: pyEnv,
       encoding: "utf8",
       timeout: 15000,
     });
@@ -812,12 +1077,18 @@ export function rateFlashcard(workspaceRoot, { propId, rating, cueId, misconcept
     const stderr = String(err?.stderr || err?.message || "");
     if (stderr.includes("unrecognized arguments")) {
       const retryIncludeCue = !(cueId && stderr.includes("--cue-id"));
+      const retryIncludeV2 = !stderr.includes("--confidence") && !stderr.includes("--duration-ms");
       try {
-        stdout = execFileSync(pythonBin, buildArgs({ includeCue: retryIncludeCue, includeV2Flags: false }), {
-          cwd: fs.existsSync(workspaceRoot) ? workspaceRoot : process.cwd(),
-          encoding: "utf8",
-          timeout: 15000,
-        });
+        stdout = execFileSync(
+          pythonBin,
+          buildArgs({ includeCue: retryIncludeCue, includeV2Flags: retryIncludeV2, includeHints: false }),
+          {
+            cwd: fs.existsSync(workspaceRoot) ? workspaceRoot : process.cwd(),
+            env: pyEnv,
+            encoding: "utf8",
+            timeout: 15000,
+          }
+        );
       } catch (retryErr) {
         return { ok: false, error: `srs_engine.py failed: ${String(retryErr?.stderr || retryErr?.message || retryErr)}` };
       }
@@ -1224,6 +1495,16 @@ export function getFrontier(workspaceRoot, { limit = 10, compress = true } = {})
   }).length;
   const readingQueueDueCount = readingQueue.filter((r) => String(r.stage || "queued") !== "crystallized").length;
 
+  const { rawProfile, learnerProfile, teachingPolicy } = loadLearnerProfileSummary(
+    workspaceRoot,
+    kgDir,
+    activeChapter?.subject || null
+  );
+  const { dueForks, dueForksCount } = loadDueForksSummary(kgDir, today);
+  const { arenasCount, openArenasCount } = loadArenasSummary(kgDir);
+  const coldStartDays = computeColdStartDays(rawProfile, revlog, mistakes);
+  const pendingPins = loadWhiteboardPendingPins(kgDir);
+
   return {
     ok: true,
     today,
@@ -1238,6 +1519,14 @@ export function getFrontier(workspaceRoot, { limit = 10, compress = true } = {})
     calibration,
     leechesCount,
     readingQueueDueCount,
+    learnerProfile,
+    teachingPolicy,
+    dueForks,
+    dueForksCount,
+    arenasCount,
+    openArenasCount,
+    coldStartDays,
+    pendingPins,
     stats: {
       totalPropositions: propositions.length,
       totalChains: chains.length,
@@ -1247,7 +1536,10 @@ export function getFrontier(workspaceRoot, { limit = 10, compress = true } = {})
   };
 }
 
-export function logReview(workspaceRoot, { propId, rating, confidence, cueId, misconception, durationMs }) {
+export function logReview(
+  workspaceRoot,
+  { propId, rating, confidence, cueId, misconception, durationMs, hintsUsed }
+) {
   const kgDir = resolveKgDir(workspaceRoot);
   const revlogPath = path.join(kgDir, "revlog.jsonl");
   const beforeSize = fs.existsSync(revlogPath) ? fs.statSync(revlogPath).size : 0;
@@ -1259,11 +1551,16 @@ export function logReview(workspaceRoot, { propId, rating, confidence, cueId, mi
     misconception,
     confidence,
     durationMs,
+    hintsUsed,
   });
   if (!rated.ok) return rated;
 
   const normConf = normalizeConfidence(confidence);
   const cleanRating = String(rating || "").trim().toLowerCase();
+  const cleanHints =
+    typeof hintsUsed === "number" && Number.isFinite(hintsUsed) && hintsUsed >= 0
+      ? Math.max(0, Math.min(5, Math.round(hintsUsed)))
+      : 0;
   const correct = cleanRating === "good" || cleanRating === "easy";
   const hypercorrection = Boolean(
     rated.result?.hypercorrection || (normConf !== null && normConf >= 0.75 && !correct)
@@ -1280,6 +1577,7 @@ export function logReview(workspaceRoot, { propId, rating, confidence, cueId, mi
         ts: new Date().toISOString(),
         rating: cleanRating,
         correct,
+        hintsUsed: cleanHints,
         ...(normConf !== null ? { learnerConfidence: normConf } : {}),
         ...(typeof durationMs === "number" && Number.isFinite(durationMs)
           ? { durationMs: Math.round(durationMs) }
@@ -1302,6 +1600,7 @@ export function logReview(workspaceRoot, { propId, rating, confidence, cueId, mi
     difficulty: rated.result?.difficulty ?? null,
     bktMastery: rated.result?.bktMastery ?? null,
     nextReview: rated.result?.nextReview || null,
+    hintsUsed: cleanHints,
     fireCredits: rated.result?.fireCredits || [],
     fireRefreshedCount: rated.result?.fireRefreshedCount || 0,
     fireSummary: rated.result?.fireSummary || null,
@@ -1309,6 +1608,449 @@ export function logReview(workspaceRoot, { propId, rating, confidence, cueId, mi
     revlogAppended,
     synced: rated.synced,
   };
+}
+
+export function planNextMove(workspaceRoot, { energy, domain, event } = {}) {
+  const pyBin = resolvePythonBin(workspaceRoot);
+  const pyCode = [
+    "import json, sys",
+    "from syntopik.brainstem import plan_next_move",
+    "req = json.loads(sys.stdin.read() or '{}')",
+    "res = plan_next_move(req.get('workspace'), event=req.get('event'), energy=req.get('energy'), domain=req.get('domain'))",
+    "print(json.dumps(res, ensure_ascii=False))",
+  ].join("\n");
+
+  try {
+    const out = execFileSync(pyBin, ["-B", "-c", pyCode], {
+      cwd: fs.existsSync(workspaceRoot) ? workspaceRoot : process.cwd(),
+      env: buildPythonEnv(workspaceRoot),
+      input: JSON.stringify({
+        workspace: workspaceRoot,
+        energy: energy ?? null,
+        domain: domain ?? null,
+        event: event ?? null,
+      }),
+      encoding: "utf8",
+      timeout: 12000,
+    });
+    const parsed = JSON.parse(out);
+    if (parsed && typeof parsed === "object" && parsed.ok) {
+      return parsed;
+    }
+  } catch {
+    // Pure-Node fallback below
+  }
+
+  const kgDir = resolveKgDir(workspaceRoot);
+  const today = new Date().toISOString().slice(0, 10);
+  const propositions = readJsonl(path.join(kgDir, "propositions.jsonl"));
+  const chains = readJsonl(path.join(kgDir, "chains.jsonl"));
+  const revlog = readJsonl(path.join(kgDir, "revlog.jsonl"));
+  const mistakes = readJsonl(path.join(kgDir, "mistakes.jsonl"));
+  const { activeChapter } = loadChapterTrackers(workspaceRoot);
+  const effDomain = domain || activeChapter?.subject || null;
+  const { rawProfile, learnerProfile, teachingPolicy } = loadLearnerProfileSummary(
+    workspaceRoot,
+    kgDir,
+    effDomain
+  );
+  const pendingPins = loadWhiteboardPendingPins(kgDir).slice(0, 3);
+  const coldStartDays = computeColdStartDays(rawProfile, revlog, mistakes);
+  const { dueForks, dueForksCount } = loadDueForksSummary(kgDir, today);
+  const { openArenasCount } = loadArenasSummary(kgDir);
+
+  const rawDue = propositions
+    .filter((p) => {
+      if (p.archived || p.suspended) return false;
+      const st = String(p.status || "planned");
+      const nr = typeof p.nextReview === "string" ? p.nextReview : null;
+      return st === "misconception" || st === "shaky" || (nr !== null && nr <= today);
+    })
+    .map((p) => ({
+      id: p.id,
+      title: p.title || p.id,
+      status: p.status || "planned",
+      nextReview: p.nextReview || null,
+    }));
+  const comp = compressDueItemsJs(rawDue, chains);
+  const dueSelected = comp.items;
+
+  const alerts = [];
+  if (coldStartDays >= 4) alerts.push(`${coldStartDays}d away: calm re-entry`);
+  if (dueForksCount > 0) alerts.push(`${dueForksCount} blunder fork(s) due`);
+  if (openArenasCount > 0) alerts.push(`${openArenasCount} open arena(s)`);
+
+  let recommendedMode = "teach_frontier";
+  let targetNodeId = null;
+  let rationale = "Workspace clear; drop sources or start a new chapter.";
+  let exactCmd = "syntopik drop <source>";
+  let skillHint = "topic-onboarding";
+  let whiteboardHint = "Ready for new topic scope or derivation frame.";
+
+  const skipCal = event === "skip_calibration" || Boolean(event && typeof event === "object" && event.skipCalibration);
+  if (pendingPins.length > 0) {
+    const p0 = pendingPins[0];
+    recommendedMode = "whiteboard_pin_answer";
+    rationale = `Learner pinned whiteboard step ${p0.stepIndex}: ${p0.note}`.slice(0, 130);
+    exactCmd = "syntopik board status --json";
+    skillHint = "teach-chapter";
+    whiteboardHint = `Resolve pin ${p0.id} directly on step ${p0.stepIndex} before advancing.`;
+  } else if (learnerProfile.totalEvents === 0 && !learnerProfile.calibrated && !skipCal) {
+    recommendedMode = "onboarding_calibration";
+    rationale = "First-time uncalibrated learner; offer optional 2-min non-VARK calibration (skippable).";
+    exactCmd = "syntopik profile calibrate --json";
+    skillHint = "topic-onboarding";
+    whiteboardHint = "Optional onboarding card (entryRamp, challengeAppetite, domainFluency).";
+  } else if (coldStartDays >= 4) {
+    recommendedMode = "cold_start_reentry";
+    targetNodeId = dueSelected[0]?.id || null;
+    rationale = `${coldStartDays} days away; serve guilt-free re-entry brief & 1 anchor recall.`;
+    exactCmd = "syntopik review --recover --daily-cap 15";
+    skillHint = "knowledge-graph";
+    whiteboardHint = "Push 1 calm anchor summary frame; zero backlog guilt.";
+  } else if (learnerProfile.affectState === "fatigued") {
+    recommendedMode = "calm_wrapup";
+    targetNodeId = dueSelected[0]?.id || null;
+    rationale = "Session fatigue cliff detected; run 1 low-energy consolidation & offer guilt-free stop.";
+    exactCmd = "syntopik review --energy low";
+    skillHint = "chapter-autopilot";
+    whiteboardHint = "Push concise summary frame and close session cleanly.";
+  } else if (learnerProfile.affectState === "overloaded_frustrated") {
+    recommendedMode = "bridge_worked_example";
+    targetNodeId = dueSelected[0]?.id || null;
+    rationale = "Overload streak detected; step down scaffolding to <=5-step worked bridge.";
+    exactCmd = "syntopik profile policy --json";
+    skillHint = "teach-chapter";
+    whiteboardHint = "Push step-by-step worked micro-example frame (<=110w prose).";
+  } else if (dueForks.length > 0) {
+    recommendedMode = "fork_replay";
+    targetNodeId = dueForks[0].propId || dueForks[0].id;
+    rationale = `Due Blunder Fork '${dueForks[0].id}' ready for mutated Woodpecker replay.`;
+    exactCmd = "syntopik run fork_replay due --json";
+    skillHint = "practice-drill";
+    whiteboardHint = `Load Blunder Fork '${dueForks[0].id}' pre-blunder FEN frame.`;
+  } else if (dueSelected.length > 0) {
+    recommendedMode = "fire_review";
+    targetNodeId = dueSelected[0].id;
+    rationale = `Due FIRe/SRC review '${dueSelected[0].id}' (${dueSelected[0].status}).`;
+    exactCmd = "syntopik review --json";
+    skillHint = "knowledge-graph";
+    whiteboardHint = `Push cold-recall prediction_gate for '${dueSelected[0].id}'.`;
+  } else if (activeChapter) {
+    const nextTopic = (activeChapter.topics || []).find((t) => t.status !== "mastered");
+    targetNodeId = nextTopic?.propIds?.[0] || nextTopic?.id || null;
+    rationale = `Teach frontier topic '${String(nextTopic?.title || activeChapter.title).slice(0, 44)}' via ${teachingPolicy.scaffoldingMode}.`;
+    exactCmd = `syntopik run chapter_tracker next --slug ${activeChapter.slug}`;
+    skillHint = "teach-chapter";
+    whiteboardHint = `Push derivation_step for '${targetNodeId || activeChapter.slug}'.`;
+  }
+
+  return {
+    ok: true,
+    recommendedMode,
+    targetNodeId,
+    chapterSlug: activeChapter?.slug || null,
+    rationale,
+    teachingPolicy,
+    policyConstraints: [`<= ${teachingPolicy.maxProseWords}w prose; 1 demand/turn`],
+    exactCmd,
+    skillHint,
+    whiteboardHint,
+    pendingPins,
+    alerts: alerts.slice(0, 3),
+  };
+}
+
+export function pushWhiteboardStep(workspaceRoot, stepArgs) {
+  const kgDir = resolveKgDir(workspaceRoot);
+  fs.mkdirSync(kgDir, { recursive: true });
+  const pyBin = resolvePythonBin(workspaceRoot);
+
+  const frameSpec = {
+    ...(stepArgs.id ? { id: stepArgs.id } : {}),
+    kind: stepArgs.kind,
+    title: stepArgs.title,
+    body: stepArgs.body || "",
+    ...(stepArgs.latex ? { latex: stepArgs.latex } : {}),
+    ...(stepArgs.propId ? { propId: stepArgs.propId } : {}),
+    ...(stepArgs.stepIndex !== undefined ? { stepIndex: stepArgs.stepIndex } : {}),
+    locked: stepArgs.locked,
+    ...(stepArgs.prompt ? { prompt: stepArgs.prompt } : {}),
+    ...(stepArgs.revealedBody ? { revealedBody: stepArgs.revealedBody } : {}),
+    ...(stepArgs.expectedAnswer !== undefined ? { expectedAnswer: stepArgs.expectedAnswer } : {}),
+    ...(stepArgs.gate ? { gate: stepArgs.gate } : {}),
+    payload: stepArgs.payload || {},
+    ...(stepArgs.sessionTitle ? { sessionTitle: stepArgs.sessionTitle } : {}),
+  };
+
+  const pyCode = [
+    "import json, sys",
+    "from syntopik.whiteboard import push_frame, resolve_pin, get_session",
+    "req = json.loads(sys.stdin.read() or '{}')",
+    "kg_dir = req['kgDir']",
+    "if req.get('resolvePinId'):",
+    "    try:",
+    "        resolve_pin(kg_dir, req['resolvePinId'], resolution=req.get('resolution'))",
+    "    except KeyError:",
+    "        pass",
+    "pushed = push_frame(kg_dir, req['frame'])",
+    "sess = pushed.get('session') or get_session(kg_dir)",
+    "fr = pushed.get('frame') or {}",
+    "out = {",
+    "    'ok': True,",
+    "    'revision': pushed.get('revision', sess.get('revision', 0)),",
+    "    'frameId': fr.get('id'),",
+    "    'kind': fr.get('kind'),",
+    "    'title': fr.get('title'),",
+    "    'stepIndex': fr.get('stepIndex'),",
+    "    'locked': bool(fr.get('locked')),",
+    "    'frameCount': sess.get('frameCount', len(sess.get('frames') or [])),",
+    "    'pendingPins': sess.get('pendingPins') or [],",
+    "    'pendingPinCount': sess.get('pendingPinCount', 0),",
+    "}",
+    "print(json.dumps(out, ensure_ascii=False))",
+  ].join("\n");
+
+  try {
+    const out = execFileSync(pyBin, ["-B", "-c", pyCode], {
+      cwd: fs.existsSync(workspaceRoot) ? workspaceRoot : process.cwd(),
+      env: buildPythonEnv(workspaceRoot),
+      input: JSON.stringify({
+        kgDir,
+        frame: frameSpec,
+        resolvePinId: stepArgs.resolvePinId || null,
+        resolution: stepArgs.resolution || null,
+      }),
+      encoding: "utf8",
+      timeout: 12000,
+    });
+    const parsed = JSON.parse(out);
+    if (parsed && parsed.ok) {
+      return parsed;
+    }
+  } catch {
+    // Pure-Node atomic fallback matching syntopik/whiteboard.py schema
+  }
+
+  const wbPath = path.join(kgDir, "whiteboard-session.json");
+  const nowIso = new Date().toISOString();
+  const prev = readJsonSafe(wbPath, null);
+  const session =
+    prev && typeof prev === "object"
+      ? {
+          schemaVersion: 1,
+          sessionId: String(prev.sessionId || `wb-${crypto.randomBytes(4).toString("hex")}`),
+          revision: Number(prev.revision || 0),
+          title: String(prev.title || ""),
+          activeFrameId: prev.activeFrameId || null,
+          frames: Array.isArray(prev.frames) ? [...prev.frames] : [],
+          pins: Array.isArray(prev.pins) ? [...prev.pins] : [],
+          updatedAt: prev.updatedAt || nowIso,
+        }
+      : {
+          schemaVersion: 1,
+          sessionId: `wb-${crypto.randomBytes(4).toString("hex")}`,
+          revision: 0,
+          title: "",
+          activeFrameId: null,
+          frames: [],
+          pins: [],
+          updatedAt: nowIso,
+        };
+
+  if (stepArgs.resolvePinId) {
+    for (const p of session.pins) {
+      if (p && String(p.id) === stepArgs.resolvePinId) {
+        p.resolved = true;
+        p.resolvedAt = nowIso;
+        if (stepArgs.resolution) p.resolution = stepArgs.resolution;
+      }
+    }
+  }
+
+  const nextRev = session.revision + 1;
+  const fid = stepArgs.id || `fr-${String(nextRev).padStart(4, "0")}-${crypto.randomBytes(2).toString("hex")}`;
+  const isGate = stepArgs.kind === "prediction_gate";
+  const locked = isGate ? Boolean(stepArgs.locked ?? true) : Boolean(stepArgs.locked ?? false);
+  const gateObj = isGate
+    ? {
+        prompt: stepArgs.prompt || stepArgs.title || "Commit your prediction before revealing.",
+        revealedBody: stepArgs.revealedBody || stepArgs.body || "",
+        expectedAnswer: stepArgs.expectedAnswer ?? null,
+        prediction: stepArgs.gate?.prediction ?? null,
+        confidence: stepArgs.gate?.confidence ?? null,
+        unlockedAt: stepArgs.gate?.unlockedAt ?? null,
+      }
+    : null;
+
+  const entry = {
+    id: fid,
+    seq: nextRev,
+    kind: stepArgs.kind,
+    title: stepArgs.title,
+    body: isGate && locked ? "" : stepArgs.body || "",
+    latex: stepArgs.latex || null,
+    propId: stepArgs.propId || null,
+    stepIndex: stepArgs.stepIndex !== undefined ? stepArgs.stepIndex : session.frames.length,
+    locked,
+    gate: gateObj,
+    payload: stepArgs.payload || {},
+    createdAt: nowIso,
+    updatedAt: nowIso,
+  };
+
+  if (stepArgs.sessionTitle) session.title = stepArgs.sessionTitle;
+  const existingIdx = session.frames.findIndex((f) => f && String(f.id) === fid);
+  if (existingIdx >= 0) {
+    entry.createdAt = session.frames[existingIdx].createdAt || nowIso;
+    session.frames[existingIdx] = entry;
+  } else {
+    session.frames.push(entry);
+    if (session.frames.length > 200) session.frames = session.frames.slice(-200);
+  }
+  session.revision = nextRev;
+  session.activeFrameId = fid;
+  session.updatedAt = nowIso;
+  writeJsonAtomic(wbPath, session);
+
+  const pendingPins = session.pins.filter((p) => p && !p.resolved);
+  return {
+    ok: true,
+    revision: session.revision,
+    frameId: fid,
+    kind: entry.kind,
+    title: entry.title,
+    stepIndex: entry.stepIndex,
+    locked: entry.locked,
+    frameCount: session.frames.length,
+    pendingPins,
+    pendingPinCount: pendingPins.length,
+  };
+}
+
+export function updateLearnerProfile(workspaceRoot, { op, overrides = {}, calibration = {} }) {
+  const kgDir = resolveKgDir(workspaceRoot);
+  fs.mkdirSync(kgDir, { recursive: true });
+  const pyBin = resolvePythonBin(workspaceRoot);
+
+  const pyCode = [
+    "import json, sys",
+    "from pathlib import Path",
+    "from syntopik.learner_model import load_profile, save_profile, apply_tier1_calibration, apply_user_overrides",
+    "req = json.loads(sys.stdin.read() or '{}')",
+    "kg = Path(req['kgDir'])",
+    "op = req.get('op', 'override')",
+    "if op == 'reset':",
+    "    p = kg / 'learner-profile.json'",
+    "    if p.exists(): p.unlink()",
+    "    prof = load_profile(kg)",
+    "    save_profile(kg, prof)",
+    "elif op == 'calibrate':",
+    "    prof = load_profile(kg)",
+    "    c = req.get('calibration') or {}",
+    "    apply_tier1_calibration(prof, entry_ramp=c.get('entryRamp', 'balanced'), challenge_appetite=c.get('challengeAppetite', 'balanced'), domain_fluency=c.get('domainFluency'), session_minutes=c.get('sessionMinutes', 30), prose_density=c.get('proseDensity', 'standard'))",
+    "    save_profile(kg, prof)",
+    "else:",
+    "    apply_user_overrides(kg, req.get('overrides') or {})",
+    "print(json.dumps({'ok': True, 'op': op}))",
+  ].join("\n");
+
+  let updatedViaPython = false;
+  try {
+    const out = execFileSync(pyBin, ["-B", "-c", pyCode], {
+      cwd: fs.existsSync(workspaceRoot) ? workspaceRoot : process.cwd(),
+      env: buildPythonEnv(workspaceRoot),
+      input: JSON.stringify({ kgDir, op, overrides, calibration }),
+      encoding: "utf8",
+      timeout: 12000,
+    });
+    const parsed = JSON.parse(out);
+    updatedViaPython = Boolean(parsed?.ok);
+  } catch {
+    updatedViaPython = false;
+  }
+
+  if (!updatedViaPython) {
+    const profPath = path.join(kgDir, "learner-profile.json");
+    const nowIso = new Date().toISOString();
+    const prof =
+      op === "reset"
+        ? {
+            schemaVersion: 1,
+            updatedAt: nowIso,
+            calibration: {
+              completed: false,
+              entryRamp: "balanced",
+              challengeAppetite: "balanced",
+              targetSuccessRate: 0.85,
+              sessionTargetMinutes: 30,
+              proseDensity: "standard",
+            },
+            userOverrides: {
+              scaffoldingMode: null,
+              allowProductiveFailure: null,
+              maxProseWords: null,
+            },
+            globalStats: { elo: 1450, totalEvents: 0 },
+            domains: {},
+            affectiveState: { state: "flow" },
+          }
+        : readJsonSafe(profPath, {
+            schemaVersion: 1,
+            updatedAt: nowIso,
+            calibration: {
+              completed: false,
+              entryRamp: "balanced",
+              challengeAppetite: "balanced",
+              targetSuccessRate: 0.85,
+              sessionTargetMinutes: 30,
+              proseDensity: "standard",
+            },
+            userOverrides: {
+              scaffoldingMode: null,
+              allowProductiveFailure: null,
+              maxProseWords: null,
+            },
+            globalStats: { elo: 1450, totalEvents: 0 },
+            domains: {},
+            affectiveState: { state: "flow" },
+          });
+
+    if (op === "override") {
+      prof.userOverrides = { ...(prof.userOverrides || {}), ...overrides };
+    } else if (op === "calibrate") {
+      const targetMap = { guided: 0.88, balanced: 0.85, adversarial: 0.78 };
+      prof.calibration = {
+        ...(prof.calibration || {}),
+        completed: true,
+        completedAt: nowIso,
+        ...(calibration.entryRamp ? { entryRamp: calibration.entryRamp } : {}),
+        ...(calibration.challengeAppetite
+          ? {
+              challengeAppetite: calibration.challengeAppetite,
+              targetSuccessRate: targetMap[calibration.challengeAppetite] ?? 0.85,
+            }
+          : {}),
+        ...(calibration.proseDensity ? { proseDensity: calibration.proseDensity } : {}),
+        ...(calibration.sessionMinutes ? { sessionTargetMinutes: calibration.sessionMinutes } : {}),
+      };
+      if (calibration.domainFluency) {
+        const eloMap = { 0: 1150, 1: 1350, 2: 1550, 3: 1750 };
+        prof.domains = prof.domains || {};
+        for (const [dom, lvl] of Object.entries(calibration.domainFluency)) {
+          const elo = eloMap[lvl] ?? 1450;
+          prof.domains[dom] = { ...(prof.domains[dom] || {}), elo, expertiseBand: eloToBand(elo) };
+        }
+      }
+    }
+    prof.compiledPolicy = buildPolicyFallbackFromProfile(prof);
+    prof.updatedAt = nowIso;
+    writeJsonAtomic(profPath, prof);
+  }
+
+  const synced = syncGraphQuiet(workspaceRoot, kgDir);
+  const { learnerProfile, teachingPolicy } = loadLearnerProfileSummary(workspaceRoot, kgDir);
+  return { ok: true, op, synced, learnerProfile, teachingPolicy };
 }
 
 export function saveSketchPng(workspaceRoot, { dataUrl, label }) {

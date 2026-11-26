@@ -1,12 +1,14 @@
 #!/usr/bin/env python3
-"""Syntopik v2.0 — Zero-LLM TutorBench-Style Pedagogical Linter & Golden Eval Pack.
+"""Syntopik v3.0 — Zero-LLM TutorBench-Style Pedagogical Linter & 40-Scenario Golden Eval Pack.
 
 Pure Python 3.12+ standard library deterministic auditor verifying Syntopik's
-calm, zero-sycophancy, zero-leak pedagogical invariants on tutor turns, graded
-quiz cards, and a built-in 15-scenario multi-domain benchmark suite covering
-TutorBench's 3 core rubrics (*Adaptive Explanation*, *Actionable Non-Spoiling
-Error Feedback*, and *Scaffolding Hinting*) across CS, ML, Math, Physics, and
-Chemistry.
+calm, zero-sycophancy, zero-leak, and v3.0 teacher-replacement pedagogical
+invariants on tutor turns, graded quiz/Parsons/faded cards, and a built-in
+40-scenario multi-domain benchmark suite covering:
+  - Adaptive Explanation, Error Feedback, Scaffolding Hinting (v2.0 core)
+  - VARK-Myth Refusal, Kalyuga Expertise-Reversal Compliance, Gaming/Rushing
+    Intervention, Fatigued-Learner Calm Wrap-Up, Causal Root-Cause Ancestor
+    Probing, T3/T4 Anti-Inflation, and Zero-Leak Parsons/Faded/Quiz Cards (v3.0).
 
 Subcommands:
   - `lint [file_or_-] [--mode teach|practice|hint|conclude|side_doubt] [--max-words N] [--json]`
@@ -30,10 +32,138 @@ from typing import Any
 PROSE_WORD_LIMIT = 160
 SIDE_DOUBT_WORD_LIMIT = 40
 HINT_WORD_LIMIT = 35
+FATIGUED_WORD_LIMIT = 110
 MAX_CODE_BLOCK_LINES = 18
 MAX_TABLE_DATA_ROWS = 4
 MAX_IMPORTANT_CALLOUTS = 1
 OPTION_PARITY_MAX_RATIO = 2.2
+
+# --- v3.0 Teacher-Replacement Invariant Regex Patterns ---
+
+VARK_NEUROMYTH_RE = re.compile(
+    r"\b(?:"
+    r"(?:since|because|as)\s+you(?:'re|\s+are)\s+(?:a|an)\s+(?:visual|auditory|kinesthetic|reading/writing)\s+learner"
+    r"|your\s+(?:visual|auditory|kinesthetic|vark)\s+learning\s+style"
+    r"|tailored\s+to\s+(?:your\s+)?(?:visual|auditory|kinesthetic)\s+learners?"
+    r"|match(?:es|ing)?\s+your\s+(?:visual|auditory|kinesthetic)\s+(?:learning\s+)?style"
+    r"|switch(?:ing)?\s+to\s+(?:visual|auditory|kinesthetic)[-\s]learner\s+mode"
+    r"|take\s+(?:a|this)\s+vark\s+(?:quiz|test|assessment)\s+to\s+find\s+your\s+style"
+    r")\b",
+    re.IGNORECASE,
+)
+
+GUILT_STREAK_RE = re.compile(
+    r"\b(?:"
+    r"(?:broke|broken|lose|losing|lost)\s+your\s+(?:study\s+)?streak"
+    r"|don['’]?t\s+(?:break|lose)\s+your\s+streak"
+    r"|you\s+fell\s+behind\s+again"
+    r"|should\s+have\s+studied\s+(?:every\s+day|yesterday|more)"
+    r"|disappointed\s+(?:that\s+)?you\s+missed"
+    r"|no\s+excuses\s+for\s+missing"
+    r")\b",
+    re.IGNORECASE,
+)
+
+WORKED_EXAMPLE_RE = re.compile(
+    r"(?:"
+    r"\bhere(?:'s|\s+is)\s+(?:a\s+)?(?:complete\s+|full\s+)?worked\s+(?:micro[-\s]?)?example\b"
+    r"|\bworked\s+example\s*:"
+    r"|\blet\s+me\s+walk\s+you\s+step[-\s]by[-\s]step\s+through\s+(?:a|this)\s+solved\b"
+    r"|\bstep\s+1\s*:.*?\bstep\s+2\s*:.*?\bstep\s+3\s*:"
+    r")",
+    re.IGNORECASE | re.DOTALL,
+)
+
+COLD_NOVICE_DUMP_RE = re.compile(
+    r"\b(?:"
+    r"figure\s+it\s+out\s+from\s+scratch"
+    r"|no\s+examples?\s+or\s+hints?"
+    r"|derive\s+the\s+general\s+(?:theorem|proof|formula)\s+cold"
+    r"|solve\s+this\s+cold\s+with\s+zero\s+scaffolding"
+    r")\b",
+    re.IGNORECASE,
+)
+
+GAMING_FREE_HINT_RE = re.compile(
+    r"\b(?:"
+    r"here(?:'s|\s+is)\s+(?:another|the\s+next|a\s+free)\s+hint"
+    r"|hint\s*:"
+    r"|just\s+try\s+option\s+[a-d]"
+    r"|let\s+me\s+give\s+you\s+another\s+clue"
+    r"|skip\s+straight\s+to\s+the\s+next\s+hint"
+    r")\b",
+    re.IGNORECASE,
+)
+
+REASONING_TRACE_DEMAND_RE = re.compile(
+    r"\b(?:"
+    r"(?:1|one)[-\s]line\s+(?:reason|reasoning|trace|invariant|justification|explanation)"
+    r"|explain\s+(?:in\s+one\s+line\s+)?why"
+    r"|state\s+your\s+(?:reason|invariant|rule|step)"
+    r"|write\s+(?:one\s+line|your\s+reasoning|the\s+reason)"
+    r"|before\s+(?:grading|hints|we\s+check|unlocking)"
+    r")\b",
+    re.IGNORECASE,
+)
+
+FATIGUE_PUSH_RE = re.compile(
+    r"\b(?:"
+    r"push\s+through\s+(?:the\s+fatigue|a\s+few\s+more|another)"
+    r"|tackle\s+(?:\d+|three|four|five)\s+more\s+(?:hard\s+)?problems?"
+    r"|start\s+a\s+brand[-\s]new\s+(?:derivation|chapter|proof)"
+    r"|don['’]?t\s+stop\s+now"
+    r"|keep\s+going\s+for\s+another\s+\d+\s+minutes"
+    r")\b",
+    re.IGNORECASE,
+)
+
+LEAF_RELECTURE_RE = re.compile(
+    r"\b(?:"
+    r"let\s+me\s+re[-\s]?explain\s+the\s+(?:entire|whole|full)"
+    r"|let(?:'s|\s+us)\s+re[-\s]?read\s+the\s+(?:entire|whole)\s+(?:chapter|derivation|algorithm|formula)"
+    r"|starting\s+from\s+scratch\s+on\s+the\s+entire"
+    r")\b",
+    re.IGNORECASE,
+)
+
+T2_MASTERY_INFLATION_RE = re.compile(
+    r"\b(?:"
+    r"marking\s+(?:this|it|the\s+\w+)\s+(?:as\s+)?(?:solid|fully\s+mastered)\s+(?:from|based\s+on)\s+(?:that|this|one)\s+mcq"
+    r"|one\s+multiple[-\s]choice\s+(?:hit|answer)\s+(?:proves|confirms)\s+(?:full|complete)\s+mastery"
+    r"|fully\s+mastered\s*[—–-]\s*no\s+(?:transfer|derivation|further)\s+(?:check|verification)\s+needed"
+    r"|bottleneck\s+(?:is\s+)?(?:fully\s+)?mastered\s+after\s+(?:t2|recognition|mcq)"
+    r")\b",
+    re.IGNORECASE,
+)
+
+PREMATURE_SOLID_CLAIM_RE = re.compile(
+    r"\b(?:"
+    r"marking\s+(?:this|it)\s+solid"
+    r"|fully\s+mastered"
+    r"|mastery\s+confirmed"
+    r"|no\s+further\s+verification\s+needed"
+    r")\b",
+    re.IGNORECASE,
+)
+
+PARSONS_ORDER_LEAK_RE = re.compile(
+    r"(?:"
+    r"^\s*(?:step\s*\d+\s*[:.)-]|\d+\s*[.)]\s+)"
+    r"|(?:#|//)\s*(?:line\s*\d+|step\s*\d+|correct|wrong|distractor)\b"
+    r"|\(\s*(?:first|second|third|last|correct|distractor|wrong)\s*\)"
+    r"|\bDISTRACTOR\s*:"
+    r")",
+    re.IGNORECASE,
+)
+
+FADED_BLANK_LEAK_RE = re.compile(
+    r"(?:"
+    r"_{2,}\s*\(\s*(?:answer|fill|hint|put)\s*:"
+    r"|/\*\s*(?:answer|fill)\s*:"
+    r"|\[\s*blank\s*=\s*[^\]]+\]"
+    r")",
+    re.IGNORECASE,
+)
 
 SYCOPHANCY_PATTERNS: tuple[tuple[str, re.Pattern[str]], ...] = (
     ("great_question", re.compile(r"\b(?:great|excellent|good|wonderful|fantastic|brilliant)\s+question\b", re.IGNORECASE)),
@@ -202,21 +332,14 @@ def _extract_option_texts(card: dict[str, Any]) -> list[str]:
 
 
 def check_quiz_card(card: dict[str, Any]) -> dict[str, Any]:
-    """Deterministically audit a graded quiz/probe/check card for anti-leak invariants."""
+    """Deterministically audit a graded quiz/probe/check/Parsons/faded card for zero-leak integrity."""
     violations: list[dict[str, Any]] = []
     graded = bool(card.get("graded", True))
+    card_mode = str(card.get("mode") or "standard").strip().lower()
     prompt = str(card.get("prompt") or card.get("question") or "").strip()
     options = _extract_option_texts(card)
 
-    if len(options) < 2:
-        violations.append(
-            {
-                "rule": "insufficient_options",
-                "message": f"Quiz card has {len(options)} options; expected at least 2.",
-            }
-        )
-
-    # Check sycophancy in prompt
+    # Check sycophancy & VARK myth in prompt
     for pat_name, pat in SYCOPHANCY_PATTERNS:
         m = pat.search(prompt)
         if m:
@@ -227,6 +350,95 @@ def check_quiz_card(card: dict[str, Any]) -> dict[str, Any]:
                     "message": f"Sycophantic phrase in prompt ({pat_name}): {m.group(0)!r}",
                 }
             )
+    m_vark = VARK_NEUROMYTH_RE.search(prompt)
+    if m_vark:
+        violations.append(
+            {
+                "rule": "vark_neuromyth",
+                "match": m_vark.group(0),
+                "message": f"VARK learning-style neuromyth disallowed: {m_vark.group(0)!r}",
+            }
+        )
+
+    # Parsons & Faded practice card zero-leak checks
+    if card_mode == "parsons" or isinstance(card.get("blocks"), list):
+        raw_blocks = card.get("blocks") or []
+        if len(raw_blocks) < 2:
+            violations.append(
+                {
+                    "rule": "insufficient_parsons_blocks",
+                    "message": f"Parsons card has {len(raw_blocks)} blocks; expected at least 2.",
+                }
+            )
+        for idx, blk in enumerate(raw_blocks):
+            b_txt = str(blk.get("code") or blk.get("text") or "" if isinstance(blk, dict) else blk)
+            m_leak = PARSONS_ORDER_LEAK_RE.search(b_txt)
+            if m_leak:
+                violations.append(
+                    {
+                        "rule": "parsons_order_or_distractor_leak",
+                        "blockIndex": idx,
+                        "match": m_leak.group(0).strip(),
+                        "message": f"Parsons block #{idx + 1} leaks ordering or distractor status ({m_leak.group(0).strip()!r}).",
+                    }
+                )
+        sealed_sol = str(card.get("modelSolution") or "").strip()
+        if sealed_sol and len(sealed_sol) >= 12 and sealed_sol in prompt:
+            violations.append(
+                {
+                    "rule": "model_solution_leak",
+                    "message": "Parsons prompt leaks sealed modelSolution verbatim.",
+                }
+            )
+        return {
+            "ok": True,
+            "passed": len(violations) == 0,
+            "mode": "parsons",
+            "blockCount": len(raw_blocks),
+            "optionCount": len(options),
+            "hasIDontKnow": True,
+            "lengthRatio": None,
+            "violationCount": len(violations),
+            "violations": violations,
+        }
+
+    if card_mode == "faded" or isinstance(card.get("template"), str):
+        template_str = str(card.get("template") or "")
+        m_faded = FADED_BLANK_LEAK_RE.search(template_str) or FADED_BLANK_LEAK_RE.search(prompt)
+        if m_faded:
+            violations.append(
+                {
+                    "rule": "faded_blank_answer_leak",
+                    "match": m_faded.group(0).strip(),
+                    "message": f"Faded card leaks blank answer inside template/prompt ({m_faded.group(0).strip()!r}).",
+                }
+            )
+        sealed_sol = str(card.get("modelSolution") or "").strip()
+        if sealed_sol and len(sealed_sol) >= 8 and (sealed_sol in template_str or sealed_sol in prompt):
+            violations.append(
+                {
+                    "rule": "model_solution_leak",
+                    "message": "Faded card leaks sealed modelSolution inside visible template/prompt.",
+                }
+            )
+        return {
+            "ok": True,
+            "passed": len(violations) == 0,
+            "mode": "faded",
+            "optionCount": len(options),
+            "hasIDontKnow": True,
+            "lengthRatio": None,
+            "violationCount": len(violations),
+            "violations": violations,
+        }
+
+    if len(options) < 2:
+        violations.append(
+            {
+                "rule": "insufficient_options",
+                "message": f"Quiz card has {len(options)} options; expected at least 2.",
+            }
+        )
 
     # Check IDK option presence
     has_idk_option = any(IDK_OPTION_RE.match(opt) for opt in options) or bool(card.get("allowIDontKnow") is True and has_explicit_idk(card))
@@ -356,15 +568,22 @@ def lint_turn(
     *,
     mode: str = "teach",
     max_words: int | None = None,
+    learner_state: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
-    """Deterministically lint a tutor turn against Syntopik's calm & non-spoiling invariants."""
+    """Deterministically lint a tutor turn against Syntopik v3.0 calm, non-spoiling & adaptive invariants."""
     clean_mode = str(mode or "teach").strip().lower()
+    state = dict(learner_state or {})
+    affect = str(state.get("affect") or "").strip().lower()
+    expertise = str(state.get("expertise") or "").strip().lower()
+
     if max_words is not None:
         word_cap = int(max_words)
     elif clean_mode == "side_doubt":
         word_cap = SIDE_DOUBT_WORD_LIMIT
     elif clean_mode == "hint":
         word_cap = HINT_WORD_LIMIT
+    elif affect == "fatigued":
+        word_cap = FATIGUED_WORD_LIMIT
     else:
         word_cap = PROSE_WORD_LIMIT
 
@@ -475,7 +694,124 @@ def lint_turn(
                 }
             )
 
-    # 6. Auto-audit embedded Markdown MCQ block if present
+    # 6. v3.0 Teacher-Replacement Invariants (VARK refusal, Guilt/Streaks, Expertise Reversal,
+    #    Gaming/Rushing trace gate, Fatigue calm wrap-up, Causal root-cause probing, T3/T4 anti-inflation)
+    m_vark = VARK_NEUROMYTH_RE.search(prose_scan)
+    if m_vark:
+        violations.append(
+            {
+                "rule": "vark_neuromyth",
+                "match": m_vark.group(0).strip(),
+                "message": f"Debunked VARK learning-style label forbidden: {m_vark.group(0).strip()!r}",
+            }
+        )
+
+    m_guilt = GUILT_STREAK_RE.search(prose_scan)
+    if m_guilt:
+        violations.append(
+            {
+                "rule": "guilt_or_streak_shaming",
+                "match": m_guilt.group(0).strip(),
+                "message": f"Guilt-tripping or streak-shaming violates calm pedagogy: {m_guilt.group(0).strip()!r}",
+            }
+        )
+
+    m_t2_inf = T2_MASTERY_INFLATION_RE.search(prose_scan)
+    if m_t2_inf:
+        violations.append(
+            {
+                "rule": "t2_mastery_inflation",
+                "match": m_t2_inf.group(0).strip(),
+                "message": f"T2 recognition alone cannot prove bottleneck mastery: {m_t2_inf.group(0).strip()!r}",
+            }
+        )
+
+    # Expertise-Reversal check (Kalyuga)
+    if expertise == "advanced" or affect == "bored_underchallenged" or state.get("allowWorkedExample") is False:
+        m_we = WORKED_EXAMPLE_RE.search(prose_scan)
+        if m_we:
+            violations.append(
+                {
+                    "rule": "expertise_reversal_violation",
+                    "match": m_we.group(0).strip()[:80],
+                    "message": "Expertise-Reversal violation: redundant worked example served to advanced/underchallenged learner.",
+                }
+            )
+    elif expertise == "novice" or (affect == "overloaded_frustrated" and state.get("requireWorkedExample") is True):
+        m_cold = COLD_NOVICE_DUMP_RE.search(prose_scan)
+        if m_cold:
+            violations.append(
+                {
+                    "rule": "expertise_reversal_violation",
+                    "match": m_cold.group(0).strip(),
+                    "message": "Novice overload violation: cold unguided problem dumped without a concrete worked micro-example.",
+                }
+            )
+
+    # Gaming / rushing intervention check
+    if affect == "gaming_rushing":
+        m_free = GAMING_FREE_HINT_RE.search(prose_scan)
+        if m_free:
+            violations.append(
+                {
+                    "rule": "gaming_rushing_violation",
+                    "match": m_free.group(0).strip(),
+                    "message": "Gaming/rushing violation: handed out hint/clue instead of demanding a 1-line reasoning trace.",
+                }
+            )
+        elif not REASONING_TRACE_DEMAND_RE.search(prose_scan):
+            violations.append(
+                {
+                    "rule": "gaming_rushing_violation",
+                    "message": "Gaming/rushing violation: turn must explicitly require a 1-line reasoning trace before grading/hints.",
+                }
+            )
+
+    # Fatigued learner graceful wrap-up check
+    if affect == "fatigued":
+        m_push = FATIGUE_PUSH_RE.search(prose_scan)
+        if m_push:
+            violations.append(
+                {
+                    "rule": "fatigue_wrapup_violation",
+                    "match": m_push.group(0).strip(),
+                    "message": f"Fatigue violation: pushing heavy new work on a fatigued learner ({m_push.group(0).strip()!r}).",
+                }
+            )
+
+    # Causal Noisy-OR root-cause ancestor probe check
+    if state.get("requireRootProbe") is True:
+        m_relect = LEAF_RELECTURE_RE.search(prose_scan)
+        if m_relect:
+            violations.append(
+                {
+                    "rule": "causal_root_probe_violation",
+                    "match": m_relect.group(0).strip(),
+                    "message": "Causal root-cause violation: re-lecturing symptom leaf instead of probing high-ΔH suspect ancestor.",
+                }
+            )
+        anc_keywords = [str(k).lower() for k in (state.get("suspectAncestorKeywords") or []) if str(k).strip()]
+        if anc_keywords and not any(k in prose_scan.lower() for k in anc_keywords):
+            violations.append(
+                {
+                    "rule": "causal_root_probe_violation",
+                    "message": f"Causal root-cause violation: turn fails to probe suspect ancestor ({anc_keywords}).",
+                }
+            )
+
+    # T3/T4 anti-inflation gate for bottleneck nodes stuck at T1/T2
+    if state.get("isBottleneck") is True and str(state.get("evidenceTier") or "").upper() in ("T1", "T2"):
+        m_prem = PREMATURE_SOLID_CLAIM_RE.search(prose_scan)
+        if m_prem and not m_t2_inf:
+            violations.append(
+                {
+                    "rule": "t2_mastery_inflation",
+                    "match": m_prem.group(0).strip(),
+                    "message": f"Anti-inflation violation: cannot mark bottleneck mastered at {state.get('evidenceTier')} ({m_prem.group(0).strip()!r}).",
+                }
+            )
+
+    # 7. Auto-audit embedded Markdown MCQ block if present
     md_options = _extract_markdown_mcq(text)
     card_audit: dict[str, Any] | None = None
     if md_options:
@@ -811,11 +1147,513 @@ GOLDEN_SCENARIOS: tuple[dict[str, Any], ...] = (
         ),
         "expectedBadRules": ["zero_sycophancy", "hint_spoiler_leak"],
     },
+    # --- Rubric 4: VARK-Myth Refusal (4 scenarios: Physics, CS, ML, Chemistry) ---
+    {
+        "id": "tb-16-phys-vark",
+        "rubric": "vark_myth_refusal",
+        "domain": "Physics",
+        "title": "Refuse 'visual learner' label; choose phasor geometry for content structure",
+        "kind": "turn",
+        "mode": "teach",
+        "good": (
+            "We do not sort people into visual or auditory learner types—empirical studies show matching instruction to self-labeled styles does not raise retention.\n\n"
+            "Instead, we match the representation to the concept: SHM phase intervals live on a circle, so projecting uniform circular motion onto the $x$-axis exposes direction-sensitive sign changes immediately.\n\n"
+            "On the phasor circle, which quadrant corresponds to $x = +A/2$ moving toward $+A$?"
+        ),
+        "bad": (
+            "Since you're a visual learner, I will switch to visual-learner mode and only draw pictures tailored to your visual learning style. "
+            "Which quadrant is it? And what is the angular velocity?"
+        ),
+        "expectedBadRules": ["vark_neuromyth", "single_active_demand"],
+    },
+    {
+        "id": "tb-17-cs-vark",
+        "rubric": "vark_myth_refusal",
+        "domain": "CS",
+        "title": "Refuse 'kinesthetic learner' label; use pointer trace for linked-list reversal",
+        "kind": "turn",
+        "mode": "teach",
+        "good": (
+            "Skipping learning-style labels here—linked-list reversal fails on aliasing bugs, so tracing pointer mutations step by step fits the problem structure.\n\n"
+            "```python\n"
+            "prev, cur = None, head\n"
+            "while cur:\n"
+            "    nxt = cur.next\n"
+            "    cur.next = prev\n"
+            "    prev, cur = cur, nxt\n"
+            "```\n\n"
+            "If you omit saving `nxt` before overwriting `cur.next = prev`, which nodes become unreachable?"
+        ),
+        "bad": (
+            "Great question! Because you are a kinesthetic learner, this matches your kinesthetic learning style perfectly. "
+            "What happens if we drop `nxt`?"
+        ),
+        "expectedBadRules": ["zero_sycophancy", "vark_neuromyth"],
+    },
+    {
+        "id": "tb-18-ml-vark",
+        "rubric": "vark_myth_refusal",
+        "domain": "ML",
+        "title": "Refuse 'auditory learner' label; use shape table for attention dimensions",
+        "kind": "turn",
+        "mode": "teach",
+        "good": (
+            "Representation follows the math rather than an auditory-learner label: multi-head attention errors are tensor-shape mismatches, so a compact shape table pins down every projection.\n\n"
+            "| Tensor | Shape | Meaning |\n"
+            "| :--- | :--- | :--- |\n"
+            "| $Q, K, V$ | $(B, H, T, d_k)$ | Split head projections |\n"
+            "| $QK^\\top$ | $(B, H, T, T)$ | Pairwise token scores |\n\n"
+            "Why does keeping $H \\cdot d_k = d_{\\text{model}}$ preserve the parameter count of $W_Q$?"
+        ),
+        "bad": (
+            "As an auditory learner, I will talk through everything tailored to auditory learners without tables. "
+            "First, take a VARK quiz to find your style."
+        ),
+        "expectedBadRules": ["vark_neuromyth"],
+    },
+    {
+        "id": "tb-19-chem-vark",
+        "rubric": "vark_myth_refusal",
+        "domain": "Chemistry",
+        "title": "Refuse VARK card framing; use Newman projection for butane steric clash",
+        "kind": "card",
+        "good": {
+            "prompt": "In a Newman projection down the C2-C3 bond of n-butane, which conformer minimizes dihedral steric repulsion?",
+            "graded": True,
+            "options": [
+                "Antiperiplanar at 180 degrees",
+                "Gauche staggered at 60 degrees",
+                "Partially eclipsed at 120 degrees",
+                "Synperiplanar eclipsed at 0 degrees",
+                "I don't know",
+            ],
+        },
+        "bad": {
+            "prompt": "Because you are a visual learner, pick the lowest-energy conformer matching your visual learning style:",
+            "graded": True,
+            "options": [
+                "Anti because the methyl groups are farthest apart",
+                "Gauche",
+            ],
+        },
+        "expectedBadRules": ["vark_neuromyth", "missing_idk_option", "option_justification_leak", "option_length_parity"],
+    },
+    # --- Rubric 5: Kalyuga Expertise-Reversal Compliance (5 scenarios) ---
+    {
+        "id": "tb-20-cs-er-novice",
+        "rubric": "expertise_reversal",
+        "domain": "CS",
+        "title": "Novice receives brief concrete worked micro-example before 1 faded check",
+        "kind": "turn",
+        "mode": "teach",
+        "learnerState": {"expertise": "novice", "requireWorkedExample": True},
+        "good": (
+            "Before generalizing recursion, trace a tiny case: `fact(3) = 3 * fact(2) = 3 * 2 * fact(1) = 6`, stopping strictly at base case `n <= 1`.\n\n"
+            "> [!IMPORTANT]\n"
+            "> Every recursive function needs a terminating base case and a strictly smaller recursive subproblem.\n\n"
+            "For `sum_to(n)` returning $1 + 2 + \\dots + n$, what base case prevents infinite recursion on `n = 0`?"
+        ),
+        "bad": (
+            "Figure it out from scratch with no examples or hints. "
+            "Derive the general theorem cold for structural induction on trees."
+        ),
+        "expectedBadRules": ["expertise_reversal_violation"],
+    },
+    {
+        "id": "tb-21-phys-er-novice",
+        "rubric": "expertise_reversal",
+        "domain": "Physics",
+        "title": "Overloaded novice on torque lever arm receives concrete micro-example",
+        "kind": "turn",
+        "mode": "teach",
+        "learnerState": {"expertise": "novice", "affect": "overloaded_frustrated", "requireWorkedExample": True},
+        "good": (
+            "Start with one concrete wrench: force $F = 10\\,\\text{N}$ acts perpendicular at $r = 0.2\\,\\text{m}$ from the bolt, giving $\\tau = r F \\sin 90^\\circ = 2.0\\,\\text{N}\\cdot\\text{m}$.\n\n"
+            "If the same $10\\,\\text{N}$ force instead pushes straight through the bolt ($\\theta = 0^\\circ$), what does $\\tau$ equal?"
+        ),
+        "bad": (
+            "Solve this cold with zero scaffolding: write the full rigid-body tensor cross-product derivation from scratch. "
+            "What is the sign? And what is the moment of inertia?"
+        ),
+        "expectedBadRules": ["expertise_reversal_violation", "single_active_demand"],
+    },
+    {
+        "id": "tb-22-math-er-advanced",
+        "rubric": "expertise_reversal",
+        "domain": "Math",
+        "title": "Advanced learner on diagonalizability gets cold counterexample, ZERO worked example",
+        "kind": "turn",
+        "mode": "practice",
+        "learnerState": {"expertise": "advanced", "allowWorkedExample": False},
+        "good": (
+            "Claim: every $n \\times n$ matrix whose eigenvalues are all real is diagonalizable over $\\mathbb{R}$.\n\n"
+            "Construct a minimal $2 \\times 2$ counterexample and state which multiplicity condition fails."
+        ),
+        "bad": (
+            "Here is a worked example first. Step 1: write A = [[2, 0], [0, 3]]. "
+            "Step 2: compute det(A - lambda I) = 0. Step 3: find eigenvectors for each eigenvalue. "
+            "Now try a counterexample."
+        ),
+        "expectedBadRules": ["expertise_reversal_violation"],
+    },
+    {
+        "id": "tb-23-ml-er-bored",
+        "rubric": "expertise_reversal",
+        "domain": "ML",
+        "title": "Underchallenged learner on LayerNorm vs BatchNorm gets bug-hunt, NO worked example",
+        "kind": "turn",
+        "mode": "practice",
+        "learnerState": {"expertise": "advanced", "affect": "bored_underchallenged", "allowWorkedExample": False},
+        "good": (
+            "A teammate replaces LayerNorm with BatchNorm inside an autoregressive decoder trained with variable-length sequences and batch size $2$.\n\n"
+            "Name the exact causal/inference failure mode this introduces during token-by-token generation."
+        ),
+        "bad": (
+            "Worked example: let me walk you step-by-step through a solved BatchNorm mean calculation on `[1, 2, 3]`. "
+            "Step 1: compute the mean. Step 2: compute variance. Step 3: normalize."
+        ),
+        "expectedBadRules": ["expertise_reversal_violation"],
+    },
+    {
+        "id": "tb-24-sys-er-advanced",
+        "rubric": "expertise_reversal",
+        "domain": "Systems",
+        "title": "Advanced learner on Raft Figure 8 commit bug gets cold partition prompt",
+        "kind": "turn",
+        "mode": "practice",
+        "learnerState": {"expertise": "advanced", "allowWorkedExample": False},
+        "good": (
+            "Suppose a Raft leader in term $4$ sees an entry from term $2$ replicated on a majority of servers and commits it directly by counting replicas.\n\n"
+            "Construct the minimal 5-node crash/election sequence that overwrites that committed entry."
+        ),
+        "bad": (
+            "Here is a complete worked example of Raft leader election. Step 1: S1 times out. "
+            "Step 2: S1 requests votes. Step 3: S1 wins majority. Now analyze Figure 8."
+        ),
+        "expectedBadRules": ["expertise_reversal_violation"],
+    },
+    # --- Rubric 6: Gaming / Rushing Intervention (4 scenarios) ---
+    {
+        "id": "tb-25-cs-gaming",
+        "rubric": "gaming_rushing_intervention",
+        "domain": "CS",
+        "title": "Rapid wrong clicks on BFS shortest path -> demand 1-line reasoning trace",
+        "kind": "turn",
+        "mode": "practice",
+        "learnerState": {"affect": "gaming_rushing"},
+        "good": (
+            "Pause before submitting another option—two rapid misses suggest guessing rather than checking the queue invariant.\n\n"
+            "Before we check the next answer, write a 1-line reasoning trace: why does standard BFS break when edges have weights $1$ and $5$?"
+        ),
+        "bad": (
+            "Here is another hint: look at the queue order. Just try option C next!"
+        ),
+        "expectedBadRules": ["gaming_rushing_violation"],
+    },
+    {
+        "id": "tb-26-phys-gaming",
+        "rubric": "gaming_rushing_intervention",
+        "domain": "Physics",
+        "title": "Rushing on pulley constraint -> require 1-line string-length trace before grading",
+        "kind": "turn",
+        "mode": "practice",
+        "learnerState": {"affect": "gaming_rushing"},
+        "good": (
+            "Slow down and skip guessing. Before grading your acceleration ratio, state your 1-line invariant relating total rope length $L$ to $x_1$ and $x_2$."
+        ),
+        "bad": (
+            "Hint: differentiate the rope equation twice to get a1 = 2*a2."
+        ),
+        "expectedBadRules": ["gaming_rushing_violation"],
+    },
+    {
+        "id": "tb-27-math-gaming",
+        "rubric": "gaming_rushing_intervention",
+        "domain": "Math",
+        "title": "Hint-spamming on integration by parts -> freeze hints & require 1-line u/dv reason",
+        "kind": "turn",
+        "mode": "practice",
+        "learnerState": {"affect": "gaming_rushing"},
+        "good": (
+            "Holding further hints until we see your own move. For $\\int x e^x\\,dx$, explain in one line why setting $u = x$ simplifies the remaining integral while $u = e^x$ complicates it."
+        ),
+        "bad": (
+            "Let me give you another clue—skip straight to the next hint and pick u = x."
+        ),
+        "expectedBadRules": ["gaming_rushing_violation"],
+    },
+    {
+        "id": "tb-28-chem-gaming",
+        "rubric": "gaming_rushing_intervention",
+        "domain": "Chemistry",
+        "title": "Rapid clicking on E2 vs SN2 -> demand 1-line substrate/base classification",
+        "kind": "turn",
+        "mode": "practice",
+        "learnerState": {"affect": "gaming_rushing"},
+        "good": (
+            "Pausing multiple-choice checks here. Write one line identifying the substrate degree ($1^\\circ/2^\\circ/3^\\circ$) and base bulkiness for `t-BuO-` on 2-bromopropane before we grade."
+        ),
+        "bad": (
+            "Here's a free hint: bulky bases favor elimination over substitution."
+        ),
+        "expectedBadRules": ["gaming_rushing_violation"],
+    },
+    # --- Rubric 7: Fatigued-Learner Graceful Calm Wrap-Up (4 scenarios) ---
+    {
+        "id": "tb-29-sys-fatigue",
+        "rubric": "fatigue_calm_wrapup",
+        "domain": "Systems",
+        "title": "Fatigued learner after long session -> concise <=110w wrap-up, zero guilt",
+        "kind": "turn",
+        "mode": "conclude",
+        "learnerState": {"affect": "fatigued"},
+        "good": (
+            "Accuracy dipped on the last three checks after 45 minutes—good signal to stop while the core invariant is fresh.\n\n"
+            "> [!IMPORTANT]\n"
+            "> Any two Raft quorums overlap in at least one server, carrying the highest committed term forward.\n\n"
+            "Locking this in for tomorrow's short review. Want to wrap here?"
+        ),
+        "bad": (
+            "Don't break your streak! Push through the fatigue and let's tackle 3 more hard problems right now—you should have studied every day this week."
+        ),
+        "expectedBadRules": ["guilt_or_streak_shaming", "fatigue_wrapup_violation"],
+    },
+    {
+        "id": "tb-30-phys-fatigue",
+        "rubric": "fatigue_calm_wrapup",
+        "domain": "Physics",
+        "title": "Fatigued learner on damped SHM -> calm 1-sentence anchor & guilt-free stop",
+        "kind": "turn",
+        "mode": "conclude",
+        "learnerState": {"affect": "fatigued"},
+        "good": (
+            "Response time doubled on the last two drills, so let's switch to low-energy consolidation.\n\n"
+            "One anchor to keep: underdamping lowers natural frequency slightly to $\\omega_d = \\sqrt{\\omega_0^2 - \\gamma^2}$ while exponentially shrinking amplitude.\n\n"
+            "Everything is saved cleanly; stop here whenever you are ready."
+        ),
+        "bad": (
+            "Don't stop now! Keep going for another 30 minutes or you broke your study streak."
+        ),
+        "expectedBadRules": ["guilt_or_streak_shaming", "fatigue_wrapup_violation"],
+    },
+    {
+        "id": "tb-31-ml-fatigue",
+        "rubric": "fatigue_calm_wrapup",
+        "domain": "ML",
+        "title": "Fatigued learner on backprop Jacobians -> short <=110w consolidation, no new derivation",
+        "kind": "turn",
+        "mode": "teach",
+        "learnerState": {"affect": "fatigued"},
+        "good": (
+            "Wrapping at a clean checkpoint rather than opening full softmax-Jacobian algebra tonight.\n\n"
+            "Core takeaway: cross-entropy + softmax collapses the output gradient cleanly to $\\hat{y} - y$.\n\n"
+            "Ready to close the session here?"
+        ),
+        "bad": (
+            "Let's start a brand-new derivation of second-order Hessian-vector products right now! "
+            + " ".join(["matrix"] * 115)
+        ),
+        "expectedBadRules": ["prose_word_ceiling", "fatigue_wrapup_violation"],
+    },
+    {
+        "id": "tb-32-math-fatigue",
+        "rubric": "fatigue_calm_wrapup",
+        "domain": "Math",
+        "title": "Post-absence fatigued learner on Green's theorem -> calm catch-up, zero shame",
+        "kind": "turn",
+        "mode": "teach",
+        "learnerState": {"affect": "fatigued"},
+        "good": (
+            "Your backlog is smoothed across five calm days—nothing is lost.\n\n"
+            "Today's single anchor: Green's theorem equates counterclockwise boundary circulation to integrated microscopic curl over the enclosed region.\n\n"
+            "Want to review just this one orientation check and end for today?"
+        ),
+        "bad": (
+            "You fell behind again and it is disappointing that you missed five days—no excuses for missing review. "
+            "Push through a few more proofs tonight."
+        ),
+        "expectedBadRules": ["guilt_or_streak_shaming", "fatigue_wrapup_violation"],
+    },
+    # --- Rubric 8: Causal Noisy-OR Root-Cause Ancestor Probing (4 scenarios) ---
+    {
+        "id": "tb-33-sys-root-probe",
+        "rubric": "causal_root_probe",
+        "domain": "Systems",
+        "title": "Failed Raft Log Matching leaf -> ask 1 high-ΔH Quorum Intersection ancestor probe",
+        "kind": "turn",
+        "mode": "practice",
+        "learnerState": {
+            "requireRootProbe": True,
+            "failedLeaf": "raft-log-matching",
+            "suspectAncestorKeywords": ["quorum", "majority", "overlap"],
+        },
+        "good": (
+            "Before revisiting Log Matching, let's isolate the prerequisite underneath it.\n\n"
+            "In a 5-node cluster, can two disjoint partitions each form a majority quorum to elect two leaders in the same term?"
+        ),
+        "bad": (
+            "Let me re-explain the entire Log Matching property from top to bottom with every RPC field and index check."
+        ),
+        "expectedBadRules": ["causal_root_probe_violation"],
+    },
+    {
+        "id": "tb-34-phys-root-probe",
+        "rubric": "causal_root_probe",
+        "domain": "Physics",
+        "title": "Failed SHM elapsed-time leaf -> probe Phasor direction sign ancestor",
+        "kind": "turn",
+        "mode": "practice",
+        "learnerState": {
+            "requireRootProbe": True,
+            "failedLeaf": "shm-two-point-time",
+            "suspectAncestorKeywords": ["phasor", "quadrant", "velocity"],
+        },
+        "good": (
+            "Your elapsed-time miss traces upstream to velocity sign on the phasor circle.\n\n"
+            "For $x(t) = A\\cos(\\omega t)$, does a point in the upper semicircle ($\\phi \\in (0, \\pi)$) have positive or negative velocity?"
+        ),
+        "bad": (
+            "Let's re-read the entire chapter on SHM kinematics and memorize every time fraction table."
+        ),
+        "expectedBadRules": ["causal_root_probe_violation"],
+    },
+    {
+        "id": "tb-35-ml-root-probe",
+        "rubric": "causal_root_probe",
+        "domain": "ML",
+        "title": "Failed Multi-Head Attention gradient leaf -> probe dot-product variance ancestor",
+        "kind": "turn",
+        "mode": "practice",
+        "learnerState": {
+            "requireRootProbe": True,
+            "failedLeaf": "multihead-grad",
+            "suspectAncestorKeywords": ["variance", "dot product", "d_k"],
+        },
+        "good": (
+            "Skip multi-head mechanics for one minute and test the upstream variance rule.\n\n"
+            "If $q_i, k_i \\sim \\mathcal{N}(0, 1)$ independently for $i=1..d_k$, how does $\\operatorname{Var}(q \\cdot k)$ scale with $d_k$?"
+        ),
+        "bad": (
+            "Starting from scratch on the entire Transformer block: first comes input embedding, then positional encoding, then projection matrices."
+        ),
+        "expectedBadRules": ["causal_root_probe_violation"],
+    },
+    {
+        "id": "tb-36-cs-root-probe",
+        "rubric": "causal_root_probe",
+        "domain": "CS",
+        "title": "Failed Dijkstra PQ leaf -> probe non-negative edge relaxation invariant",
+        "kind": "turn",
+        "mode": "practice",
+        "learnerState": {
+            "requireRootProbe": True,
+            "failedLeaf": "dijkstra-pq",
+            "suspectAncestorKeywords": ["negative", "non-negative", "relax"],
+        },
+        "good": (
+            "Before fixing the heap loop, let's verify the prerequisite invariant.\n\n"
+            "Why can an unsettled vertex $v$ never later shorten an already-popped minimum-distance vertex $u$ when all remaining edges are non-negative?"
+        ),
+        "bad": (
+            "Let me re-explain the entire Dijkstra implementation line by line from imports to return value."
+        ),
+        "expectedBadRules": ["causal_root_probe_violation"],
+    },
+    # --- Rubric 9: T3/T4 Anti-Inflation & Zero-Leak Parsons/Faded Cards (4 scenarios) ---
+    {
+        "id": "tb-37-sys-anti-inflation",
+        "rubric": "anti_inflation_and_zero_leak",
+        "domain": "Systems",
+        "title": "Refuse marking bottleneck Raft Safety solid from T2 MCQ recognition alone",
+        "kind": "turn",
+        "mode": "practice",
+        "learnerState": {"isBottleneck": True, "evidenceTier": "T2"},
+        "good": (
+            "That multiple-choice answer checks out at T2 recognition, which confirms recall of the Leader Completeness rule.\n\n"
+            "Because this node is a central bottleneck, let's verify T3 transfer before upgrading it: construct a 3-node log scenario where a candidate with a higher term still loses the up-to-date log check."
+        ),
+        "bad": (
+            "Awesome! Marking this solid from that MCQ alone—one multiple-choice hit proves complete mastery and no further verification needed."
+        ),
+        "expectedBadRules": ["zero_sycophancy", "t2_mastery_inflation"],
+    },
+    {
+        "id": "tb-38-phys-anti-inflation",
+        "rubric": "anti_inflation_and_zero_leak",
+        "domain": "Physics",
+        "title": "Refuse marking bottleneck SHM Linearization mastered from T2 MCQ alone",
+        "kind": "turn",
+        "mode": "practice",
+        "learnerState": {"isBottleneck": True, "evidenceTier": "T2"},
+        "good": (
+            "Your MCQ choice identifies the small-angle formula correctly (T2 recall).\n\n"
+            "To clear the T3 transfer gate on this bottleneck, derive the first nonlinear correction term from $\\sin\\theta \\approx \\theta - \\theta^3/6$ and predict whether period increases or decreases at large amplitude."
+        ),
+        "bad": (
+            "Fully mastered — no transfer check needed! Bottleneck is fully mastered after T2 recognition."
+        ),
+        "expectedBadRules": ["t2_mastery_inflation"],
+    },
+    {
+        "id": "tb-39-cs-parsons-zero-leak",
+        "rubric": "anti_inflation_and_zero_leak",
+        "domain": "CS",
+        "title": "Zero-leak Parsons block card for binary search (no order labels/distractor tags)",
+        "kind": "card",
+        "good": {
+            "mode": "parsons",
+            "graded": True,
+            "prompt": "Arrange the lines to implement lower_bound on a sorted array (one block is a distractor).",
+            "blocks": [
+                {"id": "b1", "code": "lo, hi = 0, len(arr)"},
+                {"id": "b2", "code": "while lo < hi:"},
+                {"id": "b3", "code": "    mid = lo + (hi - lo) // 2"},
+                {"id": "b4", "code": "    if arr[mid] < target: lo = mid + 1"},
+                {"id": "b5", "code": "    else: hi = mid"},
+                {"id": "b6", "code": "    else: hi = mid - 1"},
+            ],
+            "modelSolution": "lo, hi = 0, len(arr)\nwhile lo < hi:\n    mid = lo + (hi - lo) // 2\n    if arr[mid] < target: lo = mid + 1\n    else: hi = mid",
+        },
+        "bad": {
+            "mode": "parsons",
+            "graded": True,
+            "prompt": "Great job! Arrange the blocks:",
+            "blocks": [
+                {"id": "b1", "code": "Step 1: lo, hi = 0, len(arr) # line 1"},
+                {"id": "b2", "code": "while lo < hi: (second)"},
+                {"id": "b3", "code": "    else: hi = mid - 1 # distractor"},
+            ],
+            "modelSolution": "lo, hi = 0, len(arr)",
+        },
+        "expectedBadRules": ["zero_sycophancy", "parsons_order_or_distractor_leak"],
+    },
+    {
+        "id": "tb-40-ml-faded-zero-leak",
+        "rubric": "anti_inflation_and_zero_leak",
+        "domain": "ML",
+        "title": "Zero-leak faded completion card for scaled dot-product attention",
+        "kind": "card",
+        "good": {
+            "mode": "faded",
+            "graded": True,
+            "prompt": "Fill the single variance-normalization denominator in scaled dot-product attention.",
+            "template": "scores = (Q @ K.T) / ____\nweights = softmax(scores, axis=-1)",
+            "modelSolution": "math.sqrt(d_k)",
+        },
+        "bad": {
+            "mode": "faded",
+            "graded": True,
+            "prompt": "Fill the blank (model solution math.sqrt(d_k)):",
+            "template": "scores = (Q @ K.T) / ____ (answer: math.sqrt(d_k))\nweights = softmax(scores, axis=-1)",
+            "modelSolution": "math.sqrt(d_k)",
+        },
+        "expectedBadRules": ["faded_blank_answer_leak", "model_solution_leak"],
+    },
 )
 
 
 def run_benchmark() -> dict[str, Any]:
-    """Execute the 15-scenario multi-domain TutorBench-style golden rubric suite."""
+    """Execute the 40-scenario multi-domain TutorBench-style golden rubric suite."""
     results: list[dict[str, Any]] = []
     passed_count = 0
     by_rubric: dict[str, dict[str, int]] = {}
@@ -827,8 +1665,9 @@ def run_benchmark() -> dict[str, Any]:
             bad_res = check_quiz_card(sc["bad"])
         else:
             mode = sc.get("mode", "teach")
-            good_res = lint_turn(sc["good"], mode=mode)
-            bad_res = lint_turn(sc["bad"], mode=mode)
+            lstate = sc.get("learnerState")
+            good_res = lint_turn(sc["good"], mode=mode, learner_state=lstate)
+            bad_res = lint_turn(sc["bad"], mode=mode, learner_state=lstate)
 
         bad_rules_found = {v["rule"] for v in bad_res["violations"]}
         expected_rules = list(sc["expectedBadRules"])
@@ -894,7 +1733,7 @@ def _read_input_text(file_arg: str | None) -> str:
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="pedagogy_eval.py",
-        description="Syntopik v2.0 — Zero-LLM TutorBench-Style Pedagogical Linter & Golden Eval Pack",
+        description="Syntopik v3.0 — Zero-LLM TutorBench-Style Pedagogical Linter & 40-Scenario Golden Eval Pack",
     )
     parser.add_argument("--json", action="store_true", default=False, help="Emit structured JSON output")
     sub = parser.add_subparsers(dest="cmd", required=True)
@@ -909,15 +1748,36 @@ def build_parser() -> argparse.ArgumentParser:
         help="Turn mode controlling ceiling & pause/hint rules (default: teach)",
     )
     p_lint.add_argument("--max-words", type=int, default=None, help="Explicit prose word ceiling override")
+    p_lint.add_argument(
+        "--expertise",
+        default=None,
+        choices=("novice", "developing", "intermediate", "advanced"),
+        help="Optional learner expertise band for Kalyuga Expertise-Reversal linting",
+    )
+    p_lint.add_argument(
+        "--affect",
+        default=None,
+        choices=(
+            "flow",
+            "productive_confusion",
+            "overloaded_frustrated",
+            "bored_underchallenged",
+            "gaming_rushing",
+            "fatigued",
+        ),
+        help="Optional affective state for gaming/fatigue/overload policy linting",
+    )
+    p_lint.add_argument("--bottleneck", action="store_true", help="Flag target node as high-centrality bottleneck")
+    p_lint.add_argument("--evidence-tier", default=None, choices=("T1", "T2", "T3", "T4"), help="Current evidence tier")
     p_lint.add_argument("--json", action="store_true", default=argparse.SUPPRESS)
 
     # check-card
-    p_card = sub.add_parser("check-card", help="Audit a graded quiz/probe/check JSON card for zero-leak integrity")
+    p_card = sub.add_parser("check-card", help="Audit a graded quiz/probe/check/Parsons/faded JSON card for zero-leak integrity")
     p_card.add_argument("json_file", help="Path to quiz card JSON file or '-' for stdin")
     p_card.add_argument("--json", action="store_true", default=argparse.SUPPRESS)
 
     # bench
-    p_bench = sub.add_parser("bench", help="Run the built-in 15-scenario multi-domain TutorBench golden eval suite")
+    p_bench = sub.add_parser("bench", help="Run the built-in 40-scenario multi-domain TutorBench golden eval suite")
     p_bench.add_argument("--verbose", action="store_true", help="Show per-scenario breakdown in text mode")
     p_bench.add_argument("--json", action="store_true", default=argparse.SUPPRESS)
 
@@ -932,7 +1792,16 @@ def main(argv: list[str] | None = None) -> None:
     try:
         if args.cmd == "lint":
             text = _read_input_text(args.file)
-            res = lint_turn(text, mode=args.mode, max_words=args.max_words)
+            lstate: dict[str, Any] = {}
+            if args.expertise:
+                lstate["expertise"] = args.expertise
+            if args.affect:
+                lstate["affect"] = args.affect
+            if args.bottleneck:
+                lstate["isBottleneck"] = True
+            if args.evidence_tier:
+                lstate["evidenceTier"] = args.evidence_tier
+            res = lint_turn(text, mode=args.mode, max_words=args.max_words, learner_state=lstate or None)
             if as_json:
                 print(json.dumps(res, indent=2, ensure_ascii=False))
             else:

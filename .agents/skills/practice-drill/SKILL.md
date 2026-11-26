@@ -1,9 +1,9 @@
 ---
 name: practice-drill
 description: >-
-  Run live retrieval, discrimination, and composition drills across CS, math,
-  science, and exams with BKT-gated Parsons and faded scaffolding, surgical
-  bug-hunts, R0-R5 hints, and Pause Law.
+  Run live drills: BKT-gated Parsons/faded scaffolding, bug-hunts, Blunder Fork
+  replay, Counterexample Arena, 4-min First-Move Blitz, Derivation Blackout,
+  Axiom-Cut surgery, R0-R5 hints, and Pause Law.
 ---
 
 # Practice Drill — Quiet Availability Under Load (Any Domain)
@@ -52,10 +52,13 @@ Read each target's live `bktMastery` from `propositions.jsonl` (default `0.25` o
 - Present a compact (`<= 15`-line) plausible-but-flawed snippet, derivation, or proof pre-verified to fail a hidden test or CAS equality check (`code_verify.py` / `math_verify.py`).
 - Ask the learner to pinpoint the **earliest broken line**, name the **violated invariant**, and supply a minimal fix or failing counterexample (verified live before concluding!).
 
-### High-Velocity Precision Drills (v2.0 Tier-A Engines)
+### High-Velocity Precision Drills & Mastery Gym Engines (v3.0)
 - **Blunder FEN Fork Replay** (`syntopik run fork_replay due|check|capture|mutate` / `scripts/fork_replay.py`): drops the learner directly into the mutated mid-derivation/mid-code fork one step before a past blunder (`forks.jsonl`); plays a deterministic refutation on repeat blunders before revealing the fix.
-- **Adversarial Counterexample Arena** (`syntopik run falsify_arena create|list|test|repair` / `scripts/falsify_arena.py`): learner hunts minimal inputs to kill server-sealed Conceptual Mutants (`arenas.jsonl`, zero survivor leaks) and writes a 1-line Lakatos lemma repair.
+- **Adversarial Counterexample Arena** (`syntopik run falsify_arena create|list|test|repair` / `scripts/falsify_arena.py`): learner hunts minimal inputs to kill server-sealed Conceptual Mutants (`arenas.jsonl`, zero survivor leaks) and writes a 1-line Lakatos lemma repair (awards **T3** transfer evidence).
 - **4-Min ShadowBox First-Move Blitz** (`syntopik run decision_blitz build --slug <chapter> --n 6` / `grade` / `stats` / `scripts/decision_blitz.py`): 6 interleaved lookalikes in 4 min with zero solving — asks only **Kill-Cue**, **First Move**, and **Rejected Decoy**, logging Newman Tier-1 recognition speed (`decisions.jsonl`).
+- **Clean-Room Derivation Blackout & Axiom-Cut Surgery** (`syntopik run derivation_forge blackout|check|cut` / `scripts/derivation_forge.py`):
+  - *Blackout Reconstruction* (`mode: "blackout"` in `synt_practice_card`, levels `1..3`): hides intermediate/theorem steps (`expectedExpr` sealed server-side until concluded) and checks mathematical equivalence deterministically (awards **T3** evidence).
+  - *Axiom-Cut Surgery* (`derivation_forge cut --id <id> --axiom <a1> --guess-step <sK>`): invalidates one root axiom and asks the learner to localize the **earliest broken step** vs surviving steps via BFS dependency tracing (awards **T4** evidence).
 
 ---
 
@@ -66,11 +69,11 @@ Before showing **every** problem:
    - **CS / Algorithms / ML / Systems**: verify reference code, edge cases (empty, duplicates, overflow, cycles), AST constraints, and empirical big-$O$ complexity via `code_verify.py test-cases` and `code_verify.py complexity`.
    - **Mathematics & Physics**: verify via `math_verify.py` (and `eduniti_pyq.py` for JEE PYQs).
    - **Chemistry**: verify via `chem_physical.py`, `chem_3d.py`, and `organic_reagents.py`.
-2. **Shortcut-Hunt & Zero Target Leak**: confirm no trivial trick bypasses the target concept, and **never** name the target theorem, pattern, or mode in the stem.
+2. **Shortcut-Hunt & Zero Target Leak**: confirm no trivial trick bypasses the target concept, and **never** name the target theorem, pattern, or mode in the stem. Respect `Active TeachingPolicy` scaffolding (`worked_example_parsons` → `faded` → `standard` → `challenge_transfer`).
 3. **Inline Visual Stems (Anti-Split-Attention)**: place any circuit, FBD/optics diagram, plot, molecule, architecture diagram, or annotated PDF crop (`pdf_studio.py annotate`) **directly above** the problem stem (`visual-and-demo`).
 4. **Harness-Native Delivery**:
-   - **SEP-1865 UI Hosts & MCP Terminals**: call **`synt_practice_card`** (`mlh_practice_card` alias) with `action: "pose"` (`problemId`, `statement`, `mode: "standard"|"parsons"|"faded"`, `targets`, `modelSolution`, plus `blocks` & `canonicalOrder` for Parsons/Faded) — seals solution/order server-side and enforces `1` active problem.
-   - **Pure Markdown Fallback**: commit the verified solution internally/to `/tmp`, show only the clean Markdown stem (or shuffled `A..F` blocks), and invite the learner's attempt.
+   - **SEP-1865 UI Hosts & MCP Terminals**: call **`synt_practice_card`** (`mlh_practice_card` alias) with `action: "pose"` (`problemId`, `statement`, `mode: "standard"|"parsons"|"faded"|"blackout"`, `targets`, `modelSolution`, plus `blocks`/`canonicalOrder` for Parsons/Faded or `steps[]` for Blackout) — seals solutions/orders/blackout answers server-side and enforces `1` active problem.
+   - **Pure Markdown Fallback**: commit the verified solution internally/to `/tmp`, show only the clean Markdown stem (shuffled `A..F` blocks or `[HIDDEN]` blackout steps), and invite the learner's attempt.
 
 ---
 

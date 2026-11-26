@@ -1,18 +1,22 @@
-"""Unified pure-stdlib CLI for Syntopik v2.0 (`syntopik`).
+"""Unified pure-stdlib CLI for Syntopik v3.0 (`syntopik`).
 
 Verbs:
   init | attach | connect | serve | import | review | triage | pack | doctor | export | sync | run
+  next | profile | drop | demo | debrief | mode | sunset | pace | board | bench
 """
 
 from __future__ import annotations
 
 import argparse
 import importlib
+import inspect
 import json
 import os
+import re
 import shutil
 import subprocess
 import sys
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
@@ -25,7 +29,13 @@ from syntopik.paths import (
     resolve_workspace,
     sync_hub,
 )
-from syntopik.storage import load_json, save_json_atomic, write_text_atomic
+from syntopik.storage import (
+    load_json,
+    load_jsonl,
+    save_json_atomic,
+    save_jsonl_atomic,
+    write_text_atomic,
+)
 
 __all__ = ["ALL_HARNESSES", "attach_workspace", "build_parser", "main"]
 
@@ -40,6 +50,14 @@ ALL_HARNESSES: tuple[str, ...] = (
     "gemini",
 )
 
+DEFAULT_FALLBACK_HARNESSES: tuple[str, ...] = ("claude", "codex", "cursor")
+
+STARTER_PACK_SLUGS: tuple[str, ...] = (
+    "raft-consensus",
+    "shm-physics",
+    "transformers-attention",
+)
+
 
 def _ensure_script_import(module_name: str, workspace: Path | None = None) -> Any:
     pkg_root = resolve_package_root()
@@ -52,6 +70,13 @@ def _ensure_script_import(module_name: str, workspace: Path | None = None) -> An
     return importlib.import_module(module_name)
 
 
+def _lazy_import(module_name: str) -> Any:
+    try:
+        return importlib.import_module(module_name)
+    except ImportError as exc:
+        raise SystemExit(f"Required Syntopik v3.0 module '{module_name}' is not available: {exc}") from exc
+
+
 def _find_python_for_workspace(workspace: Path, pkg_root: Path) -> str:
     for base in (workspace, pkg_root):
         for rel in (Path(".venv") / "bin" / "python", Path(".venv") / "Scripts" / "python.exe"):
@@ -59,6 +84,35 @@ def _find_python_for_workspace(workspace: Path, pkg_root: Path) -> str:
             if cand.is_file():
                 return str(cand)
     return sys.executable
+
+
+def _parse_duration_hours(raw: str | float | int | None, *, default: float = 48.0) -> float:
+    """Parse duration strings like '48h', '2d', '1.5d', '90m', or numeric hours into float hours."""
+    if raw is None:
+        return float(default)
+    if isinstance(raw, (int, float)):
+        val = float(raw)
+        if val <= 0:
+            raise ValueError(f"Duration must be positive, got {raw!r}.")
+        return val
+    text = str(raw).strip().lower()
+    if not text:
+        return float(default)
+    match = re.fullmatch(
+        r"([0-9]+(?:\.[0-9]+)?)\s*(h|hr|hrs|hour|hours|d|day|days|m|min|mins|minute|minutes)?",
+        text,
+    )
+    if not match:
+        raise ValueError(f"Invalid duration {raw!r}; expected e.g. '48h', '2d', '90m', or '48'.")
+    amount = float(match.group(1))
+    unit = match.group(2) or "h"
+    if amount <= 0:
+        raise ValueError(f"Duration must be positive, got {raw!r}.")
+    if unit in ("d", "day", "days"):
+        return amount * 24.0
+    if unit in ("m", "min", "mins", "minute", "minutes"):
+        return amount / 60.0
+    return amount
 
 
 def _resolve_git_info_exclude(repo_dir: Path) -> Path | None:
@@ -92,7 +146,7 @@ def _update_git_exclude(repo_dir: Path, entries: list[str]) -> dict[str, Any]:
     end_idx = existing.find(end_marker)
     if start_idx != -1 and end_idx != -1 and end_idx >= start_idx:
         before = existing[:start_idx].rstrip()
-        after = existing[end_idx + len(end_marker):].lstrip()
+        after = existing[end_idx + len(end_marker) :].lstrip()
         parts = [p for p in (before, block, after) if p]
         next_text = "\n\n".join(parts) + "\n"
     else:
@@ -122,17 +176,116 @@ def _resolve_bundled_path(pkg_root: Path, repo_rel: str, bundle_rel: str) -> Pat
 
 
 def _link_or_copy_dir(src: Path, dest: Path, *, force_copy: bool = False) -> tuple[str, bool]:
+    """Create a cross-platform directory link (absolute symlink / Windows junction) or copy fallback."""
     if dest.exists() or dest.is_symlink():
         return "preserved", False
+    abs_src = src.resolve()
     dest.parent.mkdir(parents=True, exist_ok=True)
     if not force_copy:
         try:
-            os.symlink(str(src), str(dest), target_is_directory=True)
-            return "symlinked", True
+            os.symlink(str(abs_src), str(dest), target_is_directory=True)
+            if dest.is_dir():
+                return "symlinked", True
         except OSError:
             pass
-    shutil.copytree(src, dest, dirs_exist_ok=True)
+        if os.name == "nt":
+            try:
+                proc = subprocess.run(
+                    ["cmd", "/c", "mklink", "/J", str(dest), str(abs_src)],
+                    capture_output=True,
+                    text=True,
+                    check=False,
+                )
+                if proc.returncode == 0 and dest.is_dir():
+                    return "junction", True
+            except OSError:
+                pass
+    shutil.copytree(abs_src, dest, dirs_exist_ok=True)
     return "copied", True
+
+
+def _detect_installed_harnesses(target: Path, *, home: Path | None = None) -> list[str]:
+    """Detect harnesses installed globally or present in `target` without dumping all 8 blindly."""
+    home_dir = Path(home).expanduser().resolve() if home is not None else Path.home()
+    detected: list[str] = []
+
+    has_agy_home = (home_dir / ".gemini" / "antigravity").is_dir()
+    checks: list[tuple[str, bool]] = [
+        ("claude", (target / ".claude").exists() or (home_dir / ".claude").is_dir()),
+        ("codex", (target / ".codex").exists() or (home_dir / ".codex").is_dir()),
+        ("cursor", (target / ".cursor").exists() or (home_dir / ".cursor").is_dir()),
+        (
+            "windsurf",
+            (target / ".windsurf").exists()
+            or (home_dir / ".windsurf").is_dir()
+            or (home_dir / ".codeium" / "windsurf").is_dir(),
+        ),
+        (
+            "antigravity",
+            (target / ".agents" / "hooks.json").is_file()
+            or (target / "GEMINI.md").is_file()
+            or has_agy_home,
+        ),
+        (
+            "gemini",
+            (target / ".gemini").exists()
+            or (home_dir / ".gemini" / "settings.json").is_file()
+            or (home_dir / ".gemini" / "extensions").is_dir()
+            or ((home_dir / ".gemini").is_dir() and not has_agy_home),
+        ),
+        (
+            "copilot",
+            (target / ".vscode").exists() or (target / ".github" / "instructions").exists(),
+        ),
+        (
+            "opencode",
+            (target / "opencode.json").is_file() or (home_dir / ".config" / "opencode").is_dir(),
+        ),
+    ]
+    for name, present in checks:
+        if present:
+            detected.append(name)
+
+    return detected if detected else list(DEFAULT_FALLBACK_HARNESSES)
+
+
+def _hook_list_has_command(hook_list: list[Any], command_str: str) -> bool:
+    for item in hook_list:
+        if not isinstance(item, dict):
+            continue
+        if item.get("command") == command_str:
+            return True
+        inner = item.get("hooks")
+        if isinstance(inner, list):
+            for h in inner:
+                if isinstance(h, dict) and h.get("command") == command_str:
+                    return True
+    return False
+
+
+def _append_dedup_hook(hook_list: list[Any], entry: dict[str, Any], command_str: str) -> None:
+    if not _hook_list_has_command(hook_list, command_str):
+        hook_list.append(entry)
+
+
+def _inspect_antigravity_plugin(home: Path | None = None) -> dict[str, Any]:
+    home_dir = Path(home).expanduser().resolve() if home is not None else Path.home()
+    plugins_root = home_dir / ".gemini" / "config" / "plugins"
+    for name in ("syntopik", "syntopik-studio", "mlh-studio"):
+        pdir = plugins_root / name
+        if (pdir / "plugin.json").is_file():
+            return {
+                "installed": True,
+                "pluginName": name,
+                "pluginDir": str(pdir),
+                "hasDistServer": (pdir / "dist" / "server.mjs").is_file(),
+            }
+    return {
+        "installed": False,
+        "pluginName": None,
+        "pluginDir": str(plugins_root / "syntopik"),
+        "hasDistServer": False,
+    }
 
 
 def attach_workspace(
@@ -148,6 +301,7 @@ def attach_workspace(
       - NEVER overwrites an existing host `AGENTS.md` or `CLAUDE.md`.
       - Writes local exclusions strictly to `.git/info/exclude` (zero diff to host `.gitignore`).
       - Initializes `~/.syntopik` (`vault="global"`) or `<dir>/.syntopik` (`vault="local"`).
+      - Uses 100% cross-platform Windows-safe commands (zero inline POSIX `VAR=... cmd`).
     """
     target = Path(target_dir).expanduser().resolve()
     target.mkdir(parents=True, exist_ok=True)
@@ -166,14 +320,24 @@ def attach_workspace(
     setup = _ensure_script_import("setup_harness", pkg_root)
     vault_init = setup.ensure_learner_workspace(vault_path, run_sync=True, repair_skills=False)
 
-    selected = list(ALL_HARNESSES) if harness_low in ("auto", "all") else [harness_low]
-    server_mjs = _resolve_bundled_path(pkg_root, "mcp-app/mlh-studio/dist/server.mjs", "mcp-dist/server.mjs")
-    skills_src = _resolve_bundled_path(pkg_root, ".agents/skills", "skills")
-    hooks_src = _resolve_bundled_path(pkg_root, ".agents/hooks", "hooks")
+    if harness_low == "all":
+        selected = list(ALL_HARNESSES)
+    elif harness_low == "auto":
+        selected = _detect_installed_harnesses(target)
+    else:
+        selected = [harness_low]
+
+    server_mjs = _resolve_bundled_path(pkg_root, "mcp-app/mlh-studio/dist/server.mjs", "mcp-dist/server.mjs").resolve()
+    skills_src = _resolve_bundled_path(pkg_root, ".agents/skills", "skills").resolve()
+    hooks_src = _resolve_bundled_path(pkg_root, ".agents/hooks", "hooks").resolve()
+
+    session_hook_cmd = f'node "{(hooks_src / "session-start.mjs").resolve()}" --workspace "{vault_path}"'
+    post_hook_cmd = f'node "{(hooks_src / "post-graph-sync.mjs").resolve()}" --workspace "{vault_path}"'
 
     exclude_entries: list[str] = [".syntopik/"]
     written: list[str] = []
     preserved: list[str] = []
+    notes: list[str] = []
 
     # Strictly preserve any host AGENTS.md / CLAUDE.md
     for host_doc in ("AGENTS.md", "CLAUDE.md"):
@@ -333,31 +497,41 @@ def attach_workspace(
 
         def _wire_claude_hooks(doc: dict[str, Any]) -> None:
             hooks = doc.setdefault("hooks", {})
+            if not isinstance(hooks, dict):
+                hooks = {}
+                doc["hooks"] = hooks
             if not isinstance(hooks.get("SessionStart"), list):
-                hooks["SessionStart"] = [
-                    {
-                        "hooks": [
-                            {
-                                "type": "command",
-                                "command": f'SYNT_WORKSPACE="{vault_path}" node "{hooks_src / "session-start.mjs"}"',
-                                "timeout": 10,
-                            }
-                        ]
-                    }
-                ]
+                hooks["SessionStart"] = []
             if not isinstance(hooks.get("PostToolUse"), list):
-                hooks["PostToolUse"] = [
-                    {
-                        "matcher": "Write|Edit|MultiEdit|NotebookEdit|Bash",
-                        "hooks": [
-                            {
-                                "type": "command",
-                                "command": f'SYNT_WORKSPACE="{vault_path}" node "{hooks_src / "post-graph-sync.mjs"}"',
-                                "timeout": 10,
-                            }
-                        ],
-                    }
-                ]
+                hooks["PostToolUse"] = []
+
+            _append_dedup_hook(
+                hooks["SessionStart"],
+                {
+                    "hooks": [
+                        {
+                            "type": "command",
+                            "command": session_hook_cmd,
+                            "timeout": 10,
+                        }
+                    ]
+                },
+                session_hook_cmd,
+            )
+            _append_dedup_hook(
+                hooks["PostToolUse"],
+                {
+                    "matcher": "Write|Edit|MultiEdit|NotebookEdit|Bash",
+                    "hooks": [
+                        {
+                            "type": "command",
+                            "command": post_hook_cmd,
+                            "timeout": 10,
+                        }
+                    ],
+                },
+                post_hook_cmd,
+            )
 
         existed_cs = _merge_json_file(claude_settings, _wire_claude_hooks)
         written.append(".claude/settings.json")
@@ -366,15 +540,63 @@ def attach_workspace(
 
         claude_skills = target / ".claude" / "skills"
         dest_skills = target / ".agents" / "skills"
-        if not claude_skills.exists() and not claude_skills.is_symlink() and dest_skills.exists():
-            rel = os.path.relpath(dest_skills, claude_skills.parent)
-            try:
-                claude_skills.parent.mkdir(parents=True, exist_ok=True)
-                os.symlink(rel, claude_skills, target_is_directory=True)
-                written.append(".claude/skills (symlinked)")
-                exclude_entries.append(".claude/skills")
-            except OSError:
-                pass
+        if dest_skills.exists():
+            sk_action, sk_created = _link_or_copy_dir(dest_skills.resolve(), claude_skills, force_copy=copy_skills)
+            if sk_created:
+                written.append(f".claude/skills ({sk_action})")
+                exclude_entries.extend([".claude/skills", ".claude/skills/"])
+            else:
+                preserved.append(".claude/skills")
+
+    antigravity_info: dict[str, Any] | None = None
+    if "antigravity" in selected:
+        agy_hooks = target / ".agents" / "hooks.json"
+
+        def _wire_agy_hooks(doc: dict[str, Any]) -> None:
+            ss_group = doc.setdefault("study-session-context", {})
+            if not isinstance(ss_group, dict):
+                ss_group = {}
+                doc["study-session-context"] = ss_group
+            if not isinstance(ss_group.get("SessionStart"), list):
+                ss_group["SessionStart"] = []
+            _append_dedup_hook(
+                ss_group["SessionStart"],
+                {"type": "command", "command": session_hook_cmd, "timeout": 10},
+                session_hook_cmd,
+            )
+
+            pt_group = doc.setdefault("knowledge-graph-autosync", {})
+            if not isinstance(pt_group, dict):
+                pt_group = {}
+                doc["knowledge-graph-autosync"] = pt_group
+            if not isinstance(pt_group.get("PostToolUse"), list):
+                pt_group["PostToolUse"] = []
+            _append_dedup_hook(
+                pt_group["PostToolUse"],
+                {
+                    "matcher": "write_file|edit_file|replace_file_content|multi_replace_file_content|write_to_file|run_command",
+                    "type": "command",
+                    "command": post_hook_cmd,
+                    "timeout": 10,
+                },
+                post_hook_cmd,
+            )
+
+        existed_agy_hooks = _merge_json_file(agy_hooks, _wire_agy_hooks)
+        written.append(".agents/hooks.json")
+        if not existed_agy_hooks:
+            exclude_entries.append(".agents/hooks.json")
+
+        antigravity_info = _inspect_antigravity_plugin()
+        antigravity_info["workspaceHooks"] = ".agents/hooks.json"
+        if antigravity_info["installed"]:
+            notes.append(
+                f"Antigravity plugin detected ({antigravity_info['pluginName']} at {antigravity_info['pluginDir']}); workspace hooks wired in .agents/hooks.json."
+            )
+        else:
+            notes.append(
+                "Antigravity workspace hooks wired in .agents/hooks.json (host AGENTS.md preserved). Run `syntopik connect antigravity` to install the global Studio MCP plugin."
+            )
 
     if "gemini" in selected:
         gem_settings = target / ".gemini" / "settings.json"
@@ -392,7 +614,7 @@ def attach_workspace(
             exclude_entries.append(".gemini/settings.json")
 
     git_exclude = _update_git_exclude(target, exclude_entries)
-    return {
+    res: dict[str, Any] = {
         "ok": True,
         "targetDir": str(target),
         "vaultMode": vault_low,
@@ -400,9 +622,13 @@ def attach_workspace(
         "harnesses": selected,
         "written": written,
         "preserved": preserved,
+        "notes": notes,
         "gitExclude": git_exclude,
         "vaultInit": vault_init,
     }
+    if antigravity_info is not None:
+        res["antigravity"] = antigravity_info
+    return res
 
 
 def _emit(payload: dict[str, Any], as_json: bool, lines: list[str]) -> None:
@@ -461,6 +687,8 @@ def _cmd_attach(args: argparse.Namespace) -> int:
     ]
     if res["preserved"]:
         lines.append(f"  Preserved  : {', '.join(res['preserved'])}")
+    for note in res.get("notes") or []:
+        lines.append(f"  Note       : {note}")
     if res["gitExclude"]["updated"]:
         lines.append(f"  Git Ignore : updated {res['gitExclude']['path']} (zero diff to .gitignore)")
     _emit(res, bool(args.json), lines)
@@ -608,36 +836,221 @@ def _cmd_import(args: argparse.Namespace) -> int:
     return 0
 
 
+def _run_srs_json(ws: Path, pkg_root: Path, srs_args: list[str]) -> tuple[int, dict[str, Any] | None, str]:
+    srs_script = pkg_root / "scripts" / "srs_engine.py"
+    py_bin = _find_python_for_workspace(ws, pkg_root)
+    cmd = [py_bin, "-B", str(srs_script), *srs_args]
+    proc = subprocess.run(cmd, capture_output=True, text=True, check=False)
+    if proc.returncode != 0:
+        return int(proc.returncode), None, (proc.stderr or proc.stdout).strip()
+    raw = proc.stdout.strip()
+    if not raw:
+        return 0, {}, ""
+    try:
+        return 0, json.loads(raw), ""
+    except json.JSONDecodeError:
+        return 0, {"raw": raw}, ""
+
+
+def _run_review_tui(ws: Path, kg_dir: Path, payload: dict[str, Any], *, energy: str | None = None) -> int:
+    items = list(payload.get("items") or [])
+    if energy == "low":
+        items = items[:3]
+    if not items:
+        print(f"Syntopik Review TUI ({ws}): 0 items due.")
+        return 0
+
+    props_by_id = {
+        str(p.get("id")): p
+        for p in load_jsonl(kg_dir / "propositions.jsonl")
+        if isinstance(p, dict) and p.get("id")
+    }
+    srs_mod = _ensure_script_import("srs_engine", ws)
+
+    print(f"Syntopik Review TUI — {len(items)} due item(s) (Ctrl-C or 'q' to stop)")
+    reviewed = 0
+    rating_map = {
+        "1": "again",
+        "a": "again",
+        "again": "again",
+        "2": "hard",
+        "h": "hard",
+        "hard": "hard",
+        "3": "good",
+        "g": "good",
+        "good": "good",
+        "4": "easy",
+        "e": "easy",
+        "easy": "easy",
+    }
+
+    for idx, item in enumerate(items, 1):
+        pid = str(item.get("id") or "")
+        prop = props_by_id.get(pid) or {}
+        cues = [c for c in (prop.get("cues") or []) if isinstance(c, dict) and (c.get("q") or c.get("a"))]
+        cue = cues[0] if cues else None
+        prompt_text = str((cue or {}).get("q") or prop.get("prompt") or item.get("title") or pid)
+        answer_text = str((cue or {}).get("a") or prop.get("statement") or item.get("title") or "")
+        notes_text = str(item.get("notes") or prop.get("notes") or "")
+
+        print("")
+        print(f"[{idx}/{len(items)}] {pid} ({item.get('chapter') or 'General'} · {item.get('status') or 'due'})")
+        print(f"  Prompt: {prompt_text}")
+        try:
+            reveal = input("  Press Enter to reveal (or 'q' to quit): ").strip().lower()
+        except (EOFError, KeyboardInterrupt):
+            print("")
+            break
+        if reveal in ("q", "quit"):
+            break
+
+        print(f"  Answer: {answer_text}")
+        if notes_text:
+            print(f"  Notes : {notes_text}")
+
+        try:
+            raw_rate = input("  Rate [1=again, 2=hard, 3=good, 4=easy, s=skip, q=quit] (+ optional confidence %): ").strip()
+        except (EOFError, KeyboardInterrupt):
+            print("")
+            break
+        if not raw_rate or raw_rate.lower() in ("s", "skip"):
+            continue
+        if raw_rate.lower() in ("q", "quit"):
+            break
+
+        parts = raw_rate.split()
+        rating = rating_map.get(parts[0].lower())
+        if not rating:
+            print(f"  Unrecognized rating {parts[0]!r}; skipped.")
+            continue
+        conf: float | None = None
+        if len(parts) >= 2:
+            try:
+                conf = float(parts[1].rstrip("%"))
+            except ValueError:
+                conf = None
+
+        srs_mod.record_review(
+            kg_dir,
+            pid,
+            rating,
+            cue_id=(cue or {}).get("id"),
+            confidence=conf,
+            no_sync=True,
+        )
+        reviewed += 1
+        print(f"  Recorded '{rating}' for {pid}.")
+
+    if reviewed > 0:
+        sync_hub(workspace=ws, quiet=True)
+    print(f"Review TUI complete: {reviewed}/{len(items)} card(s) recorded.")
+    return 0
+
+
 def _cmd_review(args: argparse.Namespace) -> int:
     ws = resolve_workspace(getattr(args, "workspace", None))
+    kg_dir = resolve_kg_dir(ws)
+    chapters_dir = resolve_chapters_dir(ws)
+    pkg_root = resolve_package_root()
+
     if args.web:
         from syntopik.server import serve_forever
 
         return serve_forever(workspace=ws, port=args.port, open_browser=True)
 
-    pkg_root = resolve_package_root()
-    srs_script = pkg_root / "scripts" / "srs_engine.py"
-    py_bin = _find_python_for_workspace(ws, pkg_root)
-    cmd = [py_bin, "-B", str(srs_script), "due", "--kg-dir", str(resolve_kg_dir(ws))]
+    if args.recover:
+        rec_args = [
+            "recover",
+            "--kg-dir",
+            str(kg_dir),
+            "--daily-cap",
+            str(max(1, int(args.daily_cap))),
+            "--days",
+            str(max(1, int(args.days))),
+        ]
+        if getattr(args, "apply", False):
+            rec_args.append("--apply")
+        rc, data, err = _run_srs_json(ws, pkg_root, rec_args)
+        if rc != 0 or data is None:
+            print(err or "Backlog recovery failed.", file=sys.stderr)
+            return rc or 1
+        payload = {"ok": True, "mode": "recover", "workspace": str(ws), **data}
+        lines = [
+            f"Calm Backlog Recovery ({ws})",
+            f"  Overdue       : {data.get('overdueCount', data.get('totalOverdue', 0))} item(s)",
+            f"  Daily cap     : {args.daily_cap}/day over {args.days} day(s)",
+            f"  Rescheduled   : {len(data.get('rescheduleMap') or {})} item(s) (applied={bool(data.get('applied'))})",
+        ]
+        _emit(payload, bool(args.json), lines)
+        return 0
+
+    if (args.resume or args.energy is not None) and not args.tui:
+        daily_plan = _ensure_script_import("daily_plan", ws)
+        plan = daily_plan.build_daily_plan(
+            kg_dir=kg_dir,
+            chapters_dir=chapters_dir,
+            energy=args.energy or "normal",
+            resume=bool(args.resume),
+        )
+        if args.json:
+            print(json.dumps({"ok": True, "workspace": str(ws), **plan}, indent=2, ensure_ascii=False))
+        else:
+            print(daily_plan._render_human_plan(plan))
+        return 0
+
+    due_args = ["due", "--kg-dir", str(kg_dir)]
     if args.compress:
-        cmd.append("--compress")
+        due_args.append("--compress")
     if args.bury_siblings:
-        cmd.append("--bury-siblings")
-    if args.limit:
-        cmd.extend(["--limit", str(args.limit)])
+        due_args.append("--bury-siblings")
+    effective_limit = 3 if args.energy == "low" else int(args.limit)
+    if effective_limit:
+        due_args.extend(["--limit", str(effective_limit)])
+
+    rc, data, err = _run_srs_json(ws, pkg_root, due_args)
+    if rc != 0 or data is None:
+        print(err or "Failed to load due queue.", file=sys.stderr)
+        return rc or 1
+
+    if args.tui:
+        if args.json:
+            print(json.dumps({"ok": True, "mode": "tui", "workspace": str(ws), **data}, indent=2, ensure_ascii=False))
+            return 0
+        return _run_review_tui(ws, kg_dir, data, energy=args.energy)
+
     if args.json:
-        cmd.append("--json")
-    proc = subprocess.run(cmd, check=False)
-    return int(proc.returncode)
+        print(json.dumps({"ok": True, "workspace": str(ws), **data}, indent=2, ensure_ascii=False))
+        return 0
+
+    items = data.get("items") or []
+    lines = [
+        f"Syntopik Due Review ({data.get('today', '')}) — {data.get('dueCount', len(items))} item(s)"
+        + (f" ({data.get('knockedOutCount')} FIRe knockout(s))" if data.get("knockedOutCount") else ""),
+    ]
+    for it in items[:25]:
+        retr = f" · R≈{round(float(it['retrievability']) * 100)}%" if it.get("retrievability") is not None else ""
+        lines.append(f"  - {it.get('id')} [{it.get('status')}{retr}]: {it.get('title') or it.get('id')}")
+    if not items:
+        lines.append("  Nothing due right now.")
+    for ln in lines:
+        print(ln)
+    return 0
 
 
 def _cmd_triage(args: argparse.Namespace) -> int:
     ws = resolve_workspace(getattr(args, "workspace", None))
     kg_dir = resolve_kg_dir(ws)
     chapters_dir = resolve_chapters_dir(ws)
+
+    raw_duration = args.exam_in if args.exam_in is not None else args.hours
+    try:
+        hours_left = _parse_duration_hours(raw_duration, default=48.0)
+    except ValueError as exc:
+        raise SystemExit(str(exc)) from exc
+
     daily_plan = _ensure_script_import("daily_plan", ws)
     plan = daily_plan.build_triage_plan(
-        hours_left=float(args.hours),
+        hours_left=hours_left,
         sleep_hours=float(args.sleep_hours),
         kg_dir=kg_dir,
         chapters_dir=chapters_dir,
@@ -684,11 +1097,34 @@ def _cmd_pack(args: argparse.Namespace) -> int:
 
 def _cmd_doctor(args: argparse.Namespace) -> int:
     ws = resolve_workspace(getattr(args, "workspace", None)) if getattr(args, "workspace", None) else None
+    fix_actions: list[str] = []
+
+    if getattr(args, "fix", False):
+        target_ws = ws if ws is not None else resolve_workspace()
+        setup = _ensure_script_import("setup_harness", target_ws)
+        boot = setup.ensure_learner_workspace(target_ws, run_sync=True, repair_skills=True)
+        if boot.get("createdDirs"):
+            fix_actions.append(f"created {len(boot['createdDirs'])} dir(s)")
+        if boot.get("createdFiles"):
+            fix_actions.append(f"created {len(boot['createdFiles'])} missing ledger/starter file(s)")
+        if (target_ws / ".agents" / "skills").is_dir() and (target_ws / ".claude").is_dir():
+            rep = setup.repair_claude_skills_link(target_ws, create_if_missing=True)
+            fix_actions.append(f".claude/skills: {rep.get('action', 'checked')}")
+        if sync_hub(workspace=target_ws, quiet=True):
+            fix_actions.append("synced knowledge-graph/graph-data.js")
+        ws = target_ws
+
     doctor = _ensure_script_import("study_doctor", ws)
     report = doctor.run_doctor(workspace=ws, core_only=bool(args.core_only))
+    if getattr(args, "fix", False):
+        report["fixApplied"] = True
+        report["fixActions"] = fix_actions
+
     if args.json:
         print(json.dumps(report, indent=2))
     else:
+        if fix_actions:
+            print(f"Syntopik Doctor --fix: {', '.join(fix_actions)}")
         s = report["summary"]
         banner = "HEALTHY" if report["healthy"] else "ISSUES DETECTED"
         print(f"Syntopik Doctor — {banner} ({s['ok']}/{s['total']} ok, {s['warn']} warn, {s['fail']} fail · {report['elapsedMs']} ms)")
@@ -700,11 +1136,94 @@ def _cmd_doctor(args: argparse.Namespace) -> int:
     return 0 if report.get("healthy") else 1
 
 
+def _build_json_export(ws: Path, kg_dir: Path, chapters_dir: Path, chapter: str | None = None) -> dict[str, Any]:
+    ch_filter = str(chapter or "").strip().lower()
+
+    def _matches_ch(row: dict[str, Any]) -> bool:
+        if not ch_filter:
+            return True
+        return (
+            ch_filter in str(row.get("chapter") or "").lower()
+            or ch_filter in str(row.get("id") or "").lower()
+            or ch_filter in str(row.get("subject") or "").lower()
+        )
+
+    props = [p for p in load_jsonl(kg_dir / "propositions.jsonl") if _matches_ch(p)]
+    prop_ids = {str(p.get("id")) for p in props if p.get("id")}
+    all_chains = load_jsonl(kg_dir / "chains.jsonl")
+    if ch_filter:
+        chains = [
+            c
+            for c in all_chains
+            if str(c.get("conclusion") or c.get("to") or "") in prop_ids
+            or any(str(pr) in prop_ids for pr in (c.get("premises") or []))
+        ]
+    else:
+        chains = all_chains
+
+    mistakes = [m for m in load_jsonl(kg_dir / "mistakes.jsonl") if _matches_ch(m)]
+    revlog = load_jsonl(kg_dir / "revlog.jsonl")
+    if ch_filter:
+        revlog = [r for r in revlog if str(r.get("propId") or "") in prop_ids]
+    reading_queue = load_jsonl(kg_dir / "reading-queue.jsonl")
+    forks = load_jsonl(kg_dir / "forks.jsonl")
+    arenas = load_jsonl(kg_dir / "arenas.jsonl")
+    decisions = load_jsonl(kg_dir / "decisions.jsonl")
+    derivations = load_jsonl(kg_dir / "derivations.jsonl")
+
+    trackers: list[dict[str, Any]] = []
+    if chapters_dir.is_dir():
+        for tf in sorted(chapters_dir.glob("*-tracker.json")):
+            obj = load_json(tf, default=None)
+            if isinstance(obj, dict):
+                if not ch_filter or ch_filter in str(obj.get("slug") or "").lower() or ch_filter in str(obj.get("title") or "").lower():
+                    trackers.append(obj)
+
+    return {
+        "ok": True,
+        "format": "json",
+        "schemaVersion": 3,
+        "syntopikVersion": __version__,
+        "exportedAt": datetime.now(timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z"),
+        "workspace": str(ws),
+        "chapterFilter": chapter or None,
+        "counts": {
+            "propositions": len(props),
+            "chains": len(chains),
+            "mistakes": len(mistakes),
+            "revlog": len(revlog),
+            "readingQueue": len(reading_queue),
+            "forks": len(forks),
+            "arenas": len(arenas),
+            "decisions": len(decisions),
+            "derivations": len(derivations),
+            "trackers": len(trackers),
+        },
+        "propositions": props,
+        "chains": chains,
+        "mistakes": mistakes,
+        "revlog": revlog,
+        "readingQueue": reading_queue,
+        "forks": forks,
+        "arenas": arenas,
+        "decisions": decisions,
+        "derivations": derivations,
+        "chapterTrackers": trackers,
+    }
+
+
 def _cmd_export(args: argparse.Namespace) -> int:
     ws = resolve_workspace(getattr(args, "workspace", None))
     kg_dir = resolve_kg_dir(ws)
     chapters_dir = resolve_chapters_dir(ws)
-    fmt = str(args.format).strip().lower()
+
+    raw_fmt = args.format
+    if getattr(args, "pocket", False) and not raw_fmt:
+        fmt = "pocket"
+    elif raw_fmt:
+        fmt = str(raw_fmt).strip().lower()
+    else:
+        raise SystemExit("Specify an export format (obsidian|pocket|anki|pack|json|dossier) or pass --pocket.")
 
     if fmt == "obsidian":
         from syntopik.obsidian import export_vault
@@ -741,6 +1260,29 @@ def _cmd_export(args: argparse.Namespace) -> int:
         _emit(res, bool(args.json), [f"Exported Study Pack -> {res.get('outPath')}"])
         return 0
 
+    if fmt == "json":
+        snapshot = _build_json_export(ws, kg_dir, chapters_dir, chapter=args.chapter)
+        if args.out:
+            out_path = Path(args.out).expanduser().resolve()
+            save_json_atomic(out_path, snapshot)
+            res = {
+                "ok": True,
+                "format": "json",
+                "outPath": str(out_path),
+                "counts": snapshot["counts"],
+            }
+            _emit(res, bool(args.json), [f"Exported Knowledge Graph JSON -> {out_path}"])
+        else:
+            print(json.dumps(snapshot, indent=2, ensure_ascii=False))
+        return 0
+
+    if fmt == "dossier":
+        evidence = _lazy_import("syntopik.evidence")
+        out_path = Path(args.out).expanduser().resolve() if args.out else (ws / "exports" / "mastery-dossier.html").resolve()
+        res = evidence.export_mastery_dossier(ws, out_path)
+        _emit(res, bool(args.json), [f"Exported Mastery Dossier -> {res.get('outPath', out_path)}"])
+        return 0
+
     if fmt == "anki":
         pkg_root = resolve_package_root()
         srs_script = pkg_root / "scripts" / "srs_engine.py"
@@ -748,8 +1290,8 @@ def _cmd_export(args: argparse.Namespace) -> int:
         cmd = [py_bin, "-B", str(srs_script), "export-anki", "--kg-dir", str(kg_dir)]
         if args.out:
             cmd.extend(["--out", str(Path(args.out).expanduser().resolve())])
-        if args.chapter:
-            cmd.extend(["--chapter", args.chapter])
+        if getattr(args, "subject", None):
+            cmd.extend(["--subject", args.subject])
         proc = subprocess.run(cmd, check=False)
         return int(proc.returncode)
 
@@ -813,6 +1355,450 @@ def _cmd_run(args: argparse.Namespace) -> int:
     return int(proc.returncode)
 
 
+# ---------------------------------------------------------------------------
+# v3.0 First-Class Verbs (lazy imports for parallel Wave 1A/1B/1D engines)
+# ---------------------------------------------------------------------------
+
+
+def _cmd_next(args: argparse.Namespace) -> int:
+    ws = resolve_workspace(getattr(args, "workspace", None))
+    brainstem = _lazy_import("syntopik.brainstem")
+    res = brainstem.plan_next_move(
+        ws,
+        event=getattr(args, "event", None),
+        energy=getattr(args, "energy", None),
+        domain=getattr(args, "domain", None),
+    )
+    lines = [
+        f"Next Move: {res.get('recommendedMode', 'unknown')}",
+        f"  Target   : {res.get('targetNodeId') or res.get('chapterSlug') or 'frontier'}",
+        f"  Rationale: {res.get('rationale', '')}",
+    ]
+    if res.get("exactCmd"):
+        lines.append(f"  Command  : {res['exactCmd']}")
+    _emit(res, bool(args.json), lines)
+    return 0
+
+
+def _parse_kv_overrides(pairs: list[str]) -> dict[str, Any]:
+    out: dict[str, Any] = {}
+    for raw in pairs or []:
+        if "=" not in raw:
+            raise SystemExit(f"Invalid --set entry {raw!r}; expected KEY=VALUE.")
+        k, v = raw.split("=", 1)
+        k = k.strip()
+        vs = v.strip()
+        if vs.lower() in ("true", "false"):
+            val: Any = vs.lower() == "true"
+        elif re.fullmatch(r"-?[0-9]+", vs):
+            val = int(vs)
+        elif re.fullmatch(r"-?[0-9]+\.[0-9]+", vs):
+            val = float(vs)
+        else:
+            val = vs
+        out[k] = val
+    return out
+
+
+def _cmd_profile(args: argparse.Namespace) -> int:
+    ws = resolve_workspace(getattr(args, "workspace", None))
+    kg_dir = resolve_kg_dir(ws)
+    lm = _lazy_import("syntopik.learner_model")
+    action = str(args.action or "status").strip().lower()
+
+    if action == "status":
+        profile = lm.load_profile(kg_dir)
+        policy_lines = lm.format_compact_policy_lines(profile, domain=args.domain)
+        payload = {"ok": True, "action": "status", "workspace": str(ws), "profile": profile, "policyLines": policy_lines}
+        _emit(payload, bool(args.json), ["Syntopik Learner Profile:", *[f"  {ln}" for ln in policy_lines]])
+        return 0
+
+    if action == "calibrate":
+        profile = lm.load_profile(kg_dir)
+        updated = lm.apply_tier1_calibration(
+            profile,
+            entry_ramp=args.entry_ramp,
+            challenge_appetite=args.challenge_appetite,
+            session_minutes=args.session_minutes if args.session_minutes is not None else 30,
+            prose_density=args.prose_density or "standard",
+        )
+        lm.save_profile(kg_dir, updated)
+        policy_lines = lm.format_compact_policy_lines(updated, domain=args.domain)
+        payload = {"ok": True, "action": "calibrate", "workspace": str(ws), "profile": updated, "policyLines": policy_lines}
+        _emit(payload, bool(args.json), ["Learner profile calibrated:", *[f"  {ln}" for ln in policy_lines]])
+        return 0
+
+    if action == "policy":
+        profile = lm.load_profile(kg_dir)
+        policy = lm.compile_teaching_policy(profile, domain=args.domain, energy=args.energy or "normal")
+        policy_lines = lm.format_compact_policy_lines(profile, domain=args.domain)
+        payload = {"ok": True, "action": "policy", "workspace": str(ws), "policy": policy, "policyLines": policy_lines}
+        _emit(payload, bool(args.json), ["Compiled Teaching Policy:", *[f"  {ln}" for ln in policy_lines]])
+        return 0
+
+    if action == "override":
+        overrides = _parse_kv_overrides(args.set_kv)
+        density_map = getattr(lm, "PROSE_DENSITY_WORDS", {"terse": 105, "standard": 135, "rich": 155})
+        if args.prose_density:
+            overrides["maxProseWords"] = int(density_map[args.prose_density])
+        elif "proseDensity" in overrides and "maxProseWords" not in overrides:
+            raw_pd = str(overrides.pop("proseDensity")).strip().lower()
+            if raw_pd in density_map:
+                overrides["maxProseWords"] = int(density_map[raw_pd])
+        if args.session_minutes is not None:
+            overrides["sessionTargetMinutes"] = int(args.session_minutes)
+        updated = lm.apply_user_overrides(kg_dir, overrides)
+        profile_obj = updated.get("profile", updated) if isinstance(updated, dict) else updated
+        policy_lines = lm.format_compact_policy_lines(profile_obj, domain=args.domain)
+        payload = {
+            "ok": True,
+            "action": "override",
+            "workspace": str(ws),
+            "overrides": overrides,
+            "userOverrides": updated.get("userOverrides") if isinstance(updated, dict) else None,
+            "compiledPolicy": updated.get("compiledPolicy") if isinstance(updated, dict) else None,
+            "policyLines": policy_lines,
+            "profile": profile_obj,
+        }
+        _emit(payload, bool(args.json), ["Applied learner overrides:", *[f"  {ln}" for ln in policy_lines]])
+        return 0
+
+    if action == "reset":
+        prof_file = kg_dir / "learner-profile.json"
+        existed = prof_file.is_file()
+        if existed:
+            prof_file.unlink()
+        fresh = lm.load_profile(kg_dir)
+        payload = {"ok": True, "action": "reset", "workspace": str(ws), "removedExisting": existed, "profile": fresh}
+        _emit(payload, bool(args.json), [f"Learner profile reset ({'removed existing' if existed else 'already default'})."])
+        return 0
+
+    raise SystemExit(f"Unknown profile action: {action}")
+
+
+def _cmd_drop(args: argparse.Namespace) -> int:
+    ws = resolve_workspace(getattr(args, "workspace", None))
+    brainstem = _lazy_import("syntopik.brainstem")
+    res = brainstem.drop_sources(ws, list(args.inputs), slug=args.slug, title=args.title)
+    sync_hub(workspace=ws, quiet=True)
+    lines = [
+        f"Dropped {len(args.inputs)} source(s) into {ws}",
+        f"  Slug : {res.get('slug') or args.slug or 'auto'}",
+    ]
+    if res.get("probeOneHint"):
+        lines.append(f"  Next : {res['probeOneHint']}")
+    _emit(res, bool(args.json), lines)
+    return 0
+
+
+def _find_packs_dir(ws: Path, pkg_root: Path) -> Path | None:
+    for cand in (ws / "packs", pkg_root / "packs", pkg_root / "_bundle" / "packs"):
+        if cand.is_dir():
+            return cand
+    return None
+
+
+def _cmd_demo(args: argparse.Namespace) -> int:
+    pkg_root = resolve_package_root()
+    if getattr(args, "workspace", None):
+        demo_ws = Path(args.workspace).expanduser().resolve()
+    else:
+        demo_ws = (Path.home() / ".syntopik-demo").resolve()
+
+    packs_dir = _find_packs_dir(demo_ws, pkg_root)
+    if packs_dir is None:
+        raise SystemExit("Starter packs directory (packs/) not found in workspace or package bundle.")
+
+    selected_slugs = list(STARTER_PACK_SLUGS) if args.pack == "all" else [str(args.pack)]
+    pack_files: list[Path] = []
+    for slug in selected_slugs:
+        pf = packs_dir / f"{slug}.syntopik-pack.zip"
+        if not pf.is_file():
+            raise SystemExit(f"Starter pack not found: {pf}")
+        pack_files.append(pf)
+
+    setup = _ensure_script_import("setup_harness", pkg_root)
+    setup.ensure_learner_workspace(demo_ws, run_sync=False, repair_skills=False)
+
+    from syntopik.packs import import_pack
+
+    imported: list[dict[str, Any]] = []
+    for pf in pack_files:
+        res = import_pack(
+            pf,
+            workspace=demo_ws,
+            kg_dir=demo_ws / "knowledge-graph",
+            chapters_dir=demo_ws / "chapters",
+            allow_code_arenas=True,
+            no_sync=True,
+        )
+        imported.append({"pack": pf.name, "ok": bool(res.get("ok", True)), "summary": res})
+
+    synced = sync_hub(workspace=demo_ws, quiet=True)
+    payload = {
+        "ok": True,
+        "workspace": str(demo_ws),
+        "packSelection": args.pack,
+        "importedPacks": [it["pack"] for it in imported],
+        "synced": synced,
+        "results": imported,
+    }
+    _emit(
+        payload,
+        bool(args.json),
+        [
+            f"Syntopik demo workspace ready: {demo_ws}",
+            f"  Imported : {', '.join(payload['importedPacks'])}",
+            f"  Hub sync : {'ok' if synced else 'skipped (Node unavailable)'}",
+            f"  Launch   : syntopik serve --workspace \"{demo_ws}\" --open",
+        ],
+    )
+
+    if args.open:
+        from syntopik.server import serve_forever
+
+        return serve_forever(workspace=demo_ws, port=int(args.port), open_browser=True)
+    return 0
+
+
+def _cmd_debrief(args: argparse.Namespace) -> int:
+    ws = resolve_workspace(getattr(args, "workspace", None))
+    wm = _lazy_import("syntopik.work_mentor")
+    diff_text: str | None = None
+    if getattr(args, "diff_file", None):
+        diff_text = Path(args.diff_file).expanduser().read_text(encoding="utf-8")
+
+    sig = inspect.signature(wm.debrief_git_diff)
+    kwargs: dict[str, Any] = {"ref": args.ref, "diff_text": diff_text}
+    if "dry_run" in sig.parameters:
+        kwargs["dry_run"] = bool(args.dry_run)
+    res = wm.debrief_git_diff(ws, **kwargs)
+    if not args.dry_run:
+        sync_hub(workspace=ws, quiet=True)
+
+    lines = [
+        f"Work Mentor Debrief ({args.ref})",
+        f"  Findings : {len(res.get('findings') or [])}",
+    ]
+    _emit(res, bool(args.json), lines)
+    return 0
+
+
+def _cmd_mode(args: argparse.Namespace) -> int:
+    ws = resolve_workspace(getattr(args, "workspace", None))
+    wm = _lazy_import("syntopik.work_mentor")
+    mode_arg = str(args.mode or "mentor").strip().lower()
+    enabled = (mode_arg == "mentor") and (not bool(args.off))
+    res = wm.set_mentor_mode(ws, enabled=enabled)
+    state_label = "mentor (active)" if enabled else "study (mentor off)"
+    _emit(res, bool(args.json), [f"Syntopik mode updated: {state_label} ({ws})"])
+    return 0
+
+
+def _extract_id_set(items: Any) -> set[str]:
+    ids: set[str] = set()
+    if not isinstance(items, list):
+        return ids
+    for item in items:
+        if isinstance(item, str) and item.strip():
+            ids.add(item.strip())
+        elif isinstance(item, dict):
+            val = item.get("id") or item.get("propId")
+            if isinstance(val, str) and val.strip():
+                ids.add(val.strip())
+    return ids
+
+
+def _cmd_sunset(args: argparse.Namespace) -> int:
+    ws = resolve_workspace(getattr(args, "workspace", None))
+    kg_dir = resolve_kg_dir(ws)
+    chapters_dir = resolve_chapters_dir(ws)
+    slug = str(args.slug).strip()
+    if not slug:
+        raise SystemExit("Provide a chapter slug to sunset.")
+
+    gi = _ensure_script_import("graph_intel", ws)
+    if not hasattr(gi, "compute_sunset_plan"):
+        raise SystemExit("scripts/graph_intel.py does not expose compute_sunset_plan().")
+    plan = gi.compute_sunset_plan(kg_dir, slug)
+
+    safe_slug = re.sub(r"[^a-zA-Z0-9._-]+", "-", slug).strip("-") or "chapter"
+    archive_path = (chapters_dir / "_archived" / f"{safe_slug}.syntopik-pack.zip").resolve()
+
+    keep_ids = _extract_id_set(plan.get("keepAxioms"))
+    archive_ids = _extract_id_set(plan.get("archiveLeaves"))
+
+    applied = False
+    pack_snapshot: dict[str, Any] | None = None
+    archived_count = 0
+    kept_axiom_count = 0
+
+    if args.apply:
+        archive_path.parent.mkdir(parents=True, exist_ok=True)
+        try:
+            from syntopik.packs import export_pack
+
+            pack_snapshot = export_pack(
+                slug,
+                workspace=ws,
+                kg_dir=kg_dir,
+                chapters_dir=chapters_dir,
+                out_path=archive_path,
+            )
+        except Exception as exc:
+            pack_snapshot = {"ok": False, "error": str(exc)}
+
+        props_file = kg_dir / "propositions.jsonl"
+        props = load_jsonl(props_file)
+        mutated = False
+        for p in props:
+            pid = str(p.get("id") or "")
+            if pid in archive_ids:
+                p["archived"] = True
+                archived_count += 1
+                mutated = True
+            elif pid in keep_ids:
+                p["archived"] = False
+                p["targetRetention"] = 0.80
+                kept_axiom_count += 1
+                mutated = True
+        if mutated:
+            save_jsonl_atomic(props_file, props)
+        sync_hub(workspace=ws, quiet=True)
+        applied = True
+
+    payload = {
+        "ok": True,
+        "slug": slug,
+        "applied": applied,
+        "archivePath": str(archive_path),
+        "packSnapshot": pack_snapshot,
+        "archivedCount": archived_count if applied else len(archive_ids),
+        "keptAxiomCount": kept_axiom_count if applied else len(keep_ids),
+        "plan": plan,
+    }
+    lines = [
+        f"Semester Sunset ({slug}) — {'APPLIED' if applied else 'PREVIEW (pass --apply to archive)'}",
+        f"  Keep axioms (R=0.80): {len(keep_ids)}",
+        f"  Archive leaves      : {len(archive_ids)}",
+        f"  Archive pack        : {archive_path}",
+    ]
+    _emit(payload, bool(args.json), lines)
+    return 0
+
+
+def _cmd_pace(args: argparse.Namespace) -> int:
+    ws = resolve_workspace(getattr(args, "workspace", None))
+    pkg_root = resolve_package_root()
+    daily_script = pkg_root / "scripts" / "daily_plan.py"
+    py_bin = _find_python_for_workspace(ws, pkg_root)
+    cmd = [
+        py_bin,
+        "-B",
+        str(daily_script),
+        "--pace",
+        "--kg-dir",
+        str(resolve_kg_dir(ws)),
+        "--chapters-dir",
+        str(resolve_chapters_dir(ws)),
+    ]
+    if args.rebalance:
+        cmd.append("--rebalance")
+    if args.ics:
+        cmd.extend(["--ics", str(Path(args.ics).expanduser().resolve())])
+    if args.json:
+        cmd.append("--json")
+    proc = subprocess.run(cmd, check=False)
+    return int(proc.returncode)
+
+
+def _cmd_board(args: argparse.Namespace) -> int:
+    ws = resolve_workspace(getattr(args, "workspace", None))
+    kg_dir = resolve_kg_dir(ws)
+    wb = _lazy_import("syntopik.whiteboard")
+    action = str(args.action or "status").strip().lower()
+
+    if action == "status":
+        res = wb.get_session(kg_dir)
+        frames = res.get("frames") or []
+        pins = res.get("pins") or []
+        _emit(res, bool(args.json), [f"Whiteboard session ({ws}): {len(frames)} frame(s), {len(pins)} pin(s)"])
+        return 0
+
+    if action == "push":
+        if args.frame_json:
+            raw = args.frame_json.strip()
+            if raw.startswith("@"):
+                frame = json.loads(Path(raw[1:]).expanduser().read_text(encoding="utf-8"))
+            else:
+                frame = json.loads(raw)
+            if isinstance(frame, dict) and "content" in frame and "body" not in frame:
+                frame["body"] = frame.pop("content")
+        else:
+            frame = {
+                "kind": args.kind or "summary",
+                "title": args.title or "",
+                "body": args.content or "",
+            }
+        res = wb.push_frame(kg_dir, frame)
+        _emit(res, bool(args.json), [f"Pushed whiteboard frame ({frame.get('kind', 'summary')})."])
+        return 0
+
+    if action == "pin":
+        res = wb.pin_step(kg_dir, int(args.step_index), args.note or "")
+        _emit(res, bool(args.json), [f"Pinned whiteboard step {args.step_index}."])
+        return 0
+
+    if action == "clear":
+        res = wb.clear_session(kg_dir)
+        _emit(res, bool(args.json), [f"Cleared whiteboard session ({ws})."])
+        return 0
+
+    raise SystemExit(f"Unknown board action: {action}")
+
+
+def _cmd_bench(args: argparse.Namespace) -> int:
+    ws = resolve_workspace(getattr(args, "workspace", None))
+    pkg_root = resolve_package_root()
+    bench_script: Path | None = None
+    for cand in (
+        ws / "benchmarks" / "syntopik_bench.py",
+        pkg_root / "benchmarks" / "syntopik_bench.py",
+        pkg_root / "_bundle" / "benchmarks" / "syntopik_bench.py",
+    ):
+        if cand.is_file():
+            bench_script = cand
+            break
+    if bench_script is None:
+        raise SystemExit("Benchmark runner benchmarks/syntopik_bench.py not found.")
+
+    py_bin = _find_python_for_workspace(ws, pkg_root)
+    cmd = [
+        py_bin,
+        "-B",
+        str(bench_script),
+        "--days",
+        str(args.days),
+        "--seed",
+        str(args.seed),
+    ]
+    if args.svg:
+        cmd.append("--svg")
+    if args.markdown:
+        cmd.append("--markdown")
+    if args.check:
+        cmd.append("--check")
+    if args.json:
+        cmd.append("--json")
+
+    env = dict(os.environ)
+    env["PYTHONDONTWRITEBYTECODE"] = "1"
+    existing_pp = env.get("PYTHONPATH", "")
+    env["PYTHONPATH"] = f"{pkg_root}{os.pathsep}{existing_pp}" if existing_pp else str(pkg_root)
+    proc = subprocess.run(cmd, env=env, check=False)
+    return int(proc.returncode)
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="syntopik",
@@ -836,7 +1822,7 @@ def build_parser() -> argparse.ArgumentParser:
         "--harness",
         choices=["auto", "all", *ALL_HARNESSES],
         default="auto",
-        help="Target AI harness adapter(s) to wire",
+        help="Target AI harness adapter(s) to wire (auto detects installed harnesses)",
     )
     p_att.add_argument("--vault", choices=["global", "local"], default="global", help="Study vault location")
     p_att.add_argument("--copy-skills", action="store_true", help="Copy .agents/skills instead of symlinking")
@@ -866,15 +1852,22 @@ def build_parser() -> argparse.ArgumentParser:
     p_imp.add_argument("--dry-run", action="store_true", help="Preview --pocket-sync without mutating ledgers")
     p_imp.add_argument("--kind", choices=["auto", "youtube", "arxiv", "repo", "url", "notes"], default="auto")
     p_imp.add_argument("--workspace", default=None, help="Syntopik workspace directory")
-    p_imp.add_argument("--slug", default=None, help="Chapter/source slug override")
+    p_imp.add_argument("--slug", "--chapter", dest="slug", default=None, help="Chapter/source slug override (alias: --chapter)")
     p_imp.add_argument("--subject", default="General", help="Subject tag")
     p_imp.add_argument("--register-tracker", action="store_true", help="Register imported source in chapter tracker")
     p_imp.add_argument("--json", action="store_true", help="Emit JSON output")
     p_imp.set_defaults(func=_cmd_import)
 
-    p_rev = sub.add_parser("review", help="Run FIRe-compressed FSRS-6 due review or open Studio Flashcards")
+    p_rev = sub.add_parser("review", help="Run FIRe-compressed FSRS-6 review, TUI loop, recovery, re-entry, or Studio Flashcards")
     p_rev.add_argument("--workspace", default=None, help="Syntopik workspace directory")
     p_rev.add_argument("--web", action="store_true", help="Launch live Studio in browser")
+    p_rev.add_argument("--tui", action="store_true", help="Interactive terminal flashcard loop")
+    p_rev.add_argument("--recover", action="store_true", help="Calm backlog recovery plan (smooth overdue tail)")
+    p_rev.add_argument("--daily-cap", type=int, default=15, help="Max reviews/day during --recover (default: 15)")
+    p_rev.add_argument("--days", type=int, default=6, help="Recovery window in days during --recover (default: 6)")
+    p_rev.add_argument("--apply", action="store_true", help="Persist smoothed schedule when using --recover")
+    p_rev.add_argument("--resume", action="store_true", help="Zero-guilt Cold-Start Re-Entry Brief")
+    p_rev.add_argument("--energy", choices=["low", "normal", "deep"], default=None, help="Cognitive energy mode")
     p_rev.add_argument("--port", type=int, default=4173, help="Port when using --web")
     p_rev.add_argument("--limit", type=int, default=25, help="Max items")
     p_rev.add_argument("--compress", action="store_true", default=True, help="Apply FIRe SRC compression")
@@ -883,7 +1876,8 @@ def build_parser() -> argparse.ArgumentParser:
     p_rev.set_defaults(func=_cmd_review)
 
     p_tri = sub.add_parser("triage", help="48-hour Pareto exam triage plan + Anti-Mastery 1-page crib sheet")
-    p_tri.add_argument("--hours", type=float, default=48.0, help="Hours until exam (default: 48)")
+    p_tri.add_argument("--hours", type=float, default=None, help="Hours until exam (default: 48)")
+    p_tri.add_argument("--exam-in", dest="exam_in", default=None, help="Time until exam, e.g. '48h', '2d', '36' (aliases --hours)")
     p_tri.add_argument("--sleep-hours", type=float, default=7.0, help="Protected sleep hours per night (default: 7)")
     p_tri.add_argument("--chapter", default=None, help="Optional chapter filter")
     p_tri.add_argument("--crib-sheet", action="store_true", help="Also generate Anti-Mastery crib sheet spec")
@@ -899,14 +1893,23 @@ def build_parser() -> argparse.ArgumentParser:
     p_doc = sub.add_parser("doctor", help="Run workspace, runtime, and packaging health diagnostics")
     p_doc.add_argument("--workspace", default=None, help="Workspace directory override")
     p_doc.add_argument("--core-only", action="store_true", help="Check pure-stdlib core without optional STEM .venv")
+    p_doc.add_argument("--fix", action="store_true", help="Non-destructively initialize missing ledgers, repair .claude/skills, and sync graph-data.js before checking")
     p_doc.add_argument("--json", action="store_true", help="Emit JSON output")
     p_doc.set_defaults(func=_cmd_doctor)
 
-    p_exp = sub.add_parser("export", help="Export Knowledge Graph to Obsidian, Pocket HTML, Anki, or Study Pack")
-    p_exp.add_argument("format", choices=["obsidian", "pocket", "anki", "pack"], help="Export target format")
-    p_exp.add_argument("--out", default=None, help="Output file or directory")
+    p_exp = sub.add_parser("export", help="Export Knowledge Graph to Obsidian, Pocket HTML, Anki, Study Pack, JSON, or Mastery Dossier")
+    p_exp.add_argument(
+        "format",
+        nargs="?",
+        choices=["obsidian", "pocket", "anki", "pack", "json", "dossier"],
+        default=None,
+        help="Export target format",
+    )
+    p_exp.add_argument("--pocket", action="store_true", help="Shortcut flag for 'syntopik export pocket'")
+    p_exp.add_argument("--out", "--vault", dest="out", default=None, help="Output file or directory (alias: --vault)")
     p_exp.add_argument("--target", default=None, help="Target chapter/subject (for pack export)")
     p_exp.add_argument("--chapter", default=None, help="Chapter filter")
+    p_exp.add_argument("--subject", default=None, help="Subject filter (for Anki export)")
     p_exp.add_argument("--limit", type=int, default=25, help="Card limit (for pocket export)")
     p_exp.add_argument("--workspace", default=None, help="Syntopik workspace directory")
     p_exp.add_argument("--json", action="store_true", help="Emit JSON output")
@@ -922,6 +1925,96 @@ def build_parser() -> argparse.ArgumentParser:
     p_run.add_argument("engine", help="Engine script name (e.g. srs_engine, math_verify, sync-graph.mjs)")
     p_run.add_argument("engine_args", nargs=argparse.REMAINDER, help="Arguments forwarded to the engine script")
     p_run.set_defaults(func=_cmd_run)
+
+    # --- v3.0 First-Class Verbs ---
+
+    p_next = sub.add_parser("next", help="Plan the single optimal next pedagogical move (Brainstem)")
+    p_next.add_argument("--energy", choices=["low", "normal", "deep"], default=None, help="Current cognitive energy")
+    p_next.add_argument("--domain", default=None, help="Optional subject/domain scope")
+    p_next.add_argument("--event", default=None, help="Optional trigger event context")
+    p_next.add_argument("--workspace", default=None, help="Syntopik workspace directory")
+    p_next.add_argument("--json", action="store_true", help="Emit JSON output")
+    p_next.set_defaults(func=_cmd_next)
+
+    p_prof = sub.add_parser("profile", help="Inspect, calibrate, compile policy, override, or reset Adaptive Learner Profile")
+    p_prof.add_argument("action", nargs="?", choices=["status", "calibrate", "policy", "override", "reset"], default="status")
+    p_prof.add_argument("--domain", default=None, help="Optional domain scope")
+    p_prof.add_argument("--energy", choices=["low", "normal", "deep"], default=None, help="Cognitive energy override")
+    p_prof.add_argument("--entry-ramp", dest="entry_ramp", default="balanced", help="Calibration entry ramp preference")
+    p_prof.add_argument("--challenge-appetite", dest="challenge_appetite", default="balanced", help="Challenge appetite preference")
+    p_prof.add_argument("--session-minutes", dest="session_minutes", type=int, default=None, help="Target session length in minutes")
+    p_prof.add_argument("--prose-density", dest="prose_density", choices=["terse", "standard", "rich"], default=None)
+    p_prof.add_argument("--set", dest="set_kv", action="append", default=[], help="Override KEY=VALUE (repeatable)")
+    p_prof.add_argument("--workspace", default=None, help="Syntopik workspace directory")
+    p_prof.add_argument("--json", action="store_true", help="Emit JSON output")
+    p_prof.set_defaults(func=_cmd_profile)
+
+    p_drop = sub.add_parser("drop", help="Drop mixed sources (PDF, URL, YouTube, repo, notes) with Teacher-First spine classification")
+    p_drop.add_argument("inputs", nargs="+", help="One or more file paths, directories, or URLs")
+    p_drop.add_argument("--slug", default=None, help="Chapter slug override")
+    p_drop.add_argument("--title", default=None, help="Chapter title override")
+    p_drop.add_argument("--workspace", default=None, help="Syntopik workspace directory")
+    p_drop.add_argument("--json", action="store_true", help="Emit JSON output")
+    p_drop.set_defaults(func=_cmd_drop)
+
+    p_demo = sub.add_parser("demo", help="Load bundled zero-PII starter pack(s) into a clean demo workspace")
+    p_demo.add_argument("--pack", choices=[*STARTER_PACK_SLUGS, "all"], default="all", help="Starter pack to load (default: all)")
+    p_demo.add_argument("--workspace", default=None, help="Target demo workspace (default: ~/.syntopik-demo)")
+    p_demo.add_argument("--open", action="store_true", help="Launch local Studio server in browser after loading")
+    p_demo.add_argument("--port", type=int, default=4173, help="Port when using --open")
+    p_demo.add_argument("--json", action="store_true", help="Emit JSON output")
+    p_demo.set_defaults(func=_cmd_demo)
+
+    p_deb = sub.add_parser("debrief", help="Crystallize git diff bugs/invariants into Forks, Arenas, and KG propositions")
+    p_deb.add_argument("--ref", default="HEAD~1..HEAD", help="Git diff ref range (default: HEAD~1..HEAD)")
+    p_deb.add_argument("--diff-file", dest="diff_file", default=None, help="Optional unified diff file instead of git diff")
+    p_deb.add_argument("--dry-run", action="store_true", help="Analyze diff without writing to ledgers")
+    p_deb.add_argument("--workspace", default=None, help="Syntopik workspace directory")
+    p_deb.add_argument("--json", action="store_true", help="Emit JSON output")
+    p_deb.set_defaults(func=_cmd_debrief)
+
+    p_mode = sub.add_parser("mode", help="Toggle Anti-Vibe-Coding Work Mentor mode vs Study mode")
+    p_mode.add_argument("mode", nargs="?", choices=["mentor", "study"], default="mentor", help="Mode to activate")
+    p_mode.add_argument("--off", action="store_true", help="Disable mentor mode")
+    p_mode.add_argument("--workspace", default=None, help="Syntopik workspace directory")
+    p_mode.add_argument("--json", action="store_true", help="Emit JSON output")
+    p_mode.set_defaults(func=_cmd_mode)
+
+    p_sun = sub.add_parser("sunset", help="Semester Sunset: snapshot chapter pack, keep core axioms at R=0.80, archive leaves")
+    p_sun.add_argument("slug", help="Chapter slug to sunset")
+    p_sun.add_argument("--apply", action="store_true", help="Write archive snapshot and mark archived leaves / axiom retention")
+    p_sun.add_argument("--workspace", default=None, help="Syntopik workspace directory")
+    p_sun.add_argument("--json", action="store_true", help="Emit JSON output")
+    p_sun.set_defaults(func=_cmd_sunset)
+
+    p_pace = sub.add_parser("pace", help="Multi-course buffer-protected Auto-Pacer with RFC-5545 .ics export")
+    p_pace.add_argument("--rebalance", action="store_true", help="Rebalance schedule across remaining buffer days")
+    p_pace.add_argument("--ics", default=None, help="Export calendar schedule to an .ics file")
+    p_pace.add_argument("--workspace", default=None, help="Syntopik workspace directory")
+    p_pace.add_argument("--json", action="store_true", help="Emit JSON output")
+    p_pace.set_defaults(func=_cmd_pace)
+
+    p_brd = sub.add_parser("board", help="Inspect or push frames/pins to the live AI-to-Whiteboard SSE bus")
+    p_brd.add_argument("action", nargs="?", choices=["status", "push", "pin", "clear"], default="status")
+    p_brd.add_argument("--kind", default="summary", help="Frame kind for push")
+    p_brd.add_argument("--title", default="", help="Frame title for push")
+    p_brd.add_argument("--content", default="", help="Frame content for push")
+    p_brd.add_argument("--frame-json", dest="frame_json", default=None, help="Raw JSON object or @path for push")
+    p_brd.add_argument("--step-index", dest="step_index", type=int, default=0, help="Step index for pin")
+    p_brd.add_argument("--note", default="", help="Pin note text")
+    p_brd.add_argument("--workspace", default=None, help="Syntopik workspace directory")
+    p_brd.add_argument("--json", action="store_true", help="Emit JSON output")
+    p_brd.set_defaults(func=_cmd_board)
+
+    p_bench = sub.add_parser("bench", help="Run the seeded 60-day multi-persona Syntopik-Eval cognitive benchmark")
+    p_bench.add_argument("--days", type=int, default=60, help="Simulation horizon in days (default: 60)")
+    p_bench.add_argument("--seed", type=int, default=42, help="Deterministic RNG seed (default: 42)")
+    p_bench.add_argument("--svg", action="store_true", help="Write ablation & calibration SVG charts")
+    p_bench.add_argument("--markdown", action="store_true", help="Print GitHub Markdown benchmark table")
+    p_bench.add_argument("--check", action="store_true", help="Assert strict CI regression invariants")
+    p_bench.add_argument("--workspace", default=None, help="Syntopik workspace directory")
+    p_bench.add_argument("--json", action="store_true", help="Emit JSON output")
+    p_bench.set_defaults(func=_cmd_bench)
 
     return parser
 

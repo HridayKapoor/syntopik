@@ -150,6 +150,8 @@ def regenerate_review_queue(
     misconceptions: list[dict[str, Any]] = []
 
     for p in props:
+        if p.get("archived") is True:
+            continue
         status = p.get("status", "planned")
         retr = 0.0
         if isinstance(p.get("fsrs"), dict):
@@ -618,6 +620,7 @@ def record_review(
     misconception: bool = False,
     confidence: float | None = None,
     duration_ms: int | None = None,
+    hints_used: int = 0,
     no_fire: bool = False,
     no_sync: bool = False,
     now: datetime | None = None,
@@ -660,11 +663,23 @@ def record_review(
 
     ref_now = now if now is not None else datetime.now(timezone.utc)
     params = load_fsrs_parameters(resolved_kg)
+
+    # Honor per-proposition targetRetention (e.g. 0.80 for Sunset core axioms)
+    raw_target_ret = target.get("targetRetention")
+    eff_retention = 0.9
+    if isinstance(raw_target_ret, (int, float)) and not isinstance(raw_target_ret, bool):
+        fv = float(raw_target_ret)
+        if math.isfinite(fv) and 0.5 <= fv <= 0.99:
+            eff_retention = fv
+
+    hints_clamped = max(0, min(5, int(hints_used or 0)))
+
     card_dict, rev_meta = review_card_dict(
         target.get("fsrs") if isinstance(target.get("fsrs"), dict) else None,
         r_low,
         ref_now,
         parameters=params,
+        desired_retention=eff_retention,
         review_duration_ms=duration_ms,
     )
 
@@ -710,7 +725,7 @@ def record_review(
 
     # True FIRe: propagate implicit prerequisite credit on unaided good/easy (skip on lucky guess or --no-fire).
     fire_credits: list[dict[str, Any]] = []
-    if not no_fire and r_low in ("good", "easy") and not conf_sig["luckyGuess"]:
+    if not no_fire and r_low in ("good", "easy") and not conf_sig["luckyGuess"] and hints_clamped == 0:
         fire_credits = apply_fire_credit(
             target["id"],
             r_low,
@@ -735,6 +750,8 @@ def record_review(
         "learnerConfidence": conf_sig["learnerConfidence"],
         "correct": bkt_correct,
         "durationMs": int(duration_ms) if duration_ms is not None else None,
+        "hintsUsed": hints_clamped,
+        "targetRetention": eff_retention,
         "hypercorrection": conf_sig["hypercorrection"],
         "luckyGuess": conf_sig["luckyGuess"],
         "fireCreditsCount": len(fire_credits),
@@ -742,6 +759,28 @@ def record_review(
     revlog_file = resolved_kg / "revlog.jsonl"
     append_jsonl_locked(revlog_file, revlog_entry)
     revlog_rows = load_jsonl(revlog_file)
+
+    try:
+        from syntopik.learner_model import record_telemetry_event
+
+        fsrs_diff = float(card_dict.get("difficulty") or 5.0)
+        elo_diff = int(round(1200.0 + fsrs_diff * 60.0))
+        record_telemetry_event(
+            resolved_kg,
+            domain=str(target.get("subject") or "General"),
+            prop_id=str(target["id"]),
+            kind="review",
+            correct=bool(bkt_correct),
+            difficulty=elo_diff,
+            confidence=conf_sig["learnerConfidence"],
+            duration_ms=int(duration_ms) if duration_ms is not None else None,
+            hints_used=hints_clamped,
+            mistake_category="misconception" if misconception else (None if bkt_correct else "concept_gap"),
+            pf_outcome=None,
+            skipped=False,
+        )
+    except Exception:
+        pass
 
     fire_line = (
         f"FIRe implicitly refreshed {len(fire_credits)} prerequisite(s) from `{target['id']}`."
@@ -767,6 +806,9 @@ def record_review(
         "stabilityDays": round(float(card_dict.get("stability") or 0), 2),
         "difficulty": round(float(card_dict.get("difficulty") or 0), 2),
         "nextReview": due_date,
+        "intervalDays": int(rev_meta.get("intervalDays") or 1),
+        "targetRetention": eff_retention,
+        "hintsUsed": hints_clamped,
         "lapses": int(target.get("lapses") or 0),
         "fireCredits": fire_credits,
         "hypercorrection": conf_sig["hypercorrection"],
@@ -980,6 +1022,7 @@ def cmd_review(args: argparse.Namespace) -> None:
             misconception=bool(getattr(args, "misconception", False)),
             confidence=getattr(args, "confidence", None),
             duration_ms=getattr(args, "duration_ms", None),
+            hints_used=int(getattr(args, "hints", 0) or 0),
             no_fire=bool(getattr(args, "no_fire", False)),
             no_sync=bool(getattr(args, "no_sync", False)),
         )
@@ -999,9 +1042,12 @@ def cmd_due(args: argparse.Namespace) -> None:
         now = datetime.now(timezone.utc)
         today = now.date().isoformat()
     params = load_fsrs_parameters(kg_dir)
+    include_archived = bool(getattr(args, "include_archived", False))
 
     items: list[dict[str, Any]] = []
     for p in props:
+        if p.get("archived") is True and not include_archived:
+            continue
         status = p.get("status", "planned")
         due_date = p.get("nextReview")
         is_due = status in ("misconception", "shaky") or (isinstance(due_date, str) and due_date <= today)
@@ -1176,15 +1222,19 @@ def cmd_stats(args: argparse.Namespace) -> None:
     counts = {"solid": 0, "shaky": 0, "misconception": 0, "planned": 0}
     bkt_vals = []
     due_count = 0
+    archived_count = 0
     total_cues = 0
     for p in props:
         st = p.get("status", "planned")
         counts[st] = counts.get(st, 0) + 1
         if isinstance(p.get("bktMastery"), (int, float)):
             bkt_vals.append(float(p["bktMastery"]))
-        due_date = p.get("nextReview")
-        if st in ("misconception", "shaky") or (isinstance(due_date, str) and due_date <= today):
-            due_count += 1
+        if p.get("archived") is True:
+            archived_count += 1
+        else:
+            due_date = p.get("nextReview")
+            if st in ("misconception", "shaky") or (isinstance(due_date, str) and due_date <= today):
+                due_count += 1
         if isinstance(p.get("cues"), list):
             total_cues += sum(1 for c in p["cues"] if isinstance(c, dict))
 
@@ -1203,6 +1253,7 @@ def cmd_stats(args: argparse.Namespace) -> None:
 
     print(json.dumps({
         "totalNodes": len(props),
+        "archivedCount": archived_count,
         "totalChains": len(chains),
         "uniqueChains": len(seen_chain_keys),
         "hyperedgeCount": hyperedge_count,
@@ -1820,6 +1871,7 @@ def main(argv: list[str] | None = None) -> None:
     p1.add_argument("--misconception", action="store_true")
     p1.add_argument("--confidence", type=float, default=None, help="Learner confidence 0..1 (or 0..100)")
     p1.add_argument("--duration-ms", type=int, default=None, help="Review response duration in milliseconds")
+    p1.add_argument("--hints", type=int, default=0, choices=[0, 1, 2, 3, 4, 5], help="Number of hints used (0..5, default: 0)")
     p1.add_argument("--no-fire", action="store_true", help="Disable FIRe implicit prerequisite credit")
     p1.add_argument("--no-sync", action="store_true", help="Skip regenerating viewer/dashboard")
     _add_kg_dir_flag(p1)
@@ -1829,6 +1881,7 @@ def main(argv: list[str] | None = None) -> None:
     p2.add_argument("--limit", type=int, default=20)
     p2.add_argument("--compress", action="store_true", help="Apply Spaced Repetition Compression (greedy FIRe knockout set-cover)")
     p2.add_argument("--bury-siblings", action="store_true", help="Apply 24h per-type sibling burying (exempts image occlusion)")
+    p2.add_argument("--include-archived", action="store_true", help="Include Sunset-archived propositions in due results")
     p2.add_argument("--today", help="Optional ISO date YYYY-MM-DD override")
     _add_kg_dir_flag(p2)
     p2.set_defaults(func=cmd_due)

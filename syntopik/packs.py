@@ -183,6 +183,7 @@ __all__ = [
     "DATA_NAME",
     "CHECKSUMS_NAME",
     "STRIPPED_PERSONAL_FIELDS",
+    "EXCLUDED_PERSONAL_FILES",
     "is_safe_archive_path",
     "verify_pack",
     "export_pack",
@@ -198,6 +199,21 @@ CHECKSUMS_NAME = "SHA256SUMS.json"
 
 MAX_PACK_UNCOMPRESSED_BYTES = 50 * 1024 * 1024  # 50 MiB zip-bomb ceiling
 MAX_PACK_MEMBERS = 512
+
+# Learner-private files that are NEVER exported into or accepted inside portable study packs (zero-PII guarantee)
+EXCLUDED_PERSONAL_FILES: tuple[str, ...] = (
+    "learner-profile.json",
+    "whiteboard-session.json",
+    "evidence-ledger.jsonl",
+    "viva-sessions.jsonl",
+    "blitz-sessions.json",
+    "exam-attempts.jsonl",
+    "revlog.jsonl",
+    "mistakes.jsonl",
+    "fsrs-params.json",
+    "study-config.json",
+)
+_EXCLUDED_FILES_SET: frozenset[str] = frozenset(EXCLUDED_PERSONAL_FILES)
 
 # Canonical list of personal / learner-private & unsafe fields ALWAYS stripped from exported/imported packs
 STRIPPED_PERSONAL_FIELDS: tuple[str, ...] = (
@@ -227,11 +243,48 @@ STRIPPED_PERSONAL_FIELDS: tuple[str, ...] = (
     "submittedAt",
     "timeSpentSec",
     "svg",
+    "learnerProfile",
+    "recentEvents",
+    "affectiveState",
+    "failureDna",
+    "userOverrides",
+    "pins",
+    "attemptHistory",
+    "attempts",
+    "completions",
+    "lastAttemptAt",
+    "passed",
+    "blackoutPassed",
+    "axiomCutPassed",
+    "vivaHistory",
+    "entryHash",
+    "prevHash",
+    "durationMs",
+    "hintsUsed",
+    "learnerConfidence",
+    "hypercorrection",
+    "luckyGuess",
 )
 _STRIPPED_SET: frozenset[str] = frozenset(STRIPPED_PERSONAL_FIELDS)
 
 _DRIVE_PREFIX_RE = re.compile(r"^[A-Za-z]:")
-_ABS_LOCAL_PATH_RE = re.compile(r"(?:/Users/[^\s\"']+|/home/[^\s\"']+|[A-Za-z]:\\[^\s\"']+)")
+_ABS_LOCAL_PATH_RE = re.compile(
+    r"(?:"
+    r"(?:/Users|/home)/[^\s/\\:\"'<>|]+"
+    r"(?:/[^\s/\\:\"'<>|,;()\[\]{}]+(?: [^\s/\\:\"'<>|,;()\[\]{}]+){0,5}(?=/))*"
+    r"(?:/(?:[^\s/\\:\"'<>|,;()\[\]{}]+(?: [^\s/\\:\"'<>|,;()\[\]{}]+){0,4}\.[A-Za-z0-9]{1,10}"
+    r"|[^\s/\\:\"'<>|.,;()\[\]{}]+(?: [A-Z0-9][^\s/\\:\"'<>|.,;()\[\]{}]*){0,4}"
+    r"|[^\s/\\:\"'<>|]+))?/?"
+    r"|"
+    r"[A-Za-z]:\\[^\s/\\:\"'<>|]+"
+    r"(?:\\[^\s/\\:\"'<>|,;()\[\]{}]+(?: [^\s/\\:\"'<>|,;()\[\]{}]+){0,5}(?=\\))*"
+    r"(?:\\(?:[^\s/\\:\"'<>|,;()\[\]{}]+(?: [^\s/\\:\"'<>|,;()\[\]{}]+){0,4}\.[A-Za-z0-9]{1,10}"
+    r"|[^\s/\\:\"'<>|.,;()\[\]{}]+(?: [A-Z0-9][^\s/\\:\"'<>|.,;()\[\]{}]*){0,4}"
+    r"|[^\s/\\:\"'<>|]+))?\\?"
+    r")"
+)
+_SAFE_CHAPTER_MD_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,127}\.md$")
+_SAFE_EXAM_FILE_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,127}\.(?:json|html)$", re.IGNORECASE)
 
 _STOP_WORDS = frozenset(
     (
@@ -250,8 +303,12 @@ def _canonical_json_bytes(obj: Any) -> bytes:
     return json.dumps(obj, sort_keys=True, separators=(",", ":"), ensure_ascii=False).encode("utf-8")
 
 
+def _redact_local_paths_raw(text: str) -> str:
+    return _ABS_LOCAL_PATH_RE.sub("<redacted-path>", str(text or ""))
+
+
 def _strip_local_paths(text: str) -> str:
-    return _ABS_LOCAL_PATH_RE.sub("<redacted-path>", str(text or "")).strip()
+    return _redact_local_paths_raw(text).strip()
 
 
 def _deep_strip_pii(obj: Any) -> Any:
@@ -266,7 +323,7 @@ def _deep_strip_pii(obj: Any) -> Any:
     if isinstance(obj, list):
         return [_deep_strip_pii(item) for item in obj]
     if isinstance(obj, str):
-        return _strip_local_paths(obj)
+        return _redact_local_paths_raw(obj)
     return obj
 
 
@@ -441,6 +498,49 @@ def _sanitize_trap(mistake: dict[str, Any]) -> dict[str, Any] | None:
     }
 
 
+def _sanitize_derivation(raw: dict[str, Any]) -> dict[str, Any] | None:
+    """Sanitize a derivation DAG preserving structure only (stripping all personal attempt history)."""
+    if not isinstance(raw, dict):
+        return None
+    did = str(raw.get("id") or "").strip()
+    title = _strip_local_paths(str(raw.get("title") or ""))
+    raw_steps = raw.get("steps")
+    if not did or not isinstance(raw_steps, list) or not raw_steps:
+        return None
+
+    clean_steps: list[dict[str, Any]] = []
+    for idx, st in enumerate(raw_steps):
+        if not isinstance(st, dict):
+            continue
+        sid = str(st.get("id") or f"s{idx + 1}").strip()
+        role = str(st.get("role") or "step").strip().lower()
+        if role not in ("axiom", "step", "theorem"):
+            role = "step"
+        deps = [str(d).strip() for d in (st.get("dependsOn") or []) if str(d).strip()]
+        clean_steps.append(
+            {
+                "id": sid,
+                "label": _strip_local_paths(str(st.get("label") or sid)),
+                "expr": _strip_local_paths(str(st.get("expr") or "")),
+                "role": role,
+                "dependsOn": deps,
+                "note": _strip_local_paths(str(st.get("note") or "")),
+            }
+        )
+    if not clean_steps:
+        return None
+
+    out: dict[str, Any] = {
+        "id": did,
+        "propId": str(raw.get("propId") or "").strip() or None,
+        "chapter": _strip_local_paths(str(raw.get("chapter") or "")),
+        "title": title or did,
+        "domain": str(raw.get("domain") or raw.get("subject") or "General").strip(),
+        "steps": clean_steps,
+    }
+    return _deep_strip_pii(out)
+
+
 def _find_matching_tracker(chapters_dir: Path, target: str) -> tuple[dict[str, Any] | None, str | None]:
     if not chapters_dir.is_dir():
         return None, None
@@ -571,13 +671,42 @@ def export_pack(
                 seen_traps.add(dedup_key)
                 canonical_traps.append(ct)
 
+    # Clean optional derivation DAGs (`derivations.jsonl`, strictly sanitized: zero personal attempt history)
+    # Note: EXCLUDED_PERSONAL_FILES (learner-profile.json, whiteboard-session.json, evidence-ledger.jsonl,
+    # viva-sessions.jsonl, blitz-sessions.json, exam-attempts.jsonl, revlog.jsonl, etc.) are NEVER read or exported.
+    all_derivations = _load_jsonl(kdir / "derivations.jsonl")
+    clean_derivations: list[dict[str, Any]] = []
+    seen_deriv_ids: set[str] = set()
+    for raw_d in all_derivations:
+        if not isinstance(raw_d, dict):
+            continue
+        d_pid = str(raw_d.get("propId") or "").strip()
+        d_dom = str(raw_d.get("domain") or raw_d.get("subject") or "").strip().lower()
+        d_chap = str(raw_d.get("chapter") or "").strip().lower()
+        d_chap_slug = _slugify(d_chap, default="") if d_chap else ""
+        if (
+            t_low in ("all", "*")
+            or (d_pid and d_pid in prop_id_set)
+            or d_dom == t_low
+            or d_chap == t_low
+            or (t_slug and d_chap_slug == t_slug)
+            or (t_low and t_low in d_chap)
+            or (matched_slug and matched_slug.lower() in d_chap)
+        ):
+            sd = _sanitize_derivation(raw_d)
+            if sd is not None and sd["id"] not in seen_deriv_ids:
+                seen_deriv_ids.add(sd["id"])
+                clean_derivations.append(sd)
+
     clean_exams: list[dict[str, Any]] = []
     if include_exams:
         exams_dir = _resolve_exams_dir(workspace=ws)
         if exams_dir.is_dir():
             for ep in sorted(exams_dir.glob("*.json")):
+                if ep.name.lower() in _EXCLUDED_FILES_SET:
+                    continue
                 stem_low = ep.stem.lower()
-                if "-attempt-" in stem_low or stem_low.endswith("-attempt"):
+                if "-attempt-" in stem_low or stem_low.endswith("-attempt") or "attempt" in stem_low.split("-"):
                     continue
                 if t_slug in _slugify(ep.stem) or t_low in ("all", "*"):
                     ed = _load_json(ep, default=None)
@@ -598,6 +727,8 @@ def export_pack(
         "topics": clean_topics,
         "canonicalTraps": canonical_traps,
     }
+    if clean_derivations:
+        data_payload["derivations"] = clean_derivations
     if include_exams:
         data_payload["exams"] = clean_exams
 
@@ -615,6 +746,7 @@ def export_pack(
         "license": str(license_id or "CC-BY-4.0").strip(),
         "createdAt": _now_iso(),
         "strippedFields": list(STRIPPED_PERSONAL_FIELDS),
+        "excludedPersonalFiles": list(EXCLUDED_PERSONAL_FILES),
         "propositions": matched_props,
         "chains": clean_chains,
         "topics": clean_topics,
@@ -624,6 +756,8 @@ def export_pack(
             DATA_NAME: data_sha,
         },
     }
+    if clean_derivations:
+        manifest["derivations"] = clean_derivations
     if include_exams:
         manifest["exams"] = clean_exams
 
@@ -683,13 +817,133 @@ def export_pack(
         "chainCount": len(clean_chains),
         "topicCount": len(clean_topics),
         "canonicalTrapCount": len(canonical_traps),
+        "derivationCount": len(clean_derivations),
         "contentSha256": content_sha,
         "strippedFields": list(STRIPPED_PERSONAL_FIELDS),
+        "excludedPersonalFiles": list(EXCLUDED_PERSONAL_FILES),
     }
 
 
-def _read_and_verify_pack(pack_path: Path | str) -> tuple[dict[str, Any], dict[str, Any] | None]:
-    """Verify zip-slip/symlink safety and SHA-256 checksums; return `(report, manifest_or_None)`."""
+def _is_attempt_filename(name: str) -> bool:
+    stem_low = Path(name).stem.lower()
+    return (
+        name.lower() in _EXCLUDED_FILES_SET
+        or "-attempt-" in stem_low
+        or stem_low.endswith("-attempt")
+        or "attempt" in re.split(r"[-_]", stem_low)
+    )
+
+
+def _is_code_arena(arena: dict[str, Any]) -> bool:
+    """Return True if an arena executes Python/code (must require explicit allow_code_arenas=True)."""
+    dom = str(arena.get("domain") or "code").strip().lower()
+    if dom == "code":
+        return True
+    ref = arena.get("sealedReference")
+    if isinstance(ref, dict) and isinstance(ref.get("code"), str) and ref["code"].strip():
+        return True
+    for mut in arena.get("sealedMutants") or []:
+        if isinstance(mut, dict) and isinstance(mut.get("code"), str) and mut["code"].strip():
+            return True
+    for pred in arena.get("assumptionPredicates") or []:
+        if isinstance(pred, dict) and isinstance(pred.get("code"), str) and pred["code"].strip():
+            return True
+    return False
+
+
+def _sanitize_fork_for_pack(
+    raw: dict[str, Any],
+    *,
+    pack_id: Any,
+    id_remap: dict[str, str],
+    suspend: bool,
+) -> dict[str, Any] | None:
+    if not isinstance(raw, dict):
+        return None
+    fid = str(raw.get("id") or "").strip()
+    if not fid:
+        return None
+    clean = _deep_strip_pii(raw)
+    if not isinstance(clean, dict):
+        return None
+    if not str(clean.get("sealedWinningMove") or "").strip() or not str(clean.get("sealedBlunder") or "").strip():
+        return None
+    prop_id = str(clean.get("propId") or "").strip()
+    if prop_id:
+        clean["propId"] = id_remap.get(prop_id, prop_id)
+    clean["id"] = fid
+    clean["status"] = "active"
+    clean["nextReview"] = _now_iso()[:10]
+    clean["lastTested"] = None
+    clean["blunderRepeatCount"] = 0
+    clean["winCount"] = 0
+    clean["latencyMsHistory"] = []
+    clean["importedFromPack"] = pack_id
+    if suspend:
+        clean["suspended"] = True
+    return clean
+
+
+def _sanitize_arena_for_pack(
+    raw: dict[str, Any],
+    *,
+    pack_id: Any,
+    id_remap: dict[str, str],
+) -> dict[str, Any] | None:
+    if not isinstance(raw, dict):
+        return None
+    aid = str(raw.get("id") or "").strip()
+    if not aid:
+        return None
+    clean = _deep_strip_pii(raw)
+    if not isinstance(clean, dict):
+        return None
+    prop_id = str(clean.get("propId") or "").strip()
+    if prop_id:
+        clean["propId"] = id_remap.get(prop_id, prop_id)
+    clean["id"] = aid
+    clean["killedMutants"] = []
+    clean["bestMinimalSize"] = None
+    clean["attempts"] = 0
+    clean["lemmaRepairs"] = []
+    clean["importedFromPack"] = pack_id
+    return clean
+
+
+def _save_text_atomic(path: Path | str, text: str) -> Path:
+    target = Path(path).expanduser().resolve()
+    target.parent.mkdir(parents=True, exist_ok=True)
+    fd, tmp = tempfile.mkstemp(dir=str(target.parent), prefix=f".{target.name}.", suffix=".tmp")
+    tmp_path = Path(tmp)
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as fh:
+            fh.write(text)
+        os.replace(tmp_path, target)
+    except Exception:
+        tmp_path.unlink(missing_ok=True)
+        raise
+    return target
+
+
+def _parse_jsonl_bytes(raw_bytes: bytes) -> list[dict[str, Any]]:
+    rows: list[dict[str, Any]] = []
+    for ln in raw_bytes.decode("utf-8", errors="replace").splitlines():
+        s = ln.strip()
+        if not s:
+            continue
+        try:
+            obj = json.loads(s)
+        except Exception:
+            continue
+        if isinstance(obj, dict):
+            rows.append(obj)
+    return rows
+
+
+def _read_and_verify_pack_with_files(
+    pack_path: Path | str,
+) -> tuple[dict[str, Any], dict[str, Any] | None, dict[str, bytes]]:
+    """Verify zip-slip/symlink safety and SHA-256 checksums; return `(report, manifest, raw_files)`."""
     p = Path(pack_path).expanduser().resolve()
     errors: list[str] = []
     unsafe_paths: list[str] = []
@@ -703,7 +957,7 @@ def _read_and_verify_pack(pack_path: Path | str) -> tuple[dict[str, Any], dict[s
             "unsafePaths": [],
             "mismatches": [],
             "errors": [f"Pack file not found: {p}"],
-        }, None
+        }, None, {}
 
     # Standalone JSON pack
     if p.suffix.lower() == ".json" and not zipfile.is_zipfile(p):
@@ -716,7 +970,7 @@ def _read_and_verify_pack(pack_path: Path | str) -> tuple[dict[str, Any], dict[s
                     "unsafePaths": [],
                     "mismatches": [],
                     "errors": [f"JSON pack exceeds max size ({MAX_PACK_UNCOMPRESSED_BYTES} B)."],
-                }, None
+                }, None, {}
             manifest = json.loads(p.read_text(encoding="utf-8"))
         except Exception as exc:
             return {
@@ -726,7 +980,7 @@ def _read_and_verify_pack(pack_path: Path | str) -> tuple[dict[str, Any], dict[s
                 "unsafePaths": [],
                 "mismatches": [],
                 "errors": [f"Malformed JSON pack: {exc}"],
-            }, None
+            }, None, {}
         if not isinstance(manifest, dict) or not isinstance(manifest.get("propositions"), list):
             errors.append("Malformed JSON pack: expected object with 'propositions' list.")
             return {
@@ -736,7 +990,7 @@ def _read_and_verify_pack(pack_path: Path | str) -> tuple[dict[str, Any], dict[s
                 "unsafePaths": [],
                 "mismatches": [],
                 "errors": errors,
-            }, None
+            }, None, {}
 
         exp_content_sha = manifest.get("contentSha256")
         if not isinstance(exp_content_sha, str) or not exp_content_sha.strip():
@@ -748,6 +1002,8 @@ def _read_and_verify_pack(pack_path: Path | str) -> tuple[dict[str, Any], dict[s
                 "topics": manifest.get("topics", []),
                 "canonicalTraps": manifest.get("canonicalTraps", []),
             }
+            if "derivations" in manifest:
+                payload["derivations"] = manifest["derivations"]
             if "exams" in manifest:
                 payload["exams"] = manifest["exams"]
             actual_sha = _sha256_bytes(_canonical_json_bytes(payload))
@@ -762,7 +1018,7 @@ def _read_and_verify_pack(pack_path: Path | str) -> tuple[dict[str, Any], dict[s
             "unsafePaths": unsafe_paths,
             "mismatches": mismatches,
             "errors": errors,
-        }, (manifest if not errors else None)
+        }, (manifest if not errors else None), {}
 
     # ZIP pack verification
     if not zipfile.is_zipfile(p):
@@ -773,7 +1029,7 @@ def _read_and_verify_pack(pack_path: Path | str) -> tuple[dict[str, Any], dict[s
             "unsafePaths": [],
             "mismatches": [],
             "errors": ["File is neither a valid ZIP archive nor a .json pack."],
-        }, None
+        }, None, {}
 
     raw_files: dict[str, bytes] = {}
     seen_names: set[str] = set()
@@ -799,6 +1055,11 @@ def _read_and_verify_pack(pack_path: Path | str) -> tuple[dict[str, Any], dict[s
                     continue
 
                 if info.is_dir():
+                    continue
+
+                if posixpath.basename(norm_or_reason).lower() in _EXCLUDED_FILES_SET:
+                    unsafe_paths.append(info.filename)
+                    errors.append(f"Excluded personal/PII file disallowed in study pack: {norm_or_reason!r}")
                     continue
 
                 if norm_or_reason in seen_names:
@@ -829,7 +1090,7 @@ def _read_and_verify_pack(pack_path: Path | str) -> tuple[dict[str, Any], dict[s
             "unsafePaths": unsafe_paths,
             "mismatches": mismatches,
             "errors": [f"Failed to read zip archive: {exc}"],
-        }, None
+        }, None, {}
 
     if unsafe_paths or errors:
         return {
@@ -839,7 +1100,7 @@ def _read_and_verify_pack(pack_path: Path | str) -> tuple[dict[str, Any], dict[s
             "unsafePaths": unsafe_paths,
             "mismatches": mismatches,
             "errors": errors,
-        }, None
+        }, None, {}
 
     if MANIFEST_NAME not in raw_files:
         errors.append(f"Missing {MANIFEST_NAME} in pack archive.")
@@ -850,7 +1111,7 @@ def _read_and_verify_pack(pack_path: Path | str) -> tuple[dict[str, Any], dict[s
             "unsafePaths": unsafe_paths,
             "mismatches": mismatches,
             "errors": errors,
-        }, None
+        }, None, {}
 
     try:
         manifest = json.loads(raw_files[MANIFEST_NAME].decode("utf-8"))
@@ -865,7 +1126,7 @@ def _read_and_verify_pack(pack_path: Path | str) -> tuple[dict[str, Any], dict[s
             "unsafePaths": unsafe_paths,
             "mismatches": mismatches,
             "errors": errors,
-        }, None
+        }, None, {}
 
     # Require pack-data.json and SHA256SUMS.json on ZIP packs (fail closed if stripped!)
     if DATA_NAME not in raw_files:
@@ -930,6 +1191,8 @@ def _read_and_verify_pack(pack_path: Path | str) -> tuple[dict[str, Any], dict[s
         "topics": manifest.get("topics", []),
         "canonicalTraps": manifest.get("canonicalTraps", []),
     }
+    if "derivations" in manifest:
+        manifest_payload["derivations"] = manifest["derivations"]
     if "exams" in manifest:
         manifest_payload["exams"] = manifest["exams"]
 
@@ -956,15 +1219,22 @@ def _read_and_verify_pack(pack_path: Path | str) -> tuple[dict[str, Any], dict[s
         except Exception as exc:
             errors.append(f"Invalid {DATA_NAME}: {exc}")
 
+    ok = len(errors) == 0
     return {
-        "ok": len(errors) == 0,
+        "ok": ok,
         "path": str(p),
         "format": "zip",
-        "verifiedFiles": len(raw_files) if not errors else 0,
+        "verifiedFiles": len(raw_files) if ok else 0,
         "unsafePaths": unsafe_paths,
         "mismatches": mismatches,
         "errors": errors,
-    }, (manifest if not errors else None)
+    }, (manifest if ok else None), (raw_files if ok else {})
+
+
+def _read_and_verify_pack(pack_path: Path | str) -> tuple[dict[str, Any], dict[str, Any] | None]:
+    """Verify zip-slip/symlink safety and SHA-256 checksums; return `(report, manifest_or_None)`."""
+    report, manifest, _raw_files = _read_and_verify_pack_with_files(pack_path)
+    return report, manifest
 
 
 def verify_pack(pack_path: Path | str) -> dict[str, Any]:
@@ -1007,6 +1277,7 @@ def inspect_pack(pack_path: Path | str) -> dict[str, Any]:
         "chains": chains,
         "topics": topics,
         "canonicalTraps": traps,
+        "derivations": manifest.get("derivations") or [],
         "exams": manifest.get("exams") or [],
     })
 
@@ -1023,6 +1294,7 @@ def inspect_pack(pack_path: Path | str) -> dict[str, Any]:
         "createdAt": manifest.get("createdAt"),
         "contentSha256": manifest.get("contentSha256"),
         "strippedFields": manifest.get("strippedFields", []),
+        "excludedPersonalFiles": manifest.get("excludedPersonalFiles", list(EXCLUDED_PERSONAL_FILES)),
         "zeroPiiVerified": len(pii_leaks) == 0,
         "piiLeaks": pii_leaks,
         "counts": {
@@ -1030,6 +1302,7 @@ def inspect_pack(pack_path: Path | str) -> dict[str, Any]:
             "chains": len(chains),
             "topics": len(topics),
             "canonicalTraps": len(traps),
+            "derivations": len(manifest.get("derivations") or []),
             "exams": len(manifest.get("exams") or []),
         },
         "samplePropositionIds": [p.get("id") for p in props[:8] if isinstance(p, dict)],
@@ -1042,18 +1315,20 @@ def import_pack(
     workspace: Path | str | None = None,
     kg_dir: Path | str | None = None,
     chapters_dir: Path | str | None = None,
+    exams_dir: Path | str | None = None,
     mode: str = "merge",
     probe: bool = False,
     dry_run: bool = False,
     similarity_threshold: float = 0.78,
     no_sync: bool = False,
+    allow_code_arenas: bool = False,
 ) -> dict[str, Any]:
     """Safely verify and import a study pack without overwriting existing mastery or FSRS schedules."""
     mode_norm = str(mode or "merge").strip().lower()
     if mode_norm not in ("merge", "suspend-all"):
         raise ValueError(f"Invalid import mode {mode!r}; expected 'merge' or 'suspend-all'.")
 
-    report, manifest = _read_and_verify_pack(pack_path)
+    report, manifest, raw_files = _read_and_verify_pack_with_files(pack_path)
     if not report["ok"] or manifest is None:
         return {
             "ok": False,
@@ -1067,6 +1342,7 @@ def import_pack(
     ws = _resolve_workspace(workspace)
     kdir = _resolve_kg_dir(workspace=ws, explicit=kg_dir)
     cdir = _resolve_chapters_dir(workspace=ws, explicit=chapters_dir)
+    edir = _resolve_exams_dir(workspace=ws, explicit=exams_dir)
 
     props_path = kdir / "propositions.jsonl"
     chains_path = kdir / "chains.jsonl"
@@ -1172,9 +1448,9 @@ def import_pack(
     # Optionally create chapter tracker if pack includes topics and tracker does not exist yet
     tracker_action = "none"
     tracker_path: Path | None = None
+    pack_slug = _slugify(str(manifest.get("slug") or manifest.get("id") or "pack"))
     pack_topics = [t for t in (manifest.get("topics") or []) if isinstance(t, dict)]
     if pack_topics:
-        pack_slug = _slugify(str(manifest.get("slug") or manifest.get("id") or "pack"))
         tracker_path = cdir / f"{pack_slug}-tracker.json"
         if not tracker_path.exists():
             tracker_action = "created"
@@ -1206,6 +1482,171 @@ def import_pack(
                 _save_json_atomic(tracker_path, tracker_obj)
         else:
             tracker_action = "preserved_existing"
+
+    # Optionally import companion chapters/*.md (safe single-segment basename; NEVER overwrite existing)
+    added_chapter_files: list[str] = []
+    skipped_chapter_files: list[str] = []
+    cdir_resolved = cdir.resolve()
+    for member_name in sorted(raw_files.keys()):
+        if not member_name.startswith("chapters/"):
+            continue
+        rel_sub = member_name[len("chapters/"):]
+        if "/" in rel_sub or "\\" in rel_sub or not _SAFE_CHAPTER_MD_RE.fullmatch(rel_sub):
+            continue
+        dest_md = (cdir_resolved / rel_sub).resolve()
+        if not dest_md.is_relative_to(cdir_resolved):
+            continue
+        if dest_md.exists():
+            skipped_chapter_files.append(rel_sub)
+            continue
+        if not dry_run:
+            md_text = _redact_local_paths_raw(raw_files[member_name].decode("utf-8", errors="replace"))
+            _save_text_atomic(dest_md, md_text)
+        added_chapter_files.append(rel_sub)
+
+    # Optionally merge sanitized derivation DAGs (never overwriting existing derivation IDs)
+    added_derivations = 0
+    incoming_derivs = [d for d in (manifest.get("derivations") or []) if isinstance(d, dict)]
+    if incoming_derivs:
+        derivs_path = kdir / "derivations.jsonl"
+        existing_derivs = _load_jsonl(derivs_path)
+        existing_deriv_ids = {str(d.get("id") or "").strip() for d in existing_derivs if d.get("id")}
+        for raw_d in incoming_derivs:
+            sd = _sanitize_derivation(raw_d)
+            if sd is None or sd["id"] in existing_deriv_ids:
+                continue
+            if sd.get("propId"):
+                sd["propId"] = id_remap.get(sd["propId"], sd["propId"])
+            sd["importedFromPack"] = manifest.get("id")
+            existing_derivs.append(sd)
+            existing_deriv_ids.add(sd["id"])
+            added_derivations += 1
+        if not dry_run and added_derivations > 0:
+            _save_jsonl_atomic(derivs_path, existing_derivs)
+
+    # Optionally merge sanitized Blunder FEN forks (`forks.jsonl` + manifest.forks)
+    added_forks = 0
+    incoming_forks: list[dict[str, Any]] = []
+    if "forks.jsonl" in raw_files:
+        incoming_forks.extend(_parse_jsonl_bytes(raw_files["forks.jsonl"]))
+    if isinstance(manifest.get("forks"), list):
+        incoming_forks.extend(f for f in manifest["forks"] if isinstance(f, dict))
+    if incoming_forks:
+        forks_path = kdir / "forks.jsonl"
+        existing_forks = _load_jsonl(forks_path)
+        existing_fork_ids = {str(f.get("id") or "").strip() for f in existing_forks if f.get("id")}
+        for raw_f in incoming_forks:
+            sf = _sanitize_fork_for_pack(
+                raw_f,
+                pack_id=manifest.get("id"),
+                id_remap=id_remap,
+                suspend=(mode_norm == "suspend-all"),
+            )
+            if sf is None or sf["id"] in existing_fork_ids:
+                continue
+            existing_forks.append(sf)
+            existing_fork_ids.add(sf["id"])
+            added_forks += 1
+        if not dry_run and added_forks > 0:
+            _save_jsonl_atomic(forks_path, existing_forks)
+
+    # Optionally merge Counterexample Arenas (`arenas.jsonl` + manifest.arenas)
+    # Security: import math/non-code arenas always; import code-domain arenas ONLY when allow_code_arenas=True!
+    added_arenas = 0
+    skipped_code_arena_ids: list[str] = []
+    incoming_arenas: list[dict[str, Any]] = []
+    if "arenas.jsonl" in raw_files:
+        incoming_arenas.extend(_parse_jsonl_bytes(raw_files["arenas.jsonl"]))
+    if isinstance(manifest.get("arenas"), list):
+        incoming_arenas.extend(a for a in manifest["arenas"] if isinstance(a, dict))
+    if incoming_arenas:
+        arenas_path = kdir / "arenas.jsonl"
+        existing_arenas = _load_jsonl(arenas_path)
+        existing_arena_ids = {str(a.get("id") or "").strip() for a in existing_arenas if a.get("id")}
+        seen_skipped_code: set[str] = set()
+        for raw_a in incoming_arenas:
+            sa = _sanitize_arena_for_pack(
+                raw_a,
+                pack_id=manifest.get("id"),
+                id_remap=id_remap,
+            )
+            if sa is None or sa["id"] in existing_arena_ids:
+                continue
+            if _is_code_arena(sa) and not allow_code_arenas:
+                if sa["id"] not in seen_skipped_code:
+                    seen_skipped_code.add(sa["id"])
+                    skipped_code_arena_ids.append(sa["id"])
+                continue
+            existing_arenas.append(sa)
+            existing_arena_ids.add(sa["id"])
+            added_arenas += 1
+        if not dry_run and added_arenas > 0:
+            _save_jsonl_atomic(arenas_path, existing_arenas)
+
+    # Optionally import companion exams (`exams/*.json|html` + manifest.exams), excluding `*-attempt-*`
+    added_exam_files: list[str] = []
+    skipped_exam_files: list[str] = []
+    edir_resolved = edir.resolve()
+    planned_exam_names: set[str] = set()
+    for member_name in sorted(raw_files.keys()):
+        if not member_name.startswith("exams/"):
+            continue
+        rel_sub = member_name[len("exams/"):]
+        if "/" in rel_sub or "\\" in rel_sub or not _SAFE_EXAM_FILE_RE.fullmatch(rel_sub):
+            continue
+        if _is_attempt_filename(rel_sub):
+            continue
+        dest_ex = (edir_resolved / rel_sub).resolve()
+        if not dest_ex.is_relative_to(edir_resolved):
+            continue
+        if dest_ex.exists() or rel_sub in planned_exam_names:
+            skipped_exam_files.append(rel_sub)
+            continue
+        if rel_sub.lower().endswith(".json"):
+            try:
+                ex_obj = json.loads(raw_files[member_name].decode("utf-8"))
+            except Exception:
+                continue
+            if not isinstance(ex_obj, dict):
+                continue
+            clean_ex = _deep_strip_pii(ex_obj)
+            if not dry_run:
+                _save_json_atomic(dest_ex, clean_ex)
+        else:
+            if not dry_run:
+                ex_html = _redact_local_paths_raw(raw_files[member_name].decode("utf-8", errors="replace"))
+                _save_text_atomic(dest_ex, ex_html)
+        planned_exam_names.add(rel_sub)
+        added_exam_files.append(rel_sub)
+
+    for idx_ex, raw_ex in enumerate(manifest.get("exams") or []):
+        if not isinstance(raw_ex, dict) or not isinstance(raw_ex.get("questions"), list):
+            continue
+        raw_slug = str(
+            raw_ex.get("examSlug")
+            or raw_ex.get("slug")
+            or raw_ex.get("id")
+            or raw_ex.get("title")
+            or f"{pack_slug}-exam-{idx_ex + 1}"
+        )
+        ex_slug = _slugify(raw_slug, default=f"{pack_slug}-exam-{idx_ex + 1}")
+        ex_fname = f"{ex_slug}.json"
+        if _is_attempt_filename(ex_fname) or not _SAFE_EXAM_FILE_RE.fullmatch(ex_fname):
+            continue
+        dest_ex = (edir_resolved / ex_fname).resolve()
+        if not dest_ex.is_relative_to(edir_resolved):
+            continue
+        if dest_ex.exists() or ex_fname in planned_exam_names:
+            skipped_exam_files.append(ex_fname)
+            continue
+        clean_ex = _deep_strip_pii(raw_ex)
+        if isinstance(clean_ex, dict):
+            clean_ex.setdefault("examSlug", ex_slug)
+            clean_ex["importedFromPack"] = manifest.get("id")
+            if not dry_run:
+                _save_json_atomic(dest_ex, clean_ex)
+            planned_exam_names.add(ex_fname)
+            added_exam_files.append(ex_fname)
 
     if not dry_run:
         _save_jsonl_atomic(props_path, existing_props)
@@ -1239,6 +1680,16 @@ def import_pack(
         "skippedExisting": len(skipped_existing),
         "skippedDetails": skipped_existing,
         "addedChains": added_chains,
+        "addedDerivations": added_derivations,
+        "addedChapters": len(added_chapter_files),
+        "addedChapterFiles": added_chapter_files,
+        "skippedChapters": len(skipped_chapter_files),
+        "addedForks": added_forks,
+        "addedArenas": added_arenas,
+        "skippedCodeArenas": len(skipped_code_arena_ids),
+        "skippedCodeArenaIds": skipped_code_arena_ids,
+        "addedExams": len(added_exam_files),
+        "addedExamFiles": added_exam_files,
         "canonicalTrapsAvailable": len(manifest.get("canonicalTraps") or []),
         "trackerAction": tracker_action,
         "trackerPath": str(tracker_path) if tracker_path else None,
@@ -1285,6 +1736,11 @@ def _build_parser() -> argparse.ArgumentParser:
     p_imp.add_argument("--probe", action="store_true", help="Emit a 3-question placement skip probe.")
     p_imp.add_argument("--dry-run", action="store_true", help="Preview deduplication without writing files.")
     p_imp.add_argument("--no-sync", action="store_true", help="Skip hub sync after import.")
+    p_imp.add_argument(
+        "--allow-code-arenas",
+        action="store_true",
+        help="Opt in to importing executable code-domain Counterexample Arenas from trusted packs.",
+    )
 
     return parser
 
@@ -1324,6 +1780,7 @@ def main(argv: list[str] | None = None) -> int:
                 probe=args.probe,
                 dry_run=args.dry_run,
                 no_sync=args.no_sync,
+                allow_code_arenas=bool(args.allow_code_arenas),
             )
         else:
             parser.error(f"Unknown command: {args.command}")

@@ -1,9 +1,9 @@
 ---
 name: chapter-autopilot
 description: >-
-  Hands-free topic orchestrator from foundations to mastery across any subject.
-  Triggers on "Start [topic]", "Continue", "What's next?", "I fell behind",
-  "5-minute review", or "Teach-back".
+  Hands-free orchestrator using the next-move brainstem, ICS auto-pacer, 48h
+  exam triage, and post-exam sunset pruning. Triggers on "Start", "Continue",
+  "What's next?", "I fell behind", or "5-min review".
 ---
 
 # Chapter Autopilot — Universal Hands-Free Foundations → Mastery Orchestrator
@@ -29,16 +29,19 @@ The learner's only job is thinking about the subject — CS, ML, Systems, Math, 
 
 | Learner Phrase / Intent | Silent Action Behind the Scenes |
 | :--- | :--- |
-| *"Start `<topic>`"* / *"Continue"* / *"What's next?"* / *"I'm ready"* | Flow A (new) or Flow B (`syntopik run chapter_tracker next --include-warmup --json`) |
-| *"I fell behind"* / *"Clear my overdue pile"* | **Calm Catch-Up**: `syntopik run srs_engine recover --daily-cap 15 --json` (zero-guilt 5–7 day smoothing ranked by risk × blast radius) |
+| *"Start `<topic>`"* / *"Continue"* / *"What's next?"* / *"I'm ready"* | Query Pedagogical Brainstem **`synt_next_move`** / `syntopik next --json` first (then `chapter_tracker next --include-warmup --json` for frontier details) |
+| *"Drop these files/links"* / mixed sources | **10-Second Drop**: `syntopik drop <inputs...> --json` (locks Teacher-First spine + tracker + Probe #1) |
+| *"I fell behind"* / *"Clear my overdue pile"* | **Calm Catch-Up**: `syntopik review --recover --daily-cap 15 --json` (zero-guilt 5–7 day smoothing ranked by risk × blast radius) |
 | *"5-minute review"* / *"I have 5 minutes"* | **Micro-Review Sprint**: `syntopik run daily_plan --micro 5 --json` (`3–5` highest-ROI cues: bottleneck + trap + occlusion/audio) |
-| *"Teach-back `<topic>`"* / *"Test if I can explain..."* | **3-Turn Protégé Capstone** (`teach-chapter` Phase 4 — dry skeptical peer seeded from `mistakes.jsonl` / `chains.jsonl`) |
-| *"Bug hunt"* / *"Give me a broken snippet"* | **Adversarial Surgical Bug-Hunt** (`practice-drill` — `<= 15`-line verified flaw from learner's `mistakes.jsonl`) |
-| *"How ready am I for `<date>`?"* | `syntopik run srs_engine forecast --exam-date YYYY-MM-DD --json` (mean retrievability + Brier calibration + 7-day load) |
-| Returning after `>= 4` days / *"Where was I?"* | **Cold-Start Re-Entry Brief**: `syntopik review --resume` / `daily_plan.py --resume` (suppresses overdue guilt; 90s 3-bullet reload + 1 warm-start cue `0.60 <= R <= 0.85`; save stops via `chapter_tracker checkpoint <slug> --breadcrumb "..."`) |
-| *"Low energy"* / *"Deep focus"* | **Cognitive Energy Mode**: `syntopik run daily_plan --energy low\|normal\|deep --json` (`low`: 0 new theory, 3 easy/Parsons/audio wins; `deep`: Productive Failure + synthesis) |
-| *"Exam in 48 hours"* / crunch `< 72h` | **48h Exam Triage**: `syntopik triage --exam-in 48h` / `daily_plan.py --triage-hours 48 --sleep-hours 7 --json` (Pareto `salvage_70pct` / `protect_20pct` / `explicitly_cut` + sleep guard) |
-| YouTube link / arXiv ID / GitHub repo / URL | `syntopik import <target> --register-tracker --json` (`topic-onboarding` / `ingest-chapter`) |
+| *"Plan my semester"* / *"Export calendar"* / *"Auto-pace"* | **Multi-Course Auto-Pacer**: `syntopik pace [--rebalance] [--ics <file.ics>] --json` (buffer-protected schedule + RFC-5545 `.ics` calendar export) |
+| *"Exam is over"* / *"Sunset `<chapter>`"* | **Semester Sunset Pruning**: `syntopik sunset <slug> [--apply] --json` (snapshots zero-PII pack, keeps core axioms at $R=0.80$, archives low-leverage leaves) |
+| *"Exam in 48 hours"* / crunch `< 72h` | **48h Exam Triage**: `syntopik triage --exam-in 48h --sleep-hours 7 [--crib-sheet] --json` (Pareto `salvage_70pct` / `protect_20pct` / `explicitly_cut` + sleep guard) |
+| *"Blunder Fork"* / *"Arena"* / *"4-Min Blitz"* / *"Blackout"* / *"Axiom-Cut"* | Route to **Mastery Gym** (`practice-drill`: `fork_replay`, `falsify_arena`, `decision_blitz`, `derivation_forge`) |
+| *"Teach-back"* / *"Viva defense"* | **Protégé Capstone** (`teach-chapter`) or **5-Turn Adversarial Viva Defense** (`exam-simulator` / `viva_chamber`) |
+| *"Work mentor mode"* / *"Debrief my git diff"* | **Anti-Vibe-Coding Work Mentor**: `syntopik mode mentor` / `syntopik debrief --ref HEAD~1..HEAD --json` (crystallizes real diff bugs into Forks & KG nodes) |
+| Returning after `>= 4` days / *"Where was I?"* | **Cold-Start Re-Entry Brief**: `syntopik review --resume` (suppresses overdue guilt; 90s 3-bullet reload + 1 anchor cue `0.60 <= R <= 0.85`) |
+| *"Low energy"* / *"Deep focus"* | **Cognitive Energy Mode**: `syntopik next --energy low\|normal\|deep --json` / `daily_plan --energy ...` |
+| YouTube link / arXiv ID / GitHub repo / URL | `syntopik drop <target>` or `syntopik import <target> --register-tracker --json` (`topic-onboarding` / `ingest-chapter`) |
 
 ---
 
@@ -64,11 +67,12 @@ The learner's only job is thinking about the subject — CS, ML, Systems, Math, 
 
 ## Flow B — Automatic Daily / Turn Loop (*"Continue"*, *"What's next?"*, *"I'm ready"*)
 
-Silently query the deterministic state machine:
+Silently query the **Pedagogical Brainstem** first (prefers MCP **`synt_next_move`**; CLI fallback below):
 ```bash
+syntopik next --json
 syntopik run chapter_tracker next --include-warmup --json
 ```
-*(If the learner gives a time budget like "I have 60 minutes", also run `syntopik run daily_plan --minutes <N> --json`; for 5 minutes use `--micro 5`.)*
+Execute the brainstem's `recommendedMode` directly (`whiteboard_pin_answer` → `onboarding_calibration` → `cold_start_reentry` → `calm_wrapup` → `bridge_worked_example` → `causal_probe` → `fork_replay` → `fire_review` → `transfer_verify` → `teach_frontier`) while obeying `teachingPolicy` constraints (`maxProseWords`, `scaffoldingMode`, `affectIntervention`). *(If the learner gives a time budget like "I have 60 minutes", also run `syntopik run daily_plan --minutes <N> --json`; for multi-course calendar scheduling run `syntopik pace --ics <file.ics>`.)*
 
 1. **FIRe-Compressed Spaced Warmup (`warmupItems`, max `3`)**: weave `<= 3` high-leverage cues from `srs_engine.py due --compress` (composite reviews that knock out due prerequisites via FIRe; note quiet 1-line FIRe summary when prerequisites refresh!). Also surface 1–2 due extracts from `reading-queue.jsonl` when active.
 2. **`teach_topic` (Bloom Mastery Gate)**:

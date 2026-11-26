@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "syntopik"
-version = "2.0.0"
+version = "3.0.0"
 description = "Local-first, harness-native AI Deep-Mastery OS with FSRS-6 + BKT + True FIRe knowledge hypergraph, deterministic STEM/CS verifiers, calm tutoring, and a 2-way local Studio."
 readme = "README.md"
 license = { text = "MIT" }
@@ -106,6 +106,7 @@ packages = ["syntopik"]
 "scripts" = "syntopik/_bundle/scripts"
 ".agents/skills" = "syntopik/_bundle/skills"
 ".agents/hooks" = "syntopik/_bundle/hooks"
+".agents/hooks.json" = "syntopik/_bundle/hooks.json"
 "dashboard.html" = "syntopik/_bundle/dashboard.html"
 "knowledge-graph/viewer.html" = "syntopik/_bundle/viewer.html"
 "knowledge-graph/reagents.json" = "syntopik/_bundle/reagents.json"
@@ -114,4 +115,8 @@ packages = ["syntopik"]
 "mcp-app/mlh-studio/plugin.json" = "syntopik/_bundle/mcp/plugin.json"
 "mcp-app/mlh-studio/assets/logo.svg" = "syntopik/_bundle/mcp/assets/logo.svg"
 "AGENTS.md" = "syntopik/_bundle/AGENTS.md"
+"GEMINI.md" = "syntopik/_bundle/GEMINI.md"
+"CLAUDE.md" = "syntopik/_bundle/CLAUDE.md"
 "BOOTSTRAP.md" = "syntopik/_bundle/BOOTSTRAP.md"
+"packs" = "syntopik/_bundle/packs"
+"benchmarks/syntopik_bench.py" = "syntopik/_bundle/benchmarks/syntopik_bench.py"

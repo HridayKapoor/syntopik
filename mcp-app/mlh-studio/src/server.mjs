@@ -36,19 +36,25 @@ import {
 import { RESOURCE_MIME_TYPE } from "@modelcontextprotocol/ext-apps";
 import {
   hashSeed,
+  validateNextMoveArgs,
   validatePracticeAction,
   validatePracticeConclude,
   validatePracticePose,
+  validateProfileUpdateArgs,
   validateQuizArgs,
   validateStudioArgs,
+  validateWhiteboardStepArgs,
 } from "./validation.mjs";
 import {
   captureConcept,
   getFrontier,
   loadWorkspaceState,
   logReview,
+  planNextMove,
+  pushWhiteboardStep,
   rateFlashcard,
   saveSketchPng,
+  updateLearnerProfile,
 } from "./workspace.mjs";
 import { createStateStore } from "./state-store.mjs";
 
@@ -309,7 +315,7 @@ const PRACTICE_INPUT_SCHEMA = {
     statement: { type: "string" },
     mode: {
       type: "string",
-      enum: ["standard", "parsons", "faded", "recall", "discrimination", "composition"],
+      enum: ["standard", "parsons", "faded", "blackout", "recall", "discrimination", "composition"],
     },
     blocks: {
       type: "array",
@@ -328,6 +334,26 @@ const PRACTICE_INPUT_SCHEMA = {
       type: "array",
       items: { type: "string" },
     },
+    steps: {
+      type: "array",
+      description: "Clean-Room Derivation Reconstruction steps for mode='blackout' (expectedExpr & hidden expr are sealed server-side until conclude).",
+      items: {
+        type: "object",
+        properties: {
+          id: { type: "string" },
+          label: { type: "string" },
+          role: { type: "string", enum: ["axiom", "step", "theorem"] },
+          expr: { type: "string" },
+          expectedExpr: { type: "string" },
+          hidden: { type: "boolean" },
+          dependsOn: { type: "array", items: { type: "string" } },
+          note: { type: "string" },
+        },
+        required: ["id"],
+      },
+    },
+    derivationId: { type: "string" },
+    blackoutLevel: { type: "integer", enum: [1, 2, 3] },
     targets: { type: "array", items: { type: "string" } },
     modelSolution: { type: "string" },
     outcome: {
@@ -397,8 +423,68 @@ const LOG_REVIEW_SCHEMA = {
     cueId: { type: "string", description: "Optional specific cue ID reviewed." },
     misconception: { type: "boolean", description: "Flag as active misconception when rating is 'again'." },
     durationMs: { type: "number", description: "Optional response duration in milliseconds." },
+    hintsUsed: { type: "integer", description: "Optional hints used (0..5) for silent Tier-3 learner adaptation." },
   },
   required: ["propId", "rating"],
+};
+
+const NEXT_MOVE_SCHEMA = {
+  type: "object",
+  properties: {
+    energy: { type: "string", enum: ["low", "normal", "deep"], description: "Optional cognitive energy mode." },
+    domain: { type: "string", description: "Optional subject/domain focus." },
+    event: {
+      oneOf: [{ type: "string" }, { type: "object" }],
+      description: "Optional recent event context (e.g. 'skip_calibration' or {kind:'miss', propId:'...'}).",
+    },
+  },
+};
+
+const WHITEBOARD_STEP_SCHEMA = {
+  type: "object",
+  properties: {
+    kind: {
+      type: "string",
+      enum: ["derivation_step", "prediction_gate", "explore_widget", "diagram_callout", "summary"],
+      description: "Whiteboard frame kind (default: derivation_step).",
+    },
+    title: { type: "string", description: "Concise frame title." },
+    body: { type: "string", description: "Concise Markdown body (locked server-side when kind='prediction_gate')." },
+    latex: { type: "string", description: "Optional display LaTeX equation." },
+    propId: { type: "string", description: "Optional linked proposition ID." },
+    stepIndex: { type: "integer", description: "Optional 0-based step index." },
+    locked: { type: "boolean", description: "Lock frame behind prediction gate (default true for prediction_gate)." },
+    prompt: { type: "string", description: "Prompt shown on locked prediction_gate frames." },
+    revealedBody: { type: "string", description: "Body revealed once prediction_gate is unlocked." },
+    expectedAnswer: { type: "string", description: "Optional expected prediction for gate comparison." },
+    payload: { type: "object", description: "Optional structured payload (e.g., :::explore lab spec)." },
+    sessionTitle: { type: "string", description: "Optional whiteboard session heading." },
+    id: { type: "string", description: "Optional explicit frame ID (updates frame in-place if repeated)." },
+    resolvePinId: { type: "string", description: "Optional learner pin ID resolved by this step." },
+    resolution: { type: "string", description: "Optional short resolution note for resolvePinId." },
+  },
+};
+
+const UPDATE_PROFILE_SCHEMA = {
+  type: "object",
+  properties: {
+    op: { type: "string", enum: ["override", "calibrate", "reset"] },
+    scaffoldingMode: {
+      anyOf: [
+        { type: "string", enum: ["worked_example_parsons", "faded", "standard", "challenge_transfer", "auto", "clear"] },
+        { type: "null" },
+      ],
+    },
+    allowProductiveFailure: { anyOf: [{ type: "boolean" }, { type: "null" }] },
+    maxProseWords: { anyOf: [{ type: "integer" }, { type: "null" }] },
+    clearOverrides: { type: "boolean" },
+    userOverrides: { type: "object" },
+    entryRamp: { type: "string", enum: ["intuition_first", "balanced", "formalism_first"] },
+    challengeAppetite: { type: "string", enum: ["guided", "balanced", "adversarial"] },
+    proseDensity: { type: "string", enum: ["terse", "standard", "rich"] },
+    sessionMinutes: { type: "integer" },
+    domainFluency: { type: "object" },
+  },
 };
 
 function makeAppToolPair(suffix, title, description, inputSchema) {
@@ -435,7 +521,7 @@ const TOOLS = [
     name: "synt_practice_card",
     title: "Syntopik Practice Problem Card",
     description:
-      "Pose a practice problem (standard, parsons, or faded block ordering; locking modelSolution & canonicalOrder hidden server-side with a 1-active-problem gate) or conclude it to reveal the committed modelSolution verbatim with verdict and Pause Law.",
+      "Pose a practice problem (standard, parsons, faded, or blackout derivation reconstruction; sealing modelSolution, canonicalOrder, and blackout answers server-side with a 1-active-problem gate) or conclude to reveal verbatim with verdict and Pause Law.",
     inputSchema: PRACTICE_INPUT_SCHEMA,
     _meta: {
       ui: { resourceUri: "ui://syntopik/practice-card.html" },
@@ -445,7 +531,7 @@ const TOOLS = [
     name: "synt_lesson_studio",
     title: "Syntopik Studio",
     description:
-      "Open or update the live Syntopik Studio pane (Autopilot progress, Plan DAG, Knowledge Graph, zero-token FSRS-6 Flashcards w/ Image Occlusion, Mistake Traps). All arguments optional.",
+      "Open or update the live Syntopik Studio pane (Autopilot + Active TeachingPolicy strip, Plan DAG, Knowledge Graph, zero-token FSRS-6 Flashcards w/ Image Occlusion, Mistake Traps). All arguments optional.",
     inputSchema: STUDIO_INPUT_SCHEMA,
     _meta: {
       ui: { resourceUri: "ui://syntopik/studio-pane.html" },
@@ -457,7 +543,21 @@ const TOOLS = [
       },
     },
   },
-  // --- Ambient Cross-Session Headless Knowledge Tools (3, zero UI spawned) ---
+  // --- Ambient Cross-Session Headless Knowledge & Teacher Tools (5, zero UI spawned) ---
+  {
+    name: "synt_next_move",
+    title: "Syntopik Pedagogical Brainstem (Next Optimal Move)",
+    description:
+      "Return the compact <=180-token Action Envelope fusing FSRS-6/FIRe, Learner Psychology TeachingPolicy, causal root-cause probes, Blunder Forks, and live whiteboard learner pins.",
+    inputSchema: NEXT_MOVE_SCHEMA,
+  },
+  {
+    name: "synt_whiteboard_step",
+    title: "Push Live AI Whiteboard Frame",
+    description:
+      "Push a progressive frame (derivation_step, prediction_gate, explore_widget, diagram_callout, or summary) to knowledge-graph/whiteboard-session.json and return any unresolved learner pendingPins.",
+    inputSchema: WHITEBOARD_STEP_SCHEMA,
+  },
   {
     name: "synt_capture_concept",
     title: "Capture Concept to Syntopik Knowledge Graph",
@@ -467,16 +567,16 @@ const TOOLS = [
   },
   {
     name: "synt_get_frontier",
-    title: "Get Syntopik Study Frontier & Calibration",
+    title: "Get Syntopik Study Frontier & Learner Policy",
     description:
-      "Ambient headless query: return FIRe-compressed due propositions, active Chapter Autopilot next action, top 3 recurring mistake traps, and rolling Brier calibration summary.",
+      "Ambient headless query: return FIRe-compressed due items, active Autopilot, learnerProfile, Active TeachingPolicy, dueForks, arenasCount, coldStartDays, pendingPins, traps, and Brier calibration.",
     inputSchema: GET_FRONTIER_SCHEMA,
   },
   {
     name: "synt_log_review",
     title: "Log FSRS-6 + FIRe Concept Review",
     description:
-      "Ambient headless review: run srs_engine.py review with FIRe implicit prerequisite propagation and revlog.jsonl persistence, returning updated stability, BKT mastery, and fireCredits.",
+      "Ambient headless review: run srs_engine.py review with FIRe propagation, optional hintsUsed (0..5) & durationMs for Tier-3 learner psychology updates, and revlog.jsonl persistence.",
     inputSchema: LOG_REVIEW_SCHEMA,
   },
   // Backwards-compatible mlh_* aliases
@@ -563,6 +663,12 @@ const TOOLS = [
       required: ["op", "kind"],
     }
   ),
+  ...makeAppToolPair(
+    "update_profile",
+    "Update Learner Profile & TeachingPolicy Overrides",
+    "App-only: update Tier-1 calibration or transparent userOverrides in knowledge-graph/learner-profile.json.",
+    UPDATE_PROFILE_SCHEMA
+  ),
 ];
 
 function toolError(message) {
@@ -619,6 +725,27 @@ function formatTerminalParsonsText(record, safeShuffledBlocks) {
     isFaded
       ? "Ask the learner for the ordered letters (e.g., B, A, D — omitting distractors) plus values for each ___ blank before calling action=\"conclude\"."
       : "Ask the learner for the ordered letters (e.g., B, A, D — omitting distractors) before calling action=\"conclude\"."
+  );
+  return lines.join("\n");
+}
+
+function formatTerminalBlackoutText(record, safeSteps) {
+  const hiddenIds = safeSteps.filter((s) => s.hidden).map((s) => s.id);
+  const lines = [
+    `Practice problem posed (id=${record.problemId}, DERIVATION BLACKOUT L${record.blackoutLevel || 1}) — Terminal fallback (expected expressions & committed modelSolution sealed server-side):`,
+    "",
+    record.statement,
+    "",
+    "Derivation steps (reconstruct every [HIDDEN] step cleanly):",
+  ];
+  for (const st of safeSteps) {
+    const depTag = Array.isArray(st.dependsOn) && st.dependsOn.length > 0 ? ` (from ${st.dependsOn.join(", ")})` : "";
+    const body = st.hidden ? "[HIDDEN — reconstruct]" : st.expr;
+    lines.push(`- [${st.id} · ${st.role}] ${st.label}${depTag}: ${body}`);
+  }
+  lines.push("");
+  lines.push(
+    `Ask the learner to reconstruct hidden step(s) ${hiddenIds.join(", ")} (or request R0–R5 hints) before calling action="conclude".`
   );
   return lines.join("\n");
 }
@@ -718,8 +845,12 @@ function handlePracticeCard(rawArgs, toolName, hasUiExtension) {
       statement: v.statement,
       mode: v.mode || null,
       isParsonsMode: v.isParsonsMode,
+      isBlackoutMode: v.isBlackoutMode,
       blocks: v.blocks,
       canonicalOrder: v.canonicalOrder,
+      steps: v.steps,
+      derivationId: v.derivationId,
+      blackoutLevel: v.blackoutLevel,
       shuffleSeed,
       targets: v.targets,
       modelSolution: v.modelSolution,
@@ -730,8 +861,8 @@ function handlePracticeCard(rawArgs, toolName, hasUiExtension) {
     problemHistory.set(record.problemId, record);
     stateStore.savePracticePose(record);
 
-    // SECURITY INVARIANT: modelSolution, canonicalOrder, isDistractor, and legacy mode/targets
-    // are NEVER leaked during pose!
+    // SECURITY INVARIANT: modelSolution, canonicalOrder, isDistractor, blackout expectedExpr/hidden expr,
+    // and legacy mode/targets are NEVER leaked during pose!
     let safeShuffledBlocks = null;
     if (v.isParsonsMode && Array.isArray(v.blocks)) {
       const stripped = v.blocks.map((b) => ({
@@ -743,8 +874,25 @@ function handlePracticeCard(rawArgs, toolName, hasUiExtension) {
       safeShuffledBlocks = seededShuffleOptions(stripped, shuffleSeed);
     }
 
+    let safeBlackoutSteps = null;
+    if (v.isBlackoutMode && Array.isArray(v.steps)) {
+      safeBlackoutSteps = v.steps.map((s) => ({
+        id: s.id,
+        label: s.label,
+        role: s.role,
+        dependsOn: Array.isArray(s.dependsOn) ? [...s.dependsOn] : [],
+        hidden: Boolean(s.hidden),
+        expr: s.hidden ? null : s.expr,
+      }));
+    }
+
     let textMsg;
-    if (v.isParsonsMode && safeShuffledBlocks) {
+    if (v.isBlackoutMode && safeBlackoutSteps) {
+      const hiddenCount = safeBlackoutSteps.filter((s) => s.hidden).length;
+      textMsg = hasUiExtension
+        ? `Practice blackout derivation posed (id=${record.problemId}, L${record.blackoutLevel || 1}, ${hiddenCount}/${safeBlackoutSteps.length} steps hidden). Expected step expressions & modelSolution sealed server-side; awaiting reconstruction.`
+        : formatTerminalBlackoutText(record, safeBlackoutSteps);
+    } else if (v.isParsonsMode && safeShuffledBlocks) {
       textMsg = hasUiExtension
         ? `Practice ${v.mode} problem posed (id=${record.problemId}, ${safeShuffledBlocks.length} shuffled blocks). Committed solution & target block order locked server-side; awaiting learner ordering.`
         : formatTerminalParsonsText(record, safeShuffledBlocks);
@@ -766,6 +914,15 @@ function handlePracticeCard(rawArgs, toolName, hasUiExtension) {
       problemId: record.problemId,
       statement: record.statement,
       hasHiddenSolution: true,
+      ...(v.isBlackoutMode && safeBlackoutSteps
+        ? {
+            cardMode: "blackout",
+            derivationId: record.derivationId,
+            blackoutLevel: record.blackoutLevel,
+            steps: safeBlackoutSteps,
+            hiddenStepIds: safeBlackoutSteps.filter((s) => s.hidden).map((s) => s.id),
+          }
+        : {}),
       ...(v.isParsonsMode && safeShuffledBlocks
         ? {
             cardMode: v.mode,
@@ -825,6 +982,14 @@ function handlePracticeCard(rawArgs, toolName, hasUiExtension) {
       missClass,
       retest,
       modelSolution: record.modelSolution,
+      ...(record.isBlackoutMode
+        ? {
+            cardMode: "blackout",
+            derivationId: record.derivationId || null,
+            blackoutLevel: record.blackoutLevel || 1,
+            steps: Array.isArray(record.steps) ? record.steps : [],
+          }
+        : {}),
       ...(record.isParsonsMode ? { cardMode: record.mode } : {}),
       ...(Array.isArray(record.canonicalOrder) ? { canonicalOrder: record.canonicalOrder } : {}),
       ...(Array.isArray(record.blocks) ? { blocks: record.blocks } : {}),
@@ -898,7 +1063,7 @@ function handleLessonStudio(rawArgs, toolName) {
 
 function createServer() {
   const server = new Server(
-    { name: "syntopik-studio", version: "2.0.0" },
+    { name: "syntopik-studio", version: "3.0.0" },
     { capabilities: { tools: {}, resources: {} } }
   );
 
@@ -964,6 +1129,36 @@ function createServer() {
         case "synt_lesson_studio":
         case "mlh_lesson_studio":
           return handleLessonStudio(args, name);
+
+        case "synt_next_move": {
+          const checked = validateNextMoveArgs(args);
+          if (!checked.ok) return toolError(`Invalid synt_next_move arguments: ${checked.error}`);
+          const res = planNextMove(WORKSPACE_ROOT, checked.value);
+          if (!res.ok) return toolError(res.error || "planNextMove failed.");
+          const structuredContent = {
+            kind: "synt_next_move",
+            ...res,
+          };
+          return {
+            content: [{ type: "text", text: JSON.stringify(structuredContent) }],
+            structuredContent,
+          };
+        }
+
+        case "synt_whiteboard_step": {
+          const checked = validateWhiteboardStepArgs(args);
+          if (!checked.ok) return toolError(`Invalid synt_whiteboard_step arguments: ${checked.error}`);
+          const res = pushWhiteboardStep(WORKSPACE_ROOT, checked.value);
+          if (!res.ok) return toolError(res.error || "pushWhiteboardStep failed.");
+          const structuredContent = {
+            kind: "synt_whiteboard_step",
+            ...res,
+          };
+          return {
+            content: [{ type: "text", text: JSON.stringify(structuredContent) }],
+            structuredContent,
+          };
+        }
 
         case "synt_capture_concept": {
           const res = captureConcept(WORKSPACE_ROOT, args);
@@ -1103,6 +1298,22 @@ function createServer() {
             id: id || "default",
             found: saved !== null,
             state: saved,
+          };
+          return {
+            content: [{ type: "text", text: JSON.stringify(structuredContent) }],
+            structuredContent,
+          };
+        }
+
+        case "synt_app_update_profile":
+        case "mlh_app_update_profile": {
+          const checked = validateProfileUpdateArgs(args);
+          if (!checked.ok) return toolError(`Invalid ${name} arguments: ${checked.error}`);
+          const res = updateLearnerProfile(WORKSPACE_ROOT, checked.value);
+          if (!res.ok) return toolError(res.error || "Profile update failed.");
+          const structuredContent = {
+            kind: `${pfx}_app_profile_updated`,
+            ...res,
           };
           return {
             content: [{ type: "text", text: JSON.stringify(structuredContent) }],

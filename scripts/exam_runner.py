@@ -1164,6 +1164,33 @@ def grade_attempt(
 
     if not no_log:
         append_jsonl(resolved_kg / "exam-attempts.jsonl", attempt_summary_row)
+        try:
+            from syntopik.learner_model import record_telemetry_event
+
+            for q, sc, q_time, _ui in scored_rows:
+                st = sc["status"]
+                if q["trapCategory"]:
+                    err_cat = q["trapCategory"]
+                elif st == "wrong" and q_time > slow_threshold:
+                    err_cat = "time_pressure"
+                else:
+                    err_cat = "concept_gap"
+                record_telemetry_event(
+                    resolved_kg,
+                    domain=str(q.get("subject") or "General"),
+                    prop_id=str(q.get("propId") or "") or None,
+                    kind="exam",
+                    correct=(st == "correct"),
+                    difficulty=1560,
+                    confidence=None,
+                    duration_ms=int(q_time * 1000) if q_time > 0 else None,
+                    hints_used=0,
+                    mistake_category=err_cat if st in ("wrong", "partial") else None,
+                    pf_outcome=None,
+                    skipped=(st == "unattempted"),
+                )
+        except Exception:
+            pass
 
     if not no_sync and (not no_log or not no_srs):
         sync_hub_quiet(kg_dir=resolved_kg)

@@ -3,6 +3,7 @@ import { existsSync, mkdirSync, readdirSync, readFileSync, realpathSync, statSyn
 import { execFileSync } from "node:child_process";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { inflateRawSync } from "node:zlib";
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const rawArgv = process.argv.slice(2);
@@ -1280,6 +1281,1380 @@ function normalizeReadingQueue(rawQueue) {
 	return items;
 }
 
+// ---------------------------------------------------------------------------
+// Syntopik v3.0 Pure-Node Sanitizers, Safe :::explore RPN Compiler & Packs
+// ---------------------------------------------------------------------------
+
+function readJsonObject(filePath) {
+	if (!existsSync(filePath)) return null;
+	try {
+		const parsed = JSON.parse(readFileSync(filePath, "utf8"));
+		return parsed && typeof parsed === "object" && !Array.isArray(parsed) ? parsed : null;
+	} catch {
+		return null;
+	}
+}
+
+function slugifySafe(raw, fallback = "item") {
+	const s = String(raw || "")
+		.toLowerCase()
+		.replace(/[^a-z0-9]+/gu, "-")
+		.replace(/^-+|-+$/gu, "");
+	return s || fallback;
+}
+
+const SEALED_FORK_KEYS = new Set([
+	"sealedWinningMove",
+	"sealedBlunder",
+	"refutationMsg",
+	"verifySpec",
+	"mutationPool",
+]);
+
+const SEALED_DECISION_KEYS = new Set([
+	"bestMove",
+	"expertRationale",
+	"expertLens",
+	"killCue",
+	"firstMove",
+	"rejectedDecoy",
+	"sealedAnswer",
+	"canonicalAnswer",
+]);
+
+const SEALED_GATE_KEYS = new Set([
+	"canonicalAnswer",
+	"expectedAnswer",
+	"revealedBody",
+	"sealedAnswer",
+	"answer",
+]);
+
+function sanitizeFork(fork, today) {
+	const out = {};
+	for (const [k, v] of Object.entries(fork)) {
+		if (!SEALED_FORK_KEYS.has(k)) out[k] = v;
+	}
+	if (out.mutationCount == null) {
+		out.mutationCount = Array.isArray(fork.mutationPool) ? fork.mutationPool.length : 0;
+	}
+	if (!out.engine) {
+		out.engine = fork?.verifySpec?.engine || "exact";
+	}
+	const status = String(out.status || "active").toLowerCase();
+	const dueStr = typeof out.nextReview === "string" ? out.nextReview.slice(0, 10) : "";
+	out.isDue = !dueStr || dueStr <= today || status === "active" || status === "shaky";
+	return out;
+}
+
+function sanitizeArena(arena) {
+	const mutants = Array.isArray(arena.sealedMutants) ? arena.sealedMutants : [];
+	const killedSet = new Set(
+		(Array.isArray(arena.killedMutants) ? arena.killedMutants : []).map((x) => String(x)),
+	);
+	const total = mutants.length > 0 ? mutants.length : Number(arena.totalMutants || 0);
+	const killedCount =
+		mutants.length > 0
+			? mutants.filter((m) => m && typeof m === "object" && killedSet.has(String(m.id))).length
+			: Number(arena.killedCount ?? killedSet.size);
+	const survivedCount = Math.max(0, total - killedCount);
+	const rawRepairs = Array.isArray(arena.lemmaRepairs) ? arena.lemmaRepairs : [];
+	const lemmaRepairs = rawRepairs
+		.filter((r) => r && typeof r === "object")
+		.map((r) => ({
+			id: r.id ?? null,
+			lemma: r.lemma ?? "",
+			ts: r.ts ?? null,
+			persistedToProp: Boolean(r.persistedToProp),
+		}));
+	let assumptions = [];
+	if (Array.isArray(arena.assumptionPredicates)) {
+		assumptions = arena.assumptionPredicates.map((p) =>
+			p && typeof p === "object" ? String(p.description || p.expr || "") : String(p),
+		);
+	} else if (Array.isArray(arena.assumptions)) {
+		assumptions = arena.assumptions.map(String);
+	}
+	const status = String(
+		arena.status || (total > 0 && killedCount >= total ? "cleared" : "active"),
+	).toLowerCase();
+	return {
+		id: arena.id ?? null,
+		propId: arena.propId ?? null,
+		domain: arena.domain ?? null,
+		title: arena.title ?? null,
+		claim: arena.claim ?? null,
+		entry: arena.entry ?? null,
+		lang: arena.lang ?? null,
+		status,
+		assumptions,
+		totalMutants: total,
+		killedCount,
+		survivedCount,
+		killedMutants: [...killedSet].sort(),
+		bestMinimalSize: arena.bestMinimalSize ?? null,
+		lemmaRepairsCount: lemmaRepairs.length,
+		lemmaRepairs,
+		updatedAt: arena.updatedAt ?? null,
+	};
+}
+
+function sanitizeDecision(dec) {
+	const status = String(dec.status || "").trim().toLowerCase();
+	const hasGradeFlags = ["killCueHit", "firstMoveHit", "decoyHit", "correct"].some(
+		(k) => typeof dec[k] === "boolean",
+	);
+	const isGraded =
+		dec.graded === true ||
+		(dec.graded !== false &&
+			!["pending", "ungraded", "open", "draft"].includes(status) &&
+			hasGradeFlags);
+	if (isGraded) return { ...dec };
+	const out = {};
+	for (const [k, v] of Object.entries(dec)) {
+		if (!SEALED_DECISION_KEYS.has(k)) out[k] = v;
+	}
+	return out;
+}
+
+function sanitizeDerivation(deriv, level = 3) {
+	const steps = (Array.isArray(deriv.steps) ? deriv.steps : []).filter((s) => s && typeof s === "object");
+	const nonAxioms = steps.filter((s) => String(s.role || "step").toLowerCase() !== "axiom");
+	const lvl = Math.max(1, Math.min(3, Math.trunc(Number(level) || 3)));
+	const hiddenIds = new Set();
+	if (nonAxioms.length > 0) {
+		if (lvl === 1) {
+			const inter = nonAxioms.filter((s) => String(s.role || "step").toLowerCase() === "step");
+			const pool = inter.length > 0 ? inter : nonAxioms;
+			const targetN = Math.max(1, Math.round(pool.length * 0.4));
+			const stride = Math.max(1, Math.floor(pool.length / targetN));
+			for (let idx = pool.length - 1; idx >= 0; idx -= stride) {
+				hiddenIds.add(String(pool[idx].id || ""));
+				if (hiddenIds.size >= targetN) break;
+			}
+		} else if (lvl === 2) {
+			const targetN = Math.max(1, Math.round(nonAxioms.length * 0.65));
+			for (let idx = nonAxioms.length - 1; idx >= 0; idx -= 1) {
+				if (hiddenIds.size >= targetN) break;
+				hiddenIds.add(String(nonAxioms[idx].id || ""));
+			}
+		} else {
+			for (const s of nonAxioms) {
+				hiddenIds.add(String(s.id || ""));
+			}
+		}
+	}
+	const publicSteps = steps.map((s) => {
+		const sid = String(s.id || "");
+		const role = String(s.role || "step").toLowerCase();
+		const hidden = role !== "axiom" && hiddenIds.has(sid);
+		return {
+			id: sid,
+			label: s.label || sid,
+			role: s.role || "step",
+			dependsOn: Array.isArray(s.dependsOn) ? s.dependsOn.map(String) : [],
+			hidden,
+			expr: hidden ? null : (s.expr ?? null),
+			note: hidden ? null : (s.note || null),
+		};
+	});
+	return {
+		id: deriv.id ?? null,
+		propId: deriv.propId ?? null,
+		chapter: deriv.chapter ?? "General",
+		title: deriv.title ?? deriv.id ?? "Derivation",
+		domain: deriv.domain ?? "General",
+		blackoutLevel: lvl,
+		stepCount: steps.length,
+		axiomCount: steps.filter((s) => String(s.role || "step").toLowerCase() === "axiom").length,
+		theoremCount: steps.filter((s) => String(s.role || "step").toLowerCase() === "theorem").length,
+		hiddenCount: publicSteps.filter((s) => s.hidden).length,
+		hiddenStepIds: publicSteps.filter((s) => s.hidden).map((s) => s.id),
+		steps: publicSteps,
+		updatedAt: deriv.updatedAt ?? null,
+	};
+}
+
+function sanitizeVivaSession(sess) {
+	const prompts = (Array.isArray(sess.prompts) ? sess.prompts : []).filter((p) => p && typeof p === "object");
+	const turns = (Array.isArray(sess.turns) ? sess.turns : []).filter((t) => t && typeof t === "object");
+	const cur = Number.isInteger(sess.currentTurn) ? sess.currentTurn : turns.length + 1;
+	const status = String(sess.status || "in_progress");
+	const curPrompt =
+		status === "in_progress" && cur >= 1 && cur <= prompts.length ? prompts[cur - 1] : null;
+	const visiblePrompts =
+		status === "completed" ? prompts : prompts.slice(0, Math.max(1, Math.min(cur, prompts.length)));
+	return {
+		id: sess.id ?? null,
+		propId: sess.propId ?? null,
+		propTitle: sess.propTitle ?? sess.propId ?? null,
+		subject: sess.subject ?? "General",
+		chapter: sess.chapter ?? "General",
+		status,
+		currentTurn: cur,
+		totalTurns: Number(sess.totalTurns || 5),
+		turnsCompleted: turns.length,
+		turns,
+		currentPrompt: curPrompt,
+		prompts: visiblePrompts,
+		commitmentLedger: sess.commitmentLedger ?? null,
+		scores: sess.scores ?? null,
+		composite:
+			sess.scores && typeof sess.scores === "object" && typeof sess.scores.composite === "number"
+				? sess.scores.composite
+				: null,
+		outcome: sess.outcome ?? null,
+		evidenceRecorded: Boolean(sess.evidenceRecorded),
+		demotedToShaky: Boolean(sess.demotedToShaky),
+		createdAt: sess.createdAt ?? null,
+		updatedAt: sess.updatedAt ?? null,
+	};
+}
+
+function sanitizeWhiteboardFrame(frame) {
+	const fr = { ...frame };
+	const kind = String(fr.kind || "").toLowerCase();
+	const gate = fr.gate && typeof fr.gate === "object" && !Array.isArray(fr.gate) ? { ...fr.gate } : null;
+	const payload =
+		fr.payload && typeof fr.payload === "object" && !Array.isArray(fr.payload) ? { ...fr.payload } : {};
+	const isLockedGate =
+		kind === "prediction_gate" && (fr.locked !== false || !(gate && gate.unlockedAt));
+	if (isLockedGate) {
+		for (const key of SEALED_GATE_KEYS) {
+			delete fr[key];
+			delete payload[key];
+			if (gate) delete gate[key];
+		}
+		fr.body = "";
+		fr.locked = true;
+	} else if (kind === "prediction_gate" && gate) {
+		if (fr.canonicalAnswer === undefined && gate.expectedAnswer !== undefined) {
+			fr.canonicalAnswer = gate.expectedAnswer;
+		}
+	}
+	if (gate) fr.gate = gate;
+	fr.payload = payload;
+	return fr;
+}
+
+function sanitizeWhiteboard(raw) {
+	if (!raw || typeof raw !== "object") {
+		return {
+			schemaVersion: 1,
+			sessionId: null,
+			revision: 0,
+			title: "",
+			activeFrameId: null,
+			frames: [],
+			pins: [],
+			pendingPins: [],
+			pendingPinCount: 0,
+			frameCount: 0,
+			updatedAt: null,
+		};
+	}
+	const frames = (Array.isArray(raw.frames) ? raw.frames : [])
+		.filter((f) => f && typeof f === "object")
+		.map(sanitizeWhiteboardFrame);
+	const pins = (Array.isArray(raw.pins) ? raw.pins : []).filter((p) => p && typeof p === "object");
+	const pendingPins = pins.filter((p) => !p.resolved);
+	return {
+		schemaVersion: 1,
+		sessionId: raw.sessionId ?? null,
+		revision: Number(raw.revision || 0),
+		title: String(raw.title || ""),
+		activeFrameId: raw.activeFrameId ?? null,
+		frames,
+		pins,
+		pendingPins,
+		pendingPinCount: pendingPins.length,
+		frameCount: frames.length,
+		updatedAt: raw.updatedAt ?? null,
+	};
+}
+
+function defaultLearnerProfile() {
+	return {
+		schemaVersion: 1,
+		updatedAt: null,
+		calibration: {
+			completed: false,
+			completedAt: null,
+			entryRamp: "balanced",
+			challengeAppetite: "balanced",
+			targetSuccessRate: 0.85,
+			sessionTargetMinutes: 30,
+			proseDensity: "standard",
+			baselineLatencyMs: 22000,
+			microTaskBias: 0.0,
+			calibrationPrior: "calibrated",
+		},
+		userOverrides: {
+			scaffoldingMode: null,
+			allowProductiveFailure: null,
+			maxProseWords: null,
+		},
+		globalStats: {
+			elo: 1450.0,
+			totalEvents: 0,
+			priorWeight: 1.0,
+			analogyFormalismRatio: 0.5,
+			pfAttempts: 0,
+			pfSurvivalRate: 0.65,
+			latencyEwma: 1.0,
+			pacingMultiplier: 1.0,
+		},
+		domains: {},
+		affectiveState: {
+			state: "flow",
+			confidence: 0.5,
+			activeSessionMinutes: 0.0,
+			windowAccuracy: null,
+			windowMeanHints: 0.0,
+			windowMeanLatencyRatio: 1.0,
+			errorStreak: 0,
+			gamingSignals: 0,
+			lastEventAt: null,
+		},
+		metacognition: {
+			windowCount: 0,
+			brierScore: null,
+			ece: null,
+			overconfidenceBias: null,
+			label: "uncalibrated",
+			recentHypercorrections: 0,
+			recentLuckyGuesses: 0,
+		},
+		failureDna: {
+			windowCount: 0,
+			tierShares: {
+				comprehension_model: 0.0,
+				process_encoding: 0.0,
+				executive_pacing: 0.0,
+			},
+			dominantTier: null,
+			topCategories: [],
+		},
+		compiledPolicy: {
+			domain: "General",
+			domainElo: 1450.0,
+			expertiseBand: "intermediate",
+			scaffoldingMode: "faded",
+			effectiveReadiness: 0.5,
+			allowWorkedExample: false,
+			allowProductiveFailure: true,
+			maxProseWords: 135,
+			analogyFormalismRatio: 0.5,
+			targetSuccessRate: 0.85,
+			pacingMultiplier: 1.0,
+			requirePredictionFirst: false,
+			energyOverride: null,
+			affectState: "flow",
+			affectIntervention: "none",
+			activeGuardrails: [],
+		},
+	};
+}
+
+function computeEvidenceSummary(
+	propositions,
+	chainSummary,
+	revlog,
+	rawForks,
+	rawArenas,
+	rawViva,
+	rawDerivations,
+	evidenceLedger,
+) {
+	const TIER_LABELS = {
+		1: "T1 Exposure",
+		2: "T2 Cold Recall",
+		3: "T3 Mechanistic Transfer",
+		4: "T4 Adversarial Defense",
+	};
+	const adj = new Map();
+	for (const e of chainSummary.normalizedEdges) {
+		if (!adj.has(e.from)) adj.set(e.from, new Set());
+		adj.get(e.from).add(e.to);
+	}
+	const outDeg = new Map();
+	const descMap = new Map();
+	for (const [u, vs] of adj.entries()) {
+		outDeg.set(u, vs.size);
+		const visited = new Set();
+		const queue = [...vs];
+		while (queue.length > 0) {
+			const cur = queue.shift();
+			if (visited.has(cur) || cur === u) continue;
+			visited.add(cur);
+			const nexts = adj.get(cur);
+			if (nexts) {
+				for (const nxt of nexts) {
+					if (!visited.has(nxt) && nxt !== u) queue.push(nxt);
+				}
+			}
+		}
+		descMap.set(u, visited);
+	}
+
+	const t2Rev = new Set();
+	for (const r of revlog) {
+		const pid = String(r.propId || r.id || "").trim();
+		if (!pid) continue;
+		const rating = String(r.rating || "").toLowerCase();
+		const good = (typeof r.rating === "number" && r.rating >= 3) || rating === "good" || rating === "easy";
+		const correct = typeof r.correct === "boolean" ? r.correct : good;
+		const elapsed = Number(r.elapsedDays || 0);
+		const ivl = Number(r.intervalDays || 0);
+		if (correct && !r.luckyGuess && (elapsed >= 7 || ivl >= 7)) t2Rev.add(pid);
+	}
+	const t3Forks = new Set();
+	for (const f of rawForks) {
+		const pid = String(f.propId || "").trim();
+		if (!pid) continue;
+		const wins = Number(f.winCount || 0);
+		const st = String(f.status || "").toLowerCase();
+		if (wins >= 1 && (f.woodpeckerPassed || ["mastered", "solid", "cleared"].includes(st))) {
+			t3Forks.add(pid);
+		}
+	}
+	const t3Arenas = new Set();
+	for (const a of rawArenas) {
+		const pid = String(a.propId || "").trim();
+		if (!pid) continue;
+		const sa = sanitizeArena(a);
+		const kr = sa.totalMutants > 0 ? sa.killedCount / sa.totalMutants : 0;
+		if (kr >= 0.75 || ["cleared", "passed", "mastered"].includes(sa.status)) t3Arenas.add(pid);
+	}
+	const t4Viva = new Set();
+	for (const v of rawViva) {
+		const pid = String(v.propId || "").trim();
+		if (!pid) continue;
+		const score = v?.scores?.composite ?? v.score;
+		if (
+			v.passed ||
+			v.outcome === "passed" ||
+			(typeof score === "number" && score >= 0.75)
+		) {
+			t4Viva.add(pid);
+		}
+	}
+	const t4Deriv = new Set();
+	for (const d of rawDerivations) {
+		const pid = String(d.propId || "").trim();
+		if (!pid) continue;
+		if (d.passed || d.blackoutPassed || d.axiomCutPassed || Number(d.completions || 0) >= 1) {
+			t4Deriv.add(pid);
+		}
+	}
+	const ledgerMax = new Map();
+	const ledgerSrcs = new Map();
+	for (const row of evidenceLedger) {
+		if (row.verified === false) continue;
+		const pid = String(row.propId || "").trim();
+		const t = Number(row.tier);
+		if (!pid || !TIER_LABELS[t]) continue;
+		if (t > (ledgerMax.get(pid) || 0)) ledgerMax.set(pid, t);
+		if (!ledgerSrcs.has(pid)) ledgerSrcs.set(pid, []);
+		const src = String(row.source || "ledger");
+		if (!ledgerSrcs.get(pid).includes(src)) ledgerSrcs.get(pid).push(src);
+	}
+
+	const tierCounts = { T1: 0, T2: 0, T3: 0, T4: 0 };
+	const perProp = {};
+	const antiInflationAlerts = [];
+	for (const p of propositions) {
+		const pid = String(p.id || "").trim();
+		if (!pid) continue;
+		const status = String(p.status || "planned").toLowerCase();
+		let tier = 1;
+		const sources = ["exposure"];
+		const stab = Number(p?.fsrs?.stability || 0);
+		if (t2Rev.has(pid) || (status === "solid" && stab >= 7) || (ledgerMax.get(pid) || 0) >= 2) {
+			tier = Math.max(tier, 2);
+			sources.push("cold_recall");
+		}
+		if (t3Arenas.has(pid)) {
+			tier = Math.max(tier, 3);
+			sources.push("falsify_arena");
+		}
+		if (t3Forks.has(pid)) {
+			tier = Math.max(tier, 3);
+			sources.push("fork_replay");
+		}
+		if ((ledgerMax.get(pid) || 0) >= 3) tier = Math.max(tier, 3);
+		if (t4Viva.has(pid)) {
+			tier = 4;
+			sources.push("viva_chamber");
+		}
+		if (t4Deriv.has(pid)) {
+			tier = 4;
+			sources.push("derivation_forge");
+		}
+		if ((ledgerMax.get(pid) || 0) >= 4) tier = 4;
+		for (const ls of ledgerSrcs.get(pid) || []) {
+			if (!sources.includes(ls)) sources.push(ls);
+		}
+		tierCounts[`T${tier}`] += 1;
+		const od = outDeg.get(pid) || 0;
+		const descN = (descMap.get(pid) || new Set()).size;
+		perProp[pid] = {
+			propId: pid,
+			title: String(p.title || pid),
+			subject: String(p.subject || "General"),
+			chapter: String(p.chapter || ""),
+			status,
+			tier,
+			tierLabel: TIER_LABELS[tier],
+			sources,
+			outDegree: od,
+			descendantsCount: descN,
+		};
+		const isBottleneck = od >= 2 || descN >= 2 || (status === "solid" && descN >= 1);
+		if (isBottleneck && tier <= 2) {
+			antiInflationAlerts.push({
+				propId: pid,
+				title: perProp[pid].title,
+				subject: perProp[pid].subject,
+				chapter: perProp[pid].chapter,
+				status,
+				currentTier: tier,
+				currentTierLabel: TIER_LABELS[tier],
+				requiredTier: 3,
+				outDegree: od,
+				descendantsCount: descN,
+				suggestedAction: od >= 2 ? "falsify_arena" : "derivation_forge",
+			});
+		}
+	}
+	antiInflationAlerts.sort(
+		(a, b) =>
+			b.descendantsCount - a.descendantsCount ||
+			b.outDegree - a.outDegree ||
+			a.currentTier - b.currentTier ||
+			a.propId.localeCompare(b.propId),
+	);
+	const totalProps = Object.keys(perProp).length;
+	const verifiedTransferPct =
+		totalProps > 0 ? Number((((tierCounts.T3 + tierCounts.T4) / totalProps) * 100).toFixed(1)) : 0.0;
+	const headHash =
+		evidenceLedger.length > 0 ? String(evidenceLedger[evidenceLedger.length - 1].entryHash || "") : "0".repeat(64);
+	return {
+		ok: true,
+		totalPropositions: totalProps,
+		tierCounts,
+		verifiedTransferPct,
+		propositions: perProp,
+		antiInflationAlerts,
+		ledgerIntegrity: {
+			ok: true,
+			count: evidenceLedger.length,
+			brokenAt: null,
+			headHash,
+		},
+	};
+}
+
+function computeRootCauseHotspots(propositions, chainSummary, mistakes) {
+	const propsById = new Map(propositions.filter((p) => p?.id).map((p) => [String(p.id), p]));
+	const outgoing = new Map();
+	const incoming = new Map();
+	for (const e of chainSummary.normalizedEdges) {
+		if (!outgoing.has(e.from)) outgoing.set(e.from, new Set());
+		outgoing.get(e.from).add(e.to);
+		if (!incoming.has(e.to)) incoming.set(e.to, new Set());
+		incoming.get(e.to).add(e.from);
+	}
+	const missCounts = new Map();
+	for (const m of mistakes) {
+		const pid = String(m.propId || "").trim();
+		if (pid) missCounts.set(pid, (missCounts.get(pid) || 0) + 1);
+	}
+
+	const blastRadius = [];
+	const byProp = {};
+	for (const [uid, p] of propsById.entries()) {
+		const st = String(p.status || "planned").toLowerCase();
+		if ((st !== "shaky" && st !== "misconception") || !outgoing.has(uid)) continue;
+		const desc = new Set();
+		const q = [...outgoing.get(uid)];
+		while (q.length > 0) {
+			const cur = q.shift();
+			if (desc.has(cur) || cur === uid) continue;
+			desc.add(cur);
+			for (const nxt of outgoing.get(cur) || []) {
+				if (!desc.has(nxt) && nxt !== uid) q.push(nxt);
+			}
+		}
+		if (desc.size === 0) continue;
+		const weakDesc = [...desc]
+			.filter((d) => ["shaky", "misconception"].includes(String(propsById.get(d)?.status || "").toLowerCase()))
+			.sort();
+		let downstreamMisses = 0;
+		for (const d of desc) downstreamMisses += missCounts.get(d) || 0;
+		const chapters = [
+			...new Set(
+				[uid, ...desc]
+					.map((id) => String(propsById.get(id)?.chapter || "").trim())
+					.filter(Boolean),
+			),
+		].sort();
+		const sevMult = st === "misconception" ? 1.4 : 1.0;
+		const blastScore = Number(
+			(
+				sevMult *
+				(1 + 0.25 * Math.max(0, chapters.length - 1)) *
+				(desc.size + 2 * weakDesc.length + 1.5 * downstreamMisses + 0.5 * (missCounts.get(uid) || 0))
+			).toFixed(3),
+		);
+		blastRadius.push({
+			propId: uid,
+			title: String(p.title || uid),
+			subject: String(p.subject || "General"),
+			chapter: String(p.chapter || ""),
+			status: st,
+			downstreamCount: desc.size,
+			weakDownstreamCount: weakDesc.length,
+			downstreamMissCount: downstreamMisses,
+			affectedChapters: chapters,
+			affectedNodeIds: [...desc].sort(),
+			weakDownstreamIds: weakDesc,
+			blastScore,
+		});
+		const est = Math.min(0.96, Number(((st === "misconception" ? 0.5 : 0.38) + 0.08 * weakDesc.length + 0.05 * downstreamMisses).toFixed(4)));
+		byProp[uid] = Math.max(byProp[uid] || 0, est);
+	}
+	blastRadius.sort(
+		(a, b) =>
+			b.blastScore - a.blastScore ||
+			b.weakDownstreamCount - a.weakDownstreamCount ||
+			a.propId.localeCompare(b.propId),
+	);
+
+	// Also elevate direct weak/shaky parents of failing/weak leaves
+	for (const p of propositions) {
+		const pid = String(p.id || "");
+		const st = String(p.status || "").toLowerCase();
+		if (!pid || (st !== "shaky" && st !== "misconception" && !(missCounts.get(pid) > 0))) continue;
+		for (const prem of incoming.get(pid) || []) {
+			const pst = String(propsById.get(prem)?.status || "planned").toLowerCase();
+			const score = pst === "misconception" ? 0.72 : pst === "shaky" ? 0.54 : 0.28;
+			if (score > (byProp[prem] || 0)) byProp[prem] = score;
+		}
+	}
+
+	return { byProp, blastRadius: blastRadius.slice(0, 12) };
+}
+
+// --- Safe AST-free :::explore RPN compiler (mirrors syntopik/explorable.py opcodes, ZERO eval) ---
+
+const EXPLORE_MAX_EXP = 12;
+const EXPLORE_MAX_LEN = 512;
+const EXPLORE_MAX_OPS = 256;
+const EXPLORE_BLOCKED_IDENTS = new Set([
+	"__proto__",
+	"constructor",
+	"prototype",
+	"toString",
+	"valueOf",
+	"hasOwnProperty",
+	"isPrototypeOf",
+	"propertyIsEnumerable",
+	"toLocaleString",
+	"__defineGetter__",
+	"__defineSetter__",
+	"__lookupGetter__",
+	"__lookupSetter__",
+]);
+const EXPLORE_CONSTANTS = Object.freeze(
+	Object.assign(Object.create(null), { pi: Math.PI, e: Math.E, tau: Math.PI * 2 }),
+);
+const EXPLORE_FUNCS = Object.freeze(
+	Object.assign(Object.create(null), {
+		sin: { arities: [1], fn: Math.sin },
+		cos: { arities: [1], fn: Math.cos },
+		tan: { arities: [1], fn: Math.tan },
+		asin: { arities: [1], fn: Math.asin },
+		acos: { arities: [1], fn: Math.acos },
+		atan: { arities: [1], fn: Math.atan },
+		sinh: { arities: [1], fn: Math.sinh },
+		cosh: { arities: [1], fn: Math.cosh },
+		tanh: { arities: [1], fn: Math.tanh },
+		sqrt: { arities: [1], fn: Math.sqrt },
+		abs: { arities: [1], fn: Math.abs },
+		exp: { arities: [1], fn: Math.exp },
+		log: { arities: [1, 2], fn: (x, b) => (b === undefined ? Math.log(x) : Math.log(x) / Math.log(b)) },
+		ln: { arities: [1], fn: Math.log },
+		floor: { arities: [1], fn: Math.floor },
+		ceil: { arities: [1], fn: Math.ceil },
+		min: { arities: [2], fn: Math.min },
+		max: { arities: [2], fn: Math.max },
+	}),
+);
+
+function isCleanExploreIdent(name) {
+	return (
+		typeof name === "string" &&
+		name.length > 0 &&
+		name.length <= 64 &&
+		/^[A-Za-z_][A-Za-z0-9_]*$/u.test(name) &&
+		!name.includes("__") &&
+		!EXPLORE_BLOCKED_IDENTS.has(name)
+	);
+}
+
+function tokenizeExploreExpr(rawExpr) {
+	let s = String(rawExpr || "").trim();
+	if (s.startsWith("$") && s.endsWith("$") && s.length >= 2) s = s.slice(1, -1).trim();
+	s = s.replace(/−/gu, "-").replace(/\^/gu, "**");
+	if (!s || s.length > EXPLORE_MAX_LEN) throw new Error("Expression empty or too long.");
+	const tokens = [];
+	let i = 0;
+	while (i < s.length) {
+		const ch = s[i];
+		if (/\s/u.test(ch)) {
+			i++;
+			continue;
+		}
+		if (/[0-9.]/u.test(ch)) {
+			const m = /^[0-9]*\.?[0-9]+(?:[eE][+-]?[0-9]+)?/u.exec(s.slice(i));
+			if (!m) throw new Error(`Invalid number at ${i}`);
+			const val = Number(m[0]);
+			if (!Number.isFinite(val)) throw new Error("Non-finite number");
+			tokens.push({ t: "num", v: val });
+			i += m[0].length;
+			continue;
+		}
+		if (/[A-Za-z_]/u.test(ch)) {
+			const m = /^[A-Za-z_][A-Za-z0-9_]*/u.exec(s.slice(i));
+			const name = m[0];
+			if (!isCleanExploreIdent(name)) throw new Error(`Disallowed identifier: ${name}`);
+			tokens.push({ t: "id", v: name });
+			i += name.length;
+			continue;
+		}
+		if (ch === "*" && s[i + 1] === "*") {
+			tokens.push({ t: "op", v: "**" });
+			i += 2;
+			continue;
+		}
+		if ("+-*/(),".includes(ch)) {
+			tokens.push({ t: ch === "(" || ch === ")" || ch === "," ? ch : "op", v: ch });
+			i++;
+			continue;
+		}
+		throw new Error(`Disallowed character in expression: ${ch}`);
+	}
+	return tokens;
+}
+
+function compileExprToRpn(rawExpr, allowedVars = null) {
+	const tokens = tokenizeExploreExpr(rawExpr);
+	let pos = 0;
+	const ops = [];
+	const peek = () => tokens[pos] || null;
+	const consume = () => tokens[pos++];
+
+	function parseAddSub(depth) {
+		if (depth > 24) throw new Error("Expression too deep");
+		parseMulDiv(depth + 1);
+		while (peek() && peek().t === "op" && (peek().v === "+" || peek().v === "-")) {
+			const op = consume().v;
+			parseMulDiv(depth + 1);
+			ops.push({ op: "bin", fn: op });
+		}
+	}
+
+	function parseMulDiv(depth) {
+		if (depth > 24) throw new Error("Expression too deep");
+		parseUnary(depth + 1);
+		while (peek() && peek().t === "op" && (peek().v === "*" || peek().v === "/")) {
+			const op = consume().v;
+			parseUnary(depth + 1);
+			ops.push({ op: "bin", fn: op });
+		}
+	}
+
+	function parseUnary(depth) {
+		if (depth > 24) throw new Error("Expression too deep");
+		if (peek() && peek().t === "op" && (peek().v === "+" || peek().v === "-")) {
+			const op = consume().v;
+			parseUnary(depth + 1);
+			ops.push({ op: "unary", fn: op === "-" ? "neg" : "pos" });
+			return;
+		}
+		parsePow(depth + 1);
+	}
+
+	function parsePow(depth) {
+		if (depth > 24) throw new Error("Expression too deep");
+		parsePrimary(depth + 1);
+		if (peek() && peek().t === "op" && peek().v === "**") {
+			consume();
+			const startLen = ops.length;
+			parseUnary(depth + 1);
+			const rhsOps = ops.slice(startLen);
+			if (rhsOps.some((o) => o.op === "bin" && o.fn === "**")) {
+				throw new Error("Nested exponentiation disallowed");
+			}
+			if (rhsOps.length === 1 && rhsOps[0].op === "num" && Math.abs(rhsOps[0].val) > EXPLORE_MAX_EXP) {
+				throw new Error("Exponent exceeds safe limit");
+			}
+			ops.push({ op: "bin", fn: "**" });
+		}
+	}
+
+	function parsePrimary(depth) {
+		if (depth > 24) throw new Error("Expression too deep");
+		const tok = peek();
+		if (!tok) throw new Error("Unexpected end of expression");
+		if (tok.t === "num") {
+			consume();
+			ops.push({ op: "num", val: tok.v });
+			return;
+		}
+		if (tok.t === "id") {
+			consume();
+			if (!isCleanExploreIdent(tok.v)) throw new Error(`Disallowed identifier: ${tok.v}`);
+			if (peek() && peek().t === "(") {
+				const spec = Object.prototype.hasOwnProperty.call(EXPLORE_FUNCS, tok.v)
+					? EXPLORE_FUNCS[tok.v]
+					: null;
+				if (!spec) throw new Error(`Disallowed function: ${tok.v}`);
+				consume(); // '('
+				let arity = 0;
+				if (!peek() || peek().t !== ")") {
+					while (true) {
+						parseAddSub(depth + 1);
+						arity++;
+						if (peek() && peek().t === ",") {
+							consume();
+							continue;
+						}
+						break;
+					}
+				}
+				if (!peek() || peek().t !== ")") throw new Error("Missing ')'");
+				consume();
+				if (!spec.arities.includes(arity)) throw new Error(`Invalid arity for ${tok.v}`);
+				ops.push({ op: "call", fn: tok.v, arity });
+				return;
+			}
+			if (Object.prototype.hasOwnProperty.call(EXPLORE_CONSTANTS, tok.v)) {
+				ops.push({ op: "const", name: tok.v, val: EXPLORE_CONSTANTS[tok.v] });
+				return;
+			}
+			if (allowedVars !== null && !allowedVars.has(tok.v)) {
+				throw new Error(`Unknown variable: ${tok.v}`);
+			}
+			ops.push({ op: "var", name: tok.v });
+			return;
+		}
+		if (tok.t === "(") {
+			consume();
+			parseAddSub(depth + 1);
+			if (!peek() || peek().t !== ")") throw new Error("Missing ')'");
+			consume();
+			return;
+		}
+		throw new Error(`Unexpected token: ${tok.v}`);
+	}
+
+	parseAddSub(0);
+	if (pos !== tokens.length) throw new Error("Trailing tokens in expression");
+	if (ops.length === 0 || ops.length > EXPLORE_MAX_OPS) throw new Error("RPN op count out of safe bounds");
+	return ops;
+}
+
+function evaluateRpn(rpnOps, env = {}) {
+	if (!Array.isArray(rpnOps) || rpnOps.length === 0 || rpnOps.length > EXPLORE_MAX_OPS) {
+		throw new Error("Invalid RPN array");
+	}
+	const stack = [];
+	for (const tok of rpnOps) {
+		if (!tok || typeof tok !== "object") throw new Error("Invalid RPN token");
+		if (tok.op === "num") {
+			const n = Number(tok.val);
+			if (!Number.isFinite(n)) throw new Error("Non-finite num");
+			stack.push(n);
+		} else if (tok.op === "const") {
+			if (!Object.prototype.hasOwnProperty.call(EXPLORE_CONSTANTS, tok.name)) {
+				throw new Error(`Disallowed constant: ${tok.name}`);
+			}
+			stack.push(EXPLORE_CONSTANTS[tok.name]);
+		} else if (tok.op === "var") {
+			if (!isCleanExploreIdent(tok.name)) throw new Error(`Disallowed var ${tok.name}`);
+			const v = Object.prototype.hasOwnProperty.call(env, tok.name)
+				? Number(env[tok.name])
+				: Object.prototype.hasOwnProperty.call(EXPLORE_CONSTANTS, tok.name)
+					? EXPLORE_CONSTANTS[tok.name]
+					: NaN;
+			if (!Number.isFinite(v)) throw new Error(`Missing var ${tok.name}`);
+			stack.push(v);
+		} else if (tok.op === "unary") {
+			if (stack.length < 1) throw new Error("Stack underflow");
+			const a = stack.pop();
+			stack.push(tok.fn === "neg" ? -a : +a);
+		} else if (tok.op === "bin") {
+			if (stack.length < 2) throw new Error("Stack underflow");
+			const b = stack.pop();
+			const a = stack.pop();
+			let r;
+			if (tok.fn === "+") r = a + b;
+			else if (tok.fn === "-") r = a - b;
+			else if (tok.fn === "*") r = a * b;
+			else if (tok.fn === "/") {
+				if (b === 0) throw new Error("Division by zero");
+				r = a / b;
+			} else if (tok.fn === "**") {
+				if (Math.abs(b) > EXPLORE_MAX_EXP) throw new Error("Exponent limit");
+				r = Math.pow(a, b);
+			} else {
+				throw new Error(`Disallowed binary op: ${tok.fn}`);
+			}
+			if (!Number.isFinite(r) || Math.abs(r) > 1e100) throw new Error("Overflow");
+			stack.push(r);
+		} else if (tok.op === "call") {
+			const spec = Object.prototype.hasOwnProperty.call(EXPLORE_FUNCS, tok.fn)
+				? EXPLORE_FUNCS[tok.fn]
+				: null;
+			if (!spec || !spec.arities.includes(tok.arity) || stack.length < tok.arity) {
+				throw new Error(`Disallowed function: ${tok.fn}`);
+			}
+			const args = stack.splice(stack.length - tok.arity, tok.arity);
+			const r = spec.fn(...args);
+			if (!Number.isFinite(r) || Math.abs(r) > 1e100) throw new Error("Non-finite call");
+			stack.push(r);
+		} else {
+			throw new Error(`Disallowed RPN op: ${tok.op}`);
+		}
+	}
+	if (stack.length !== 1 || !Number.isFinite(stack[0])) throw new Error("Bad RPN stack");
+	return stack[0];
+}
+
+function parseKvPairsDsl(text) {
+	const out = Object.create(null);
+	const re = /([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(?:"([^"]*)"|'([^']*)'|([^,\s]+))/gu;
+	let m;
+	while ((m = re.exec(text)) !== null) {
+		const k = m[1];
+		if (!isCleanExploreIdent(k)) continue;
+		if (m[2] !== undefined || m[3] !== undefined) {
+			out[k] = m[2] ?? m[3];
+		} else {
+			const num = Number(m[4]);
+			out[k] = Number.isFinite(num) ? num : m[4];
+		}
+	}
+	return out;
+}
+
+function compileExplorableSpecNode(spec) {
+	if (!spec || typeof spec !== "object") throw new Error("Invalid spec");
+	const titleRaw = String(spec.title || "").trim();
+	const id = slugifySafe(spec.id || titleRaw || "explorable-lab", "explorable-lab");
+	const title = titleRaw || prettifyName(id);
+	const prompt = String(spec.prompt || "").trim();
+	const params = [];
+	const paramNames = new Set();
+	const defaultEnv = Object.create(null);
+	for (const p of Array.isArray(spec.params) ? spec.params : []) {
+		if (!p || typeof p !== "object") continue;
+		const name = String(p.name || "").trim();
+		if (
+			!isCleanExploreIdent(name) ||
+			Object.prototype.hasOwnProperty.call(EXPLORE_CONSTANTS, name) ||
+			Object.prototype.hasOwnProperty.call(EXPLORE_FUNCS, name)
+		) {
+			throw new Error(`Invalid param: ${name}`);
+		}
+		const pmin = Number(p.min ?? 0);
+		const pmax = Number(p.max ?? 1);
+		if (!Number.isFinite(pmin) || !Number.isFinite(pmax) || pmax <= pmin) throw new Error("Bad range");
+		const step = Number(p.step ?? (pmax - pmin) / 50);
+		const defVal = Math.max(pmin, Math.min(pmax, Number(p.default ?? (pmin + pmax) / 2)));
+		paramNames.add(name);
+		defaultEnv[name] = defVal;
+		params.push({
+			name,
+			label: String(p.label || name).trim(),
+			min: pmin,
+			max: pmax,
+			step: step > 0 ? step : (pmax - pmin) / 50,
+			default: defVal,
+			unit: String(p.unit || "").trim(),
+		});
+	}
+	const outAllowed = paramNames;
+	const outputs = [];
+	for (let i = 0; i < (Array.isArray(spec.outputs) ? spec.outputs.length : 0); i++) {
+		const o = spec.outputs[i];
+		if (!o || typeof o !== "object") continue;
+		const expr = String(o.expr || "").trim();
+		const rpn = compileExprToRpn(expr, outAllowed);
+		const entry = {
+			label: String(o.label || `Output ${i + 1}`).trim(),
+			expr,
+			rpn,
+			unit: String(o.unit || "").trim(),
+		};
+		if (Object.keys(defaultEnv).length > 0) {
+			try {
+				entry.defaultValue = Number(evaluateRpn(rpn, defaultEnv).toFixed(6));
+			} catch {
+				// ignore runtime domain error at default
+			}
+		}
+		outputs.push(entry);
+	}
+	let curve = null;
+	if (spec.curve && typeof spec.curve === "object") {
+		const c = spec.curve;
+		const xVar = String(c.xVar || "x").trim();
+		if (
+			!isCleanExploreIdent(xVar) ||
+			Object.prototype.hasOwnProperty.call(EXPLORE_CONSTANTS, xVar) ||
+			Object.prototype.hasOwnProperty.call(EXPLORE_FUNCS, xVar)
+		) {
+			throw new Error("Bad xVar");
+		}
+		const xMin = Number(c.xMin ?? 0);
+		const xMax = Number(c.xMax ?? 1);
+		if (!Number.isFinite(xMin) || !Number.isFinite(xMax) || xMax <= xMin) throw new Error("Bad x range");
+		const rawSamples = Number(c.samples ?? 64);
+		const samples = Number.isFinite(rawSamples) ? Math.max(2, Math.min(200, Math.round(rawSamples))) : 64;
+		const curveVars = new Set([...paramNames, xVar]);
+		const exactExpr = String(c.exactExpr || "").trim();
+		const exactRpn = compileExprToRpn(exactExpr, curveVars);
+		const approxExpr = String(c.approxExpr || "").trim();
+		const approxRpn = approxExpr ? compileExprToRpn(approxExpr, curveVars) : null;
+		const regimeThreshold =
+			c.regimeThreshold !== undefined && c.regimeThreshold !== null && String(c.regimeThreshold).trim() !== ""
+				? Number(c.regimeThreshold)
+				: null;
+		curve = {
+			xVar,
+			xMin,
+			xMax,
+			samples,
+			exactExpr,
+			exactRpn,
+			approxExpr: approxExpr || null,
+			approxRpn,
+			regimeThreshold: Number.isFinite(regimeThreshold) ? regimeThreshold : null,
+			yLabel: String(c.yLabel || "y").trim(),
+		};
+	}
+	let limitCheck = null;
+	if (spec.limitCheck && typeof spec.limitCheck === "object") {
+		const lc = spec.limitCheck;
+		const lVar = String(lc.var || params[0]?.name || "x").trim();
+		if (!isCleanExploreIdent(lVar)) throw new Error("Bad limitCheck.var");
+		const rawTarget = lc.target ?? 0;
+		const numTarget = Number(rawTarget);
+		const target = typeof rawTarget === "number" || (String(rawTarget).trim() !== "" && Number.isFinite(numTarget))
+			? numTarget
+			: String(rawTarget).trim();
+		const expectedExpr = String(lc.expectedExpr || "").trim();
+		const limVars = new Set([...paramNames, lVar]);
+		const expectedRpn = expectedExpr ? compileExprToRpn(expectedExpr, limVars) : null;
+		let expectedVal =
+			lc.expectedVal !== undefined && lc.expectedVal !== null && Number.isFinite(Number(lc.expectedVal))
+				? Number(lc.expectedVal)
+				: null;
+		if (expectedVal === null && expectedRpn) {
+			const evalEnv = Object.assign(Object.create(null), defaultEnv);
+			if (typeof target === "number" && Number.isFinite(target)) evalEnv[lVar] = target;
+			else if (/^\+?inf|oo$/iu.test(String(target))) evalEnv[lVar] = 1e6;
+			else if (/^-inf|-oo$/iu.test(String(target))) evalEnv[lVar] = -1e6;
+			try {
+				expectedVal = evaluateRpn(expectedRpn, evalEnv);
+			} catch {
+				expectedVal = null;
+			}
+		}
+		limitCheck = {
+			question: String(lc.question || `Predict the limiting value as ${lVar} -> ${target}.`).trim(),
+			var: lVar,
+			target,
+			expectedExpr: expectedExpr || null,
+			expectedRpn,
+			expectedVal,
+			hint: String(lc.hint || "Check the dominant term in the limiting regime.").trim(),
+		};
+	}
+	return { id, title, prompt, params, outputs, curve, limitCheck };
+}
+
+function parseExplorableBlocks(markdownText) {
+	if (!markdownText || !markdownText.includes(":::explore")) return [];
+	const lines = String(markdownText).split(/\r?\n/u);
+	const specs = [];
+	let inCode = false;
+	let fenceChar = "";
+	let inExplore = false;
+	let fenceArg = "";
+	let buf = [];
+
+	for (const line of lines) {
+		const trimmed = line.trim();
+		if (!inExplore) {
+			const cf = /^\s*(`{3,}|~{3,})/u.exec(line);
+			if (cf) {
+				const ch = cf[1][0];
+				if (!inCode) {
+					inCode = true;
+					fenceChar = ch;
+				} else if (ch === fenceChar) {
+					inCode = false;
+					fenceChar = "";
+				}
+				continue;
+			}
+			if (inCode) continue;
+			const om = /^:::explore(?:\s+(.*))?$/u.exec(trimmed);
+			if (om) {
+				inExplore = true;
+				fenceArg = (om[1] || "").trim();
+				buf = [];
+				continue;
+			}
+		} else if (/^:::\s*$/u.test(trimmed)) {
+			inExplore = false;
+			let cleaned = buf.join("\n").trim();
+			buf = [];
+			if (cleaned.startsWith("```")) {
+				const cl = cleaned.split(/\r?\n/u);
+				if (cl.length >= 2 && cl[cl.length - 1].trim().startsWith("```")) {
+					cleaned = cl.slice(1, -1).join("\n").trim();
+				}
+			}
+			try {
+				let rawSpec;
+				if (cleaned.startsWith("{")) {
+					rawSpec = JSON.parse(cleaned);
+					if (fenceArg && !rawSpec.id) rawSpec.id = fenceArg;
+				} else {
+					rawSpec = { params: [], outputs: [] };
+					if (fenceArg) rawSpec.id = fenceArg;
+					const curve = {};
+					const lim = {};
+					for (const rl of cleaned.split(/\r?\n/u)) {
+						const l = rl.trim();
+						if (!l || l.startsWith("#") || !l.includes(":")) continue;
+						const idx = l.indexOf(":");
+						const kRaw = l.slice(0, idx).trim();
+						const kLow = kRaw.toLowerCase();
+						const vStr = l.slice(idx + 1).trim();
+						if (kLow === "id" || kLow === "title" || kLow === "prompt") {
+							rawSpec[kLow] = vStr.replace(/^["']|["']$/gu, "");
+						} else if (kLow.startsWith("param ")) {
+							const pobj = parseKvPairsDsl(vStr);
+							pobj.name = kRaw.slice(6).trim();
+							rawSpec.params.push(pobj);
+						} else if (kLow.startsWith("output")) {
+							const oobj = parseKvPairsDsl(vStr);
+							if (!oobj.label && kRaw.includes(" ")) oobj.label = kRaw.slice(kRaw.indexOf(" ") + 1).trim();
+							rawSpec.outputs.push(oobj);
+						} else if (kLow === "curve") {
+							Object.assign(curve, parseKvPairsDsl(vStr));
+						} else if (kLow === "limitcheck" || kLow === "limit_check" || kLow === "limit") {
+							Object.assign(lim, parseKvPairsDsl(vStr));
+						}
+					}
+					if (Object.keys(curve).length > 0) rawSpec.curve = curve;
+					if (Object.keys(lim).length > 0) rawSpec.limitCheck = lim;
+				}
+				specs.push(compileExplorableSpecNode(rawSpec));
+			} catch {
+				// Skip malformed :::explore block gracefully
+			}
+		} else {
+			buf.push(line);
+		}
+	}
+	return specs;
+}
+
+function scanExplorables(chapters) {
+	const out = {};
+	for (const ch of chapters) {
+		if (ch.ext !== "md" || !ch.content || !ch.content.includes(":::explore")) continue;
+		const compiled = parseExplorableBlocks(ch.content);
+		if (compiled.length > 0) {
+			out[ch.slug] = compiled;
+		}
+	}
+	return out;
+}
+
+// --- Pure-Node ZIP pack-manifest.json reader for packs/*.syntopik-pack.zip ---
+
+function readZipEntryText(zipPath, targetName, maxBytes = 4 * 1024 * 1024) {
+	try {
+		const buf = readFileSync(zipPath);
+		if (buf.length < 22) return null;
+		const minEocd = Math.max(0, buf.length - 65557);
+		let eocd = -1;
+		for (let i = buf.length - 22; i >= minEocd; i--) {
+			if (buf.readUInt32LE(i) === 0x06054b50) {
+				eocd = i;
+				break;
+			}
+		}
+		if (eocd === -1) return null;
+		const cdSize = buf.readUInt32LE(eocd + 12);
+		const cdOffset = buf.readUInt32LE(eocd + 16);
+		let pos = cdOffset;
+		const cdEnd = Math.min(buf.length, cdOffset + cdSize);
+		while (pos + 46 <= cdEnd) {
+			if (buf.readUInt32LE(pos) !== 0x02014b50) break;
+			const compMethod = buf.readUInt16LE(pos + 10);
+			const compSize = buf.readUInt32LE(pos + 20);
+			const uncompSize = buf.readUInt32LE(pos + 24);
+			const nameLen = buf.readUInt16LE(pos + 28);
+			const extraLen = buf.readUInt16LE(pos + 30);
+			const commentLen = buf.readUInt16LE(pos + 32);
+			const localOffset = buf.readUInt32LE(pos + 42);
+			const entryName = buf.subarray(pos + 46, pos + 46 + nameLen).toString("utf8");
+			if (entryName === targetName) {
+				if (uncompSize > maxBytes || compSize > maxBytes) return null;
+				if (localOffset + 30 > buf.length || buf.readUInt32LE(localOffset) !== 0x04034b50) return null;
+				const lNameLen = buf.readUInt16LE(localOffset + 26);
+				const lExtraLen = buf.readUInt16LE(localOffset + 28);
+				const dataStart = localOffset + 30 + lNameLen + lExtraLen;
+				const dataSlice = buf.subarray(dataStart, dataStart + compSize);
+				const raw =
+					compMethod === 0
+						? dataSlice
+						: compMethod === 8
+							? inflateRawSync(dataSlice, { maxOutputLength: maxBytes })
+							: null;
+				return raw ? raw.toString("utf8") : null;
+			}
+			pos += 46 + nameLen + extraLen + commentLen;
+		}
+	} catch {
+		return null;
+	}
+	return null;
+}
+
+function readZipEntryJson(zipPath, targetName, maxBytes = 4 * 1024 * 1024) {
+	const txt = readZipEntryText(zipPath, targetName, maxBytes);
+	if (!txt) return null;
+	try {
+		return JSON.parse(txt);
+	} catch {
+		return null;
+	}
+}
+
+function scanStarterPacks() {
+	const candidateDirs = [];
+	const seenDirs = new Set();
+	for (const d of [path.join(root, "packs"), path.join(repoRoot, "packs")]) {
+		const res = path.resolve(d);
+		if (existsSync(res) && !seenDirs.has(res)) {
+			seenDirs.add(res);
+			candidateDirs.push(res);
+		}
+	}
+	const out = [];
+	const seenSlugs = new Set();
+	for (const pdir of candidateDirs) {
+		let entries;
+		try {
+			entries = readdirSync(pdir, { withFileTypes: true });
+		} catch {
+			continue;
+		}
+		for (const ent of entries) {
+			if (!ent.isFile() || !ent.name.endsWith(".syntopik-pack.zip")) continue;
+			const slug = ent.name.slice(0, -".syntopik-pack.zip".length).trim().toLowerCase();
+			if (!/^[a-z0-9][a-z0-9_-]{0,63}$/u.test(slug) || seenSlugs.has(slug)) continue;
+			const full = path.join(pdir, ent.name);
+			let sizeBytes = 0;
+			try {
+				sizeBytes = statSync(full).size;
+			} catch {
+				continue;
+			}
+			const pm = readZipEntryJson(full, "pack-manifest.json");
+			const compFiles = Array.isArray(pm?.companionFiles) ? pm.companionFiles.map(String) : [];
+			const countJsonl = (name) => {
+				const txt = readZipEntryText(full, name, 512 * 1024);
+				return txt ? txt.split(/\r?\n/u).filter((l) => l.trim()).length : 0;
+			};
+			const meta = {
+				slug,
+				id: String(pm?.id || slug),
+				title: String(pm?.title || prettifyName(slug)),
+				subject: String(pm?.subject || "General"),
+				author: String(pm?.author || "Syntopik"),
+				license: String(pm?.license || "CC-BY-4.0"),
+				filename: ent.name,
+				sizeBytes,
+				propositionCount: Array.isArray(pm?.propositions) ? pm.propositions.length : 0,
+				chainCount: Array.isArray(pm?.chains) ? pm.chains.length : 0,
+				chapterCount: Array.isArray(pm?.chapters)
+					? pm.chapters.length
+					: compFiles.filter((cf) => cf.startsWith("chapters/") && cf.endsWith(".md")).length,
+				forkCount: Array.isArray(pm?.forks) ? pm.forks.length : countJsonl("forks.jsonl"),
+				arenaCount: Array.isArray(pm?.arenas) ? pm.arenas.length : countJsonl("arenas.jsonl"),
+				derivationCount: Array.isArray(pm?.derivations) ? pm.derivations.length : 0,
+				examCount: Array.isArray(pm?.exams) ? pm.exams.length : 0,
+			};
+			if (typeof pm?.description === "string") meta.description = pm.description;
+			seenSlugs.add(slug);
+			out.push(meta);
+		}
+	}
+	out.sort((a, b) => a.slug.localeCompare(b.slug));
+	return out;
+}
+
+function computeOfflineNextMove(learnerProfile, whiteboard, forksDue, dueItems, activeTracker, evidenceSummary) {
+	const pol = learnerProfile?.compiledPolicy || defaultLearnerProfile().compiledPolicy;
+	const pendingPins = whiteboard?.pendingPins || [];
+	let mode = "teach_frontier";
+	let targetNodeId = null;
+	let rationale = "Workspace clear; drop sources or load a starter pack.";
+	if (pendingPins.length > 0) {
+		mode = "whiteboard_pin_answer";
+		rationale = `Learner pinned whiteboard step ${pendingPins[0].stepIndex}: ${String(pendingPins[0].note || "").slice(0, 80)}`;
+	} else if (!learnerProfile?.calibration?.completed && Number(learnerProfile?.globalStats?.totalEvents || 0) === 0) {
+		mode = "onboarding_calibration";
+		rationale = "First-time uncalibrated learner; optional 2-min non-VARK calibration available.";
+	} else if (forksDue.length > 0) {
+		mode = "fork_replay";
+		targetNodeId = forksDue[0].propId || forksDue[0].id || null;
+		rationale = `Due Blunder Fork '${forksDue[0].id}' ready for Woodpecker replay.`;
+	} else if (dueItems.length > 0) {
+		mode = "fire_review";
+		targetNodeId = dueItems[0].id || null;
+		rationale = `Due spaced review '${targetNodeId}' (${dueItems[0].status}).`;
+	} else if ((evidenceSummary?.antiInflationAlerts || []).length > 0) {
+		mode = "transfer_verify";
+		targetNodeId = evidenceSummary.antiInflationAlerts[0].propId;
+		rationale = `Bottleneck '${targetNodeId}' needs T3/T4 transfer verification.`;
+	} else if (activeTracker) {
+		mode = "teach_frontier";
+		rationale = activeTracker.nextHint || `Continue active chapter ${activeTracker.title}.`;
+	}
+	return {
+		ok: true,
+		recommendedMode: mode,
+		targetNodeId,
+		chapterSlug: activeTracker?.slug || null,
+		rationale,
+		teachingPolicy: pol,
+		pendingPins: pendingPins.slice(0, 3),
+		alerts: [],
+	};
+}
+
 const propositions = readJsonl(path.join(kgDir, "propositions.jsonl"));
 const rawChains = readJsonl(path.join(kgDir, "chains.jsonl"));
 const chainSummary = normalizeChains(rawChains);
@@ -1288,6 +2663,14 @@ const examAttempts = readJsonl(path.join(kgDir, "exam-attempts.jsonl"));
 const harnessLog = readJsonl(path.join(kgDir, "harness-log.jsonl"));
 const revlog = readJsonl(path.join(kgDir, "revlog.jsonl"));
 const rawReadingQueue = readJsonl(path.join(kgDir, "reading-queue.jsonl"));
+const rawForks = readJsonl(path.join(kgDir, "forks.jsonl"));
+const rawArenas = readJsonl(path.join(kgDir, "arenas.jsonl"));
+const rawDecisions = readJsonl(path.join(kgDir, "decisions.jsonl"));
+const rawDerivations = readJsonl(path.join(kgDir, "derivations.jsonl"));
+const rawVivaSessions = readJsonl(path.join(kgDir, "viva-sessions.jsonl"));
+const evidenceLedger = readJsonl(path.join(kgDir, "evidence-ledger.jsonl"));
+const rawLearnerProfile = readJsonObject(path.join(kgDir, "learner-profile.json"));
+const rawWhiteboard = readJsonObject(path.join(kgDir, "whiteboard-session.json"));
 const reviewQueuePath = path.join(kgDir, "review-queue.md");
 const reviewQueueMarkdown = existsSync(reviewQueuePath)
 	? readFileSync(reviewQueuePath, "utf8")
@@ -1324,10 +2707,50 @@ const calibration = computeCalibration(revlog);
 const leeches = computeLeeches(propositions, revlog);
 const readingQueue = normalizeReadingQueue(rawReadingQueue);
 
+// v3.0 sanitized payloads (zero sealed secret leaks!)
+const learnerProfile = rawLearnerProfile || defaultLearnerProfile();
+const forks = rawForks.map((f) => sanitizeFork(f, today));
+const forksDue = forks.filter((f) => f.isDue);
+const arenas = rawArenas.map(sanitizeArena);
+const decisions = rawDecisions.map(sanitizeDecision);
+const derivations = rawDerivations.map((d) => sanitizeDerivation(d, 3));
+const vivaSessions = rawVivaSessions.map(sanitizeVivaSession);
+const evidenceSummary = computeEvidenceSummary(
+	propositions,
+	chainSummary,
+	revlog,
+	rawForks,
+	rawArenas,
+	rawVivaSessions,
+	rawDerivations,
+	evidenceLedger,
+);
+const rootCauseHotspots = computeRootCauseHotspots(propositions, chainSummary, mistakes);
+const whiteboard = sanitizeWhiteboard(rawWhiteboard);
+const explorables = scanExplorables(chapters);
+const starterPacks = scanStarterPacks();
+const nextMove = computeOfflineNextMove(
+	learnerProfile,
+	whiteboard,
+	forksDue,
+	dueItems,
+	activeChapterTracker,
+	evidenceSummary,
+);
+
 stats.revlogCount = revlog.length;
 stats.leechesCount = leeches.length;
 stats.readingQueueCount = readingQueue.length;
 stats.brierScore = calibration.brierScore;
+stats.forksCount = forks.length;
+stats.forksDueCount = forksDue.length;
+stats.arenasCount = arenas.length;
+stats.decisionsCount = decisions.length;
+stats.derivationsCount = derivations.length;
+stats.vivaSessionsCount = vivaSessions.length;
+stats.explorablesCount = Object.values(explorables).reduce((acc, arr) => acc + arr.length, 0);
+stats.starterPacksCount = starterPacks.length;
+stats.verifiedTransferPct = evidenceSummary.verifiedTransferPct;
 
 const studyGraph = {
 	propositions,
@@ -1336,7 +2759,7 @@ const studyGraph = {
 	chainCount: chainSummary.chainCount,
 };
 const studyHub = {
-	schemaVersion: 4,
+	schemaVersion: 5,
 	generatedAt: new Date().toISOString(),
 	today,
 	workspaceName: path.basename(root),
@@ -1360,6 +2783,21 @@ const studyHub = {
 	calibration,
 	leeches,
 	readingQueue,
+	forksDue,
+	forksDueCount: forksDue.length,
+	arenasCount: arenas.length,
+	learnerProfile,
+	nextMove,
+	forks,
+	arenas,
+	decisions,
+	derivations,
+	vivaSessions,
+	evidenceSummary,
+	rootCauseHotspots,
+	whiteboard,
+	explorables,
+	starterPacks,
 };
 
 const bundle = [

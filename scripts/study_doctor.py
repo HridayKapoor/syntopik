@@ -32,7 +32,9 @@ SCRIPTS_DIR_STR = str(Path(__file__).resolve().parent)
 if SCRIPTS_DIR_STR not in sys.path:
     sys.path.insert(0, SCRIPTS_DIR_STR)
 
-from setup_harness import ensure_learner_workspace  # noqa: E402
+from setup_harness import ensure_learner_workspace, repair_claude_skills_link  # noqa: E402
+
+RULE_BUDGET_BYTES = 9500
 
 EXPECTED_SCRIPTS: list[str] = [
     "pdf_studio.py",
@@ -69,6 +71,13 @@ EXPECTED_SCRIPTS: list[str] = [
     "sync-graph.mjs",
 ]
 
+V3_SCRIPTS: list[str] = [
+    "learner_profile.py",
+    "derivation_forge.py",
+    "viva_chamber.py",
+    "build_starter_packs.py",
+]
+
 EXPECTED_SYNTOPIK_MODULES: list[str] = [
     "__init__.py",
     "paths.py",
@@ -82,6 +91,17 @@ EXPECTED_SYNTOPIK_MODULES: list[str] = [
     "pocket.py",
     "server.py",
     "cli.py",
+]
+
+V3_SYNTOPIK_MODULES: list[str] = [
+    "learner_model.py",
+    "root_cause.py",
+    "evidence.py",
+    "brainstem.py",
+    "explorable.py",
+    "work_mentor.py",
+    "whiteboard.py",
+    "sim_eval.py",
 ]
 
 EXPECTED_SKILLS: list[str] = [
@@ -167,13 +187,24 @@ def find_binary(name: str, extra_dirs: list[Path] | None = None) -> str | None:
     which_hit = shutil.which(name)
     if which_hit:
         return which_hit
-    for prefix in (
+    prefixes: list[Path] = [
         HOME / ".local" / "bin",
         HOME / ".cargo" / "bin",
-        Path("/opt/homebrew/bin"),
-        Path("/usr/local/bin"),
-        Path("/usr/bin"),
-    ):
+    ]
+    if os.name == "nt":
+        prog_files = os.environ.get("ProgramFiles")
+        if prog_files:
+            prefixes.append(Path(prog_files) / "nodejs")
+        local_app = os.environ.get("LOCALAPPDATA")
+        if local_app:
+            prefixes.append(Path(local_app) / "Programs" / "nodejs")
+    else:
+        prefixes.extend([
+            Path("/opt/homebrew/bin"),
+            Path("/usr/local/bin"),
+            Path("/usr/bin"),
+        ])
+    for prefix in prefixes:
         cand = prefix / name
         if _is_executable(cand):
             return str(cand)
@@ -396,6 +427,8 @@ def check_multi_harness_configs(ws: Path) -> dict[str, Any]:
                     json.loads(raw_txt)
                 except Exception as exc:
                     errors.append(f"{label}: invalid JSON ({exc})")
+                if "$(git rev-parse" in raw_txt or re.search(r"\$\{[A-Za-z0-9_]+:-", raw_txt):
+                    errors.append(f"{label}: contains POSIX-only shell syntax (breaks Windows)")
             elif kind == "toml":
                 try:
                     tomllib.loads(raw_txt)
@@ -487,34 +520,44 @@ def check_workspace_scripts(ws: Path, pkg_root: Path | None = None) -> dict[str,
             "detail": "scripts/ directory missing",
         }
     missing = [s for s in EXPECTED_SCRIPTS if not (scripts_dir / s).exists()]
+    present_v3 = [s for s in V3_SCRIPTS if (scripts_dir / s).exists()]
+    missing_v3 = [s for s in V3_SCRIPTS if s not in present_v3]
     if missing:
         return {
             "name": "Workspace Scripts (scripts/)",
             "category": "workspace",
             "status": "fail",
             "required": True,
-            "count": len(EXPECTED_SCRIPTS) - len(missing),
-            "expectedCount": len(EXPECTED_SCRIPTS),
+            "count": len(EXPECTED_SCRIPTS) - len(missing) + len(present_v3),
+            "expectedCount": len(EXPECTED_SCRIPTS) + len(V3_SCRIPTS),
+            "v3Present": len(present_v3),
+            "v3Missing": missing_v3,
             "detail": f"missing: {', '.join(missing)}",
         }
+    total_present = len(EXPECTED_SCRIPTS) + len(present_v3)
+    if not missing_v3:
+        detail = f"all {total_present} scripts present (32 core + {len(present_v3)} v3.0)"
+    else:
+        detail = f"{len(EXPECTED_SCRIPTS)}/{len(EXPECTED_SCRIPTS)} core + {len(present_v3)}/{len(V3_SCRIPTS)} v3.0 scripts present"
     return {
         "name": "Workspace Scripts (scripts/)",
         "category": "workspace",
         "status": "ok",
         "required": True,
-        "count": len(EXPECTED_SCRIPTS),
-        "expectedCount": len(EXPECTED_SCRIPTS),
-        "detail": f"all {len(EXPECTED_SCRIPTS)} scripts present",
+        "count": total_present,
+        "expectedCount": len(EXPECTED_SCRIPTS) + len(V3_SCRIPTS),
+        "v3Present": len(present_v3),
+        "v3Missing": missing_v3,
+        "detail": detail,
     }
 
 
 def check_syntopik_package(ws: Path, pkg_root: Path | None = None) -> dict[str, Any]:
     pr = pkg_root or ROOT
-    pkg_dir = _first_existing_dir(
-        ws / "syntopik",
-        pr / "syntopik",
-        pr.parent if pr.name == "_bundle" and pr.parent.name == "syntopik" else Path("/nonexistent"),
-    )
+    pkg_candidates: list[Path] = [ws / "syntopik", pr / "syntopik"]
+    if pr.name == "_bundle" and pr.parent.name == "syntopik":
+        pkg_candidates.append(pr.parent)
+    pkg_dir = _first_existing_dir(*pkg_candidates)
     if pkg_dir is None:
         try:
             import syntopik as _synt_mod
@@ -523,24 +566,35 @@ def check_syntopik_package(ws: Path, pkg_root: Path | None = None) -> dict[str, 
         except Exception:
             pkg_dir = ws / "syntopik"
     missing = [m for m in EXPECTED_SYNTOPIK_MODULES if not (pkg_dir / m).is_file()]
+    present_v3 = [m for m in V3_SYNTOPIK_MODULES if (pkg_dir / m).is_file()]
+    missing_v3 = [m for m in V3_SYNTOPIK_MODULES if m not in present_v3]
     if missing:
         return {
             "name": "Core Package (syntopik/)",
             "category": "workspace",
             "status": "fail",
             "required": True,
-            "count": len(EXPECTED_SYNTOPIK_MODULES) - len(missing),
-            "expectedCount": len(EXPECTED_SYNTOPIK_MODULES),
+            "count": len(EXPECTED_SYNTOPIK_MODULES) - len(missing) + len(present_v3),
+            "expectedCount": len(EXPECTED_SYNTOPIK_MODULES) + len(V3_SYNTOPIK_MODULES),
+            "v3Present": len(present_v3),
+            "v3Missing": missing_v3,
             "detail": f"missing: {', '.join(missing)}",
         }
+    total_present = len(EXPECTED_SYNTOPIK_MODULES) + len(present_v3)
+    if not missing_v3:
+        detail = f"all {total_present} pure-stdlib modules present (12 core + {len(present_v3)} v3.0)"
+    else:
+        detail = f"{len(EXPECTED_SYNTOPIK_MODULES)}/{len(EXPECTED_SYNTOPIK_MODULES)} core + {len(present_v3)}/{len(V3_SYNTOPIK_MODULES)} v3.0 pure-stdlib modules present"
     return {
         "name": "Core Package (syntopik/)",
         "category": "workspace",
         "status": "ok",
         "required": True,
-        "count": len(EXPECTED_SYNTOPIK_MODULES),
-        "expectedCount": len(EXPECTED_SYNTOPIK_MODULES),
-        "detail": f"all {len(EXPECTED_SYNTOPIK_MODULES)} pure-stdlib modules present",
+        "count": total_present,
+        "expectedCount": len(EXPECTED_SYNTOPIK_MODULES) + len(V3_SYNTOPIK_MODULES),
+        "v3Present": len(present_v3),
+        "v3Missing": missing_v3,
+        "detail": detail,
     }
 
 
@@ -811,8 +865,8 @@ def check_rule_budget(ws: Path, *, is_repo: bool = True) -> dict[str, Any]:
             issues.append(f"{p.name} has YAML frontmatter")
     total_bytes = sum(sizes.values())
     est_tokens = total_bytes // 4
-    if total_bytes > 10000:
-        issues.append(f"combined {total_bytes} B > 10000 B (~2500 tok ceiling)")
+    if total_bytes > RULE_BUDGET_BYTES:
+        issues.append(f"combined {total_bytes} B > {RULE_BUDGET_BYTES} B (~{RULE_BUDGET_BYTES // 4} tok ceiling)")
     if issues:
         return {
             "name": "Rule Budget (GEMINI.md + AGENTS.md)",
@@ -820,6 +874,7 @@ def check_rule_budget(ws: Path, *, is_repo: bool = True) -> dict[str, Any]:
             "status": "fail",
             "required": True,
             "bytes": total_bytes,
+            "budgetBytes": RULE_BUDGET_BYTES,
             "detail": "; ".join(issues),
         }
     return {
@@ -828,7 +883,8 @@ def check_rule_budget(ws: Path, *, is_repo: bool = True) -> dict[str, Any]:
         "status": "ok",
         "required": True,
         "bytes": total_bytes,
-        "detail": f"{total_bytes} B (~{est_tokens} tok <= 2500 tok; GEMINI={sizes['GEMINI.md']} B, AGENTS={sizes['AGENTS.md']} B, no frontmatter)",
+        "budgetBytes": RULE_BUDGET_BYTES,
+        "detail": f"{total_bytes} B (~{est_tokens} tok <= {RULE_BUDGET_BYTES // 4} tok / {RULE_BUDGET_BYTES} B; GEMINI={sizes['GEMINI.md']} B, AGENTS={sizes['AGENTS.md']} B, no frontmatter)",
     }
 
 
@@ -995,13 +1051,41 @@ def main(argv: list[str] | None = None) -> None:
     parser = argparse.ArgumentParser(description="Fast Cross-Platform Health Diagnostic for Syntopik")
     parser.add_argument("--workspace", default=None, help="Optional workspace root directory override")
     parser.add_argument("--core-only", action="store_true", help="Check bare-stdlib core & multi-harness integrity without requiring optional STEM .venv packages")
+    parser.add_argument("--fix", action="store_true", help="Non-destructively initialize missing ledgers, repair .claude/skills mirror, and sync graph-data.js before checking")
     parser.add_argument("--json", action="store_true", help="Output machine-readable JSON")
     args = parser.parse_args(argv)
 
+    fix_actions: list[str] = []
+    if args.fix:
+        target_ws = Path(args.workspace).expanduser().resolve() if args.workspace else (
+            ROOT if _is_repo_checkout(ROOT) else (HOME / ".syntopik").resolve()
+        )
+        boot = ensure_learner_workspace(target_ws, run_sync=True, repair_skills=True)
+        if boot.get("createdDirs"):
+            fix_actions.append(f"created {len(boot['createdDirs'])} dir(s)")
+        if boot.get("createdFiles"):
+            fix_actions.append(f"created {len(boot['createdFiles'])} file(s)")
+        if (target_ws / ".agents" / "skills").is_dir() and (target_ws / ".claude").is_dir():
+            rep = repair_claude_skills_link(target_ws, create_if_missing=True)
+            fix_actions.append(f".claude/skills: {rep.get('action', 'checked')}")
+        try:
+            from syntopik.paths import sync_hub
+
+            if sync_hub(workspace=target_ws, quiet=True):
+                fix_actions.append("synced knowledge-graph/graph-data.js")
+        except Exception:
+            pass
+
     report = run_doctor(workspace=args.workspace, core_only=bool(args.core_only))
+    if args.fix:
+        report["fixApplied"] = True
+        report["fixActions"] = fix_actions
+
     if args.json:
         print(json.dumps(report, indent=2))
     else:
+        if fix_actions:
+            print(f"Syntopik Doctor --fix: {', '.join(fix_actions)}")
         s = report["summary"]
         banner = "HEALTHY" if report["healthy"] else "ISSUES DETECTED"
         print(f"Syntopik Doctor — {banner} ({s['ok']}/{s['total']} ok, {s['warn']} warn, {s['fail']} fail · {report['elapsedMs']} ms)")

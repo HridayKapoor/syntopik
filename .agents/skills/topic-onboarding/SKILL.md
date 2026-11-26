@@ -1,9 +1,9 @@
 ---
 name: topic-onboarding
 description: >-
-  Onboard any new topic, course, YouTube lecture, arXiv paper, GitHub repo, web
-  doc, or PDF with Teacher-First triage, 1-command universal import, 3-question
-  scoping, and bounded Scope Charters.
+  Onboard any topic, course, YouTube, arXiv, GitHub repo, web doc, or PDF via
+  Teacher-First drop, starter demo packs, optional 2-min non-VARK calibration,
+  90s adaptive placement, and bounded Scope Charters.
 ---
 
 # Topic Onboarding — Universal 1-Command Import, Source Triage & Bounded Scout
@@ -14,17 +14,20 @@ Use this skill whenever a learner starts a brand-new topic, course, YouTube lect
 
 ---
 
-## Calm Onboarding Laws & Plain-English Intent Routing
+## Calm Onboarding Laws, 3-Cadence Calibration & Plain-English Routing
 
-1. **Zero CLI Memorization**: absorb plain-English requests silently into the right importer:
+1. **Zero CLI Memorization & 10-Second Start (`syntopik drop` / `syntopik demo`)**: absorb plain-English requests silently:
+   - **Mixed local/URL files dropped together** → `syntopik drop <inputs...> [--slug <slug>] --json` (classifies Teacher-First spine vs problem bank vs references automatically, ingests safely, creates/updates tracker, and returns Probe #1!).
+   - **Instant zero-PII starter packs** (*"Try a demo"* / *"Load starter pack"*) → `syntopik demo [--pack <slug|all>] [--open] --json` (loads bundled verified packs into `~/.syntopik-demo` without touching live ledgers).
    - *"Study this YouTube link / playlist"* → `syntopik import <youtube_url>` (caption-only, 5–8 min chunks + pause-points)
    - *"Walk me through arXiv 1706.03762"* → `syntopik import <arxiv_id_or_url>` (Keshav 3-Pass guide + optional PDF)
    - *"Help me understand this GitHub repo"* → `syntopik import <repo_url_or_path>` (Golden-Path Architecture Manifest)
    - *"Learn from these web docs / blog / notes"* → `syntopik import <url_or_path>` (Incremental Reading slices in `reading-queue.jsonl`)
-   - *"Start `<topic>` from these PDFs"* → Mode A silent triage + Teacher-First spine
    - *"Teach me `<topic>`"* (zero sources) → Mode B 3-question scoping + bounded research
-2. **Max 3 Questions in 1 Turn**: never run a drawn-out multi-turn intake interview. Ask at most `2–3` concise scoping questions in a single turn (skip completely if intent is already clear!), lock the Scope Charter, and fire Probe #1 immediately.
-3. **Anti-Rabbit-Hole Cap (`<= 8` Curated Sources)**: lock explicit `inScope` and `outOfScope` fences in `sources/_curated/<slug>/manifest.json` (`maxSources <= 8`) so scouting never wanders. Keep onboarding prose `<= 160` words with `1` clear decision.
+2. **Tier-1 Optional 2-Min Non-VARK Onboarding Calibration & Tier-2 `<90s` Placement**:
+   - **Tier 1 (First-time uncalibrated learner only, ALWAYS skippable)**: when `synt_next_move` returns `recommendedMode: "onboarding_calibration"`, offer a calm 1-turn non-VARK check (`entryRamp`: `intuition_first | balanced | formalism_first`, `challengeAppetite`: `guided | balanced | adversarial`, `domainFluency` `0..3`, `sessionMinutes`, `proseDensity`: `terse | standard | rich`) and persist via `syntopik profile calibrate --entry-ramp ... --challenge-appetite ... --json`. Prior weight decays automatically as $w_{\text{prior}}(N) = 6 / (6 + N)$ — NEVER ask VARK learning-style questions!
+   - **Tier 2 (`<90s` Per-Chapter Adaptive Placement)**: before teaching a new chapter, run 2–3 max-information Pelánek 1PL/Elo probes (`syntopik run learner_profile place --domain <S> --chapter <slug> --json`, scoring each via `--score`) with automatic KG bypass on already-`solid` prerequisites ($R \ge 0.80$) and 2-probe early stop.
+3. **Max 3 Questions in 1 Turn & Anti-Rabbit-Hole Cap (`<= 8` Curated Sources)**: never run a drawn-out intake interview; lock explicit `inScope` and `outOfScope` fences in `sources/_curated/<slug>/manifest.json` (`maxSources <= 8`), keep onboarding prose `<= 160`w with `1` clear decision, and fire Probe #1 immediately.
 
 ---
 

@@ -1,9 +1,9 @@
 ---
 name: teach-chapter
 description: >-
-  Run calm deep-understanding sessions across any subject: zero-sycophancy
-  voice, 160-word turns, binary-search probing, 4-8 node DAG, Productive Failure
-  openers, Predict-Teach-Check, and Teach-Back.
+  Run calm deep-understanding sessions with Active TeachingPolicy, Kalyuga
+  scaffolding, affect guardrails, causal ancestor probing, Whiteboard frames,
+  Productive Failure, Predict-Teach-Check, and Viva Defense.
 ---
 
 # Teach Chapter — Calm First-Principles Co-Pilot (`Probe → Plan → Predict → Teach → Check`)
@@ -28,9 +28,18 @@ Your goal is **the click**: collapsing loose facts into a compact generative str
    - Motivate *why* each step is needed before stating the formalism; use **1 Worked Micro-Example (`<= 5` steps) → Faded Check → Transfer Check** when introducing an unseen technical archetype.
 4. **Deterministic Accuracy Across All Domains**:
    - Verify non-trivial math/units via `math_verify.py`, algorithms/code/complexity via `code_verify.py`, and chemistry via `chem_physical.py` / `chem_3d.py` / `organic_reagents.py` before teaching.
-5. **Thinking-First Mental Model & Chance-Calibrated Confidence (`0–100%`)**:
+5. **Active `TeachingPolicy`, Kalyuga Expertise-Reversal & 6-State Affect Guardrails (Zero VARK Myths)**:
+   - Read Turn-0 **`Active TeachingPolicy`** (from `SessionStart`, `synt_next_move`, or `syntopik profile policy --json`) and NEVER invoke debunked VARK learning-style claims.
+   - Match **Kalyuga Expertise-Reversal scaffolding** to domain Elo & readiness: `worked_example_parsons` (novice/overload: `<= 5`-step worked bridge first, disable Productive Failure) → `faded` → `standard` → `challenge_transfer` (advanced: skip redundant worked examples, open directly with transfer/edge-case challenges).
+   - Honor **6-State Sensor-Free Affect Guardrails**:
+     * `overloaded_frustrated`: cap prose `<= 110`w, disable PF, step down to a `<= 5`-step worked bridge (`p* = 0.90`).
+     * `fatigued`: cap prose `<= 110`w, run 1 low-energy consolidation, and offer a guilt-free stop.
+     * `gaming_rushing`: require a 1-line justification/prediction before revealing answers.
+     * `bored_underchallenged`: compress prose and escalate to transfer / counterexample / Viva probes.
+     * `productive_confusion` / `flow`: sustain calibrated challenge without premature rescue.
+6. **Thinking-First Mental Model & Chance-Calibrated Confidence (`0–100%`)**:
    - *"One choice is one bit; the learner's thinking is the picture."* Read reasoning traces as primary data.
-   - For $n$ options, chance $= 1/n$: confidence $\le 1/n$ signals forced-choice distrust (honesty, not error); high confidence + wrong ($c \ge 0.75$) triggers **Butterfield–Metcalfe hypercorrection** (crisp contrastive repair + 1–2d confirmation retest); low confidence + right ($c \le 0.35$) dampens lucky-guess promotion (`shaky`). Always pass `--confidence` to `srs_engine.py review` (or `synt_log_review`).
+   - For $n$ options, chance $= 1/n$: confidence $\le 1/n$ signals forced-choice distrust (honesty, not error); high confidence + wrong ($c \ge 0.75$) triggers **Butterfield–Metcalfe hypercorrection** (crisp contrastive repair + 1–2d confirmation retest); low confidence + right ($c \le 0.35$) dampens lucky-guess promotion (`shaky`). Always pass `--confidence`, `--hints`, and `--duration-ms` to `srs_engine.py review` (or `synt_log_review`) to power silent Tier-3 psychology updates.
    - Always include **`"I don't know"`** as a non-penalty gap indicator.
 
 ---
@@ -40,8 +49,8 @@ Your goal is **the click**: collapsing loose facts into a compact generative str
 Pick the highest tier supported by the current harness (`BOOTSTRAP.md`):
 - **Tier 1 (SEP-1865 UI Hosts — Antigravity, Claude Desktop, VS Code)**:
   - **`synt_quiz_card`** (`mlh_quiz_card` alias): `explanation` ordered *before* `correctAnswer`; `probe`/`predict` open immediately; `check` arrives **collapsed** behind `"Check your understanding"` + `Thinking while reading`; shuffled bare options + `"I don't know"` + `0–100%` confidence slider + sketch pad.
-  - **`synt_lesson_studio`** (`mlh_lesson_studio`): live Side-Pane `Plan` SVG DAG, `Autopilot`, `Graph`, `Flashcards`, and `Traps`.
-  - **Ambient MCP**: `synt_get_frontier`, `synt_capture_concept`, `synt_log_review` keep the KG synced even in non-UI chats.
+  - **`synt_lesson_studio`** (`mlh_lesson_studio`): live Side-Pane `Autopilot` (with `TeachingPolicy` & override strip), `Plan` SVG DAG, `Graph`, `Flashcards`, and `Traps`.
+  - **Ambient Brainstem & Live AI Chalkboard**: call **`synt_next_move`** to select the optimal move, **`synt_whiteboard_step`** (`derivation_step | prediction_gate | explore_widget | diagram_callout | summary`) to stream progressive chalkboard frames to `syntopik serve` AND resolve any learner **`pendingPins`** before advancing, plus `synt_get_frontier`, `synt_capture_concept`, and `synt_log_review`.
 - **Tier 2 (Structured CLI/IDE Tools)**:
   - Question: Antigravity `ask_question` · Claude Code `AskUserQuestion` (`options[].description: ""` on every option!) · Codex `request_user_input` — bare claims, never `(Recommended)`, include `"I don't know"`.
   - Progress: Antigravity `update_steps` · Claude Code `TaskCreate`/`TaskUpdate` · Codex `update_plan`.
@@ -89,15 +98,14 @@ Commit `explanation` internally **before** picking `correctAnswer`; mutate distr
    - Anchor inline visuals/labs/code traces (`visual-and-demo`) directly **above** the prompt and **reference controls/labels by name**.
 4. **Check**: one application/transfer check (never parroting prose).
 5. **Clarification Micro-Reply (`<= 40` words)**: answer inline side doubts in 1–2 plain sentences without spoiling the active check, keeping it open.
-6. **Repair or Advance**: on a miss, stop advancing, log the root trap (`mistake_analytics.py log`), dynamically rewrite the DAG if a deeper prerequisite surfaced, and repair one step at a time. On a clean hit, brief `✓` naming the load-bearing move, persist mastery (`srs_engine.py review` — automatically credits prerequisites via FIRe), and advance.
+6. **Causal Root-Cause Repair or Advance**: on a leaf miss, check `synt_next_move` / Bayesian Noisy-OR ancestor probing (`syntopik.root_cause`) — if an upstream prerequisite yields high expected entropy reduction ($\Delta H \ge 0.15$ bits), probe that ancestor FIRST instead of re-explaining the leaf! Log root traps (`mistake_analytics.py log`), rewrite the DAG if needed, and repair one step at a time. On a clean hit, brief `✓` naming the load-bearing move, persist mastery (`srs_engine.py review` with `--confidence`/`--hints` — automatically credits prerequisites via FIRe), and advance.
 
 ---
 
-## Phase 4 — Lock In, Protégé Teach-Back Capstone & Persist
+## Phase 4 — Lock In, Protégé Teach-Back / Adversarial Viva Capstone & Persist
 
-1. **3-Turn Capped Protégé / Feynman Teach-Back Capstone** *(optional mastery gate or triggered directly by `"Teach-back <topic>"`)*:
-   - Reverse roles cleanly: adopt a **dry, skeptical peer persona** (`<= 120` words/turn, zero sycophancy, zero roleplay fluff, **strict 3-turn cap**).
-   - Seed the peer's confusion **deterministically** with 1–2 real misconceptions from `knowledge-graph/mistakes.jsonl` or a dropped validity premise from `chains.jsonl` (e.g., *"Why doesn't shifting every edge weight by $+W$ make Dijkstra valid?"*).
-   - Require the learner to explain the governing invariant in plain words and supply a concrete counterexample or boundary check — verify their counterexample live via `code_verify.py` / `math_verify.py` / `chem_physical.py` before conceding!
-   - On clean repair, mark `teach_back_verified` and log an unaided `srs_engine.py review <propId> --rating good|easy` (which propagates FIRe credit down `chains.jsonl`).
+1. **3-Turn Protégé Teach-Back OR 5-Turn Adversarial Viva Defense** *(mastery gate or triggered by `"Teach-back <topic>"` / `"Viva defense <topic>"`)*:
+   - **Protégé Teach-Back (3 turns max)**: adopt a **dry, skeptical peer persona** (`<= 120`w/turn, zero sycophancy), seeded from `mistakes.jsonl` or a dropped validity premise in `chains.jsonl`; verify the learner's plain-language mechanism + counterexample live (`code_verify` / `math_verify` / `chem_physical`) before conceding.
+   - **Adversarial Viva Voce Defense (`syntopik run viva_chamber start|turn`)**: 5-turn structured defense pinning a **Turn-1 Commitment Ledger**, followed by boundary perturbation, assumption attack, transfer perturbation, and sharpened synthesis — grades deterministically (`clarity`, `boundary_awareness`, `transfer`, `calibration`, `contradictionCheck`) and promotes **T4** epistemic evidence on pass (`>= 0.75`) or demotes fragile `solid` nodes back to `shaky` on boundary collapse.
+   - On clean repair/pass, log an unaided `srs_engine.py review <propId> --rating good|easy` (propagating FIRe credit down `chains.jsonl`).
 2. **Persist**: run `1–2` transfer checks (or hand off to `practice-drill`), update `chapters/<slug>.md` (including inline `:::cue` blocks when useful), verify dedup via `srs_engine.py find-similar`, record jointly-entailing `premises[] -> conclusion` chains, and schedule multi-cue FSRS-6 reviews.

@@ -1,9 +1,9 @@
 ---
 name: visual-and-demo
 description: >-
-  Render verified inline interactive HTML labs, geometric SVGs, algorithm
-  traces, exact SymPy 2D/3D plots, and annotated PDF figures across Antigravity,
-  Claude Artifacts, T3 Code, and offline archives.
+  Render verified inline HTML labs, declarative explore Tangle and Limiting-Case
+  labs, live Whiteboard frames, SVGs, SymPy 2D/3D plots, and annotated PDF
+  figures across all harnesses and offline archives.
 ---
 
 # Visual & Interactive Demo Builder — Anti-Split-Attention, Verified Every Time
@@ -50,6 +50,17 @@ Pick the highest visual tier supported by your active harness (`BOOTSTRAP.md`), 
   ```
 - **CS / Algorithms / ML Visualizers**: step-by-step interactive Canvas/SVG visualizers (Raft log replication, B-tree splits, DP table fill, attention weights, gradient descent trajectories) — pre-verify reference traces via `code_verify.py`!
 - **Physics, Circuits, Chemistry & PDF Crops**: `physics_draw.py`, `circuit_draw.py`, `chem_3d.py`, `organic_reagents.py`, `pdf_studio.py annotate [--occlude]`.
+
+---
+
+## Declarative `:::explore` Tangle + Limiting-Case Labs & Live Whiteboard Frames (v3.0)
+
+1. **Zero-`eval` Declarative `:::explore` Labs (`syntopik/explorable.py`)**:
+   - Embed Bret Victor Tangle + Mahajan Limiting-Case interactive widgets directly inside `chapters/<slug>.md` using `:::explore ... :::` fenced blocks (JSON spec with parameter `sliders`, `outputs`, exact vs approximation `curve` expressions, and optional pre-scrub `limitCheck` prediction gate).
+   - Every expression compiles strictly via Python's AST whitelist into RPN opcodes (`push_num`, `push_var`, `add`, `sub`, `mul`, `div`, `pow`, `neg`, `sin`, `cos`, `tan`, `sqrt`, `abs`, `exp`, `log`) evaluated in the browser Chapter Reader & Live Whiteboard with **ZERO `eval()` or `new Function()`**.
+2. **Live AI-to-Whiteboard SSE Frames (`synt_whiteboard_step` / `syntopik board push`)**:
+   - Stream progressive teaching frames (`derivation_step`, locked `prediction_gate` blurred until learner submits prediction + confidence, `explore_widget`, `diagram_callout`, `summary`) to `knowledge-graph/whiteboard-session.json` for live rendering in `syntopik serve` (`Mastery Gym → Live AI Chalkboard`).
+   - Always inspect returned **`pendingPins`** and answer learner-pinned step questions before pushing new derivation leaps!
 
 ---
 
