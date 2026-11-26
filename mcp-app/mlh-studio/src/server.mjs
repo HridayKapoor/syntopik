@@ -1,24 +1,28 @@
 /**
- * syntopik-studio — Official SEP-1865 MCP App Server (with backwards-compatible mlh_* aliases)
+ * syntopik-studio — Official SEP-1865 MCP App Server v2.0 (with backwards-compatible mlh_* aliases)
  *
- * Exposes:
- *   - Canonical model-visible tools:
+ * Exposes 17 tools:
+ *   - Canonical UI model-visible tools (3):
  *       1. synt_quiz_card      (inline ui://syntopik/quiz-card.html)
- *       2. synt_practice_card  (inline ui://syntopik/practice-card.html)
+ *       2. synt_practice_card  (inline ui://syntopik/practice-card.html — standard, parsons, faded)
  *       3. synt_lesson_studio  (aux_pane + global ui://syntopik/studio-pane.html)
- *   - Backwards-compatible model-visible aliases:
+ *   - Backwards-compatible UI aliases (3):
  *       mlh_quiz_card, mlh_practice_card, mlh_lesson_studio (ui://mlh/*.html)
- *   - App-only tools (_meta.ui.visibility = ["app"], 0 model tokens):
+ *   - Ambient Cross-Session Headless MCP tools (3, usable from ANY chat without spawning UI):
+ *       synt_capture_concept, synt_get_frontier, synt_log_review
+ *   - App-only tools (8, _meta.ui.visibility = ["app"], 0 model tokens):
  *       synt_app_load_state, synt_app_rate_flashcard, synt_app_save_sketch, synt_app_card_state
  *       (+ mlh_app_* aliases)
  *   - Terminal Host Safeguard:
  *       Inspects client initialize capabilities (`extensions["io.modelcontextprotocol/ui"]`).
  *       When absent (e.g., `claude` or `codex` TUI), emits clean Markdown question + bare
- *       lettered options + "I don't know" (quiz) or statement (practice pose) in content[0].text
- *       while keeping correctAnswer, explanation, and modelSolution locked server-side!
+ *       lettered options + "I don't know" (quiz) or statement / shuffled Parsons blocks A..F (practice pose)
+ *       in content[0].text while keeping correctAnswer, explanation, modelSolution, canonicalOrder,
+ *       and isDistractor locked server-side!
  */
 
 import fs from "node:fs";
+import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { Server } from "@modelcontextprotocol/sdk/server/index.js";
@@ -38,7 +42,14 @@ import {
   validateQuizArgs,
   validateStudioArgs,
 } from "./validation.mjs";
-import { loadWorkspaceState, rateFlashcard, saveSketchPng } from "./workspace.mjs";
+import {
+  captureConcept,
+  getFrontier,
+  loadWorkspaceState,
+  logReview,
+  rateFlashcard,
+  saveSketchPng,
+} from "./workspace.mjs";
 import { createStateStore } from "./state-store.mjs";
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
@@ -58,10 +69,53 @@ function parseCliFlag(argv, flagName) {
   return "";
 }
 
+function isPluginCachePath(dirPath) {
+  if (!dirPath) return false;
+  const norm = path.resolve(dirPath).replace(/\\/g, "/");
+  return (
+    norm.includes("/.claude/plugins/cache/") ||
+    norm.includes("/.claude/plugins/marketplaces/") ||
+    norm.includes("/.gemini/extensions/") ||
+    norm.includes("/.gemini/config/plugins/") ||
+    norm.includes("/.codex/plugins/") ||
+    norm.includes("/node_modules/")
+  );
+}
+
+function isWritableDir(dirPath) {
+  try {
+    if (!fs.existsSync(dirPath)) return false;
+    fs.accessSync(dirPath, fs.constants.W_OK);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function resolveAttachedDir(dirPath) {
+  if (!dirPath || !dirPath.trim()) return "";
+  const abs = path.resolve(dirPath.trim());
+  if (!fs.existsSync(abs)) return "";
+  if (fs.existsSync(path.join(abs, "knowledge-graph"))) return abs;
+  const dotSynt = path.join(abs, ".syntopik");
+  if (fs.existsSync(dotSynt)) {
+    try {
+      if (fs.statSync(dotSynt).isDirectory()) return dotSynt;
+    } catch {
+      return "";
+    }
+  }
+  return "";
+}
+
 function findRepoRootFallback() {
   // Bundled dist/server.mjs or src/server.mjs sits 3 levels inside <repo>/mcp-app/mlh-studio/{dist,src}
   const candidate = path.resolve(HERE, "..", "..", "..");
-  if (fs.existsSync(path.join(candidate, "AGENTS.md"))) {
+  if (
+    !isPluginCachePath(candidate) &&
+    isWritableDir(candidate) &&
+    fs.existsSync(path.join(candidate, "AGENTS.md"))
+  ) {
     return candidate;
   }
   return "";
@@ -73,7 +127,11 @@ function parseWorkspaceArg(argv) {
     !fromFlag || fromFlag === "." || fromFlag.includes("${");
 
   if (!isGenericDotOrUnexpanded) {
-    return path.resolve(fromFlag);
+    const abs = path.resolve(fromFlag);
+    if (!fs.existsSync(path.join(abs, "knowledge-graph")) && fs.existsSync(path.join(abs, ".syntopik", "knowledge-graph"))) {
+      return path.join(abs, ".syntopik");
+    }
+    return abs;
   }
 
   const envWs = process.env.SYNT_WORKSPACE || process.env.MLH_WORKSPACE || "";
@@ -82,11 +140,22 @@ function parseWorkspaceArg(argv) {
   }
 
   const claudeDir = process.env.CLAUDE_PROJECT_DIR || "";
-  if (claudeDir.trim()) {
+  if (claudeDir.trim() && !isPluginCachePath(claudeDir)) {
+    const attached = resolveAttachedDir(claudeDir);
+    if (attached) return attached;
     return path.resolve(claudeDir.trim());
   }
 
-  if (fromFlag === "." && fs.existsSync(path.join(process.cwd(), "AGENTS.md"))) {
+  const cwdAttached = resolveAttachedDir(process.cwd());
+  if (cwdAttached && !isPluginCachePath(cwdAttached)) {
+    return cwdAttached;
+  }
+
+  if (
+    fromFlag === "." &&
+    !isPluginCachePath(process.cwd()) &&
+    fs.existsSync(path.join(process.cwd(), "AGENTS.md"))
+  ) {
     return process.cwd();
   }
 
@@ -95,10 +164,10 @@ function parseWorkspaceArg(argv) {
     return repoFallback;
   }
 
-  if (fromFlag && !fromFlag.includes("${")) {
+  if (fromFlag && fromFlag !== "." && !fromFlag.includes("${")) {
     return path.resolve(fromFlag);
   }
-  return process.cwd();
+  return path.join(os.homedir(), ".syntopik");
 }
 
 const CLI_ARGS = process.argv.slice(2);
@@ -117,14 +186,14 @@ const UI_RESOURCES = [
   {
     uri: "ui://syntopik/practice-card.html",
     name: "Syntopik Practice Card",
-    description: "Calm inline practice problem card with server-held hidden modelSolution.",
+    description: "Calm inline practice problem card (standard, Parsons, faded) with server-held hidden modelSolution.",
     filename: "practice-card.html",
     envOverrides: ["SYNT_PRACTICE_HTML", "MLH_PRACTICE_HTML"],
   },
   {
     uri: "ui://syntopik/studio-pane.html",
     name: "Syntopik Studio",
-    description: "Live Syntopik Studio side-pane: Autopilot, Plan DAG, Knowledge Graph, FSRS-6 Flashcards, and Mistake Traps.",
+    description: "Live Syntopik Studio side-pane: Autopilot, Plan DAG, Knowledge Graph, FSRS-6 Flashcards w/ Image Occlusion, and Mistake Traps.",
     filename: "studio-pane.html",
     envOverrides: ["SYNT_STUDIO_HTML", "MLH_STUDIO_HTML"],
   },
@@ -238,7 +307,27 @@ const PRACTICE_INPUT_SCHEMA = {
     action: { type: "string", enum: ["pose", "conclude"] },
     problemId: { type: "string" },
     statement: { type: "string" },
-    mode: { type: "string", enum: ["recall", "discrimination", "composition"] },
+    mode: {
+      type: "string",
+      enum: ["standard", "parsons", "faded", "recall", "discrimination", "composition"],
+    },
+    blocks: {
+      type: "array",
+      items: {
+        type: "object",
+        properties: {
+          id: { type: "string" },
+          code: { type: "string" },
+          indent: { type: "integer" },
+          isDistractor: { type: "boolean" },
+        },
+        required: ["id", "code"],
+      },
+    },
+    canonicalOrder: {
+      type: "array",
+      items: { type: "string" },
+    },
     targets: { type: "array", items: { type: "string" } },
     modelSolution: { type: "string" },
     outcome: {
@@ -268,6 +357,48 @@ const STUDIO_INPUT_SCHEMA = {
     visitedNodeIds: { type: "array", items: { type: "string" } },
     tab: { type: "string", enum: ["autopilot", "plan", "graph", "flashcards", "traps"] },
   },
+};
+
+const CAPTURE_CONCEPT_SCHEMA = {
+  type: "object",
+  properties: {
+    title: { type: "string", description: "Concise concept or invariant title." },
+    statement: { type: "string", description: "Caveat-free unconditional truth or mechanism statement." },
+    subject: { type: "string", description: "Subject area (e.g., CS, ML, Physics, Math, Chemistry)." },
+    chapter: { type: "string", description: "Chapter, course, paper, or project context." },
+    cuePrompt: { type: "string", description: "Optional active recall question cue." },
+    cueAnswer: { type: "string", description: "Optional concise answer for cuePrompt." },
+    premises: {
+      type: "array",
+      items: { type: "string" },
+      description: "Optional prerequisite proposition IDs forming a hyperedge into this concept.",
+    },
+    relation: { type: "string", description: "Optional chain relation (default: requires)." },
+    kind: { type: "string", description: "Optional proposition kind (default: concept)." },
+    id: { type: "string", description: "Optional explicit kebab-case proposition ID." },
+  },
+  required: ["title", "statement", "subject", "chapter"],
+};
+
+const GET_FRONTIER_SCHEMA = {
+  type: "object",
+  properties: {
+    limit: { type: "integer", description: "Max due items to return (default 10, max 50)." },
+    compress: { type: "boolean", description: "Enable FIRe Spaced Repetition Compression knockouts (default true)." },
+  },
+};
+
+const LOG_REVIEW_SCHEMA = {
+  type: "object",
+  properties: {
+    propId: { type: "string", description: "Proposition ID to review." },
+    rating: { type: "string", enum: ["again", "hard", "good", "easy"] },
+    confidence: { type: "number", description: "Optional learner confidence (0..1 or 0..100)." },
+    cueId: { type: "string", description: "Optional specific cue ID reviewed." },
+    misconception: { type: "boolean", description: "Flag as active misconception when rating is 'again'." },
+    durationMs: { type: "number", description: "Optional response duration in milliseconds." },
+  },
+  required: ["propId", "rating"],
 };
 
 function makeAppToolPair(suffix, title, description, inputSchema) {
@@ -304,7 +435,7 @@ const TOOLS = [
     name: "synt_practice_card",
     title: "Syntopik Practice Problem Card",
     description:
-      "Pose a practice problem (locking modelSolution hidden server-side with a 1-active-problem gate) or conclude it to reveal the committed modelSolution verbatim with verdict and Pause Law.",
+      "Pose a practice problem (standard, parsons, or faded block ordering; locking modelSolution & canonicalOrder hidden server-side with a 1-active-problem gate) or conclude it to reveal the committed modelSolution verbatim with verdict and Pause Law.",
     inputSchema: PRACTICE_INPUT_SCHEMA,
     _meta: {
       ui: { resourceUri: "ui://syntopik/practice-card.html" },
@@ -314,7 +445,7 @@ const TOOLS = [
     name: "synt_lesson_studio",
     title: "Syntopik Studio",
     description:
-      "Open or update the live Syntopik Studio pane (Autopilot progress, Plan DAG, Knowledge Graph, zero-token FSRS-6 Flashcards, Mistake Traps). All arguments optional.",
+      "Open or update the live Syntopik Studio pane (Autopilot progress, Plan DAG, Knowledge Graph, zero-token FSRS-6 Flashcards w/ Image Occlusion, Mistake Traps). All arguments optional.",
     inputSchema: STUDIO_INPUT_SCHEMA,
     _meta: {
       ui: { resourceUri: "ui://syntopik/studio-pane.html" },
@@ -325,6 +456,28 @@ const TOOLS = [
         ],
       },
     },
+  },
+  // --- Ambient Cross-Session Headless Knowledge Tools (3, zero UI spawned) ---
+  {
+    name: "synt_capture_concept",
+    title: "Capture Concept to Syntopik Knowledge Graph",
+    description:
+      "Ambient headless capture: deduplicate via find-similar, save a verified proposition (plus optional recall cue and prerequisite hyperedge chain) to the Knowledge Graph, and sync graph-data.js.",
+    inputSchema: CAPTURE_CONCEPT_SCHEMA,
+  },
+  {
+    name: "synt_get_frontier",
+    title: "Get Syntopik Study Frontier & Calibration",
+    description:
+      "Ambient headless query: return FIRe-compressed due propositions, active Chapter Autopilot next action, top 3 recurring mistake traps, and rolling Brier calibration summary.",
+    inputSchema: GET_FRONTIER_SCHEMA,
+  },
+  {
+    name: "synt_log_review",
+    title: "Log FSRS-6 + FIRe Concept Review",
+    description:
+      "Ambient headless review: run srs_engine.py review with FIRe implicit prerequisite propagation and revlog.jsonl persistence, returning updated stability, BKT mastery, and fireCredits.",
+    inputSchema: LOG_REVIEW_SCHEMA,
   },
   // Backwards-compatible mlh_* aliases
   {
@@ -377,6 +530,7 @@ const TOOLS = [
         rating: { type: "string", enum: ["again", "hard", "good", "easy"] },
         cueId: { type: "string" },
         misconception: { type: "boolean" },
+        confidence: { type: "number" },
       },
       required: ["propId", "rating"],
     }
@@ -447,6 +601,28 @@ function formatTerminalQuizText(v, cardId, shuffleSeed) {
   return lines.join("\n");
 }
 
+function formatTerminalParsonsText(record, safeShuffledBlocks) {
+  const isFaded = record.mode === "faded";
+  const lines = [
+    `Practice problem posed (id=${record.problemId}, ${isFaded ? "FADED PARSONS" : "PARSONS"}) — Terminal fallback (committed solution & target block order locked server-side):`,
+    "",
+    record.statement,
+    "",
+    "Shuffled blocks (order the valid steps and omit any distractors):",
+  ];
+  for (const blk of safeShuffledBlocks) {
+    const indentPad = blk.indent > 0 ? "  ".repeat(blk.indent) : "";
+    lines.push(`${blk.letter}) ${indentPad}${blk.code}`);
+  }
+  lines.push("");
+  lines.push(
+    isFaded
+      ? "Ask the learner for the ordered letters (e.g., B, A, D — omitting distractors) plus values for each ___ blank before calling action=\"conclude\"."
+      : "Ask the learner for the ordered letters (e.g., B, A, D — omitting distractors) before calling action=\"conclude\"."
+  );
+  return lines.join("\n");
+}
+
 function handleQuizCard(rawArgs, toolName, hasUiExtension) {
   const checked = validateQuizArgs(rawArgs);
   if (!checked.ok) {
@@ -480,8 +656,6 @@ function handleQuizCard(rawArgs, toolName, hasUiExtension) {
   }
 
   if (!hasUiExtension) {
-    // Terminal Host Safeguard (#94 §1.C): include bare question + lettered options + "I don't know"
-    // in content[0].text while keeping correctAnswer, explanation, and committedAnswer hidden server-side!
     const safeStructured = {
       kind: `${pfx}_quiz_card`,
       cardId,
@@ -538,10 +712,15 @@ function handlePracticeCard(rawArgs, toolName, hasUiExtension) {
       return toolError(`Invalid ${toolName} pose: ${checked.error}`);
     }
     const v = checked.value;
+    const shuffleSeed = v.isParsonsMode ? hashSeed(`${v.problemId}:${v.statement}`) : null;
     const record = {
       problemId: v.problemId,
       statement: v.statement,
       mode: v.mode || null,
+      isParsonsMode: v.isParsonsMode,
+      blocks: v.blocks,
+      canonicalOrder: v.canonicalOrder,
+      shuffleSeed,
       targets: v.targets,
       modelSolution: v.modelSolution,
       posedAt: new Date().toISOString(),
@@ -551,27 +730,55 @@ function handlePracticeCard(rawArgs, toolName, hasUiExtension) {
     problemHistory.set(record.problemId, record);
     stateStore.savePracticePose(record);
 
-    // SECURITY INVARIANT: modelSolution, mode, and targets are NEVER sent on pose!
-    const textMsg = hasUiExtension
-      ? `Practice problem posed (id=${record.problemId}). Committed modelSolution locked server-side; awaiting learner attempt or hint request.`
-      : [
-          `Practice problem posed (id=${record.problemId}) — Terminal fallback (committed modelSolution locked server-side):`,
-          "",
-          record.statement,
-          "",
-          "Present the problem cleanly and await the learner's attempt, R0–R5 hint request, or surrender before calling action=\"conclude\".",
-        ].join("\n");
+    // SECURITY INVARIANT: modelSolution, canonicalOrder, isDistractor, and legacy mode/targets
+    // are NEVER leaked during pose!
+    let safeShuffledBlocks = null;
+    if (v.isParsonsMode && Array.isArray(v.blocks)) {
+      const stripped = v.blocks.map((b) => ({
+        id: b.id,
+        code: b.code,
+        indent: b.indent || 0,
+        hasBlanks: /_{3,}/.test(b.code),
+      }));
+      safeShuffledBlocks = seededShuffleOptions(stripped, shuffleSeed);
+    }
+
+    let textMsg;
+    if (v.isParsonsMode && safeShuffledBlocks) {
+      textMsg = hasUiExtension
+        ? `Practice ${v.mode} problem posed (id=${record.problemId}, ${safeShuffledBlocks.length} shuffled blocks). Committed solution & target block order locked server-side; awaiting learner ordering.`
+        : formatTerminalParsonsText(record, safeShuffledBlocks);
+    } else {
+      textMsg = hasUiExtension
+        ? `Practice problem posed (id=${record.problemId}). Committed modelSolution locked server-side; awaiting learner attempt or hint request.`
+        : [
+            `Practice problem posed (id=${record.problemId}) — Terminal fallback (committed modelSolution locked server-side):`,
+            "",
+            record.statement,
+            "",
+            "Present the problem cleanly and await the learner's attempt, R0–R5 hint request, or surrender before calling action=\"conclude\".",
+          ].join("\n");
+    }
+
+    const structuredContent = {
+      kind: `${pfx}_practice_card`,
+      action: "pose",
+      problemId: record.problemId,
+      statement: record.statement,
+      hasHiddenSolution: true,
+      ...(v.isParsonsMode && safeShuffledBlocks
+        ? {
+            cardMode: v.mode,
+            blocks: safeShuffledBlocks,
+            shuffleSeed,
+          }
+        : {}),
+      ...(hasUiExtension ? {} : { terminalFallback: true }),
+    };
 
     return {
       content: [{ type: "text", text: textMsg }],
-      structuredContent: {
-        kind: `${pfx}_practice_card`,
-        action: "pose",
-        problemId: record.problemId,
-        statement: record.statement,
-        hasHiddenSolution: true,
-        ...(hasUiExtension ? {} : { terminalFallback: true }),
-      },
+      structuredContent,
     };
   }
 
@@ -587,11 +794,17 @@ function handlePracticeCard(rawArgs, toolName, hasUiExtension) {
   }
   stateStore.savePracticeConclude(record.problemId);
 
+  const canonicalLine =
+    Array.isArray(record.canonicalOrder) && record.canonicalOrder.length > 0
+      ? `Canonical block order: ${record.canonicalOrder.join(" → ")}`
+      : "";
+
   const concludeText = hasUiExtension
     ? `Practice problem ${record.problemId} concluded (${outcome}${rung ? `, ${rung}` : ""}). Verbatim committed modelSolution revealed. Pause for learner go-ahead.`
     : [
         `Practice problem ${record.problemId} concluded (${outcome}${rung ? `, ${rung}` : ""}).`,
         `Verdict: ${verdict}`,
+        ...(canonicalLine ? [canonicalLine] : []),
         "",
         "Committed Model Solution (reveal verbatim):",
         record.modelSolution,
@@ -612,6 +825,9 @@ function handlePracticeCard(rawArgs, toolName, hasUiExtension) {
       missClass,
       retest,
       modelSolution: record.modelSolution,
+      ...(record.isParsonsMode ? { cardMode: record.mode } : {}),
+      ...(Array.isArray(record.canonicalOrder) ? { canonicalOrder: record.canonicalOrder } : {}),
+      ...(Array.isArray(record.blocks) ? { blocks: record.blocks } : {}),
     },
   };
 }
@@ -749,6 +965,51 @@ function createServer() {
         case "mlh_lesson_studio":
           return handleLessonStudio(args, name);
 
+        case "synt_capture_concept": {
+          const res = captureConcept(WORKSPACE_ROOT, args);
+          if (!res.ok) return toolError(res.error);
+          const structuredContent = {
+            kind: "synt_capture_concept_result",
+            id: res.id,
+            deduplicated: res.deduplicated,
+            matchedId: res.matchedId,
+            matchedScore: res.matchedScore,
+            cueAdded: res.cueAdded,
+            chainAdded: res.chainAdded,
+            synced: res.synced,
+          };
+          return {
+            content: [{ type: "text", text: JSON.stringify(structuredContent) }],
+            structuredContent,
+          };
+        }
+
+        case "synt_get_frontier": {
+          const res = getFrontier(WORKSPACE_ROOT, args);
+          if (!res.ok) return toolError(res.error);
+          const structuredContent = {
+            kind: "synt_frontier",
+            ...res,
+          };
+          return {
+            content: [{ type: "text", text: JSON.stringify(structuredContent) }],
+            structuredContent,
+          };
+        }
+
+        case "synt_log_review": {
+          const res = logReview(WORKSPACE_ROOT, args);
+          if (!res.ok) return toolError(res.error);
+          const structuredContent = {
+            kind: "synt_log_review_result",
+            ...res,
+          };
+          return {
+            content: [{ type: "text", text: JSON.stringify(structuredContent) }],
+            structuredContent,
+          };
+        }
+
         case "synt_app_load_state":
         case "mlh_app_load_state": {
           const section =
@@ -787,6 +1048,9 @@ function createServer() {
           const structuredContent = {
             kind: `${pfx}_app_rate_result`,
             review: res.result,
+            fireCredits: res.result?.fireCredits || [],
+            fireRefreshedCount: res.result?.fireRefreshedCount || 0,
+            fireSummary: res.result?.fireSummary || null,
             stats: refreshed.stats,
             flashcards: refreshed.flashcards,
           };

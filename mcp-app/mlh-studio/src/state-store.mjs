@@ -33,7 +33,7 @@ function isTempWorkspace(wsPath) {
 
 export function resolveDataDir(workspaceRoot, explicitDataDir) {
   const cleaned = typeof explicitDataDir === "string" ? explicitDataDir.trim() : "";
-  if (cleaned && !cleaned.includes("${PLUGIN_DATA}")) {
+  if (cleaned && !cleaned.includes("${")) {
     return path.resolve(cleaned);
   }
   const envDir =
@@ -172,6 +172,22 @@ function sanitizePracticePatch(patch) {
     out.statusKind = patch.statusKind;
   }
   if (typeof patch.nextRequested === "boolean") out.nextRequested = patch.nextRequested;
+  if (Array.isArray(patch.parsonsOrder)) {
+    out.parsonsOrder = [...new Set(patch.parsonsOrder.map((x) => String(x).slice(0, 120)).filter(Boolean))].slice(0, 40);
+  }
+  if (Array.isArray(patch.excludedIds)) {
+    out.excludedIds = [...new Set(patch.excludedIds.map((x) => String(x).slice(0, 120)).filter(Boolean))].slice(0, 40);
+  }
+  if (patch.fadedBlanks && typeof patch.fadedBlanks === "object" && !Array.isArray(patch.fadedBlanks)) {
+    const cleanBlanks = {};
+    let count = 0;
+    for (const [k, v] of Object.entries(patch.fadedBlanks)) {
+      if (count >= 60) break;
+      cleanBlanks[String(k).slice(0, 120)] = String(v ?? "").slice(0, 300);
+      count += 1;
+    }
+    out.fadedBlanks = cleanBlanks;
+  }
   return out;
 }
 

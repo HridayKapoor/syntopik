@@ -5,7 +5,15 @@
 
 const VALID_ROLES = new Set(["probe", "predict", "check"]);
 const VALID_PRACTICE_ACTIONS = new Set(["pose", "conclude"]);
-const VALID_PRACTICE_MODES = new Set(["recall", "discrimination", "composition"]);
+const VALID_PRACTICE_MODES = new Set([
+  "standard",
+  "parsons",
+  "faded",
+  "recall",
+  "discrimination",
+  "composition",
+]);
+const PARSONS_MODES = new Set(["parsons", "faded"]);
 const VALID_OUTCOMES = new Set([
   "solved",
   "solvedWithHints",
@@ -201,10 +209,74 @@ export function validatePracticePose(rawArgs, activeProblem) {
   let mode;
   if (args.mode !== undefined && args.mode !== null && args.mode !== "") {
     if (typeof args.mode !== "string" || !VALID_PRACTICE_MODES.has(args.mode.trim())) {
-      errors.push(`mode must be one of recall, discrimination, or composition (got ${JSON.stringify(args.mode)}).`);
+      errors.push(
+        `mode must be one of standard, parsons, faded, recall, discrimination, or composition (got ${JSON.stringify(args.mode)}).`
+      );
     } else {
       mode = args.mode.trim();
     }
+  }
+
+  const isParsonsMode = Boolean(mode && PARSONS_MODES.has(mode));
+  let cleanBlocks = null;
+  let cleanCanonicalOrder = null;
+
+  if (args.blocks !== undefined && args.blocks !== null) {
+    if (!Array.isArray(args.blocks) || args.blocks.length < 2) {
+      errors.push("blocks must be an array of at least 2 block objects {id, code, indent?, isDistractor?}.");
+    } else {
+      const seenBlockIds = new Set();
+      cleanBlocks = [];
+      args.blocks.forEach((blk, idx) => {
+        if (!blk || typeof blk !== "object" || Array.isArray(blk)) {
+          errors.push(`blocks[${idx}] must be an object with {id, code}.`);
+          return;
+        }
+        const id = typeof blk.id === "string" ? blk.id.trim() : "";
+        const code = typeof blk.code === "string" ? blk.code : "";
+        if (!id) errors.push(`blocks[${idx}].id must be a non-empty string.`);
+        if (!code.trim()) errors.push(`blocks[${idx}].code must be a non-empty string.`);
+        if (id) {
+          if (seenBlockIds.has(id)) {
+            errors.push(`Duplicate block id "${id}". Every Parsons block id must be unique.`);
+          }
+          seenBlockIds.add(id);
+        }
+        const rawIndent = Number(blk.indent ?? 0);
+        const indent = Number.isFinite(rawIndent) ? Math.max(0, Math.min(8, Math.round(rawIndent))) : 0;
+        const isDistractor = Boolean(blk.isDistractor);
+        if (id && code.trim()) {
+          cleanBlocks.push({ id, code, indent, isDistractor });
+        }
+      });
+
+      const validBlockIds = new Set(cleanBlocks.map((b) => b.id));
+      if (args.canonicalOrder !== undefined && args.canonicalOrder !== null) {
+        if (!Array.isArray(args.canonicalOrder) || args.canonicalOrder.length === 0) {
+          errors.push("canonicalOrder must be a non-empty array of block id strings.");
+        } else {
+          const dedupOrder = [];
+          const seenOrd = new Set();
+          for (const rawId of args.canonicalOrder) {
+            const cid = typeof rawId === "string" ? rawId.trim() : "";
+            if (!cid || !validBlockIds.has(cid)) {
+              errors.push(`canonicalOrder contains unknown block id ${JSON.stringify(rawId)}.`);
+            } else if (!seenOrd.has(cid)) {
+              seenOrd.add(cid);
+              dedupOrder.push(cid);
+            }
+          }
+          cleanCanonicalOrder = dedupOrder;
+        }
+      } else if (cleanBlocks.length > 0) {
+        cleanCanonicalOrder = cleanBlocks.filter((b) => !b.isDistractor).map((b) => b.id);
+        if (cleanCanonicalOrder.length === 0) {
+          errors.push("Parsons blocks must contain at least one non-distractor block (or explicit canonicalOrder).");
+        }
+      }
+    }
+  } else if (isParsonsMode) {
+    errors.push(`blocks array (at least 2 items) is required when mode is "${mode}".`);
   }
 
   let targets = [];
@@ -237,6 +309,9 @@ export function validatePracticePose(rawArgs, activeProblem) {
       problemId,
       statement,
       mode,
+      isParsonsMode,
+      blocks: cleanBlocks,
+      canonicalOrder: cleanCanonicalOrder,
       targets,
       modelSolution,
     },

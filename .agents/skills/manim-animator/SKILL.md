@@ -1,11 +1,9 @@
 ---
 name: manim-animator
 description: >-
-  Generate 3Blue1Brown-style animated MP4 explanation videos using Manim 0.22
-  with native LaTeX (TinyTeX/TeX Live + dvisvgm) across Mathematics, CS/ML,
-  Physics, and Chemistry: MathTex, TransformMatchingTex term morphing,
-  \underbrace, \cancel{}, \ce{} chemical reactions via scripts/manim_helpers.py,
-  optional narration via scripts/narrate_video.py, and frame-by-frame visual QA.
+  Generate 3Blue1Brown-style animated MP4 explanation videos with Manim and native
+  LaTeX term morphing, chemical equations, optional voiceover narration, and
+  frame-by-frame visual QA.
 ---
 
 # Manim Animator — 3Blue1Brown-Style Concept & Derivation Videos
@@ -64,6 +62,6 @@ class DerivationScene(Scene):
    ```bash
    .venv/bin/manim -qm --media_dir animations/media -o "<slug>.mp4" "animations/<slug>.py" <SceneClass>
    ```
-   Copy final output to `animations/<slug>.mp4` (and optionally add voiceover + Pillow-burned captions via `.venv/bin/python -B scripts/narrate_video.py --video animations/<slug>.mp4 ...`).
+   Copy final output to `animations/<slug>.mp4` (optionally add voiceover + Pillow-burned captions via `syntopik run narrate_video --video animations/<slug>.mp4 ...` or `.venv/bin/python -B scripts/narrate_video.py ...`).
 2. **Mandatory Frame Audit**: extract 2–3 keyframes via `ffmpeg` into `/tmp` and inspect every frame with `read_file` / `Read` to confirm zero clipped math, zero overlapping labels, and crisp contrast; clean up `/tmp` frames.
 3. Share a clickable `file://` link to `animations/<slug>.mp4` with 2–3 timestamped observation cues (`<= 120` words).

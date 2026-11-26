@@ -3,6 +3,7 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%2336538C'/%3E%3Ctext x='16' y='21.5' text-anchor='middle' font-family='system-ui,sans-serif' font-size='15' font-weight='800' fill='%23FCFBF8'%3ESY%3C/text%3E%3C/svg%3E" />
 <title>Syntopik — Local Deep-Mastery OS</title>
 <style>
   :root, [data-theme="dark"] {
@@ -43,6 +44,11 @@
     --font-ui: "Inter", -apple-system, BlinkMacSystemFont, "SF Pro Text", system-ui, sans-serif;
     --font-mono: "JetBrains Mono", "SF Mono", ui-monospace, monospace;
     --synt-ease: cubic-bezier(0.2, 0, 0, 1);
+    --heat-0: #1C2025;
+    --heat-1: rgba(78, 159, 118, 0.28);
+    --heat-2: rgba(78, 159, 118, 0.52);
+    --heat-3: rgba(78, 159, 118, 0.76);
+    --heat-4: #4E9F76;
   }
   [data-theme="light"] {
     /* Archival Vellum & Graphite */
@@ -78,6 +84,11 @@
     --cluster-bg: rgba(239, 236, 228, 0.72);
     --shadow: 0 8px 24px rgba(28, 32, 36, 0.07);
     --preview-bg: #FAF8F3;
+    --heat-0: #EAE6DC;
+    --heat-1: rgba(43, 122, 82, 0.22);
+    --heat-2: rgba(43, 122, 82, 0.44);
+    --heat-3: rgba(43, 122, 82, 0.70);
+    --heat-4: #2B7A52;
   }
 
   * { box-sizing: border-box; }
@@ -287,26 +298,26 @@
   .container {
     max-width: 1320px;
     margin: 0 auto;
-    padding: 22px 24px 48px;
+    padding: 12px 20px 44px;
     display: flex;
     flex-direction: column;
-    gap: 22px;
+    gap: 11px;
   }
 
   /* Overview KPI Grid */
   .kpi-grid {
     display: grid;
     grid-template-columns: repeat(4, minmax(0, 1fr));
-    gap: 14px;
+    gap: 12px;
   }
   .kpi-card {
     background: var(--bg-card);
     border: 1px solid var(--border);
-    border-radius: 14px;
-    padding: 16px 18px;
+    border-radius: 13px;
+    padding: 11px 14px;
     display: flex;
     flex-direction: column;
-    gap: 8px;
+    gap: 5px;
   }
   .kpi-label {
     font-size: 11px;
@@ -319,16 +330,16 @@
     align-items: center;
   }
   .kpi-big {
-    font-size: 30px;
+    font-size: 26px;
     font-weight: 750;
     letter-spacing: -0.03em;
     line-height: 1.05;
   }
   .kpi-meta {
     display: flex;
-    gap: 6px;
+    gap: 5px;
     flex-wrap: wrap;
-    font-size: 12px;
+    font-size: 11.5px;
     color: var(--muted);
   }
   .seg-bar {
@@ -346,19 +357,19 @@
     display: flex;
     align-items: center;
     justify-content: space-between;
-    gap: 12px;
+    gap: 10px;
     flex-wrap: wrap;
-    margin-bottom: 12px;
+    margin-bottom: 8px;
   }
   .section-head h2 {
     margin: 0;
-    font-size: 16px;
+    font-size: 15px;
     font-weight: 700;
     letter-spacing: -0.015em;
   }
   .section-head p {
-    margin: 3px 0 0;
-    font-size: 12.5px;
+    margin: 2px 0 0;
+    font-size: 12px;
     color: var(--muted);
   }
 
@@ -366,8 +377,8 @@
   .surface-card {
     background: var(--bg-card);
     border: 1px solid var(--border);
-    border-radius: 14px;
-    padding: 18px 20px;
+    border-radius: 13px;
+    padding: 12px 16px;
   }
   .due-list {
     display: grid;
@@ -1100,44 +1111,44 @@
   .ap-grid {
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 14px;
-    margin-top: 6px;
+    gap: 10px;
+    margin-top: 4px;
   }
   .ap-meter {
     background: var(--bg-elev);
     border: 1px solid var(--border);
-    border-radius: 11px;
-    padding: 12px 14px;
+    border-radius: 10px;
+    padding: 9px 12px;
     display: flex;
     flex-direction: column;
-    gap: 8px;
+    gap: 6px;
   }
   .ap-meter-head {
     display: flex;
     align-items: center;
     justify-content: space-between;
     gap: 8px;
-    font-size: 12.5px;
+    font-size: 12px;
     font-weight: 650;
   }
   .ap-meter-stat {
     font-family: "SF Mono", ui-monospace, Menlo, monospace;
-    font-size: 11.5px;
+    font-size: 11px;
     color: var(--text-2);
   }
   .ap-topic-chips {
     display: flex;
     flex-wrap: wrap;
-    gap: 6px;
+    gap: 4px;
     margin-top: 2px;
   }
   .ap-topic-chip {
     display: inline-flex;
     align-items: center;
-    gap: 5px;
-    font-size: 11px;
-    padding: 3px 8px;
-    border-radius: 7px;
+    gap: 4px;
+    font-size: 10.5px;
+    padding: 2px 7px;
+    border-radius: 6px;
     background: var(--bg-input);
     border: 1px solid var(--border);
     color: var(--text-2);
@@ -1147,25 +1158,25 @@
   .ap-topic-chip.in_progress { color: var(--accent); border-color: var(--accent); background: var(--accent-bg); }
   .ap-topic-chip.probed { color: var(--shaky); border-color: transparent; background: var(--shaky-bg); }
   .ap-milestones-wrap {
-    margin-top: 12px;
-    padding-top: 12px;
+    margin-top: 9px;
+    padding-top: 9px;
     border-top: 1px solid var(--border);
     display: flex;
     flex-direction: column;
-    gap: 8px;
+    gap: 6px;
   }
   .ap-milestones {
     display: flex;
     flex-wrap: wrap;
-    gap: 6px;
+    gap: 5px;
   }
   .ap-milestone {
     display: inline-flex;
     align-items: center;
-    gap: 5px;
-    font-size: 11px;
+    gap: 4px;
+    font-size: 10.5px;
     font-weight: 600;
-    padding: 4px 9px;
+    padding: 3px 8px;
     border-radius: 999px;
     border: 1px solid var(--border);
     background: var(--bg-input);
@@ -1177,13 +1188,13 @@
     border-color: transparent;
   }
   .ap-next-banner {
-    margin-top: 12px;
-    padding: 9px 12px;
-    border-radius: 9px;
+    margin-top: 9px;
+    padding: 7px 11px;
+    border-radius: 8px;
     border: 1px solid var(--border);
     border-left: 3px solid var(--accent);
     background: var(--bg-elev);
-    font-size: 12.5px;
+    font-size: 12px;
     color: var(--text-2);
     display: flex;
     align-items: center;
@@ -1587,12 +1598,631 @@
   }
   .math-matrix td { padding: 1px 6px; text-align: center; }
 
+  /* ================= SYNTOPIK v2.0 LIVE STUDIO & CALM INTELLIGENCE ================= */
+  .live-pill {
+    font-size: 11px;
+    font-weight: 600;
+    gap: 6px;
+    padding: 4px 10px;
+  }
+  .live-pill.is-live {
+    color: var(--solid);
+    background: var(--solid-bg);
+    border-color: transparent;
+  }
+  .live-dot {
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: var(--muted);
+    display: inline-block;
+    flex-shrink: 0;
+  }
+  .live-pill.is-live .live-dot {
+    background: var(--solid);
+  }
+
+  .energy-group {
+    display: inline-flex;
+    align-items: center;
+    gap: 2px;
+    padding: 3px;
+    border-radius: 999px;
+    background: var(--bg-input);
+    border: 1px solid var(--border);
+  }
+  .energy-btn {
+    border: 1px solid transparent;
+    background: transparent;
+    color: var(--muted);
+    border-radius: 999px;
+    padding: 3px 9px;
+    font-size: 11px;
+    font-weight: 600;
+    line-height: 1.2;
+  }
+  .energy-btn:hover {
+    color: var(--text);
+    background: var(--bg-hover);
+    border-color: transparent;
+  }
+  .energy-btn.active {
+    background: var(--bg-elev);
+    color: var(--text);
+    border-color: var(--border-strong);
+  }
+
+  /* Calm Re-Entry Brief */
+  .reentry-card {
+    border-left: 3.5px solid var(--teal);
+    background: linear-gradient(135deg, var(--bg-card) 0%, var(--bg-elev) 100%);
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+  .reentry-bullets {
+    margin: 0;
+    padding-left: 18px;
+    font-size: 12.5px;
+    color: var(--text-2);
+    line-height: 1.5;
+  }
+
+  /* Interactive Autopilot Controls & Studio Tools */
+  .ap-topic-chip.is-interactive,
+  .ap-milestone.is-interactive {
+    cursor: pointer;
+    transition: border-color 0.15s, background 0.15s, transform 0.12s;
+  }
+  .ap-topic-chip.is-interactive:hover,
+  .ap-milestone.is-interactive:hover {
+    border-color: var(--accent);
+    transform: translateY(-1px);
+  }
+  .ap-tools-row {
+    margin-top: 9px;
+    padding-top: 9px;
+    border-top: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 6px;
+    flex-wrap: wrap;
+  }
+  .ap-tools-row button {
+    padding: 5px 10px;
+    font-size: 11.5px;
+  }
+  .ap-tools-group {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    flex-wrap: wrap;
+  }
+  .studio-result-bar {
+    margin-top: 12px;
+    padding: 12px 14px;
+    border-radius: 10px;
+    border: 1px solid var(--border-strong);
+    border-left: 3px solid var(--solid);
+    background: var(--bg-elev);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    flex-wrap: wrap;
+    font-size: 12.5px;
+  }
+  .studio-qr-box {
+    background: #fff;
+    padding: 6px;
+    border-radius: 8px;
+    border: 1px solid var(--border);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .studio-qr-box svg {
+    width: 96px;
+    height: 96px;
+    display: block;
+  }
+
+  /* 365-Day Retention Heatmap + Brier Calibration Strip */
+  .retention-layout {
+    display: grid;
+    grid-template-columns: minmax(0, 1.95fr) minmax(300px, 1fr);
+    gap: 16px;
+    align-items: start;
+  }
+  .heatmap-wrap {
+    width: 100%;
+    overflow-x: auto;
+    padding: 2px 0 4px;
+  }
+  .heatmap-svg {
+    width: 100%;
+    min-width: 560px;
+    height: auto;
+    display: block;
+  }
+  .heatmap-foot {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    flex-wrap: wrap;
+    margin-top: 4px;
+    font-size: 11px;
+    color: var(--muted);
+  }
+  .heatmap-legend {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+  }
+  .heat-swatch {
+    width: 11px;
+    height: 11px;
+    border-radius: 2.5px;
+    display: inline-block;
+    border: 1px solid rgba(127, 127, 127, 0.14);
+  }
+  .calibration-strip {
+    margin-top: 12px;
+    padding-top: 12px;
+    border-top: 1px solid var(--border);
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 8px;
+  }
+  .retention-layout .calibration-strip {
+    margin-top: 0;
+    padding-top: 0;
+    border-top: none;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px;
+  }
+  .cal-tile {
+    background: var(--bg-elev);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 8px 10px;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+  }
+  .cal-label {
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: var(--muted);
+  }
+  .cal-value {
+    font-size: 15.5px;
+    font-weight: 700;
+    color: var(--text);
+    font-family: var(--font-mono);
+  }
+  .cal-sub {
+    font-size: 10.5px;
+    color: var(--muted);
+    line-height: 1.3;
+  }
+  .leech-strip {
+    margin-top: 12px;
+    padding-top: 12px;
+    border-top: 1px solid var(--border);
+    display: flex;
+    flex-direction: column;
+    gap: 7px;
+  }
+  .leech-chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+  }
+  .leech-chip {
+    font-size: 11.5px;
+    padding: 4px 9px;
+    border-radius: 8px;
+    background: var(--shaky-bg);
+    color: var(--shaky);
+    border: 1px solid transparent;
+  }
+  .leech-chip:hover {
+    border-color: var(--shaky);
+  }
+
+  /* Interactive Flashcard & SVG Image-Occlusion Modal */
+  .review-modal-shell {
+    width: min(760px, 95vw);
+    max-height: 90vh;
+    background: var(--bg-elev);
+    border: 1px solid var(--border-strong);
+    border-radius: 15px;
+    box-shadow: var(--shadow);
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+  .review-modal-body {
+    flex: 1;
+    min-height: 0;
+    overflow-y: auto;
+    padding: 20px 22px 22px;
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+  }
+  .review-modal-footer {
+    padding: 11px 18px;
+    border-top: 1px solid var(--border);
+    background: var(--bg-card);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    flex-wrap: wrap;
+  }
+  .fc-banner {
+    padding: 9px 12px;
+    border-radius: 9px;
+    border: 1px solid var(--border);
+    border-left: 3px solid var(--solid);
+    background: var(--solid-bg);
+    color: var(--solid);
+    font-size: 12.5px;
+    font-weight: 600;
+  }
+  .fc-banner.info {
+    border-left-color: var(--accent);
+    background: var(--accent-bg);
+    color: var(--accent);
+  }
+  .fc-card-surface {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: 13px;
+    padding: 18px 20px;
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+  }
+  .fc-prompt {
+    font-family: var(--font-prose);
+    font-size: 17px;
+    line-height: 1.6;
+    color: var(--text);
+  }
+  .fc-answer {
+    font-family: var(--font-prose);
+    font-size: 15.5px;
+    line-height: 1.62;
+    color: var(--text);
+    padding-top: 12px;
+    border-top: 1px solid var(--border);
+  }
+  .fc-conf-box {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 9px 12px;
+    border-radius: 9px;
+    background: var(--bg-elev);
+    border: 1px solid var(--border);
+    font-size: 12px;
+    color: var(--text-2);
+  }
+  .fc-conf-box input[type="range"] {
+    flex: 1;
+    accent-color: var(--accent);
+    cursor: pointer;
+  }
+  .fc-conf-num {
+    font-family: var(--font-mono);
+    font-size: 12px;
+    font-weight: 650;
+    min-width: 38px;
+    text-align: right;
+    color: var(--text);
+  }
+  .fc-rating-grid {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 8px;
+  }
+  .fc-rate-btn {
+    justify-content: center;
+    padding: 9px 10px;
+    border-radius: 9px;
+    font-size: 12.5px;
+    font-weight: 650;
+  }
+  .fc-rate-btn.again { color: var(--misconception); background: var(--misconception-bg); border-color: transparent; }
+  .fc-rate-btn.hard { color: var(--shaky); background: var(--shaky-bg); border-color: transparent; }
+  .fc-rate-btn.good { color: var(--solid); background: var(--solid-bg); border-color: transparent; }
+  .fc-rate-btn.easy { color: var(--accent); background: var(--accent-bg); border-color: transparent; }
+  .fc-rate-btn:hover:not(:disabled) { border-color: currentColor; filter: brightness(1.06); }
+  .fc-rate-btn:disabled { opacity: 0.55; cursor: not-allowed; }
+
+  /* SVG Image-Occlusion Stage */
+  .io-stage {
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 10px 12px;
+    background: var(--bg-elev);
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+  .io-stage svg {
+    max-width: 440px;
+    max-height: 260px;
+    margin: 0 auto;
+    display: block;
+  }
+  .io-toolbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    flex-wrap: wrap;
+    font-size: 11.5px;
+    color: var(--muted);
+  }
+  .io-mask-group {
+    cursor: pointer;
+    outline: none;
+  }
+  .io-mask-rect {
+    fill: var(--accent-strong);
+    fill-opacity: 1;
+    stroke: var(--bg-elev);
+    stroke-width: 1.5;
+    transition: fill-opacity 0.15s, fill 0.15s, stroke 0.15s;
+  }
+  .io-mask-group:hover .io-mask-rect,
+  .io-mask-group:focus .io-mask-rect {
+    fill-opacity: 1;
+    stroke: var(--accent);
+  }
+  .io-mask-group.io-mask-revealed .io-mask-rect {
+    fill: var(--solid);
+    fill-opacity: 0.10;
+    stroke: var(--solid);
+    stroke-width: 1.8;
+    stroke-dasharray: 4 3;
+  }
+  .io-mask-group.io-mask-no-img.io-mask-revealed .io-mask-rect {
+    fill: var(--solid-bg);
+    fill-opacity: 1;
+    stroke-dasharray: none;
+  }
+
+  /* Quick-Import Bar & Incremental Reading Queue */
+  .quick-import-card {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: 13px;
+    padding: 14px 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+  .quick-import-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+  }
+  .quick-import-row input[type="text"],
+  .quick-import-row input[type="url"] {
+    font-family: inherit;
+    background: var(--bg-input);
+    color: var(--text);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 7px 11px;
+    font-size: 12.5px;
+    outline: none;
+  }
+  .quick-import-row input[type="url"] { flex: 1; min-width: 240px; }
+  .quick-import-row input[type="text"] { width: 155px; }
+  .quick-import-row input:focus { border-color: var(--accent); }
+  .rq-list {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+  .rq-row {
+    background: var(--bg-elev);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 10px 13px;
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 10px;
+    flex-wrap: wrap;
+  }
+
+  /* Chapter Reader Inline Mnemonic Cues (:::cue & {{c1::...}}) */
+  .md-cue-strip {
+    margin: 1em 0;
+    border: 1px solid var(--border);
+    border-left: 3px solid var(--teal);
+    border-radius: 10px;
+    background: var(--bg-card);
+    overflow: hidden;
+    font-family: var(--font-ui);
+  }
+  .md-cue-strip summary {
+    list-style: none;
+    cursor: pointer;
+    padding: 10px 14px;
+    display: flex;
+    align-items: flex-start;
+    gap: 9px;
+    font-size: 0.92em;
+    line-height: 1.5;
+    color: var(--text);
+  }
+  .md-cue-strip summary::-webkit-details-marker { display: none; }
+  .md-cue-strip summary:hover { background: var(--bg-hover); }
+  .md-cue-q { flex: 1; font-family: var(--font-prose); font-size: 1em; }
+  .md-cue-body {
+    padding: 10px 14px 12px;
+    border-top: 1px solid var(--border);
+    background: var(--bg-elev);
+    display: flex;
+    flex-direction: column;
+    gap: 9px;
+    font-size: 0.92em;
+    color: var(--text-2);
+  }
+  .md-cue-a { font-family: var(--font-prose); color: var(--text); line-height: 1.58; }
+  .md-cue-actions {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    flex-wrap: wrap;
+    font-size: 11px;
+  }
+  .md-cue-rate-btn {
+    padding: 3px 9px;
+    font-size: 11px;
+    border-radius: 6px;
+  }
+  .md-cloze {
+    display: inline-flex;
+    align-items: baseline;
+    font-family: inherit;
+    font-size: 0.96em;
+    padding: 1px 7px;
+    margin: 0 2px;
+    border-radius: 6px;
+    border: 1px dashed var(--accent);
+    background: var(--accent-bg);
+    color: var(--accent);
+    cursor: pointer;
+    vertical-align: baseline;
+  }
+  .md-cloze:hover { background: var(--bg-hover); }
+  .md-cloze.revealed {
+    border-style: solid;
+    border-color: var(--solid);
+    background: var(--solid-bg);
+    color: var(--solid);
+    font-weight: 600;
+  }
+
+  /* Embedded Graph Inspector v2.0 additions */
+  .bc-list {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+  .bc-item {
+    padding: 8px 10px;
+    border-radius: 8px;
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-left: 3px solid var(--shaky);
+    font-size: 12px;
+    line-height: 1.45;
+    color: var(--text-2);
+  }
+  .graph-quick-review {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 10px 11px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  @media (max-width: 1380px) {
+    .topbar {
+      padding: 8px 14px;
+      gap: 8px;
+      flex-wrap: nowrap;
+    }
+    .brand {
+      gap: 8px;
+      margin-right: 2px;
+      flex-shrink: 0;
+    }
+    .brand-mark {
+      width: 28px;
+      height: 28px;
+      font-size: 12px;
+    }
+    .brand-title span {
+      display: none;
+    }
+    .tabs {
+      gap: 3px;
+      padding: 3px;
+      flex-shrink: 1;
+      min-width: 0;
+    }
+    .tab-btn {
+      padding: 5px 9px;
+      font-size: 12px;
+      gap: 5px;
+    }
+    .tab-badge {
+      font-size: 10px;
+      padding: 1px 5px;
+    }
+    .topbar-right {
+      gap: 5px;
+      flex-shrink: 0;
+    }
+    .topbar-right button,
+    .topbar-right .btn-link {
+      padding: 5px 8px;
+      font-size: 11.5px;
+      gap: 4px;
+      white-space: nowrap;
+    }
+    .energy-btn {
+      padding: 3px 7px;
+      font-size: 10.5px;
+    }
+    .live-pill {
+      padding: 4px 8px;
+      font-size: 10.5px;
+      gap: 5px;
+    }
+    .sync-pill {
+      padding: 4px 7px;
+      font-size: 10.5px;
+    }
+  }
+  @media (max-width: 1360px) {
+    .hide-at-1360 { display: none; }
+  }
   @media (max-width: 1160px) {
     .exam-kpi-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
   }
   @media (max-width: 1080px) {
+    .topbar { flex-wrap: wrap; }
     .kpi-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
     .prompts-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .retention-layout { grid-template-columns: 1fr; }
+    .retention-layout .calibration-strip {
+      margin-top: 10px;
+      padding-top: 10px;
+      border-top: 1px solid var(--border);
+    }
+    .calibration-strip { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   }
   @media (max-width: 900px) {
     .mistake-grid { grid-template-columns: 1fr; }
@@ -1622,23 +2252,29 @@
     <div class="brand-mark" aria-hidden="true">SY</div>
     <div class="brand-title">
       <strong>Syntopik</strong>
-      <span>Local Deep-Mastery OS · 100% Offline</span>
+      <span id="brandSubtitle">Local Deep-Mastery OS · 100% Offline</span>
     </div>
   </div>
 
   <nav class="tabs" role="tablist" aria-label="Study Hub sections">
     <button class="tab-btn active" role="tab" data-tab="overview" aria-selected="true">Overview</button>
-    <button class="tab-btn" role="tab" data-tab="graph" aria-selected="false">Knowledge Graph <span class="tab-badge" id="badge-graph">0</span></button>
-    <button class="tab-btn" role="tab" data-tab="chapters" aria-selected="false">Chapters &amp; Sheets <span class="tab-badge" id="badge-chapters">0</span></button>
-    <button class="tab-btn" role="tab" data-tab="demos" aria-selected="false">Labs &amp; 3D <span class="tab-badge" id="badge-demos">0</span></button>
-    <button class="tab-btn" role="tab" data-tab="videos" aria-selected="false">Manim Videos <span class="tab-badge" id="badge-videos">0</span></button>
+    <button class="tab-btn" role="tab" data-tab="graph" aria-selected="false"><span class="hide-at-1360">Knowledge </span>Graph <span class="tab-badge" id="badge-graph">0</span></button>
+    <button class="tab-btn" role="tab" data-tab="chapters" aria-selected="false">Chapters<span class="hide-at-1360"> &amp; Sheets</span> <span class="tab-badge" id="badge-chapters">0</span></button>
+    <button class="tab-btn" role="tab" data-tab="demos" aria-selected="false">Labs<span class="hide-at-1360"> &amp; 3D</span> <span class="tab-badge" id="badge-demos">0</span></button>
+    <button class="tab-btn" role="tab" data-tab="videos" aria-selected="false"><span class="hide-at-1360">Manim </span>Videos <span class="tab-badge" id="badge-videos">0</span></button>
     <button class="tab-btn" role="tab" data-tab="sources" aria-selected="false">Sources <span class="tab-badge" id="badge-sources">0</span></button>
     <button class="tab-btn" role="tab" data-tab="exams" aria-selected="false">Exams <span class="tab-badge" id="badge-exams" title="Ready exams / Graded attempts">0/0</span></button>
   </nav>
 
   <div class="topbar-right">
+    <div class="energy-group" id="energySelector" role="group" aria-label="Cognitive energy mode" title="Calmly adapts Next-Step guidance to your current energy">
+      <button type="button" class="energy-btn" data-energy="low">Low</button>
+      <button type="button" class="energy-btn active" data-energy="normal">Normal</button>
+      <button type="button" class="energy-btn" data-energy="deep">Deep</button>
+    </div>
+    <span class="pill live-pill" id="liveStatusPill" title="Studio connection status"><span class="live-dot"></span>Offline</span>
     <span class="sync-pill" id="syncStamp">Synced offline</span>
-    <a class="btn-link" href="./knowledge-graph/viewer.html" title="Open standalone full-screen Knowledge Graph">Standalone Graph ↗</a>
+    <a class="btn-link" href="./knowledge-graph/viewer.html" title="Open standalone full-screen Knowledge Graph"><span class="hide-at-1360">Standalone </span>Graph ↗</a>
     <button id="themeToggleBtn" title="Switch Dark / Light theme (t)">☀ Light</button>
     <div class="shortcut-wrap">
       <button id="shortcutHelpBtn" aria-expanded="false" aria-controls="shortcutPopover" title="Keyboard shortcuts (?)">?</button>
@@ -1659,19 +2295,41 @@
 <!-- TAB 1: OVERVIEW -->
 <section class="view-panel active" id="panel-overview" role="tabpanel">
   <div class="container">
+    <div class="surface-card reentry-card" id="reentryCard" hidden></div>
+
     <div class="kpi-grid" id="overviewKpis"></div>
 
     <div class="surface-card autopilot-card" id="activeAutopilotCard"></div>
 
-    <div class="surface-card">
+    <div class="surface-card" id="retentionIntelCard">
+      <div class="section-head">
+        <div>
+          <h2>Retention Activity &amp; Calibration</h2>
+          <p id="retentionSubtitle">Quiet 365-day practice ledger and confidence calibration — zero streaks, zero red backlog alarms.</p>
+        </div>
+        <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+          <span class="pill" id="retentionSummaryPill">0 active days</span>
+          <span class="pill shaky" id="leechesCountPill" hidden>0 leeches</span>
+        </div>
+      </div>
+      <div class="retention-layout">
+        <div id="retentionHeatmapContainer"></div>
+        <div id="calibrationStripContainer"></div>
+      </div>
+      <div id="leechesContainer"></div>
+    </div>
+
+    <div class="surface-card" id="dueStrip">
       <div class="section-head">
         <div>
           <h2>FSRS Due Review &amp; Weak-Edge Strip</h2>
           <p id="dueStripSubtitle">Prioritized by active misconceptions, shaky concepts, and FSRS due date.</p>
         </div>
-        <div style="display:flex;gap:8px;flex-wrap:wrap;">
+        <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
+          <button class="primary" id="openFlashcardModalBtn">Review Due Now</button>
+          <button id="calmRecoverBtn" hidden title="Smooth backlog into calm daily chunks (<=15/day)">Calm Catch-Up (15/day)</button>
           <button id="openDueInGraphBtn">Inspect Due in Graph →</button>
-          <button class="primary" id="copyDailyReviewBtn">Copy Daily Review Prompt</button>
+          <button id="copyDailyReviewBtn">Copy Review Prompt</button>
         </div>
       </div>
       <div id="dueReviewContainer"></div>
@@ -1848,6 +2506,27 @@
         <p>Lecture slides, research papers, textbooks, code repos, handwritten notes, and problem banks sitting in <code>sources/</code>.</p>
       </div>
     </div>
+    <div class="quick-import-card" id="quickImportCard">
+      <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;">
+        <strong style="font-size:13.5px;">Quick Universal Import</strong>
+        <span style="font-size:11.5px;color:var(--muted);" id="quickImportHint">Paste any YouTube, arXiv, GitHub, or web URL</span>
+      </div>
+      <div class="quick-import-row">
+        <input id="quickImportInput" type="url" placeholder="https://youtu.be/... · https://arxiv.org/abs/... · https://github.com/..." aria-label="Source URL to import" />
+        <input id="quickImportSlug" type="text" placeholder="Optional slug" aria-label="Optional source slug" />
+        <button class="primary" id="quickImportBtn" type="button">Import Source</button>
+      </div>
+    </div>
+    <div class="surface-card" id="readingQueueCard">
+      <div class="section-head" style="margin-bottom:8px;">
+        <div>
+          <h2>Incremental Reading Queue</h2>
+          <p id="readingQueueSubtitle">Extracts and slices staged for gradual crystallization into Knowledge Graph truths.</p>
+        </div>
+        <span class="pill" id="readingQueueCountPill">0 slices</span>
+      </div>
+      <div id="readingQueueContainer"></div>
+    </div>
     <div class="toolbar">
       <input id="sourcesSearch" type="search" placeholder="Search source PDFs, folders, notes…" />
       <select id="sourcesFolderFilter" aria-label="Filter sources by folder"><option value="">All folders</option></select>
@@ -1926,6 +2605,31 @@
     </div>
   </div>
 </section>
+
+<!-- FLASHCARD & SVG IMAGE-OCCLUSION REVIEW MODAL -->
+<div class="modal-backdrop" id="reviewModal" role="dialog" aria-modal="true" aria-labelledby="reviewModalTitle">
+  <div class="review-modal-shell">
+    <div class="modal-header">
+      <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+        <strong id="reviewModalTitle">FSRS-6 Flashcard Review</strong>
+        <span class="pill" id="reviewDeckCounter">0 / 0</span>
+        <span class="pill live-pill" id="reviewModeBadge"><span class="live-dot"></span>Offline Preview</span>
+      </div>
+      <div style="display:flex;gap:8px;align-items:center;">
+        <button id="reviewDeckScopeBtn" type="button">Showing: Due</button>
+        <button id="reviewModalCloseBtn" type="button">Close (Esc)</button>
+      </div>
+    </div>
+    <div class="review-modal-body" id="reviewModalBody"></div>
+    <div class="review-modal-footer">
+      <div style="display:flex;gap:6px;align-items:center;">
+        <button id="reviewPrevBtn" type="button">← Prev</button>
+        <button id="reviewNextBtn" type="button">Skip →</button>
+      </div>
+      <span style="font-size:11.5px;color:var(--muted);" id="reviewFooterHint">Space: flip · 1–4: rate · Esc: close</span>
+    </div>
+  </div>
+</div>
 
 <!-- PREVIEW MODAL -->
 <div class="modal-backdrop" id="previewModal" role="dialog" aria-modal="true" aria-labelledby="modalTitle">
@@ -2038,9 +2742,9 @@
     state_mutation_bug: { label: "State Mutation Bug", color: "var(--misconception)", pill: "misconception" },
   };
 
-  const graphData = window.__STUDY_GRAPH__ || { propositions: [], chains: [] };
-  const hubData = window.__STUDY_HUB__ || {
-    schemaVersion: 3,
+  let graphData = window.__STUDY_GRAPH__ || { propositions: [], chains: [] };
+  let hubData = window.__STUDY_HUB__ || {
+    schemaVersion: 4,
     generatedAt: null,
     today: null,
     workspaceName: "Syntopik",
@@ -2060,6 +2764,44 @@
     examFiles: [],
     examStats: { attemptsCount: 0, avgPct: null, avgAccuracyPct: null, bestPct: null, totalNegativeLost: 0, avgTimePerQuestionSec: null, latestAttempt: null },
     harnessLog: [],
+    retentionHeatmap: null,
+    calibration: null,
+    leeches: [],
+    readingQueue: [],
+  };
+  let serverExtras = {
+    forksDue: 0,
+    arenasCount: 0,
+    reentry: null,
+    triageRecommended: false,
+  };
+  let liveCaps = {
+    live: false,
+    token: "",
+    version: "",
+    workspaceName: "",
+    lan: null,
+  };
+  let sseSource = null;
+  let sseRefreshTimer = null;
+  let energyMode = "normal"; // "low" | "normal" | "deep"
+  let studioActionBanner = null; // { title, summary, href?, linkLabel?, qrSvg? }
+  let studioActionBusy = false;
+  let quickImportBusy = false;
+  let graphReviewBusy = false;
+  let graphConfPct = 70;
+
+  const reviewState = {
+    open: false,
+    showAll: false,
+    index: 0,
+    revealed: false,
+    confidencePct: 70,
+    unmaskedIds: new Set(),
+    busy: false,
+    banner: null, // { text, kind }
+    cardShownAt: Date.now(),
+    localReviewedIds: new Set(),
   };
 
   let activeTab = "overview";
@@ -2169,6 +2911,246 @@
     return typeof raw === "number" && Number.isFinite(raw) ? raw : null;
   }
 
+  function getLapses(n) {
+    const raw = n?.lapses ?? n?.fsrs?.lapses;
+    return typeof raw === "number" && Number.isFinite(raw) ? raw : 0;
+  }
+
+  function getImplicitCredit(n) {
+    const raw = n?.implicitCredit;
+    return typeof raw === "number" && Number.isFinite(raw) ? raw : 0;
+  }
+
+  function getLeechSet() {
+    const s = new Set();
+    for (const l of (hubData.leeches || [])) {
+      if (l && l.id) s.add(String(l.id));
+    }
+    return s;
+  }
+
+  function isNodeLeech(n) {
+    if (!n) return false;
+    if (getLeechSet().has(String(n.id || ""))) return true;
+    const diff = getDifficulty(n);
+    return getLapses(n) >= 4 || (diff !== null && diff >= 8.5);
+  }
+
+  function getGraphEdges() {
+    if (Array.isArray(graphData.normalizedEdges) && graphData.normalizedEdges.length > 0) {
+      return graphData.normalizedEdges;
+    }
+    const out = [];
+    for (const raw of (graphData.chains || [])) {
+      if (!raw || typeof raw !== "object") continue;
+      const to = raw.conclusion || raw.to;
+      if (!to) continue;
+      const prems = Array.isArray(raw.premises) && raw.premises.length
+        ? raw.premises
+        : (raw.from ? [raw.from] : []);
+      for (const from of prems) {
+        if (!from || from === to) continue;
+        out.push({
+          from,
+          to,
+          relation: raw.relation || "requires",
+          why: raw.why || raw.note || "",
+        });
+      }
+    }
+    return out;
+  }
+
+  /* ================= v2.0 LIVE API, SSE & ENERGY MODE ================= */
+  function updateLiveStatusUI() {
+    const pill = document.getElementById("liveStatusPill");
+    const stamp = document.getElementById("syncStamp");
+    const sub = document.getElementById("brandSubtitle");
+    const importHint = document.getElementById("quickImportHint");
+    const revBadge = document.getElementById("reviewModeBadge");
+    if (stamp) stamp.hidden = Boolean(liveCaps.live);
+    if (liveCaps.live) {
+      if (pill) {
+        pill.classList.add("is-live");
+        pill.innerHTML = `<span class="live-dot"></span>Live Studio`;
+        pill.title = `Connected to Syntopik Studio${liveCaps.version ? ` v${liveCaps.version}` : ""}`;
+      }
+      if (sub) sub.textContent = "Local Deep-Mastery OS · Live Studio";
+      if (importHint) importHint.textContent = "Live import via syntopik — YouTube, arXiv, GitHub, or web URL";
+      if (revBadge) {
+        revBadge.classList.add("is-live");
+        revBadge.innerHTML = `<span class="live-dot"></span>Live Studio`;
+      }
+    } else {
+      if (pill) {
+        pill.classList.remove("is-live");
+        pill.innerHTML = `<span class="live-dot"></span>Offline`;
+        pill.title = "100% offline read-only workbench";
+      }
+      if (sub) sub.textContent = "Local Deep-Mastery OS · 100% Offline";
+      if (importHint) importHint.textContent = "Offline mode — copies a ready-to-run syntopik import command";
+      if (revBadge) {
+        revBadge.classList.remove("is-live");
+        revBadge.innerHTML = `<span class="live-dot"></span>Offline Preview`;
+      }
+    }
+  }
+
+  function setEnergyMode(nextMode, announce = false) {
+    const normalized = ["low", "normal", "deep"].includes(nextMode) ? nextMode : "normal";
+    energyMode = normalized;
+    safeStorageSet("syntopik-energy-mode", normalized);
+    document.querySelectorAll("#energySelector .energy-btn").forEach((btn) => {
+      const isAct = btn.getAttribute("data-energy") === normalized;
+      btn.classList.toggle("active", isAct);
+      btn.setAttribute("aria-pressed", isAct ? "true" : "false");
+    });
+    renderOverview();
+    if (liveCaps.live) {
+      refreshLiveState();
+    }
+    if (announce) {
+      const labels = {
+        low: "Low energy · up to 3 warm-start cues, zero new proofs",
+        normal: "Normal energy · balanced FIRe review & Autopilot",
+        deep: "Deep focus · derivations, bottlenecks & synthesis",
+      };
+      showToast(labels[normalized]);
+    }
+  }
+
+  async function apiPost(endpoint, payload) {
+    const headers = { "Content-Type": "application/json" };
+    if (liveCaps.token) headers["X-Syntopik-Token"] = liveCaps.token;
+    const res = await fetch(endpoint, {
+      method: "POST",
+      headers,
+      body: JSON.stringify(payload || {}),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok || data.ok === false) {
+      throw new Error(data.error || `Request failed (${res.status})`);
+    }
+    return data;
+  }
+
+  function syncHeaderBadgesAndStamp() {
+    const examFilesCount = (hubData.examFiles || []).length;
+    const examAttemptsCount = (hubData.examAttempts || []).length;
+    document.getElementById("badge-graph").textContent = String((graphData.propositions || []).length);
+    document.getElementById("badge-chapters").textContent = String((hubData.chapters || []).length);
+    document.getElementById("badge-demos").textContent = String((hubData.demos || []).length);
+    document.getElementById("badge-videos").textContent = String((hubData.animations || []).length);
+    document.getElementById("badge-sources").textContent = String((hubData.sources || []).length);
+    const examsBadge = document.getElementById("badge-exams");
+    examsBadge.textContent = `${examFilesCount}/${examAttemptsCount}`;
+    examsBadge.title = `${examFilesCount} ready assessment(s) / ${examAttemptsCount} graded attempt(s)`;
+    if (hubData.generatedAt) {
+      const d = new Date(hubData.generatedAt);
+      const label = Number.isNaN(d.getTime())
+        ? String(hubData.generatedAt).slice(0, 16)
+        : d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+      document.getElementById("syncStamp").textContent = `Synced ${label}`;
+    }
+  }
+
+  function rerenderAllViews() {
+    syncHeaderBadgesAndStamp();
+    renderOverview();
+    populateSourceFolders();
+    renderChapters();
+    renderDemos();
+    renderVideos();
+    renderSources();
+    renderExams();
+    if (graphInitialized) {
+      populateGraphFilters();
+      renderGraph(false);
+    }
+    if (reviewState.open) {
+      renderReviewModalBody();
+    }
+  }
+
+  async function refreshLiveState() {
+    if (!liveCaps.live) return false;
+    try {
+      const res = await fetch(`/api/state?energy=${encodeURIComponent(energyMode)}`, { cache: "no-store" });
+      if (!res.ok) return false;
+      const st = await res.json();
+      if (st && st.graph) graphData = st.graph;
+      if (st && st.hub) hubData = { ...hubData, ...st.hub };
+      const forksCount = typeof st?.forksDueCount === "number"
+        ? st.forksDueCount
+        : (Array.isArray(st?.forksDue) ? st.forksDue.length : Number(st?.forksDue || 0));
+      serverExtras = {
+        forksDue: Number.isFinite(forksCount) ? forksCount : 0,
+        arenasCount: Number(st?.arenasCount || 0),
+        reentry: st?.reentry || null,
+        triageRecommended: Boolean(st?.triageRecommended),
+      };
+      rerenderAllViews();
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  function connectLiveEvents() {
+    if (!liveCaps.live || typeof EventSource === "undefined") return;
+    if (sseSource) {
+      try { sseSource.close(); } catch { /* ignore */ }
+      sseSource = null;
+    }
+    try {
+      sseSource = new EventSource("/api/events");
+      sseSource.addEventListener("message", (ev) => {
+        try {
+          const msg = JSON.parse(ev.data || "{}");
+          if (!msg || msg.type === "ping" || msg.type === "heartbeat") return;
+          if (msg.type === "changed" || msg.type === "sync" || msg.type === "state") {
+            clearTimeout(sseRefreshTimer);
+            sseRefreshTimer = setTimeout(() => { refreshLiveState(); }, 250);
+          }
+        } catch { /* ignore malformed ping */ }
+      });
+      sseSource.onerror = () => {
+        // Quietly let EventSource retry without spamming console.
+      };
+    } catch { /* ignore */ }
+  }
+
+  async function probeLiveCapabilities() {
+    if (window.location.protocol === "file:") {
+      liveCaps = { live: false, token: "", version: "", workspaceName: "", lan: null };
+      updateLiveStatusUI();
+      return false;
+    }
+    try {
+      const res = await fetch("/api/capabilities", { cache: "no-store" });
+      if (!res.ok) throw new Error("unavailable");
+      const caps = await res.json();
+      if (caps && caps.live) {
+        liveCaps = {
+          live: true,
+          token: String(caps.token || ""),
+          version: String(caps.version || ""),
+          workspaceName: String(caps.workspaceName || ""),
+          lan: caps.lan || null,
+        };
+        updateLiveStatusUI();
+        await refreshLiveState();
+        connectLiveEvents();
+        return true;
+      }
+    } catch {
+      // Remain cleanly in offline read-only mode with zero console errors.
+    }
+    liveCaps = { live: false, token: "", version: "", workspaceName: "", lan: null };
+    updateLiveStatusUI();
+    return false;
+  }
+
   function getNextReview(n) {
     if (typeof n.nextReview === "string" && n.nextReview.trim()) return n.nextReview.trim().slice(0, 10);
     if (typeof n?.fsrs?.due === "string" && n.fsrs.due.trim()) return n.fsrs.due.trim().slice(0, 10);
@@ -2178,7 +3160,7 @@
   function getRetrievability(n) {
     const stab = getStability(n);
     if (stab === null || stab <= 0) return null;
-    const lastDay = parseDateUtcDays(n?.fsrs?.last_review || n.lastTested);
+    const lastDay = parseDateUtcDays(n?.fsrs?.last_review || n.lastReviewed || n.lastTested);
     const todayDay = parseDateUtcDays(getTodayIso());
     if (lastDay === null || todayDay === null) return null;
     const elapsed = Math.max(0, todayDay - lastDay);
@@ -2555,6 +3537,81 @@
     NOTE: { cls: "note", icon: "●", label: "Note" },
   };
 
+  function parseCueHeaderAttrs(rawAttr) {
+    const attrs = {};
+    const s = String(rawAttr || "").trim();
+    if (!s) return attrs;
+    if (s.startsWith("{") && s.endsWith("}")) {
+      try {
+        const parsed = JSON.parse(s);
+        if (parsed && typeof parsed === "object") {
+          for (const [k, v] of Object.entries(parsed)) {
+            if (v !== null && v !== undefined) attrs[String(k)] = String(v);
+          }
+          return attrs;
+        }
+      } catch { /* fall through to relaxed parser */ }
+    }
+    const inner = s.replace(/^\{|\}$/gu, "");
+    const pairRe = /([A-Za-z_][A-Za-z0-9_-]*)\s*[:=]\s*(?:"([^"]*)"|'([^']*)'|([^,\s}]+))/gu;
+    let m;
+    while ((m = pairRe.exec(inner)) !== null) {
+      const val = m[2] !== undefined ? m[2] : (m[3] !== undefined ? m[3] : m[4]);
+      attrs[m[1]] = String(val || "").trim();
+    }
+    return attrs;
+  }
+
+  function splitCueQaBody(bodyText) {
+    const lines = String(bodyText || "").split(/\r?\n/u);
+    const qLines = [];
+    const aLines = [];
+    let mode = null;
+    for (const ln of lines) {
+      const st = ln.trim();
+      const mq = /^(?:Q|Prompt)\s*:\s*(.*)$/iu.exec(st);
+      const ma = /^(?:A|Answer)\s*:\s*(.*)$/iu.exec(st);
+      if (mq) {
+        mode = "q";
+        if (mq[1].trim()) qLines.push(mq[1].trim());
+      } else if (ma) {
+        mode = "a";
+        if (ma[1].trim()) aLines.push(ma[1].trim());
+      } else if (mode === "q" && st) {
+        qLines.push(st);
+      } else if (mode === "a" && st) {
+        aLines.push(st);
+      }
+    }
+    if (qLines.length || aLines.length) {
+      return { q: qLines.join(" ").trim(), a: aLines.join(" ").trim() };
+    }
+    const blocks = String(bodyText || "").trim().split(/\n\s*\n/u).map((b) => b.trim()).filter(Boolean);
+    if (blocks.length >= 2) {
+      return { q: blocks[0].replace(/\s+/gu, " "), a: blocks.slice(1).join(" ").replace(/\s+/gu, " ") };
+    }
+    return { q: (blocks[0] || "").replace(/\s+/gu, " "), a: "" };
+  }
+
+  function renderInlineRichMd(rawStr) {
+    const held = [];
+    const hold = (html) => {
+      const idx = held.length;
+      held.push(html);
+      return `\u0000RIC${idx}\u0000`;
+    };
+    let s = String(rawStr ?? "");
+    s = s.replace(/`([^`\n]+)`/gu, (_, code) => hold(`<code>${esc(code)}</code>`));
+    s = s.replace(/(?<!\$)\$(?!\$)([^\n$]+?)(?<!\$)\$(?!\$)/gu, (_, tex) =>
+      hold(`<span class="math-inline">${renderTexInner(tex.trim())}</span>`)
+    );
+    s = s.replace(/\\\((.+?)\\\)/gu, (_, tex) =>
+      hold(`<span class="math-inline">${renderTexInner(tex.trim())}</span>`)
+    );
+    s = formatInlineMd(esc(s));
+    return s.replace(/\u0000RIC(\d+)\u0000/gu, (_, idx) => held[Number(idx)] ?? "");
+  }
+
   function renderChapterMarkdown(rawMd) {
     const input = String(rawMd ?? "");
     if (!input.trim()) return `<p style="color:var(--muted);">This chapter note is empty.</p>`;
@@ -2579,6 +3636,37 @@
       return holdBlock(`<div class="md-code-wrap">${langBar}<pre><code>${esc(code.replace(/\n$/, ""))}</code></pre></div>`);
     });
 
+    // 1b. Inline Matuschak Mnemonic Medium :::cue blocks (6-second collapsible review strips)
+    work = work.replace(/^:::cue([^\r\n]*)\r?\n([\s\S]*?)^:::[ \t]*$/gmu, (_, rawAttrs, body) => {
+      const attrs = parseCueHeaderAttrs(rawAttrs);
+      const qa = splitCueQaBody(body);
+      const kind = attrs.kind || "recall";
+      const propId = attrs.propId || "";
+      const cueId = attrs.id || "";
+      const rateControls = propId
+        ? `<div class="md-cue-actions" data-cue-actions>
+            <span style="color:var(--muted);">Quick rate:</span>
+            <button type="button" class="md-cue-rate-btn" data-cue-rate="again" data-prop-id="${esc(propId)}" data-cue-id="${esc(cueId)}">Again</button>
+            <button type="button" class="md-cue-rate-btn" data-cue-rate="hard" data-prop-id="${esc(propId)}" data-cue-id="${esc(cueId)}">Hard</button>
+            <button type="button" class="md-cue-rate-btn" data-cue-rate="good" data-prop-id="${esc(propId)}" data-cue-id="${esc(cueId)}">Good</button>
+            <button type="button" class="md-cue-rate-btn" data-cue-rate="easy" data-prop-id="${esc(propId)}" data-cue-id="${esc(cueId)}">Easy</button>
+            <span class="md-cue-status" style="color:var(--solid);font-weight:600;"></span>
+          </div>`
+        : "";
+      return holdBlock(
+        `<details class="md-cue-strip" data-prop-id="${esc(propId)}" data-cue-id="${esc(cueId)}">` +
+          `<summary>` +
+            `<span class="pill teal" style="flex-shrink:0;">6s Cue · ${esc(kind)}</span>` +
+            `<span class="md-cue-q">${renderInlineRichMd(qa.q || "Recall check")}</span>` +
+          `</summary>` +
+          `<div class="md-cue-body">` +
+            `<div class="md-cue-a">${qa.a ? renderInlineRichMd(qa.a) : `<span style="color:var(--muted);">Think through your answer before continuing.</span>`}</div>` +
+            rateControls +
+          `</div>` +
+        `</details>`
+      );
+    });
+
     // 2. Display math $$...$$ and \[...\]
     work = work.replace(/\$\$([\s\S]+?)\$\$/gu, (_, tex) =>
       holdBlock(`<div class="math-display">${renderTexInner(tex.trim())}</div>`)
@@ -2589,6 +3677,16 @@
 
     // 3. Inline code spans
     work = work.replace(/`([^`\n]+)`/gu, (_, code) => holdInline(`<code>${esc(code)}</code>`));
+
+    // 3b. Inline {{c1::answer}} / {{c1::answer::hint}} cloze deletion strips
+    work = work.replace(/\{\{c(\d+)::([^:}]+?)(?:::([^}]+?))?\}\}/gu, (_, cNum, answer, hint) => {
+      const cleanAns = String(answer || "").trim();
+      const cleanHint = String(hint || "").trim();
+      const maskedLabel = cleanHint ? `[${cleanHint}]` : "[…]";
+      return holdInline(
+        `<button type="button" class="md-cloze" data-cloze-idx="${esc(cNum)}" data-cloze-answer="${esc(cleanAns)}" data-cloze-masked="${esc(maskedLabel)}" aria-expanded="false" title="Click to reveal cloze c${esc(cNum)}">${esc(maskedLabel)}</button>`
+      );
+    });
 
     // 4. Inline math $...$ and \(...\)
     work = work.replace(/(?<!\$)\$(?!\$)([^\n$]+?)(?<!\$)\$(?!\$)/gu, (_, tex) =>
@@ -2817,6 +3915,566 @@
     document.getElementById("readerAudioBar").hidden = true;
   }
 
+  /* ================= FLASHCARD & SVG IMAGE-OCCLUSION MODAL ================= */
+  function extractOcclusionSpec(card) {
+    if (!card || typeof card !== "object") return null;
+    const media = card.cue?.media || card.prop?.media || null;
+    const rawOcc =
+      card.cue?.occlusion ||
+      media?.occlusion ||
+      card.prop?.occlusion ||
+      (Array.isArray(media?.masks) ? media : null);
+    if (!rawOcc) return null;
+
+    let masks = [];
+    let src = media?.src || "";
+    let dataUri = media?.dataUri || "";
+    let width = Number(media?.width || 0);
+    let height = Number(media?.height || 0);
+    let mode = media?.mode || "hide_all";
+
+    if (Array.isArray(rawOcc)) {
+      masks = rawOcc;
+    } else if (typeof rawOcc === "object") {
+      masks = Array.isArray(rawOcc.masks) ? rawOcc.masks : [];
+      if (rawOcc.src) src = rawOcc.src;
+      if (rawOcc.dataUri) dataUri = rawOcc.dataUri;
+      if (rawOcc.width) width = Number(rawOcc.width);
+      if (rawOcc.height) height = Number(rawOcc.height);
+      if (rawOcc.mode) mode = rawOcc.mode;
+    }
+
+    const normalizedMasks = masks
+      .filter((m) => m && typeof m === "object")
+      .map((m, idx) => {
+        const rawBox = Array.isArray(m.bbox) && m.bbox.length >= 4
+          ? m.bbox
+          : (Array.isArray(m.bboxPx) && m.bboxPx.length >= 4 ? m.bboxPx : null);
+        const bbox = rawBox
+          ? rawBox.map((v) => Number(v) || 0)
+          : [Number(m.x) || 0, Number(m.y) || 0, Number(m.w ?? m.width) || 0, Number(m.h ?? m.height) || 0];
+        return {
+          id: String(m.id || `m${idx + 1}`),
+          bbox,
+          label: String(m.label || m.answer || m.text || m.id || `Region ${idx + 1}`),
+          propId: m.propId ? String(m.propId) : null,
+        };
+      })
+      .filter((m) => m.bbox[2] > 0 && m.bbox[3] > 0);
+
+    if (normalizedMasks.length === 0) return null;
+    return {
+      src,
+      dataUri,
+      width: width > 0 ? width : 640,
+      height: height > 0 ? height : 360,
+      mode,
+      masks: normalizedMasks,
+    };
+  }
+
+  function hasOcclusionData(prop) {
+    if (!prop || typeof prop !== "object") return false;
+    if (extractOcclusionSpec({ prop, cue: null })) return true;
+    if (Array.isArray(prop.cues)) {
+      return prop.cues.some((cue) => Boolean(extractOcclusionSpec({ prop, cue })));
+    }
+    return false;
+  }
+
+  function renderFlashcardText(rawText, revealed) {
+    const s = String(rawText ?? "");
+    const clozeTransformed = s.replace(/\{\{c(\d+)::([^:}]+?)(?:::([^}]+?))?\}\}/gu, (_, _idx, ans, hint) => {
+      const cleanAns = String(ans || "").trim();
+      const cleanHint = String(hint || "").trim();
+      if (revealed) return `**${cleanAns}**`;
+      return cleanHint ? `[${cleanHint}]` : "[…]";
+    });
+    return renderInlineRichMd(clozeTransformed);
+  }
+
+  function buildReviewDeck(showAll) {
+    const props = Array.isArray(graphData.propositions) ? graphData.propositions : [];
+    const rank = (s) => (s === "misconception" ? 0 : s === "shaky" ? 1 : 2);
+    const ordered = [...props].sort((a, b) => {
+      const dueDiff = (isNodeDue(b) ? 1 : 0) - (isNodeDue(a) ? 1 : 0);
+      if (dueDiff !== 0) return dueDiff;
+      const rd = rank(a.status) - rank(b.status);
+      if (rd !== 0) return rd;
+      return String(getNextReview(a) || "0000-00-00").localeCompare(String(getNextReview(b) || "0000-00-00"));
+    });
+
+    const filtered = showAll ? ordered : ordered.filter(isNodeDue);
+    const sourceProps = filtered.length > 0 || showAll ? filtered : ordered;
+    const deck = [];
+    for (const p of sourceProps) {
+      const cues = Array.isArray(p.cues) ? p.cues.filter((c) => c && typeof c === "object") : [];
+      if (cues.length > 0) {
+        cues.forEach((cue, idx) => {
+          deck.push({
+            prop: p,
+            propId: p.id,
+            title: p.title || p.id,
+            subject: p.subject || "General",
+            chapter: p.chapter || "",
+            status: p.status || "planned",
+            notes: p.notes || "",
+            boundaryConditions: Array.isArray(p.boundaryConditions) ? p.boundaryConditions : [],
+            isDue: isNodeDue(p),
+            isLeech: isNodeLeech(p),
+            cue,
+            cueIndex: idx,
+            totalCues: cues.length,
+          });
+        });
+      } else {
+        deck.push({
+          prop: p,
+          propId: p.id,
+          title: p.title || p.id,
+          subject: p.subject || "General",
+          chapter: p.chapter || "",
+          status: p.status || "planned",
+          notes: p.notes || "",
+          boundaryConditions: Array.isArray(p.boundaryConditions) ? p.boundaryConditions : [],
+          isDue: isNodeDue(p),
+          isLeech: isNodeLeech(p),
+          cue: {
+            id: null,
+            q: p.title || p.id,
+            a: p.notes || "Explain this proposition from first principles, including its boundary conditions.",
+            synthetic: true,
+          },
+          cueIndex: 0,
+          totalCues: 1,
+        });
+      }
+    }
+    return deck;
+  }
+
+  function renderOcclusionStageHtml(occSpec) {
+    const W = occSpec.width;
+    const H = occSpec.height;
+    const allNormalized = occSpec.masks.every(
+      ({ bbox: [x, y, w, h] }) => x >= 0 && y >= 0 && x + w <= 1.05 && y + h <= 1.05
+    );
+    const revealedCount = occSpec.masks.filter(
+      (m) => reviewState.revealed || reviewState.unmaskedIds.has(m.id)
+    ).length;
+    const allOpen = revealedCount === occSpec.masks.length;
+
+    const imgHref = occSpec.dataUri
+      ? occSpec.dataUri
+      : (occSpec.src ? (/^(?:data:|https?:\/\/|\/)/iu.test(occSpec.src) ? occSpec.src : relHref(occSpec.src)) : "");
+    const hasBgImage = Boolean(imgHref);
+
+    const svgParts = [];
+    if (hasBgImage) {
+      svgParts.push(`<image href="${esc(imgHref)}" x="0" y="0" width="${W}" height="${H}" preserveAspectRatio="xMidYMid meet" />`);
+    } else {
+      svgParts.push(`<rect x="1" y="1" width="${W - 2}" height="${H - 2}" rx="8" fill="var(--bg-card)" stroke="var(--border)" stroke-width="1.5" />`);
+      if (occSpec.src) {
+        svgParts.push(`<text x="14" y="22" font-size="11" font-family="ui-monospace, Menlo, monospace" fill="var(--muted)">${esc(occSpec.src)}</text>`);
+      }
+    }
+
+    occSpec.masks.forEach((m, i) => {
+      const [rx, ry, rw, rh] = allNormalized
+        ? [m.bbox[0] * W, m.bbox[1] * H, m.bbox[2] * W, m.bbox[3] * H]
+        : m.bbox;
+      const isRev = reviewState.revealed || reviewState.unmaskedIds.has(m.id);
+      const shortLbl = m.label.length > 26 ? `${m.label.slice(0, 25)}…` : m.label;
+      const maskCls = `io-mask-group${isRev ? " io-mask-revealed" : ""}${hasBgImage ? " io-mask-over-img" : " io-mask-no-img"}`;
+      const maskText = (!isRev || !hasBgImage)
+        ? `<text x="${rx + rw / 2}" y="${ry + rh / 2 + 4}" text-anchor="middle" font-size="12" font-weight="650" fill="${isRev ? "var(--solid)" : "#ffffff"}">${esc(isRev ? shortLbl : `${i + 1} · ?`)}</text>`
+        : "";
+      svgParts.push(
+        `<g class="${maskCls}" data-io-mask="${esc(m.id)}" role="button" tabindex="0" aria-label="${esc(isRev ? `Revealed: ${m.label}` : `Reveal region ${i + 1}`)}">` +
+          `<rect class="io-mask-rect" x="${rx}" y="${ry}" width="${rw}" height="${rh}" rx="6" />` +
+          maskText +
+        `</g>`
+      );
+    });
+
+    const revealedMasks = occSpec.masks.filter(
+      (m) => reviewState.revealed || reviewState.unmaskedIds.has(m.id)
+    );
+    const legendHtml = revealedMasks.length
+      ? `<div style="display:flex;gap:6px;flex-wrap:wrap;">${revealedMasks.map((m) => `<span class="pill solid">${esc(m.id)}: ${esc(m.label)}</span>`).join("")}</div>`
+      : "";
+
+    return `
+      <div class="io-stage">
+        <div class="io-toolbar">
+          <span>Image Occlusion · ${revealedCount}/${occSpec.masks.length} revealed (click masks to inspect)</span>
+          <button type="button" id="ioToggleAllBtn" style="padding:3px 9px;font-size:11px;">${allOpen ? "Re-mask" : "Reveal All"}</button>
+        </div>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${W} ${H}" width="100%" style="height:auto;border-radius:7px;">
+          ${svgParts.join("")}
+        </svg>
+        ${legendHtml}
+      </div>
+    `;
+  }
+
+  async function rateReviewCard(card, rating) {
+    if (!card || reviewState.busy) return;
+    const durationMs = Math.max(200, Date.now() - (reviewState.cardShownAt || Date.now()));
+    const confidence = Number((reviewState.confidencePct / 100).toFixed(2));
+
+    if (!liveCaps.live) {
+      reviewState.localReviewedIds.add(card.propId);
+      reviewState.banner = {
+        text: `Local preview: marked "${rating}" (${reviewState.confidencePct}% conf) — start Live Studio to persist or copy prompt below.`,
+        kind: "info",
+      };
+      reviewState.revealed = false;
+      reviewState.unmaskedIds = new Set();
+      reviewState.index += 1;
+      reviewState.cardShownAt = Date.now();
+      renderReviewModalBody();
+      return;
+    }
+
+    reviewState.busy = true;
+    renderReviewModalBody();
+    try {
+      const payload = {
+        propId: card.propId,
+        rating,
+        confidence,
+        durationMs,
+      };
+      if (card.cue && card.cue.id && !card.cue.synthetic) {
+        payload.cueId = card.cue.id;
+      }
+      const res = await apiPost("/api/review", payload);
+      const fireCount = Array.isArray(res.fireCredits)
+        ? res.fireCredits.length
+        : Number(res.fireRefreshedCount || 0);
+      const nextDue = res?.node?.nextReview ? ` · next ${String(res.node.nextReview).slice(0, 10)}` : "";
+      const fireMsg = res.fireSummary
+        ? ` · ${res.fireSummary}`
+        : fireCount > 0
+          ? ` · FIRe refreshed ${fireCount} prerequisite${fireCount === 1 ? "" : "s"}`
+          : "";
+      const fullText = `Rated "${rating}"${nextDue}${fireMsg}`;
+      reviewState.banner = { text: fullText, kind: "success" };
+      showToast(fireCount > 0 ? `FIRe refreshed ${fireCount} prerequisite${fireCount === 1 ? "" : "s"}` : fullText);
+      reviewState.revealed = false;
+      reviewState.unmaskedIds = new Set();
+      reviewState.cardShownAt = Date.now();
+      await refreshLiveState();
+      const updatedDeck = buildReviewDeck(reviewState.showAll);
+      if (updatedDeck.length > 0 && reviewState.index >= updatedDeck.length) {
+        reviewState.index = 0;
+      }
+    } catch (err) {
+      reviewState.banner = { text: `Review save failed: ${err?.message || "offline"}`, kind: "info" };
+      showToast(`Review error: ${err?.message || "offline"}`);
+    } finally {
+      reviewState.busy = false;
+      renderReviewModalBody();
+    }
+  }
+
+  function renderReviewModalBody() {
+    const body = document.getElementById("reviewModalBody");
+    const counter = document.getElementById("reviewDeckCounter");
+    const scopeBtn = document.getElementById("reviewDeckScopeBtn");
+    if (!body) return;
+
+    const deck = buildReviewDeck(reviewState.showAll);
+    scopeBtn.textContent = reviewState.showAll ? "Showing: All Cards" : "Showing: Due & Weak";
+    updateLiveStatusUI();
+
+    if (deck.length === 0) {
+      counter.textContent = "0 / 0";
+      body.innerHTML = `
+        ${reviewState.banner ? `<div class="fc-banner ${reviewState.banner.kind === "info" ? "info" : ""}">${esc(reviewState.banner.text)}</div>` : ""}
+        <div class="empty-box">
+          <h3>Review Queue Clear</h3>
+          <p>No propositions are currently due. Switch to <strong>Showing: All Cards</strong> to browse your Knowledge Graph, or start a new chapter.</p>
+        </div>
+      `;
+      return;
+    }
+
+    const safeIdx = ((reviewState.index % deck.length) + deck.length) % deck.length;
+    reviewState.index = safeIdx;
+    const card = deck[safeIdx];
+    counter.textContent = `${safeIdx + 1} / ${deck.length}`;
+    const stCls = ["solid", "shaky", "misconception", "planned"].includes(card.status) ? card.status : "planned";
+    const occSpec = extractOcclusionSpec(card);
+
+    body.innerHTML = `
+      ${reviewState.banner ? `<div class="fc-banner ${reviewState.banner.kind === "info" ? "info" : ""}">${esc(reviewState.banner.text)}</div>` : ""}
+      <div class="fc-card-surface">
+        <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;">
+          <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;">
+            <span class="pill ${stCls}"><span class="dot" style="background:${statusVar(card.status)}"></span>${esc(card.status)}</span>
+            ${card.isLeech ? `<span class="pill shaky">Leech</span>` : ""}
+            <span class="pill">${esc(card.subject)}${card.chapter ? ` · ${esc(card.chapter)}` : ""}</span>
+          </div>
+          <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;">
+            ${card.totalCues > 1 ? `<span class="pill accent">Cue ${card.cueIndex + 1}/${card.totalCues}</span>` : ""}
+            <code>${esc(card.propId)}</code>
+          </div>
+        </div>
+
+        <div class="fc-prompt">${renderFlashcardText(card.cue?.q || card.title, reviewState.revealed)}</div>
+
+        ${occSpec ? renderOcclusionStageHtml(occSpec) : ""}
+
+        <label class="fc-conf-box">
+          <span>Confidence before rating</span>
+          <input type="range" id="fcConfSlider" min="0" max="100" step="5" value="${reviewState.confidencePct}" aria-label="Confidence percentage" />
+          <span class="fc-conf-num" id="fcConfNum">${reviewState.confidencePct}%</span>
+        </label>
+
+        ${!reviewState.revealed ? `
+          <button type="button" class="primary" id="fcRevealBtn" style="justify-content:center;padding:10px 16px;font-size:13.5px;">Show Answer (Space)</button>
+        ` : `
+          <div class="fc-answer">${renderFlashcardText(card.cue?.a || card.title, true)}</div>
+          ${card.notes && !String(card.cue?.a || "").includes(card.notes) ? `<div class="notes-box"><strong>Notes:</strong> ${renderInlineRichMd(card.notes)}</div>` : ""}
+          ${card.boundaryConditions.length ? `
+            <div style="display:flex;flex-direction:column;gap:5px;">
+              <span class="section-heading" style="margin:0;">Boundary Conditions</span>
+              ${card.boundaryConditions.slice(0, 3).map((bc) => `<div class="bc-item">${esc(typeof bc === "string" ? bc : (bc.lemma || bc.condition || bc.text || ""))}</div>`).join("")}
+            </div>
+          ` : ""}
+          <div class="fc-rating-grid">
+            <button type="button" class="fc-rate-btn again" data-fc-rate="again" ${reviewState.busy ? "disabled" : ""}>1 · Again</button>
+            <button type="button" class="fc-rate-btn hard" data-fc-rate="hard" ${reviewState.busy ? "disabled" : ""}>2 · Hard</button>
+            <button type="button" class="fc-rate-btn good" data-fc-rate="good" ${reviewState.busy ? "disabled" : ""}>3 · Good</button>
+            <button type="button" class="fc-rate-btn easy" data-fc-rate="easy" ${reviewState.busy ? "disabled" : ""}>4 · Easy</button>
+          </div>
+        `}
+      </div>
+      ${!liveCaps.live ? `
+        <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;font-size:12px;color:var(--muted);">
+          <span>Offline preview mode — run <code>syntopik serve --open</code> to save reviews directly with FIRe.</span>
+          <button type="button" id="fcCopyFallbackBtn">Copy Review Prompt</button>
+        </div>
+      ` : ""}
+    `;
+
+    const confSlider = document.getElementById("fcConfSlider");
+    const confNum = document.getElementById("fcConfNum");
+    if (confSlider && confNum) {
+      confSlider.addEventListener("input", () => {
+        reviewState.confidencePct = Number(confSlider.value);
+        confNum.textContent = `${reviewState.confidencePct}%`;
+      });
+    }
+
+    const revBtn = document.getElementById("fcRevealBtn");
+    if (revBtn) {
+      revBtn.addEventListener("click", () => {
+        reviewState.revealed = true;
+        renderReviewModalBody();
+      });
+    }
+
+    body.querySelectorAll("[data-fc-rate]").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        rateReviewCard(card, btn.getAttribute("data-fc-rate"));
+      });
+    });
+
+    const toggleAllBtn = document.getElementById("ioToggleAllBtn");
+    if (toggleAllBtn && occSpec) {
+      toggleAllBtn.addEventListener("click", () => {
+        const allRev = occSpec.masks.every((m) => reviewState.revealed || reviewState.unmaskedIds.has(m.id));
+        reviewState.unmaskedIds = allRev ? new Set() : new Set(occSpec.masks.map((m) => m.id));
+        renderReviewModalBody();
+      });
+    }
+
+    body.querySelectorAll("[data-io-mask]").forEach((g) => {
+      const mid = g.getAttribute("data-io-mask");
+      const toggle = () => {
+        if (reviewState.unmaskedIds.has(mid)) reviewState.unmaskedIds.delete(mid);
+        else reviewState.unmaskedIds.add(mid);
+        renderReviewModalBody();
+      };
+      g.addEventListener("click", toggle);
+      g.addEventListener("keydown", (ev) => {
+        if (ev.key === "Enter" || ev.key === " ") {
+          ev.preventDefault();
+          toggle();
+        }
+      });
+    });
+
+    const copyFb = document.getElementById("fcCopyFallbackBtn");
+    if (copyFb) {
+      copyFb.addEventListener("click", () => {
+        copyText(
+          `Review proposition ${card.propId} ("${card.title}") with me without spoilers and log my FSRS-6 + FIRe rating.`,
+          "Copied review prompt ✓"
+        );
+      });
+    }
+  }
+
+  function openReviewModal(opts = {}) {
+    reviewState.open = true;
+    reviewState.revealed = false;
+    reviewState.unmaskedIds = new Set();
+    reviewState.banner = null;
+    reviewState.cardShownAt = Date.now();
+    if (typeof opts.showAll === "boolean") reviewState.showAll = opts.showAll;
+    let deck = buildReviewDeck(reviewState.showAll);
+    if (opts.propId) {
+      let idx = deck.findIndex((c) => c.propId === opts.propId);
+      if (idx === -1) {
+        reviewState.showAll = true;
+        deck = buildReviewDeck(true);
+        idx = deck.findIndex((c) => c.propId === opts.propId);
+      }
+      reviewState.index = idx >= 0 ? idx : 0;
+    } else {
+      reviewState.index = 0;
+    }
+    document.getElementById("reviewModal").classList.add("open");
+    renderReviewModalBody();
+  }
+
+  function closeReviewModal() {
+    reviewState.open = false;
+    document.getElementById("reviewModal").classList.remove("open");
+  }
+
+  /* ================= STUDIO LIVE ACTIONS (RECOVER, TRIAGE, POCKET, PACK, OBSIDIAN) ================= */
+  async function runStudioAction(kind, params = {}) {
+    if (studioActionBusy) return;
+    const chapterSlug = params.chapter || hubData.activeChapterTracker?.slug || "";
+
+    if (!liveCaps.live) {
+      const prompts = {
+        recover: "I fell behind — run srs_engine.py recover --daily-cap 15 --apply to smooth my review backlog calmly.",
+        triage: `Run 48h exam triage and compile an Anti-Mastery 1-page crib sheet PDF${chapterSlug ? ` for ${chapterSlug}` : ""}.`,
+        pocket: "Export an offline Pocket Phone Deck (25 cards) using syntopik.pocket so I can review on my phone.",
+        pack: `Export a zero-PII portable Study Pack (.syntopik-pack.zip) for ${chapterSlug || "my active chapter"}.`,
+        obsidian: "Sync my Knowledge Graph and chapter notes with Obsidian via scripts/vault_sync.py.",
+      };
+      copyText(prompts[kind] || "Continue", "Offline mode — copied prompt to clipboard ✓");
+      return;
+    }
+
+    studioActionBusy = true;
+    try {
+      if (kind === "recover") {
+        const res = await apiPost("/api/recover", { dailyCap: params.dailyCap || 15 });
+        const cnt = Number(res.rescheduledCount ?? res.rescheduled ?? 0);
+        showToast(`Calm Catch-Up smoothed ${cnt} card${cnt === 1 ? "" : "s"} to ≤${res.dailyCap || 15}/day ✓`);
+        await refreshLiveState();
+      } else if (kind === "triage") {
+        const res = await apiPost("/api/triage/crib-sheet", chapterSlug ? { chapter: chapterSlug } : {});
+        const excluded = res?.antiMasteryMeta?.excludedSolidCount;
+        const exclNote = typeof excluded === "number" && excluded > 0 ? ` · excluded ${excluded} already-solid concept${excluded === 1 ? "" : "s"}` : "";
+        const href = res.url || (res.relPath && !res.relPath.startsWith("/") ? relHref(res.relPath) : "");
+        const compiled = res.compiled !== false;
+        studioActionBanner = {
+          title: compiled ? "Anti-Mastery 1-Page Crib Sheet Ready" : "Anti-Mastery Spec Ready (Typst not installed)",
+          summary: compiled
+            ? `Compiled ${res.pages ? `${res.pages}-page ` : ""}PDF of weak invariants & traps${exclNote}.`
+            : `Saved anti-mastery JSON spec${exclNote}.`,
+          href,
+          linkLabel: compiled ? "Open Crib Sheet PDF ↗" : "Open Spec JSON ↗",
+        };
+        showToast(compiled ? "Compiled Anti-Mastery 1-page PDF ✓" : "Saved Anti-Mastery spec ✓");
+        await refreshLiveState();
+      } else if (kind === "pocket") {
+        const res = await apiPost("/api/export/pocket", { limit: params.limit || 25 });
+        const href = res.pocketUrl || res.url || (res.relPath && !res.relPath.startsWith("/") ? relHref(res.relPath) : "");
+        const cardCnt = res.cardCount ?? res.cardsCount ?? res.count;
+        studioActionBanner = {
+          title: "Pocket Phone Deck Exported",
+          summary: `${cardCnt != null ? `${cardCnt} cards · ` : ""}Zero-CDN offline mobile HTML ready${res.lanUrl ? ` · LAN: ${res.lanUrl}` : ""}.`,
+          href,
+          linkLabel: "Open Pocket Deck ↗",
+          qrSvg: typeof res.qrSvg === "string" && res.qrSvg.trim().startsWith("<svg") ? res.qrSvg : "",
+        };
+        showToast("Pocket Phone Deck ready ✓");
+        renderActiveAutopilot();
+      } else if (kind === "pack") {
+        const res = await apiPost("/api/pack/export", { target: chapterSlug || "all" });
+        const rawOut = String(res.relPath || res.path || res.packPath || res.outPath || "");
+        const fileName = rawOut ? rawOut.split(/[\\/]/u).pop() : "study-pack.syntopik-pack.zip";
+        const packRel = res.relPath ? String(res.relPath).replace(/^\.\//u, "") : "";
+        const packHref = res.url || (packRel && !packRel.startsWith("/") ? relHref(packRel) : "");
+        studioActionBanner = {
+          title: "Zero-PII Study Pack Exported",
+          summary: `Exported ${fileName} (personal logs, mistakes, and FSRS history stripped).`,
+          href: packHref,
+          linkLabel: "Download Pack ↗",
+        };
+        showToast(`Exported ${fileName} ✓`);
+        renderActiveAutopilot();
+      } else if (kind === "obsidian") {
+        const res = await apiPost("/api/export/obsidian", {});
+        const expCount = res.propositionsExported ?? res.exportedCount ?? (Array.isArray(res.files) ? res.files.length : null);
+        const vaultName = res.vaultDir ? String(res.vaultDir).split(/[\\/]/u).filter(Boolean).pop() : "";
+        const obsSummary = res.summary || (
+          expCount !== null
+            ? `Obsidian vault synced: ${expCount} note${expCount === 1 ? "" : "s"}${vaultName ? ` → ${vaultName}` : ""} ✓`
+            : (vaultName ? `Synced Obsidian vault (${vaultName}) ✓` : "Synced with Obsidian vault ✓")
+        );
+        showToast(obsSummary);
+        await refreshLiveState();
+      }
+    } catch (err) {
+      showToast(`Action failed: ${err?.message || "unavailable"}`);
+    } finally {
+      studioActionBusy = false;
+    }
+  }
+
+  function renderReentryBrief() {
+    const card = document.getElementById("reentryCard");
+    if (!card) return;
+    const re = serverExtras.reentry;
+    if (!re || typeof re !== "object") {
+      card.hidden = true;
+      card.innerHTML = "";
+      return;
+    }
+    card.hidden = false;
+    const bullets = Array.isArray(re.reloadBullets) ? re.reloadBullets.filter(Boolean) : [];
+    const crumb = re.breadcrumb && typeof re.breadcrumb === "object"
+      ? (re.breadcrumb.summary || re.breadcrumb.firstMicroAction || "")
+      : (typeof re.breadcrumb === "string" ? re.breadcrumb : "");
+    card.innerHTML = `
+      <div class="section-head" style="margin-bottom:0;">
+        <div>
+          <div style="display:flex;align-items:center;gap:7px;flex-wrap:wrap;margin-bottom:4px;">
+            <span class="pill teal">Welcome Back</span>
+            ${re.daysAbsent ? `<span class="pill">${esc(String(re.daysAbsent))} days away · zero backlog guilt</span>` : ""}
+          </div>
+          <h2>Calm Re-Entry Brief</h2>
+          <p>${re.lastMasteredTruth ? `Last locked truth: ${esc(re.lastMasteredTruth)}` : "Pick up cleanly with one familiar warm-start cue."}</p>
+        </div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;">
+          ${re.warmStartPropId ? `<button class="primary" id="reentryWarmStartBtn" type="button">Warm-Start Cue</button>` : ""}
+          <button id="reentryCalmRecoverBtn" type="button">Smooth Queue (≤15/day)</button>
+        </div>
+      </div>
+      ${crumb ? `<div style="font-size:12.5px;color:var(--text-2);"><strong>Breadcrumb:</strong> ${esc(crumb)}</div>` : ""}
+      ${bullets.length ? `<ul class="reentry-bullets">${bullets.slice(0, 3).map((b) => `<li>${esc(b)}</li>`).join("")}</ul>` : ""}
+    `;
+    const wsBtn = document.getElementById("reentryWarmStartBtn");
+    if (wsBtn && re.warmStartPropId) {
+      wsBtn.addEventListener("click", () => openReviewModal({ propId: re.warmStartPropId }));
+    }
+    const recBtn = document.getElementById("reentryCalmRecoverBtn");
+    if (recBtn) {
+      recBtn.addEventListener("click", () => runStudioAction("recover", { dailyCap: 15 }));
+    }
+  }
+
   /* ================= ACTIVE CHAPTER AUTOPILOT CARD ================= */
   const MILESTONE_LABELS = [
     ["sourcesIndexed", "Sources Indexed"],
@@ -2850,11 +4508,21 @@
           <p>Paste <code>Start &lt;Topic, Course, or Chapter&gt;</code> (with or without attached PDFs/code) in Antigravity, Claude Code, or Codex. Your live Topics progress, Question ledger, Milestones, and 1-click <code>Continue</code> resume button appear right here.</p>
           ${trackers.length > 0 ? `<div class="ap-other-row" style="justify-content:center;">Saved trackers (${trackers.length}): ${trackers.map((t) => `<span class="pill">${esc(t.title)} · ${t.pct}%</span>`).join("")}</div>` : ""}
         </div>
+        <div class="ap-tools-row">
+          <div class="ap-tools-group">
+            <button type="button" id="apTriageBtn" class="${serverExtras.triageRecommended ? "primary" : ""}">48h Calm Triage · Anti-Mastery 1p PDF</button>
+            <button type="button" id="apPocketBtn">Pocket Phone Deck</button>
+            <button type="button" id="apPackBtn">Export Study Pack</button>
+            <button type="button" id="apObsidianBtn">Obsidian Sync</button>
+          </div>
+        </div>
+        ${renderStudioActionBannerHtml()}
       `;
       const btn = document.getElementById("copyStartAutopilotBtn");
       if (btn) {
         btn.addEventListener("click", () => copyText(startPrompt, "Copied Start Chapter prompt ✓"));
       }
+      wireStudioActionButtons(null);
       return;
     }
 
@@ -2878,6 +4546,35 @@
       (a) => String(a.slug || "").toLowerCase() === String(active.slug || "").toLowerCase()
     );
 
+    const energyNextHtml = (() => {
+      if (energyMode === "low") {
+        return `
+          <div class="ap-next-banner" style="border-left-color:var(--teal);">
+            <span><strong>Low-Energy Pace:</strong> 0 new proofs today — complete up to 3 warm-start cues, then stop guilt-free.</span>
+            <button type="button" class="primary" id="apLowWarmupBtn" style="padding:4px 10px;font-size:11.5px;">Start Warm-Start</button>
+          </div>
+        `;
+      }
+      if (energyMode === "deep") {
+        const deepExtras = [
+          serverExtras.forksDue > 0 ? `${serverExtras.forksDue} blunder fork${serverExtras.forksDue === 1 ? "" : "s"} due` : "",
+          serverExtras.arenasCount > 0 ? `${serverExtras.arenasCount} counterexample arena${serverExtras.arenasCount === 1 ? "" : "s"}` : "",
+        ].filter(Boolean).join(" · ");
+        return `
+          <div class="ap-next-banner" style="border-left-color:var(--accent);">
+            <span><strong>Deep Focus Step:</strong> ${esc(active.nextHint || "Derive next core invariant from first principles")}${deepExtras ? ` · ${esc(deepExtras)}` : ""}</span>
+            <span class="subtle" style="font-size:11.5px;color:var(--muted);">Productive Failure &amp; synthesis mode</span>
+          </div>
+        `;
+      }
+      return active.nextHint ? `
+        <div class="ap-next-banner">
+          <span><strong>Next Step:</strong> ${esc(active.nextHint)}</span>
+          <span class="subtle" style="font-size:11.5px;color:var(--muted);">${liveCaps.live ? "Click topic chips or milestones to update live" : "Paste Continue in chat to advance"}</span>
+        </div>
+      ` : "";
+    })();
+
     card.innerHTML = `
       <div class="section-head" style="margin-bottom:8px;">
         <div>
@@ -2886,6 +4583,7 @@
             <span class="pill teal">${esc(active.subject || "General")}</span>
             <span class="pill solid">${active.pct ?? 0}% complete</span>
             ${active.doubtCount > 0 ? `<span class="pill shaky">${active.doubtCount} open doubt${active.doubtCount === 1 ? "" : "s"}</span>` : ""}
+            ${serverExtras.triageRecommended ? `<span class="pill shaky">Exam Near · 48h Triage Ready</span>` : ""}
           </div>
           <h2>${esc(active.title || active.slug)}</h2>
         </div>
@@ -2905,12 +4603,15 @@
           </div>
           ${topicsArr.length > 0 ? `
             <div class="ap-topic-chips">
-              ${topicsArr.slice(0, 8).map((t) => {
+              ${topicsArr.slice(0, 10).map((t) => {
                 const st = ["mastered", "in_progress", "probed"].includes(t.status) ? t.status : "pending";
                 const sym = st === "mastered" ? "✓" : st === "in_progress" ? "▶" : st === "probed" ? "◐" : "○";
-                return `<span class="ap-topic-chip ${st}" title="${esc(t.level || "basics")} · ${esc(t.status || "pending")}">${sym} ${esc(truncate(t.title || t.id, 26))}</span>`;
+                const tip = liveCaps.live
+                  ? `${t.title || t.id} (${st}) — click to cycle pending → in_progress → mastered`
+                  : `${t.level || "basics"} · ${st}`;
+                return `<span class="ap-topic-chip ${st}${liveCaps.live ? " is-interactive" : ""}" data-topic-id="${esc(t.id)}" data-topic-status="${esc(st)}" title="${esc(tip)}"${liveCaps.live ? ' role="button" tabindex="0"' : ""}>${sym} ${esc(truncate(t.title || t.id, 26))}</span>`;
               }).join("")}
-              ${topicsArr.length > 8 ? `<span class="ap-topic-chip">+${topicsArr.length - 8} more</span>` : ""}
+              ${topicsArr.length > 10 ? `<span class="ap-topic-chip">+${topicsArr.length - 10} more</span>` : ""}
             </div>
           ` : `<div style="font-size:11.5px;color:var(--muted);">No topics indexed yet.</div>`}
         </div>
@@ -2932,22 +4633,34 @@
         </div>
       </div>
 
-      ${active.nextHint ? `
-        <div class="ap-next-banner">
-          <span><strong>Next Step:</strong> ${esc(active.nextHint)}</span>
-          <span class="subtle" style="font-size:11.5px;color:var(--muted);">Paste <code>Continue</code> in chat to advance</span>
-        </div>
-      ` : ""}
+      ${energyNextHtml}
 
       <div class="ap-milestones-wrap">
-        <div class="section-heading" style="margin:0;">Milestones (${doneMilestones}/${MILESTONE_LABELS.length})</div>
+        <div class="section-heading" style="margin:0;">Milestones (${doneMilestones}/${MILESTONE_LABELS.length})${liveCaps.live ? ' <span style="font-weight:500;text-transform:none;letter-spacing:0;color:var(--muted);">· click to toggle</span>' : ""}</div>
         <div class="ap-milestones">
           ${MILESTONE_LABELS.map(([key, label]) => {
             const done = Boolean(milestonesObj[key]);
-            return `<span class="ap-milestone ${done ? "done" : ""}">${done ? "✓" : "○"} ${esc(label)}</span>`;
+            return `<span class="ap-milestone ${done ? "done" : ""}${liveCaps.live ? " is-interactive" : ""}" data-milestone-key="${esc(key)}" data-milestone-val="${done ? "1" : "0"}"${liveCaps.live ? ' role="button" tabindex="0" title="Click to toggle milestone"' : ""}>${done ? "✓" : "○"} ${esc(label)}</span>`;
           }).join("")}
         </div>
       </div>
+
+      <div class="ap-tools-row">
+        <div class="ap-tools-group">
+          <button type="button" id="apTriageBtn" class="${serverExtras.triageRecommended ? "primary" : ""}">48h Calm Triage · Anti-Mastery 1p PDF</button>
+          <button type="button" id="apPocketBtn">Pocket Phone Deck</button>
+          <button type="button" id="apPackBtn">Export Study Pack</button>
+          <button type="button" id="apObsidianBtn">Obsidian Sync</button>
+        </div>
+        ${serverExtras.forksDue > 0 || serverExtras.arenasCount > 0 ? `
+          <div class="ap-tools-group">
+            ${serverExtras.forksDue > 0 ? `<span class="pill shaky">${serverExtras.forksDue} fork${serverExtras.forksDue === 1 ? "" : "s"} due</span>` : ""}
+            ${serverExtras.arenasCount > 0 ? `<span class="pill accent">${serverExtras.arenasCount} arena${serverExtras.arenasCount === 1 ? "" : "s"}</span>` : ""}
+          </div>
+        ` : ""}
+      </div>
+
+      ${renderStudioActionBannerHtml()}
 
       ${matchingAudio ? `
         <div class="chapter-audio-box" style="margin-top:12px;">
@@ -2969,6 +4682,282 @@
       contBtn.addEventListener("click", () => {
         copyText("Continue", 'Copied "Continue" prompt — paste into your AI harness ✓');
       });
+    }
+    const lowWarmBtn = document.getElementById("apLowWarmupBtn");
+    if (lowWarmBtn) {
+      lowWarmBtn.addEventListener("click", () => openReviewModal({ showAll: false }));
+    }
+
+    if (liveCaps.live) {
+      const nextStatusFor = (st) => (st === "pending" || st === "probed" ? "in_progress" : st === "in_progress" ? "mastered" : "pending");
+      card.querySelectorAll(".ap-topic-chip[data-topic-id]").forEach((chip) => {
+        const trigger = async () => {
+          const topicId = chip.getAttribute("data-topic-id");
+          const curStatus = chip.getAttribute("data-topic-status") || "pending";
+          const nextStatus = nextStatusFor(curStatus);
+          try {
+            await apiPost("/api/tracker/topic", { slug: active.slug, topicId, status: nextStatus });
+            showToast(`Topic "${topicId}" → ${nextStatus}`);
+            await refreshLiveState();
+          } catch (err) {
+            showToast(`Update failed: ${err?.message || "offline"}`);
+          }
+        };
+        chip.addEventListener("click", trigger);
+        chip.addEventListener("keydown", (ev) => {
+          if (ev.key === "Enter" || ev.key === " ") { ev.preventDefault(); trigger(); }
+        });
+      });
+
+      card.querySelectorAll(".ap-milestone[data-milestone-key]").forEach((ms) => {
+        const trigger = async () => {
+          const key = ms.getAttribute("data-milestone-key");
+          const curVal = ms.getAttribute("data-milestone-val") === "1";
+          try {
+            await apiPost("/api/tracker/milestone", { slug: active.slug, key, value: !curVal });
+            showToast(`Milestone "${key}" ${!curVal ? "checked ✓" : "unchecked"}`);
+            await refreshLiveState();
+          } catch (err) {
+            showToast(`Update failed: ${err?.message || "offline"}`);
+          }
+        };
+        ms.addEventListener("click", trigger);
+        ms.addEventListener("keydown", (ev) => {
+          if (ev.key === "Enter" || ev.key === " ") { ev.preventDefault(); trigger(); }
+        });
+      });
+    }
+
+    wireStudioActionButtons(active.slug);
+  }
+
+  function renderStudioActionBannerHtml() {
+    if (!studioActionBanner) return "";
+    return `
+      <div class="studio-result-bar" id="studioActionResultBar">
+        <div style="display:flex;flex-direction:column;gap:4px;flex:1;min-width:200px;">
+          <strong>${esc(studioActionBanner.title)}</strong>
+          <span style="color:var(--text-2);">${esc(studioActionBanner.summary)}</span>
+          ${studioActionBanner.href ? `<div style="margin-top:4px;"><a class="btn-link primary" href="${esc(studioActionBanner.href)}" target="_blank" rel="noopener">${esc(studioActionBanner.linkLabel || "Open Artifact ↗")}</a></div>` : ""}
+        </div>
+        ${studioActionBanner.qrSvg ? `<div class="studio-qr-box" title="Scan on phone (LAN)">${studioActionBanner.qrSvg}</div>` : ""}
+        <button type="button" id="dismissStudioResultBtn" style="padding:4px 8px;">✕</button>
+      </div>
+    `;
+  }
+
+  function wireStudioActionButtons(slug) {
+    const tBtn = document.getElementById("apTriageBtn");
+    if (tBtn) tBtn.addEventListener("click", () => runStudioAction("triage", { chapter: slug }));
+    const pBtn = document.getElementById("apPocketBtn");
+    if (pBtn) pBtn.addEventListener("click", () => runStudioAction("pocket", { limit: 25 }));
+    const pkBtn = document.getElementById("apPackBtn");
+    if (pkBtn) pkBtn.addEventListener("click", () => runStudioAction("pack", { chapter: slug || "all" }));
+    const obBtn = document.getElementById("apObsidianBtn");
+    if (obBtn) obBtn.addEventListener("click", () => runStudioAction("obsidian", {}));
+    const disBtn = document.getElementById("dismissStudioResultBtn");
+    if (disBtn) {
+      disBtn.addEventListener("click", () => {
+        studioActionBanner = null;
+        renderActiveAutopilot();
+      });
+    }
+  }
+
+  /* ================= 365-DAY RETENTION HEATMAP + BRIER CALIBRATION ================= */
+  function buildFallbackHeatmapDays() {
+    const todayIso = hubData.today || getTodayIso();
+    const endMs = Date.parse(`${todayIso}T00:00:00Z`) || Date.now();
+    const dayMs = 86400000;
+    const days = [];
+    for (let i = 364; i >= 0; i -= 1) {
+      const d = new Date(endMs - i * dayMs).toISOString().slice(0, 10);
+      days.push({ date: d, count: 0, reviews: 0, exams: 0, level: 0 });
+    }
+    return {
+      windowDays: 365,
+      startDate: days[0].date,
+      endDate: days[days.length - 1].date,
+      totalEvents: 0,
+      activeDays: 0,
+      maxDailyCount: 0,
+      days,
+    };
+  }
+
+  function renderRetentionAndCalibration() {
+    const hmBox = document.getElementById("retentionHeatmapContainer");
+    const calBox = document.getElementById("calibrationStripContainer");
+    const leechBox = document.getElementById("leechesContainer");
+    const summaryPill = document.getElementById("retentionSummaryPill");
+    const leechesPill = document.getElementById("leechesCountPill");
+    const subtitle = document.getElementById("retentionSubtitle");
+    if (!hmBox || !calBox) return;
+
+    const hm = (hubData.retentionHeatmap && Array.isArray(hubData.retentionHeatmap.days) && hubData.retentionHeatmap.days.length > 0)
+      ? hubData.retentionHeatmap
+      : buildFallbackHeatmapDays();
+
+    const days = hm.days;
+    const totalEvents = Number(hm.totalEvents || 0);
+    const activeDays = Number(hm.activeDays || 0);
+    if (summaryPill) {
+      summaryPill.textContent = `${totalEvents} event${totalEvents === 1 ? "" : "s"} · ${activeDays} active day${activeDays === 1 ? "" : "s"}`;
+    }
+    if (subtitle) {
+      subtitle.textContent = totalEvents > 0
+        ? `Last 365 days (${hm.startDate} to ${hm.endDate}) — calm mineral-sage ledger of reviews and timed assessments.`
+        : "Quiet 365-day activity ledger — reviews and timed assessments fill in mineral sage as you practice.";
+    }
+
+    // Build 53-week x 7-day SVG grid aligned by weekday (0=Sun..6=Sat)
+    const firstDateMs = Date.parse(`${days[0].date}T00:00:00Z`) || Date.now();
+    const startDow = new Date(firstDateMs).getUTCDay();
+    const cell = 11;
+    const gap = 3;
+    const step = cell + gap;
+    const padL = 28;
+    const padT = 18;
+    const totalCols = Math.ceil((startDow + days.length) / 7);
+    const svgW = padL + totalCols * step + 6;
+    const svgH = padT + 7 * step + 4;
+    const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+    const fillVars = ["var(--heat-0)", "var(--heat-1)", "var(--heat-2)", "var(--heat-3)", "var(--heat-4)"];
+
+    const monthLabels = [];
+    let lastMonth = -1;
+    let lastLabelCol = -4;
+    const rects = [];
+
+    days.forEach((d, idx) => {
+      const slot = startDow + idx;
+      const col = Math.floor(slot / 7);
+      const row = slot % 7;
+      const x = padL + col * step;
+      const y = padT + row * step;
+      const lvl = Math.max(0, Math.min(4, Number(d.level || 0)));
+      const mo = Number(String(d.date).slice(5, 7)) - 1;
+      if (mo !== lastMonth && col - lastLabelCol >= 3) {
+        lastMonth = mo;
+        lastLabelCol = col;
+        monthLabels.push(`<text x="${x}" y="11" fill="var(--muted)" font-size="9.5" font-family="var(--font-ui)">${MONTHS[mo] || ""}</text>`);
+      }
+      const details = d.count > 0
+        ? `${d.date} · ${d.count} event${d.count === 1 ? "" : "s"} (${d.reviews || 0} rev, ${d.exams || 0} exam)`
+        : `${d.date} · quiet day`;
+      rects.push(
+        `<rect x="${x}" y="${y}" width="${cell}" height="${cell}" rx="2.5" fill="${fillVars[lvl]}">` +
+          `<title>${esc(details)}</title>` +
+        `</rect>`
+      );
+    });
+
+    const dowTicks = [
+      [1, "Mon"],
+      [3, "Wed"],
+      [5, "Fri"],
+    ].map(([r, lbl]) => `<text x="0" y="${padT + r * step + 9}" fill="var(--muted)" font-size="9" font-family="var(--font-ui)">${lbl}</text>`).join("");
+
+    hmBox.innerHTML = `
+      <div class="heatmap-wrap">
+        <svg class="heatmap-svg" viewBox="0 0 ${svgW} ${svgH}" role="img" aria-label="365-day retention activity heatmap">
+          ${monthLabels.join("")}
+          ${dowTicks}
+          ${rects.join("")}
+        </svg>
+      </div>
+      <div class="heatmap-foot">
+        <span>${esc(hm.startDate)} → ${esc(hm.endDate)}</span>
+        <span class="heatmap-legend">
+          <span>Quiet</span>
+          ${fillVars.map((fv) => `<span class="heat-swatch" style="background:${fv}"></span>`).join("")}
+          <span>Active</span>
+        </span>
+      </div>
+    `;
+
+    // Calibration strip
+    const cal = hubData.calibration && typeof hubData.calibration === "object" ? hubData.calibration : {};
+    const samples = Number(cal.sampleCount || 0);
+    const brier = typeof cal.brierScore === "number" && Number.isFinite(cal.brierScore) ? cal.brierScore : null;
+    const bias = typeof cal.overconfidenceBias === "number" && Number.isFinite(cal.overconfidenceBias) ? cal.overconfidenceBias : null;
+    const ece = typeof cal.ece === "number" && Number.isFinite(cal.ece) ? cal.ece : null;
+    const acc = typeof cal.accuracy === "number" && Number.isFinite(cal.accuracy) ? cal.accuracy : null;
+    const meanConf = typeof cal.meanConfidence === "number" && Number.isFinite(cal.meanConfidence) ? cal.meanConfidence : null;
+    const hyper = Number(cal.hypercorrectionCount || 0);
+    const lucky = Number(cal.luckyGuessCount || 0);
+
+    const biasLabel = bias === null
+      ? "—"
+      : `${bias > 0 ? "+" : ""}${bias.toFixed(2)}`;
+    const biasSub = bias === null
+      ? "Rate with confidence to calibrate"
+      : bias > 0.08
+        ? "Slight overconfidence — slow down before locking"
+        : bias < -0.08
+          ? "Slight underconfidence — trust your derivations"
+          : "Well-calibrated confidence";
+    const brierColor = brier === null ? "var(--text)" : brier <= 0.16 ? "var(--solid)" : brier <= 0.25 ? "var(--shaky)" : "var(--misconception)";
+
+    calBox.innerHTML = `
+      <div class="calibration-strip">
+        <div class="cal-tile">
+          <span class="cal-label">Brier Score</span>
+          <span class="cal-value" style="color:${brierColor}">${brier !== null ? brier.toFixed(3) : "—"}</span>
+          <span class="cal-sub">${samples > 0 ? `Over ${samples} confidence-rated review${samples === 1 ? "" : "s"}` : "Lower is sharper (0.00 = ideal)"}</span>
+        </div>
+        <div class="cal-tile">
+          <span class="cal-label">Confidence Bias</span>
+          <span class="cal-value">${esc(biasLabel)}</span>
+          <span class="cal-sub">${esc(biasSub)}</span>
+        </div>
+        <div class="cal-tile">
+          <span class="cal-label">ECE · Acc vs Conf</span>
+          <span class="cal-value">${ece !== null ? ece.toFixed(3) : "—"}</span>
+          <span class="cal-sub">${acc !== null && meanConf !== null ? `Acc ${Math.round(acc * 100)}% vs Conf ${Math.round(meanConf * 100)}%` : "Expected calibration error"}</span>
+        </div>
+        <div class="cal-tile">
+          <span class="cal-label">Metacognition</span>
+          <span class="cal-value">${hyper} / ${lucky}</span>
+          <span class="cal-sub">Hypercorrections · Lucky guesses</span>
+        </div>
+      </div>
+    `;
+
+    // Leeches
+    let leeches = Array.isArray(hubData.leeches) ? hubData.leeches : [];
+    if (leeches.length === 0) {
+      leeches = (graphData.propositions || [])
+        .filter((p) => getLapses(p) >= 4 || (getDifficulty(p) !== null && getDifficulty(p) >= 8.5))
+        .map((p) => ({ id: p.id, title: p.title || p.id, lapses: getLapses(p), difficulty: getDifficulty(p) }));
+    }
+    if (leechesPill) {
+      leechesPill.hidden = leeches.length === 0;
+      leechesPill.textContent = `${leeches.length} leech${leeches.length === 1 ? "" : "es"}`;
+    }
+    if (leechBox) {
+      if (leeches.length === 0) {
+        leechBox.innerHTML = "";
+      } else {
+        leechBox.innerHTML = `
+          <div class="leech-strip">
+            <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;">
+              <span class="section-heading" style="margin:0;">Leech Concepts (${leeches.length})</span>
+              <span style="font-size:11.5px;color:var(--muted);">Repeated lapses — re-derive or split into smaller atomic truths</span>
+            </div>
+            <div class="leech-chips">
+              ${leeches.slice(0, 8).map((l) => `
+                <button type="button" class="leech-chip" data-leech-node="${esc(l.id)}" title="${esc(l.reason || `lapses=${l.lapses || 0}`)}">
+                  ${esc(truncate(l.title || l.id, 34))}${l.lapses ? ` · ${l.lapses} lapses` : ""}
+                </button>
+              `).join("")}
+            </div>
+          </div>
+        `;
+        leechBox.querySelectorAll("[data-leech-node]").forEach((btn) => {
+          btn.addEventListener("click", () => openNodeInGraph(btn.getAttribute("data-leech-node")));
+        });
+      }
     }
   }
 
@@ -2997,6 +4986,9 @@
     const total = props.length;
     const avgBkt = bkts.length ? Math.round((bkts.reduce((a, b) => a + b, 0) / bkts.length) * 100) : null;
     const pct = (n) => (total > 0 ? (n / total) * 100 : 0);
+    const overdueCount = props.filter((p) => getCountdown(p).overdue).length;
+    const dailyCap = 15;
+    const suppressOverdue = energyMode === "low" || Boolean(serverExtras.reentry?.suppressOverdueCount);
 
     const chapters = hubData.chapters || [];
     const demos = hubData.demos || [];
@@ -3004,9 +4996,11 @@
     const sources = hubData.sources || [];
     const examFiles = hubData.examFiles || [];
 
+    renderReentryBrief();
+
     document.getElementById("overviewKpis").innerHTML = `
       <div class="kpi-card">
-        <div class="kpi-label"><span>Knowledge Graph Nodes</span><span>${chains.length} edges</span></div>
+        <div class="kpi-label"><span>Knowledge Graph Nodes</span><span>${getGraphEdges().length} edges</span></div>
         <div class="kpi-big">${total}</div>
         <div class="seg-bar" aria-label="Mastery status breakdown">
           <span style="width:${pct(counts.solid)}%;background:var(--solid)"></span>
@@ -3030,17 +5024,19 @@
       </div>
 
       <div class="kpi-card">
-        <div class="kpi-label"><span>FSRS Items Due Today</span><span>${getTodayIso()}</span></div>
-        <div class="kpi-big" style="color:${liveDue.length > 0 ? "var(--shaky)" : "var(--solid)"}">${liveDue.length}</div>
+        <div class="kpi-label"><span>${suppressOverdue ? "Calm Review Budget" : "FSRS Review Queue"}</span><span>${getTodayIso()}</span></div>
+        <div class="kpi-big" style="color:${liveDue.length > 0 ? (suppressOverdue ? "var(--teal)" : "var(--shaky)") : "var(--solid)"}">${suppressOverdue ? Math.min(3, liveDue.length) : liveDue.length}</div>
         <div class="kpi-meta">
-          ${liveDue.length > 0
-            ? `${counts.misconception} misconceptions · ${counts.shaky} shaky · ${Math.max(0, liveDue.length - counts.misconception - counts.shaky)} scheduled due`
-            : "All caught up — zero concepts overdue today."}
+          ${suppressOverdue
+            ? (liveDue.length > 0 ? "Warm-start pacing — up to 3 gentle cues, zero backlog pressure." : "All caught up — zero concepts waiting today.")
+            : (liveDue.length > 0
+              ? `${counts.misconception} misconceptions · ${counts.shaky} shaky · ${Math.max(0, liveDue.length - counts.misconception - counts.shaky)} scheduled due`
+              : "All caught up — zero concepts due today.")}
         </div>
       </div>
 
       <div class="kpi-card">
-        <div class="kpi-label"><span>Local Study Assets</span><span>Offline Ready</span></div>
+        <div class="kpi-label"><span>Local Study Assets</span><span>${liveCaps.live ? "Live Studio" : "Offline Ready"}</span></div>
         <div class="kpi-big">${chapters.length + demos.length + animations.length + sources.length + examFiles.length}</div>
         <div class="kpi-meta">
           <span class="pill">${chapters.length} chapters/sheets</span>
@@ -3052,10 +5048,40 @@
       </div>
     `;
 
-    // Due Review Strip
+    // 1-Click Calm Catch-Up visibility (overdue > cap)
+    const recoverBtn = document.getElementById("calmRecoverBtn");
+    if (recoverBtn) {
+      recoverBtn.hidden = !(overdueCount > dailyCap || liveDue.length > dailyCap);
+    }
+
+    // Due Review Strip (adapted calmly to Cognitive Energy mode)
     const dueContainer = document.getElementById("dueReviewContainer");
+    let displayDue = liveDue;
+    if (energyMode === "low" && liveDue.length > 0) {
+      displayDue = [...liveDue]
+        .sort((a, b) => {
+          const ra = getRetrievability(a);
+          const rb = getRetrievability(b);
+          const da = ra !== null ? Math.abs(ra - 0.75) : 0.5;
+          const db = rb !== null ? Math.abs(rb - 0.75) : 0.5;
+          return da - db;
+        })
+        .slice(0, 3);
+    } else if (energyMode === "deep" && liveDue.length > 0) {
+      displayDue = [...liveDue]
+        .sort((a, b) => {
+          const la = isNodeLeech(a) ? 0 : 1;
+          const lb = isNodeLeech(b) ? 0 : 1;
+          if (la !== lb) return la - lb;
+          return (getBkt(a) ?? 0.5) - (getBkt(b) ?? 0.5);
+        })
+        .slice(0, 9);
+    } else {
+      displayDue = liveDue.slice(0, 9);
+    }
+
     if (liveDue.length === 0) {
-      document.getElementById("dueStripSubtitle").textContent = "Zero concepts overdue right now — build a new chapter or run a practice drill.";
+      document.getElementById("dueStripSubtitle").textContent = "Zero concepts waiting right now — build a new chapter or browse all cards in the reviewer.";
       dueContainer.innerHTML = `
         <div class="empty-box" style="padding:22px;">
           <h3>Clean Review Queue</h3>
@@ -3065,14 +5091,22 @@
         </div>
       `;
     } else {
-      document.getElementById("dueStripSubtitle").textContent = `${liveDue.length} concept${liveDue.length === 1 ? "" : "s"} need attention — click any card to inspect its dependency chain.`;
-      dueContainer.innerHTML = `<div class="due-list">${liveDue.slice(0, 9).map((n) => {
+      const modeHint = energyMode === "low"
+        ? `Low-energy calm cap: showing ${displayDue.length} warm-start cue${displayDue.length === 1 ? "" : "s"} — click any card to review.`
+        : energyMode === "deep"
+          ? `Deep focus: prioritizing leeches and lowest-BKT bottlenecks (${liveDue.length} in queue).`
+          : `${liveDue.length} concept${liveDue.length === 1 ? "" : "s"} ready — click any card to launch Flashcard & Occlusion review.`;
+      document.getElementById("dueStripSubtitle").textContent = modeHint;
+      dueContainer.innerHTML = `<div class="due-list">${displayDue.map((n) => {
         const b = getBkt(n);
         const s = getStability(n);
         const cd = getCountdown(n);
+        const ic = getImplicitCredit(n);
+        const leech = isNodeLeech(n);
+        const occ = hasOcclusionData(n);
         const stCls = ["solid", "shaky", "misconception", "planned"].includes(n.status) ? n.status : "planned";
         return `
-          <div class="due-item" data-open-node="${esc(n.id)}">
+          <div class="due-item" data-review-node="${esc(n.id)}">
             <div class="due-item-top">
               <div class="due-item-title"><span class="dot" style="background:${statusVar(n.status)};margin-right:7px"></span>${esc(n.title || n.id)}</div>
               <span class="pill ${stCls}">${esc(cd.short)}</span>
@@ -3081,13 +5115,32 @@
               <span>${esc(n.subject || "General")}${n.chapter ? ` · ${esc(n.chapter)}` : ""}</span>
               <span>BKT ${b !== null ? Math.round(b * 100) + "%" : "—"}</span>
               <span>S ${formatStability(s)}</span>
+              ${ic > 0 ? `<span style="color:var(--solid);">FIRe +${ic.toFixed(2)}</span>` : ""}
             </div>
+            ${(leech || occ) ? `
+              <div style="display:flex;gap:5px;flex-wrap:wrap;">
+                ${leech ? `<span class="pill shaky">Leech</span>` : ""}
+                ${occ ? `<span class="pill teal">SVG Occlusion</span>` : ""}
+              </div>
+            ` : ""}
             ${n.notes ? `<div class="due-item-note">${esc(truncate(n.notes, 110))}</div>` : ""}
+            <div style="display:flex;justify-content:flex-end;margin-top:auto;padding-top:4px;">
+              <button type="button" data-open-node="${esc(n.id)}" style="padding:3px 8px;font-size:11px;">Inspect Chain →</button>
+            </div>
           </div>
         `;
       }).join("")}</div>`;
+      dueContainer.querySelectorAll("[data-review-node]").forEach((el) => {
+        el.addEventListener("click", (ev) => {
+          if (ev.target.closest("[data-open-node]")) return;
+          openReviewModal({ propId: el.getAttribute("data-review-node") });
+        });
+      });
       dueContainer.querySelectorAll("[data-open-node]").forEach((el) => {
-        el.addEventListener("click", () => openNodeInGraph(el.getAttribute("data-open-node")));
+        el.addEventListener("click", (ev) => {
+          ev.stopPropagation();
+          openNodeInGraph(el.getAttribute("data-open-node"));
+        });
       });
     }
 
@@ -3121,6 +5174,7 @@
     });
 
     renderActiveAutopilot();
+    renderRetentionAndCalibration();
     renderMistakeAnalytics();
 
     // Recently updated artifacts
@@ -4045,7 +6099,87 @@
     }).join("")}</div>`;
   }
 
-  /* ================= SOURCES TAB ================= */
+  /* ================= SOURCES TAB + QUICK IMPORT + READING QUEUE ================= */
+  async function handleQuickImport() {
+    if (quickImportBusy) return;
+    const inputEl = document.getElementById("quickImportInput");
+    const slugEl = document.getElementById("quickImportSlug");
+    const btnEl = document.getElementById("quickImportBtn");
+    const target = String(inputEl?.value || "").trim();
+    const slug = String(slugEl?.value || "").trim();
+    if (!target) {
+      showToast("Paste a YouTube, arXiv, GitHub, or web URL first");
+      if (inputEl) inputEl.focus();
+      return;
+    }
+
+    if (!liveCaps.live) {
+      const cmd = slug ? `syntopik import "${target}" --slug ${slug}` : `syntopik import "${target}"`;
+      copyText(cmd, "Offline mode — copied syntopik import command ✓");
+      return;
+    }
+
+    quickImportBusy = true;
+    const origLbl = btnEl ? btnEl.textContent : "Import Source";
+    if (btnEl) {
+      btnEl.disabled = true;
+      btnEl.textContent = "Importing…";
+    }
+    try {
+      const payload = slug ? { target, slug } : { target };
+      const res = await apiPost("/api/import", payload);
+      if (inputEl) inputEl.value = "";
+      if (slugEl) slugEl.value = "";
+      showToast(res.summary || `Imported "${res.slug || slug || "source"}" into sources/ ✓`);
+      await refreshLiveState();
+    } catch (err) {
+      showToast(`Import failed: ${err?.message || "check URL"}`);
+    } finally {
+      quickImportBusy = false;
+      if (btnEl) {
+        btnEl.disabled = false;
+        btnEl.textContent = origLbl;
+      }
+    }
+  }
+
+  function renderReadingQueue() {
+    const container = document.getElementById("readingQueueContainer");
+    const pill = document.getElementById("readingQueueCountPill");
+    if (!container || !pill) return;
+    const items = Array.isArray(hubData.readingQueue) ? hubData.readingQueue : [];
+    pill.textContent = `${items.length} slice${items.length === 1 ? "" : "s"}`;
+
+    if (items.length === 0) {
+      container.innerHTML = `<div style="font-size:12.5px;color:var(--muted);">0 incremental reading slices queued — import a web article, lecture, or paper URL above to stage extracts here.</div>`;
+      return;
+    }
+
+    container.innerHTML = `<div class="rq-list">${items.slice(0, 12).map((item) => {
+      const stageCls = item.stage === "crystallized" ? "solid" : item.stage === "extracted" ? "teal" : "accent";
+      const safeUrl = item.url && isSafeLinkUrl(item.url) ? item.url : "";
+      const rawLocal = String(item.relPath || item.sourcePath || "").trim().replace(/^\.\//u, "");
+      const relLink = rawLocal && !rawLocal.startsWith("/") && isSafeLinkUrl(rawLocal) ? relHref(rawLocal) : "";
+      return `
+        <div class="rq-row">
+          <div style="display:flex;flex-direction:column;gap:4px;flex:1;min-width:220px;">
+            <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;">
+              <span class="pill ${stageCls}">${esc(item.stage || "queued")}</span>
+              <span class="pill">Priority ${esc(String(item.priority ?? 50))}</span>
+              ${item.nextReview ? `<span style="font-size:11px;color:var(--muted);font-family:var(--font-mono);">Next ${esc(String(item.nextReview).slice(0, 10))}</span>` : ""}
+            </div>
+            <strong style="font-size:13.5px;">${esc(item.title || item.id)}</strong>
+            ${item.excerpt || item.notes ? `<div style="font-size:12px;color:var(--text-2);line-height:1.45;">${esc(truncate(item.excerpt || item.notes, 160))}</div>` : ""}
+          </div>
+          <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;">
+            ${relLink ? `<a class="btn-link" href="${esc(relLink)}" target="_blank" rel="noopener">Open Local ↗</a>` : ""}
+            ${safeUrl ? `<a class="btn-link" href="${esc(safeUrl)}" target="_blank" rel="noopener noreferrer">Source URL ↗</a>` : ""}
+          </div>
+        </div>
+      `;
+    }).join("")}</div>`;
+  }
+
   function populateSourceFolders() {
     const sel = document.getElementById("sourcesFolderFilter");
     const folders = [...new Set((hubData.sources || []).map((s) => s.folder).filter(Boolean))].sort();
@@ -4053,6 +6187,7 @@
   }
 
   function renderSources() {
+    renderReadingQueue();
     const q = document.getElementById("sourcesSearch").value.trim().toLowerCase();
     const folder = document.getElementById("sourcesFolderFilter").value;
     const items = (hubData.sources || []).filter((item) => {
@@ -4364,7 +6499,7 @@
     });
 
     const idSet = new Set(nodes.map((n) => n.id));
-    const edges = (graphData.chains || []).filter((e) => idSet.has(e.from) && idSet.has(e.to));
+    const edges = getGraphEdges().filter((e) => idSet.has(e.from) && idSet.has(e.to));
     return { nodes, edges };
   }
 
@@ -4632,14 +6767,21 @@
 
   function renderGraphInspector(n) {
     const byId = new Map((graphData.propositions || []).map((p) => [p.id, p]));
-    const incoming = (graphData.chains || []).filter((e) => e.to === n.id);
-    const outgoing = (graphData.chains || []).filter((e) => e.from === n.id);
+    const allEdges = getGraphEdges();
+    const incoming = allEdges.filter((e) => e.to === n.id);
+    const outgoing = allEdges.filter((e) => e.from === n.id);
     const bkt = getBkt(n);
     const bktPct = bkt !== null ? Math.round(bkt * 100) : null;
     const stab = getStability(n);
     const diff = getDifficulty(n);
     const retr = getRetrievability(n);
     const cd = getCountdown(n);
+    const lapses = getLapses(n);
+    const implicitCredit = getImplicitCredit(n);
+    const leech = isNodeLeech(n);
+    const boundaryConditions = Array.isArray(n.boundaryConditions)
+      ? n.boundaryConditions.filter((bc) => bc !== null && bc !== undefined && String(typeof bc === "string" ? bc : (bc.lemma || bc.condition || bc.text || bc.note || "")).trim())
+      : [];
     const statusCls = ["solid", "shaky", "misconception", "planned"].includes(n.status) ? n.status : "planned";
 
     const renderEdgeItem = (e, targetId) => {
@@ -4661,6 +6803,7 @@
       </div>
       <div class="detail-meta">
         <span class="pill ${statusCls}"><span class="dot" style="background:${statusVar(n.status)}"></span>${esc(n.status || "planned")}</span>
+        ${leech ? `<span class="pill shaky">Leech</span>` : ""}
         ${n.kind ? `<span class="pill">${esc(n.kind)}</span>` : ""}
         ${n.subject ? `<span class="pill">${esc(n.subject)}</span>` : ""}
         ${n.chapter ? `<span class="pill">${esc(n.chapter)}</span>` : ""}
@@ -4678,14 +6821,44 @@
           <span class="metric-value">${formatStability(stab)}</span>
           <span class="metric-sub">${diff !== null ? `D ${diff.toFixed(1)}/10` : "Unrated"}${retr !== null ? ` · R≈${Math.round(retr * 100)}%` : ""}</span>
         </div>
+        <div class="metric-box">
+          <span class="metric-label">FIRe Credit</span>
+          <span class="metric-value" style="color:${implicitCredit > 0 ? "var(--solid)" : "var(--text)"}">${implicitCredit.toFixed(2)}</span>
+          <span class="metric-sub">${n.lastImplicitReview ? `Implicit ${esc(String(n.lastImplicitReview).slice(0, 10))}` : "Prerequisite credit"}</span>
+        </div>
+        <div class="metric-box">
+          <span class="metric-label">Lapses</span>
+          <span class="metric-value" style="color:${leech ? "var(--shaky)" : "var(--text)"}">${lapses}</span>
+          <span class="metric-sub">${leech ? "Leech · re-derive" : "FSRS lapses"}</span>
+        </div>
       </div>
       <div class="metric-box">
         <span class="metric-label">Next Review Countdown</span>
         <span style="font-size:13.5px;font-weight:650;color:${cd.overdue ? "var(--misconception)" : cd.dueToday ? "var(--shaky)" : "var(--text)"}">${esc(cd.text)}</span>
-        <span class="metric-sub">${n.lastTested ? `Last tested: ${esc(n.lastTested)}` : "Not tested yet"}</span>
+        <span class="metric-sub">${n.lastReviewed ? `Last reviewed: ${esc(String(n.lastReviewed).slice(0, 10))}` : n.lastTested ? `Last tested: ${esc(String(n.lastTested).slice(0, 10))}` : n?.fsrs?.last_review ? `Last reviewed: ${esc(String(n.fsrs.last_review).slice(0, 10))}` : "Not tested yet"}</span>
       </div>
+      ${liveCaps.live ? `
+        <div class="graph-quick-review">
+          <div class="section-heading" style="margin:0;">Live FSRS-6 Review</div>
+          <div class="fc-rating-grid" style="gap:5px;">
+            <button type="button" class="fc-rate-btn again" style="padding:6px 4px;font-size:11px;" data-graph-rate="again" ${graphReviewBusy ? "disabled" : ""}>Again</button>
+            <button type="button" class="fc-rate-btn hard" style="padding:6px 4px;font-size:11px;" data-graph-rate="hard" ${graphReviewBusy ? "disabled" : ""}>Hard</button>
+            <button type="button" class="fc-rate-btn good" style="padding:6px 4px;font-size:11px;" data-graph-rate="good" ${graphReviewBusy ? "disabled" : ""}>Good</button>
+            <button type="button" class="fc-rate-btn easy" style="padding:6px 4px;font-size:11px;" data-graph-rate="easy" ${graphReviewBusy ? "disabled" : ""}>Easy</button>
+          </div>
+        </div>
+      ` : ""}
       ${n.notes ? `<div class="notes-box">${esc(n.notes)}</div>` : ""}
-      <button class="primary" id="copyConceptDrillBtn" style="justify-content:center;width:100%;">Copy Drill Prompt for Concept</button>
+      ${boundaryConditions.length ? `
+        <div>
+          <div class="section-heading">Boundary Conditions (${boundaryConditions.length})</div>
+          <ul class="bc-list">${boundaryConditions.map((bc) => `<li class="bc-item">${esc(typeof bc === "string" ? bc : (bc.lemma || bc.condition || bc.text || bc.note || ""))}</li>`).join("")}</ul>
+        </div>
+      ` : ""}
+      <div style="display:flex;gap:6px;flex-wrap:wrap;">
+        <button class="primary" id="reviewGraphNodeBtn" style="flex:1;justify-content:center;">Open Flashcard</button>
+        <button id="copyConceptDrillBtn" style="flex:1;justify-content:center;">Copy Drill Prompt</button>
+      </div>
       <div>
         <div class="section-heading">Depends On (${incoming.length})</div>
         <ul class="edge-list">${incoming.length ? incoming.map((e) => renderEdgeItem(e, e.from)).join("") : `<li class="edge-item" style="color:var(--muted)">Root / Foundation node</li>`}</ul>
@@ -4700,11 +6873,34 @@
       selectedNodeId = null;
       renderGraph(false);
     });
+    document.getElementById("reviewGraphNodeBtn").addEventListener("click", () => {
+      openReviewModal({ propId: n.id });
+    });
     document.getElementById("copyConceptDrillBtn").addEventListener("click", () => {
       copyText(
         `Drill me on ${n.id} ("${n.title || n.id}") without spoilers using fresh scenarios, verify my reasoning, and update my FSRS + BKT rating with scripts/srs_engine.py.`,
         "Copied concept drill prompt ✓"
       );
+    });
+    document.querySelectorAll("#graphInspector [data-graph-rate]").forEach((btn) => {
+      btn.addEventListener("click", async () => {
+        if (!liveCaps.live || graphReviewBusy) return;
+        graphReviewBusy = true;
+        renderGraphInspector(n);
+        try {
+          const rating = btn.getAttribute("data-graph-rate");
+          const res = await apiPost("/api/review", { propId: n.id, rating, confidence: graphConfPct / 100 });
+          const fc = Array.isArray(res.fireCredits) ? res.fireCredits.length : Number(res.fireRefreshedCount || 0);
+          showToast(fc > 0 ? `Rated "${rating}" · FIRe refreshed ${fc} prerequisite${fc === 1 ? "" : "s"}` : `Rated "${rating}" ✓`);
+          await refreshLiveState();
+        } catch (err) {
+          showToast(`Review failed: ${err?.message || "offline"}`);
+        } finally {
+          graphReviewBusy = false;
+          const updated = (graphData.propositions || []).find((p) => p.id === n.id);
+          if (updated && selectedNodeId === n.id) renderGraphInspector(updated);
+        }
+      });
     });
     document.querySelectorAll("#graphInspector [data-jump]").forEach((el) => {
       el.addEventListener("click", () => selectGraphNode(el.getAttribute("data-jump"), true));
@@ -4750,25 +6946,17 @@
   /* ================= INIT & EVENTS ================= */
   function init() {
     applyTheme(safeStorageGet("study-harness-theme") || "dark");
+    const savedEnergy = safeStorageGet("syntopik-energy-mode") || "normal";
+    energyMode = ["low", "normal", "deep"].includes(savedEnergy) ? savedEnergy : "normal";
+    document.querySelectorAll("#energySelector .energy-btn").forEach((btn) => {
+      const isAct = btn.getAttribute("data-energy") === energyMode;
+      btn.classList.toggle("active", isAct);
+      btn.setAttribute("aria-pressed", isAct ? "true" : "false");
+      btn.addEventListener("click", () => setEnergyMode(btn.getAttribute("data-energy"), true));
+    });
 
-    // Badges & sync stamp
-    const examFilesCount = (hubData.examFiles || []).length;
-    const examAttemptsCount = (hubData.examAttempts || []).length;
-    document.getElementById("badge-graph").textContent = String((graphData.propositions || []).length);
-    document.getElementById("badge-chapters").textContent = String((hubData.chapters || []).length);
-    document.getElementById("badge-demos").textContent = String((hubData.demos || []).length);
-    document.getElementById("badge-videos").textContent = String((hubData.animations || []).length);
-    document.getElementById("badge-sources").textContent = String((hubData.sources || []).length);
-    const examsBadge = document.getElementById("badge-exams");
-    examsBadge.textContent = `${examFilesCount}/${examAttemptsCount}`;
-    examsBadge.title = `${examFilesCount} ready assessment(s) / ${examAttemptsCount} graded attempt(s)`;
-    if (hubData.generatedAt) {
-      const d = new Date(hubData.generatedAt);
-      const label = Number.isNaN(d.getTime())
-        ? hubData.generatedAt.slice(0, 16)
-        : d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
-      document.getElementById("syncStamp").textContent = `Synced ${label}`;
-    }
+    updateLiveStatusUI();
+    syncHeaderBadgesAndStamp();
 
     renderOverview();
     populateSourceFolders();
@@ -4783,7 +6971,13 @@
       btn.addEventListener("click", () => switchTab(btn.getAttribute("data-tab")));
     });
 
-    // Overview quick buttons
+    // Overview quick buttons + Flashcard review modal + Calm Catch-Up
+    document.getElementById("openFlashcardModalBtn").addEventListener("click", () => {
+      openReviewModal({ showAll: false });
+    });
+    document.getElementById("calmRecoverBtn").addEventListener("click", () => {
+      runStudioAction("recover", { dailyCap: 15 });
+    });
     document.getElementById("openDueInGraphBtn").addEventListener("click", () => {
       switchTab("graph");
       document.getElementById("statusFilter").value = "due";
@@ -4795,6 +6989,84 @@
     });
     document.getElementById("copyMistakeDrillBtn").addEventListener("click", () => {
       copyText(MISTAKE_DRILL_PROMPT, "Copied Top-3 Trap Drill prompt ✓");
+    });
+
+    // Flashcard modal controls
+    document.getElementById("reviewModalCloseBtn").addEventListener("click", closeReviewModal);
+    document.getElementById("reviewModal").addEventListener("click", (e) => {
+      if (e.target.id === "reviewModal") closeReviewModal();
+    });
+    document.getElementById("reviewDeckScopeBtn").addEventListener("click", () => {
+      reviewState.showAll = !reviewState.showAll;
+      reviewState.index = 0;
+      reviewState.revealed = false;
+      reviewState.unmaskedIds = new Set();
+      reviewState.cardShownAt = Date.now();
+      renderReviewModalBody();
+    });
+    document.getElementById("reviewPrevBtn").addEventListener("click", () => {
+      reviewState.index -= 1;
+      reviewState.revealed = false;
+      reviewState.unmaskedIds = new Set();
+      reviewState.cardShownAt = Date.now();
+      renderReviewModalBody();
+    });
+    document.getElementById("reviewNextBtn").addEventListener("click", () => {
+      reviewState.index += 1;
+      reviewState.revealed = false;
+      reviewState.unmaskedIds = new Set();
+      reviewState.cardShownAt = Date.now();
+      renderReviewModalBody();
+    });
+
+    // Sources quick-import bar
+    document.getElementById("quickImportBtn").addEventListener("click", handleQuickImport);
+    document.getElementById("quickImportInput").addEventListener("keydown", (e) => {
+      if (e.key === "Enter") {
+        e.preventDefault();
+        handleQuickImport();
+      }
+    });
+
+    // Chapter Reader inline cloze & :::cue rating delegation
+    document.getElementById("readerBody").addEventListener("click", async (e) => {
+      const clozeBtn = e.target.closest(".md-cloze");
+      if (clozeBtn) {
+        const revealed = clozeBtn.classList.toggle("revealed");
+        clozeBtn.setAttribute("aria-expanded", revealed ? "true" : "false");
+        clozeBtn.textContent = revealed
+          ? (clozeBtn.getAttribute("data-cloze-answer") || "")
+          : (clozeBtn.getAttribute("data-cloze-masked") || "[…]");
+        return;
+      }
+      const rateBtn = e.target.closest(".md-cue-rate-btn");
+      if (rateBtn) {
+        const propId = rateBtn.getAttribute("data-prop-id") || "";
+        const cueId = rateBtn.getAttribute("data-cue-id") || "";
+        const rating = rateBtn.getAttribute("data-cue-rate") || "good";
+        const strip = rateBtn.closest(".md-cue-strip");
+        const statusEl = strip ? strip.querySelector(".md-cue-status") : null;
+        if (!liveCaps.live) {
+          copyText(
+            `Record FSRS rating "${rating}" for ${propId}${cueId ? ` (cue ${cueId})` : ""} using scripts/srs_engine.py.`,
+            "Offline mode — copied rating prompt ✓"
+          );
+          if (statusEl) statusEl.textContent = "Copied prompt ✓";
+          return;
+        }
+        try {
+          const payload = { propId, rating };
+          if (cueId) payload.cueId = cueId;
+          const res = await apiPost("/api/review", payload);
+          const fc = Array.isArray(res.fireCredits) ? res.fireCredits.length : Number(res.fireRefreshedCount || 0);
+          const msg = fc > 0 ? `Rated ${rating} · FIRe refreshed ${fc}` : `Rated ${rating} ✓`;
+          if (statusEl) statusEl.textContent = msg;
+          showToast(msg);
+          refreshLiveState();
+        } catch (err) {
+          if (statusEl) statusEl.textContent = err?.message || "Save failed";
+        }
+      }
     });
 
     // Exams tab controls
@@ -4953,6 +7225,8 @@
       if (e.key === "Escape") {
         if (!shortcutPop.hidden) {
           setShortcutPopoverOpen(false);
+        } else if (reviewState.open) {
+          closeReviewModal();
         } else if (document.getElementById("chapterReaderDrawer").classList.contains("open")) {
           closeChapterReader();
         } else if (document.getElementById("previewModal").classList.contains("open")) {
@@ -4967,6 +7241,23 @@
       }
 
       if (e.ctrlKey || e.metaKey || e.altKey || isEditableFocused()) return;
+
+      if (reviewState.open) {
+        if (e.key === " ") {
+          e.preventDefault();
+          if (!reviewState.revealed) {
+            reviewState.revealed = true;
+            renderReviewModalBody();
+          }
+        } else if (reviewState.revealed && ["1", "2", "3", "4"].includes(e.key)) {
+          e.preventDefault();
+          const map = { "1": "again", "2": "hard", "3": "good", "4": "easy" };
+          const deck = buildReviewDeck(reviewState.showAll);
+          const card = deck.length ? deck[reviewState.index % deck.length] : null;
+          if (card) rateReviewCard(card, map[e.key]);
+        }
+        return;
+      }
 
       if (e.key === "/") {
         e.preventDefault();
@@ -5001,6 +7292,9 @@
         if (activeTab === "graph" && graphInitialized) fitToView();
       }).observe(document.getElementById("graphStage"));
     }
+
+    // Progressive Live Studio discovery (never calls fetch on file://)
+    probeLiveCapabilities();
   }
 
   init();

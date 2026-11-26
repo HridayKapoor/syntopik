@@ -1,10 +1,88 @@
 #!/usr/bin/env node
-import { existsSync, readdirSync, readFileSync } from "node:fs";
+import { accessSync, constants, existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { execFileSync } from "node:child_process";
+import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
-const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", "..");
+const hookDir = path.dirname(fileURLToPath(import.meta.url));
+const packageRoot = existsSync(path.join(path.resolve(hookDir, ".."), "scripts", "sync-graph.mjs"))
+	? path.resolve(hookDir, "..")
+	: path.resolve(hookDir, "..", "..");
+
+function isPluginCachePath(dirPath) {
+	if (!dirPath) return false;
+	const norm = path.resolve(dirPath).replace(/\\/gu, "/");
+	return (
+		norm.includes("/.claude/plugins/cache/") ||
+		norm.includes("/.claude/plugins/marketplaces/") ||
+		norm.includes("/.gemini/extensions/") ||
+		norm.includes("/.gemini/config/plugins/") ||
+		norm.includes("/.codex/plugins/") ||
+		norm.includes("/node_modules/")
+	);
+}
+
+function isWritableDir(dirPath) {
+	try {
+		if (!existsSync(dirPath)) return false;
+		accessSync(dirPath, constants.W_OK);
+		return true;
+	} catch {
+		return false;
+	}
+}
+
+function resolveAttachedOrDirect(dirPath) {
+	if (!dirPath || typeof dirPath !== "string" || !dirPath.trim()) return null;
+	const abs = path.resolve(dirPath.trim());
+	if (!existsSync(abs)) return null;
+	if (existsSync(path.join(abs, "knowledge-graph"))) return abs;
+	const dotSynt = path.join(abs, ".syntopik");
+	if (existsSync(dotSynt)) {
+		try {
+			if (statSync(dotSynt).isDirectory()) return dotSynt;
+		} catch {
+			return null;
+		}
+		return abs;
+	}
+	return null;
+}
+
+function resolveWorkspaceRoot(payload) {
+	const wsEnv = (process.env.SYNT_WORKSPACE || process.env.MLH_WORKSPACE || "").trim();
+	if (wsEnv) return path.resolve(wsEnv);
+
+	const candidates = [
+		process.env.CLAUDE_PROJECT_DIR || "",
+		Array.isArray(payload?.workspacePaths) ? payload.workspacePaths[0] : "",
+		typeof payload?.cwd === "string" ? payload.cwd : "",
+		process.cwd(),
+	];
+	for (const cand of candidates) {
+		const hit = resolveAttachedOrDirect(cand);
+		if (hit && !isPluginCachePath(hit)) return hit;
+	}
+
+	if (!isPluginCachePath(packageRoot) && isWritableDir(packageRoot)) {
+		return packageRoot;
+	}
+	return path.join(os.homedir(), ".syntopik");
+}
+
+function findSyncScript(workspaceRoot) {
+	const candidates = [
+		path.join(workspaceRoot, "scripts", "sync-graph.mjs"),
+		path.join(packageRoot, "scripts", "sync-graph.mjs"),
+		path.resolve(hookDir, "..", "scripts", "sync-graph.mjs"),
+		path.resolve(hookDir, "..", "..", "scripts", "sync-graph.mjs"),
+	];
+	if (process.env.CLAUDE_PLUGIN_ROOT) {
+		candidates.push(path.join(process.env.CLAUDE_PLUGIN_ROOT, "scripts", "sync-graph.mjs"));
+	}
+	return candidates.find((p) => existsSync(p)) || null;
+}
 
 const LEVEL_RANK = { basics: 0, main: 1, advanced: 2 };
 const DONE_Q_STATUSES = new Set(["solved", "mastered", "skipped"]);
@@ -363,8 +441,7 @@ try {
 		}
 	}
 
-	const wsEnv = process.env.SYNT_WORKSPACE || process.env.MLH_WORKSPACE || "";
-	const root = wsEnv.trim() ? path.resolve(wsEnv.trim()) : repoRoot;
+	const root = resolveWorkspaceRoot(payload);
 
 	const customKgEnv = process.env.SYNT_KG_DIR || process.env.MLH_KG_DIR || "";
 	const kgDir = customKgEnv.trim()
@@ -376,15 +453,19 @@ try {
 		? path.resolve(customChaptersEnv.trim())
 		: path.join(root, "chapters");
 
-	// Fresh-clone auto-bootstrap: ONLY when running without a custom *_KG_DIR override
-	// and knowledge-graph/graph-data.js does not exist yet on disk.
+	// Fresh-clone auto-bootstrap: ONLY when running without a custom *_KG_DIR override,
+	// outside read-only plugin caches, in a writable workspace, and graph-data.js does not exist yet.
 	const graphDataFile = path.join(kgDir, "graph-data.js");
-	if (!customKgEnv.trim() && !existsSync(graphDataFile)) {
-		const syncScript = path.join(repoRoot, "scripts", "sync-graph.mjs");
-		if (existsSync(syncScript)) {
+	const canBootstrap =
+		!customKgEnv.trim() &&
+		!existsSync(graphDataFile) &&
+		!isPluginCachePath(root) &&
+		(existsSync(kgDir) ? isWritableDir(kgDir) : existsSync(root) && isWritableDir(root));
+	if (canBootstrap) {
+		const syncScript = findSyncScript(root);
+		if (syncScript) {
 			try {
-				const syncArgs = [syncScript, "--quiet"];
-				if (wsEnv.trim()) syncArgs.push(`--workspace=${root}`);
+				const syncArgs = [syncScript, "--quiet", `--workspace=${root}`];
 				if (customChaptersEnv.trim()) syncArgs.push(`--chapters-dir=${chaptersDir}`);
 				execFileSync(process.execPath, syncArgs, {
 					cwd: root,

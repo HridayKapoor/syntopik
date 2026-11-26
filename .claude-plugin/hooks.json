@@ -1,0 +1,28 @@
+{
+  "description": "Syntopik Turn-0 Study Snapshot and Knowledge Graph autosync hooks.",
+  "hooks": {
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "R=\"${CLAUDE_PLUGIN_ROOT}\"; node \"${R:-${CLAUDE_PROJECT_DIR:-.}}/.agents/hooks/session-start.mjs\"",
+            "timeout": 10
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Write|Edit|MultiEdit|NotebookEdit|Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "R=\"${CLAUDE_PLUGIN_ROOT}\"; node \"${R:-${CLAUDE_PROJECT_DIR:-.}}/.agents/hooks/post-graph-sync.mjs\"",
+            "timeout": 10
+          }
+        ]
+      }
+    ]
+  }
+}

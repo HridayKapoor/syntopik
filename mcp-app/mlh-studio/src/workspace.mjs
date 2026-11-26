@@ -1,15 +1,20 @@
 /**
- * Workspace IO helpers for mlh-studio app-only tools:
+ * Workspace IO helpers for syntopik-studio MCP App & ambient headless tools:
+ *  - Resolve scripts/ from workspaceRoot first, then PACKAGE_ROOT (plugin-cache & attached-repo safe!)
  *  - Read knowledge-graph/*.jsonl cleanly (0-byte / missing safe)
- *  - Compute due flashcards with LearnHarness multi-cue weights
- *  - Rate flashcards via local `.venv/bin/python scripts/srs_engine.py review`
- *  - Save rough-work canvas PNG sketches into `sources/attempts/`
+ *  - Compute due flashcards with LearnHarness multi-cue weights + safe offline occlusion media
+ *  - Rate flashcards via srs_engine.py review (returning FIRe refresh credits + revlog persistence)
+ *  - Ambient headless helpers: captureConcept(), getFrontier(), logReview()
+ *  - Save rough-work canvas PNG sketches into sources/attempts/
  */
 
 import fs from "node:fs";
 import path from "node:path";
 import crypto from "node:crypto";
 import { execFileSync } from "node:child_process";
+import { fileURLToPath } from "node:url";
+
+const MODULE_DIR = path.dirname(fileURLToPath(import.meta.url));
 
 const CUE_WEIGHTS = {
   again: 4,
@@ -31,6 +36,87 @@ const DEFAULT_MILESTONES = {
   cbtMockPassed: false,
   audioBriefBuilt: false,
 };
+
+export function resolvePackageRoot() {
+  const candidates = [
+    path.resolve(MODULE_DIR, ".."),
+    path.resolve(MODULE_DIR, "..", "..", ".."),
+    process.env.CLAUDE_PLUGIN_ROOT || "",
+    process.env.SYNT_PACKAGE_ROOT || "",
+  ].filter(Boolean);
+
+  for (const cand of candidates) {
+    const abs = path.resolve(cand);
+    if (fs.existsSync(path.join(abs, "scripts", "sync-graph.mjs"))) {
+      return abs;
+    }
+  }
+  return path.resolve(MODULE_DIR, "..", "..", "..");
+}
+
+export function resolveScriptPath(workspaceRoot, scriptName) {
+  const pkgRoot = resolvePackageRoot();
+  const candidates = [
+    path.join(workspaceRoot, "scripts", scriptName),
+    path.join(pkgRoot, "scripts", scriptName),
+    path.resolve(MODULE_DIR, "..", "scripts", scriptName),
+    path.resolve(MODULE_DIR, "..", "..", "..", "scripts", scriptName),
+  ];
+  if (process.env.CLAUDE_PLUGIN_ROOT) {
+    candidates.push(path.join(process.env.CLAUDE_PLUGIN_ROOT, "scripts", scriptName));
+  }
+  for (const cand of candidates) {
+    if (fs.existsSync(cand)) return cand;
+  }
+  return null;
+}
+
+export function resolveKgDir(workspaceRoot) {
+  const customKg = process.env.SYNT_KG_DIR || process.env.MLH_KG_DIR || "";
+  return customKg.trim()
+    ? path.resolve(customKg.trim())
+    : path.join(workspaceRoot, "knowledge-graph");
+}
+
+function writeJsonlAtomic(filePath, rows) {
+  fs.mkdirSync(path.dirname(filePath), { recursive: true });
+  const content = rows.length > 0 ? `${rows.map((r) => JSON.stringify(r)).join("\n")}\n` : "";
+  const tmp = path.join(
+    path.dirname(filePath),
+    `.${path.basename(filePath)}.${process.pid}.${crypto.randomBytes(4).toString("hex")}.tmp`
+  );
+  fs.writeFileSync(tmp, content, "utf8");
+  fs.renameSync(tmp, filePath);
+}
+
+function appendJsonlSafe(filePath, obj) {
+  fs.mkdirSync(path.dirname(filePath), { recursive: true });
+  fs.appendFileSync(filePath, `${JSON.stringify(obj)}\n`, "utf8");
+}
+
+function syncGraphQuiet(workspaceRoot, kgDir) {
+  const syncScript = resolveScriptPath(workspaceRoot, "sync-graph.mjs");
+  if (!syncScript) return false;
+  try {
+    const customKg = process.env.SYNT_KG_DIR || process.env.MLH_KG_DIR || "";
+    const customCh = process.env.SYNT_CHAPTERS_DIR || process.env.MLH_CHAPTERS_DIR || "";
+    const syncArgs = [syncScript, "--quiet", `--workspace=${workspaceRoot}`];
+    if (customKg.trim() || path.resolve(kgDir) !== path.resolve(path.join(workspaceRoot, "knowledge-graph"))) {
+      syncArgs.push(`--kg-dir=${kgDir}`);
+    }
+    if (customCh.trim()) {
+      syncArgs.push(`--chapters-dir=${path.resolve(customCh.trim())}`);
+    }
+    execFileSync(process.execPath, syncArgs, {
+      cwd: fs.existsSync(workspaceRoot) ? workspaceRoot : process.cwd(),
+      stdio: "ignore",
+      timeout: 10000,
+    });
+    return true;
+  } catch {
+    return false;
+  }
+}
 
 function isJeeTracker(tracker) {
   const scopeProfile = String(
@@ -274,6 +360,143 @@ export function readJsonl(filePath) {
   return rows;
 }
 
+export function computeCalibrationSummary(revlog) {
+  const totalReviews = revlog.length;
+  const calibrated = [];
+  let hypercorrectionCount = 0;
+  let luckyGuessCount = 0;
+
+  for (const ev of revlog) {
+    const rating = String(ev.rating || "").trim().toLowerCase();
+    const hasCorrect = typeof ev.correct === "boolean";
+    const y = hasCorrect
+      ? ev.correct
+        ? 1
+        : 0
+      : rating === "good" || rating === "easy"
+        ? 1
+        : rating === "again" || rating === "hard"
+          ? 0
+          : null;
+    const rawConf =
+      typeof ev.learnerConfidence === "number" && Number.isFinite(ev.learnerConfidence)
+        ? ev.learnerConfidence
+        : typeof ev.confidence === "number" && Number.isFinite(ev.confidence)
+          ? ev.confidence
+          : null;
+    if (ev.hypercorrection === true) {
+      hypercorrectionCount += 1;
+    }
+    if (rawConf === null || y === null) continue;
+    const c = Math.max(0, Math.min(1, rawConf > 1 ? rawConf / 100 : rawConf));
+    if (ev.hypercorrection !== true && c >= 0.75 && y === 0) {
+      hypercorrectionCount += 1;
+    }
+    if (c <= 0.35 && y === 1) {
+      luckyGuessCount += 1;
+    }
+    calibrated.push({ c, y });
+  }
+
+  const windowItems = calibrated.slice(-100);
+  const n = windowItems.length;
+  if (n === 0) {
+    return {
+      sampleCount: 0,
+      totalReviews,
+      brierScore: null,
+      overconfidenceBias: null,
+      accuracy: null,
+      meanConfidence: null,
+      hypercorrectionCount,
+      luckyGuessCount,
+    };
+  }
+
+  let brierSum = 0;
+  let biasSum = 0;
+  let accSum = 0;
+  let confSum = 0;
+  for (const { c, y } of windowItems) {
+    const diff = c - y;
+    brierSum += diff * diff;
+    biasSum += diff;
+    accSum += y;
+    confSum += c;
+  }
+
+  return {
+    sampleCount: n,
+    totalReviews,
+    brierScore: Number((brierSum / n).toFixed(4)),
+    overconfidenceBias: Number((biasSum / n).toFixed(4)),
+    accuracy: Number((accSum / n).toFixed(4)),
+    meanConfidence: Number((confSum / n).toFixed(4)),
+    hypercorrectionCount,
+    luckyGuessCount,
+  };
+}
+
+function inlineWorkspaceImageDataUri(workspaceRoot, rawSrc) {
+  if (typeof rawSrc !== "string" || !rawSrc.trim()) return null;
+  const src = rawSrc.trim();
+  if (src.startsWith("data:image/")) return src;
+  if (/^https?:\/\//i.test(src)) return null;
+  const absRoot = path.resolve(workspaceRoot);
+  const absCandidate = path.isAbsolute(src) ? path.resolve(src) : path.resolve(absRoot, src);
+  if (!absCandidate.startsWith(absRoot + path.sep)) return null;
+  if (!fs.existsSync(absCandidate)) return null;
+  try {
+    const st = fs.statSync(absCandidate);
+    if (!st.isFile() || st.size === 0 || st.size > 512 * 1024) return null;
+    const ext = path.extname(absCandidate).toLowerCase();
+    const mimeMap = {
+      ".svg": "image/svg+xml",
+      ".png": "image/png",
+      ".jpg": "image/jpeg",
+      ".jpeg": "image/jpeg",
+      ".webp": "image/webp",
+    };
+    const mime = mimeMap[ext];
+    if (!mime) return null;
+    const b64 = fs.readFileSync(absCandidate).toString("base64");
+    return `data:${mime};base64,${b64}`;
+  } catch {
+    return null;
+  }
+}
+
+function resolveCardMedia(workspaceRoot, prop, cueObj) {
+  const rawMedia = (cueObj && cueObj.media) || prop.media || null;
+  const rawOcc =
+    (cueObj && cueObj.occlusion) ||
+    (rawMedia && rawMedia.occlusion) ||
+    prop.occlusion ||
+    null;
+
+  if (!rawMedia && !rawOcc) return { media: null, occlusion: null };
+
+  const media = rawMedia && typeof rawMedia === "object" && !Array.isArray(rawMedia)
+    ? { ...rawMedia }
+    : typeof rawMedia === "string"
+      ? { src: rawMedia }
+      : null;
+
+  let occlusion = rawOcc;
+  if (occlusion && typeof occlusion === "object" && !Array.isArray(occlusion)) {
+    occlusion = { ...occlusion };
+    if (occlusion.src && !occlusion.dataUri) {
+      const uri = inlineWorkspaceImageDataUri(workspaceRoot, occlusion.src);
+      if (uri) occlusion.dataUri = uri;
+    }
+  }
+  if (media && media.src && !media.dataUri) {
+    const uri = inlineWorkspaceImageDataUri(workspaceRoot, media.src);
+    if (uri) media.dataUri = uri;
+  }
+  return { media, occlusion };
+}
+
 export function selectWeightedCue(prop, seed = null) {
   const cues = Array.isArray(prop.cues)
     ? prop.cues.filter((c) => c && typeof c === "object" && (c.q || c.a))
@@ -287,6 +510,8 @@ export function selectWeightedCue(prop, seed = null) {
       synthetic: true,
       index: 0,
       totalCues: 1,
+      media: prop.media || null,
+      occlusion: prop.occlusion || null,
     };
   }
   const weighted = cues.map((c, idx) => {
@@ -295,7 +520,6 @@ export function selectWeightedCue(prop, seed = null) {
     return { cue: c, weight, idx };
   });
   const total = weighted.reduce((acc, w) => acc + w.weight, 0);
-  // Deterministic-if-seeded or uniform draw over weights
   let r;
   if (typeof seed === "number") {
     const x = Math.sin(seed + 1) * 10000;
@@ -319,20 +543,20 @@ export function selectWeightedCue(prop, seed = null) {
     synthetic: false,
     index: chosen.idx,
     totalCues: cues.length,
+    media: chosen.cue.media || null,
+    occlusion: chosen.cue.occlusion || null,
   };
 }
 
 export function loadWorkspaceState(workspaceRoot, section = "all") {
-  const customKg = process.env.SYNT_KG_DIR || process.env.MLH_KG_DIR || "";
-  const kgDir = customKg.trim()
-    ? path.resolve(customKg.trim())
-    : path.join(workspaceRoot, "knowledge-graph");
+  const kgDir = resolveKgDir(workspaceRoot);
   const today = new Date().toISOString().slice(0, 10);
 
   const propositions = readJsonl(path.join(kgDir, "propositions.jsonl"));
   const chains = readJsonl(path.join(kgDir, "chains.jsonl"));
   const mistakes = readJsonl(path.join(kgDir, "mistakes.jsonl"));
   const examAttempts = readJsonl(path.join(kgDir, "exam-attempts.jsonl"));
+  const revlog = readJsonl(path.join(kgDir, "revlog.jsonl"));
 
   const statusCounts = { solid: 0, shaky: 0, misconception: 0, planned: 0 };
   let bktSum = 0;
@@ -355,6 +579,7 @@ export function loadWorkspaceState(workspaceRoot, section = "all") {
     const urgency =
       st === "misconception" ? 0 : st === "shaky" ? 1 : nextReview && nextReview <= today ? 2 : st === "planned" ? 3 : 4;
     const cue = selectWeightedCue(p);
+    const { media, occlusion } = resolveCardMedia(workspaceRoot, p, cue);
     flashcards.push({
       propId: p.id,
       title: p.title || p.id,
@@ -368,6 +593,8 @@ export function loadWorkspaceState(workspaceRoot, section = "all") {
       urgency,
       cue,
       cuesCount: Array.isArray(p.cues) ? p.cues.length : 0,
+      ...(media ? { media } : {}),
+      ...(occlusion ? { occlusion } : {}),
     });
   }
 
@@ -375,7 +602,6 @@ export function loadWorkspaceState(workspaceRoot, section = "all") {
   const dueCount = flashcards.filter((f) => f.isDue && f.status !== "planned").length;
   const reviewableDueCount = flashcards.filter((f) => f.isDue).length;
 
-  // Summarize mistake categories
   const categoryCounts = new Map();
   for (const m of mistakes) {
     const cat = String(m.category || "uncategorized");
@@ -405,6 +631,7 @@ export function loadWorkspaceState(workspaceRoot, section = "all") {
   });
 
   const { chapterTrackers, activeChapter } = loadChapterTrackers(workspaceRoot);
+  const calibration = computeCalibrationSummary(revlog);
 
   const stats = {
     today,
@@ -419,11 +646,13 @@ export function loadWorkspaceState(workspaceRoot, section = "all") {
     trackersCount: chapterTrackers.length,
     activeChapterPct: activeChapter ? activeChapter.pct : null,
     activeChapterSlug: activeChapter ? activeChapter.slug : null,
+    brierScore: calibration.brierScore,
   };
 
   const payload = {
     workspaceName: path.basename(workspaceRoot),
     stats,
+    calibration,
   };
 
   if (section === "all" || section === "autopilot") {
@@ -470,15 +699,68 @@ function findExecutableOnPath(names) {
 }
 
 function resolvePythonBin(workspaceRoot) {
-  const venvPosix = path.join(workspaceRoot, ".venv", "bin", "python");
-  if (fs.existsSync(venvPosix)) return venvPosix;
-  const venvWin = path.join(workspaceRoot, ".venv", "Scripts", "python.exe");
-  if (fs.existsSync(venvWin)) return venvWin;
+  const roots = [workspaceRoot, resolvePackageRoot()];
+  for (const r of roots) {
+    const venvPosix = path.join(r, ".venv", "bin", "python");
+    if (fs.existsSync(venvPosix)) return venvPosix;
+    const venvWin = path.join(r, ".venv", "Scripts", "python.exe");
+    if (fs.existsSync(venvWin)) return venvWin;
+  }
   const preferred = process.platform === "win32" ? ["python", "python3"] : ["python3", "python"];
   return findExecutableOnPath(preferred) || preferred[0];
 }
 
-export function rateFlashcard(workspaceRoot, { propId, rating, cueId, misconception }) {
+function normalizeConfidence(rawConf) {
+  if (typeof rawConf !== "number" || !Number.isFinite(rawConf)) return null;
+  const val = rawConf > 1 ? rawConf / 100 : rawConf;
+  return Math.max(0, Math.min(1, Number(val.toFixed(4))));
+}
+
+function slugifyPart(text, maxLen = 28) {
+  return String(text || "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, maxLen);
+}
+
+function tokenizeSimple(text) {
+  return String(text || "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, " ")
+    .trim()
+    .split(/\s+/)
+    .filter((w) => w.length >= 2);
+}
+
+function findSimilarFallbackJs(props, query) {
+  const qNorm = String(query || "").trim().toLowerCase().replace(/\s+/g, " ");
+  const qSet = new Set(tokenizeSimple(query));
+  if (!qNorm || qSet.size === 0) return [];
+  const hits = [];
+  for (const p of props) {
+    const pid = String(p.id || "").trim().toLowerCase();
+    const titleNorm = String(p.title || "").trim().toLowerCase().replace(/\s+/g, " ");
+    if (qNorm === pid || qNorm === titleNorm) {
+      hits.push({ id: p.id, title: p.title || p.id, score: 1.0 });
+      continue;
+    }
+    const candTokens = new Set(tokenizeSimple(`${p.id || ""} ${p.title || ""} ${p.statement || ""} ${p.notes || ""}`));
+    if (candTokens.size === 0) continue;
+    let inter = 0;
+    for (const t of qSet) {
+      if (candTokens.has(t)) inter += 1;
+    }
+    const dice = (2 * inter) / (qSet.size + candTokens.size);
+    if (dice >= 0.5) {
+      hits.push({ id: p.id, title: p.title || p.id, score: Number(dice.toFixed(4)) });
+    }
+  }
+  hits.sort((a, b) => b.score - a.score || String(a.id).localeCompare(String(b.id)));
+  return hits.slice(0, 3);
+}
+
+export function rateFlashcard(workspaceRoot, { propId, rating, cueId, misconception, confidence, durationMs }) {
   const cleanId = typeof propId === "string" ? propId.trim() : "";
   const cleanRating = typeof rating === "string" ? rating.trim().toLowerCase() : "";
   if (!cleanId || !/^[A-Za-z0-9._:/-]+$/.test(cleanId)) {
@@ -489,17 +771,20 @@ export function rateFlashcard(workspaceRoot, { propId, rating, cueId, misconcept
   }
 
   const pythonBin = resolvePythonBin(workspaceRoot);
-  const srsScript = path.join(workspaceRoot, "scripts", "srs_engine.py");
-  const customKg = process.env.SYNT_KG_DIR || process.env.MLH_KG_DIR || "";
-  const kgDir = customKg.trim()
-    ? path.resolve(customKg.trim())
-    : path.join(workspaceRoot, "knowledge-graph");
+  const srsScript = resolveScriptPath(workspaceRoot, "srs_engine.py");
+  const kgDir = resolveKgDir(workspaceRoot);
 
-  if (!fs.existsSync(srsScript)) {
-    return { ok: false, error: `scripts/srs_engine.py not found in workspace ${workspaceRoot}` };
+  if (!srsScript) {
+    return { ok: false, error: `scripts/srs_engine.py not found in workspace ${workspaceRoot} or package root` };
   }
 
-  const buildArgs = (includeCue) => {
+  const normConf = normalizeConfidence(confidence);
+  const cleanDur =
+    typeof durationMs === "number" && Number.isFinite(durationMs) && durationMs >= 0
+      ? Math.round(durationMs)
+      : null;
+
+  const buildArgs = ({ includeCue, includeV2Flags }) => {
     const argv = ["-B", srsScript, "--kg-dir", kgDir, "review", cleanId, "--rating", cleanRating, "--no-sync"];
     if (includeCue && typeof cueId === "string" && cueId.trim()) {
       argv.push("--cue-id", cueId.trim());
@@ -507,22 +792,29 @@ export function rateFlashcard(workspaceRoot, { propId, rating, cueId, misconcept
     if (misconception) {
       argv.push("--misconception");
     }
+    if (includeV2Flags && normConf !== null) {
+      argv.push("--confidence", String(normConf));
+    }
+    if (includeV2Flags && cleanDur !== null) {
+      argv.push("--duration-ms", String(cleanDur));
+    }
     return argv;
   };
 
   let stdout;
   try {
-    stdout = execFileSync(pythonBin, buildArgs(true), {
-      cwd: workspaceRoot,
+    stdout = execFileSync(pythonBin, buildArgs({ includeCue: true, includeV2Flags: true }), {
+      cwd: fs.existsSync(workspaceRoot) ? workspaceRoot : process.cwd(),
       encoding: "utf8",
       timeout: 15000,
     });
   } catch (err) {
     const stderr = String(err?.stderr || err?.message || "");
-    if (cueId && stderr.includes("unrecognized arguments") && stderr.includes("--cue-id")) {
+    if (stderr.includes("unrecognized arguments")) {
+      const retryIncludeCue = !(cueId && stderr.includes("--cue-id"));
       try {
-        stdout = execFileSync(pythonBin, buildArgs(false), {
-          cwd: workspaceRoot,
+        stdout = execFileSync(pythonBin, buildArgs({ includeCue: retryIncludeCue, includeV2Flags: false }), {
+          cwd: fs.existsSync(workspaceRoot) ? workspaceRoot : process.cwd(),
           encoding: "utf8",
           timeout: 15000,
         });
@@ -534,23 +826,7 @@ export function rateFlashcard(workspaceRoot, { propId, rating, cueId, misconcept
     }
   }
 
-  // Quietly refresh graph-data.js if sync-graph.mjs exists
-  const syncScript = path.join(workspaceRoot, "scripts", "sync-graph.mjs");
-  if (fs.existsSync(syncScript)) {
-    try {
-      const syncArgs = [syncScript, "--quiet", `--workspace=${workspaceRoot}`];
-      if (customKg.trim()) {
-        syncArgs.push(`--kg-dir=${kgDir}`);
-      }
-      execFileSync(process.execPath, syncArgs, {
-        cwd: workspaceRoot,
-        stdio: "ignore",
-        timeout: 10000,
-      });
-    } catch {
-      // Non-fatal sync error
-    }
-  }
+  const synced = syncGraphQuiet(workspaceRoot, kgDir);
 
   let parsed = {};
   try {
@@ -559,7 +835,480 @@ export function rateFlashcard(workspaceRoot, { propId, rating, cueId, misconcept
     parsed = { raw: stdout.trim() };
   }
 
-  return { ok: true, result: parsed };
+  const fireCredits = Array.isArray(parsed.fireCredits)
+    ? parsed.fireCredits
+    : Array.isArray(parsed.fire_credits)
+      ? parsed.fire_credits
+      : [];
+  const fireRefreshedCount = fireCredits.length;
+  const fireSummary =
+    fireRefreshedCount > 0
+      ? `FIRe refreshed ${fireRefreshedCount} prerequisite${fireRefreshedCount === 1 ? "" : "s"}`
+      : null;
+
+  return {
+    ok: true,
+    synced,
+    result: {
+      ...parsed,
+      fireCredits,
+      fireRefreshedCount,
+      ...(fireSummary ? { fireSummary } : {}),
+    },
+  };
+}
+
+export function captureConcept(
+  workspaceRoot,
+  { title, statement, subject, chapter, cuePrompt, cueAnswer, premises, relation, notes, kind, id }
+) {
+  const cleanTitle = typeof title === "string" ? title.trim() : "";
+  const cleanStatement = typeof statement === "string" ? statement.trim() : "";
+  const cleanSubject = typeof subject === "string" && subject.trim() ? subject.trim() : "General";
+  const cleanChapter = typeof chapter === "string" && chapter.trim() ? chapter.trim() : "General";
+  if (!cleanTitle) return { ok: false, error: "title must be a non-empty string." };
+  if (!cleanStatement) return { ok: false, error: "statement must be a non-empty string." };
+
+  const kgDir = resolveKgDir(workspaceRoot);
+  fs.mkdirSync(kgDir, { recursive: true });
+  const propsFile = path.join(kgDir, "propositions.jsonl");
+  const chainsFile = path.join(kgDir, "chains.jsonl");
+  const props = readJsonl(propsFile);
+  const existingChains = readJsonl(chainsFile);
+
+  // Deduplicate via srs_engine.py find-similar (with pure-JS fallback if python/venv absent)
+  let matches = [];
+  const srsScript = resolveScriptPath(workspaceRoot, "srs_engine.py");
+  if (props.length > 0 && srsScript) {
+    try {
+      const pyBin = resolvePythonBin(workspaceRoot);
+      const out = execFileSync(
+        pyBin,
+        ["-B", srsScript, "--kg-dir", kgDir, "find-similar", cleanTitle, "--top", "3", "--threshold", "0.72"],
+        {
+          cwd: fs.existsSync(workspaceRoot) ? workspaceRoot : process.cwd(),
+          encoding: "utf8",
+          timeout: 12000,
+        }
+      );
+      const parsed = JSON.parse(out);
+      if (Array.isArray(parsed?.matches)) matches = parsed.matches;
+    } catch {
+      matches = findSimilarFallbackJs(props, cleanTitle);
+    }
+  } else if (props.length > 0) {
+    matches = findSimilarFallbackJs(props, cleanTitle);
+  }
+
+  const topMatch = matches.length > 0 ? matches[0] : null;
+  const exactIdHit =
+    typeof id === "string" && id.trim() ? props.find((p) => p.id === id.trim()) : null;
+  const dupTarget =
+    exactIdHit ||
+    (topMatch && Number(topMatch.score) >= 0.78
+      ? props.find((p) => p.id === topMatch.id) || null
+      : null);
+
+  const today = new Date().toISOString().slice(0, 10);
+  const nowIso = new Date().toISOString();
+  const cleanCueQ = typeof cuePrompt === "string" ? cuePrompt.trim() : "";
+  const cleanCueA = typeof cueAnswer === "string" ? cueAnswer.trim() : "";
+  let propId;
+  let deduplicated = false;
+  let cueAdded = false;
+
+  if (dupTarget) {
+    deduplicated = true;
+    propId = String(dupTarget.id);
+    if (cleanCueQ) {
+      if (!Array.isArray(dupTarget.cues)) dupTarget.cues = [];
+      const alreadyHasCue = dupTarget.cues.some(
+        (c) => String(c?.q || "").trim().toLowerCase() === cleanCueQ.toLowerCase()
+      );
+      if (!alreadyHasCue) {
+        const nextIdx = dupTarget.cues.length + 1;
+        dupTarget.cues.push({
+          id: `c${nextIdx}`,
+          q: cleanCueQ,
+          a: cleanCueA || cleanStatement,
+          lastRating: null,
+          reviews: 0,
+        });
+        cueAdded = true;
+      }
+    }
+    if (cleanStatement && !String(dupTarget.notes || "").includes(cleanStatement)) {
+      dupTarget.notes = dupTarget.notes ? `${dupTarget.notes} | ${cleanStatement}` : cleanStatement;
+    }
+    dupTarget.updatedAt = nowIso;
+    writeJsonlAtomic(propsFile, props);
+  } else {
+    const existingIds = new Set(props.map((p) => String(p.id || "")));
+    let baseId =
+      typeof id === "string" && id.trim()
+        ? slugifyPart(id.trim(), 64)
+        : [slugifyPart(cleanSubject, 14), slugifyPart(cleanChapter, 18), slugifyPart(cleanTitle, 28)]
+            .filter(Boolean)
+            .join("-") || `prop-${Date.now().toString(36)}`;
+    propId = baseId;
+    let suffix = 2;
+    while (existingIds.has(propId)) {
+      propId = `${baseId}-${suffix}`;
+      suffix += 1;
+    }
+
+    const cues = [];
+    if (cleanCueQ || cleanCueA) {
+      cues.push({
+        id: "c1",
+        q: cleanCueQ || `State and justify: ${cleanTitle}`,
+        a: cleanCueA || cleanStatement,
+        lastRating: null,
+        reviews: 0,
+      });
+      cueAdded = true;
+    }
+
+    const newProp = {
+      id: propId,
+      subject: cleanSubject,
+      chapter: cleanChapter,
+      title: cleanTitle,
+      statement: cleanStatement,
+      kind: typeof kind === "string" && kind.trim() ? kind.trim() : "concept",
+      status: "shaky",
+      bktMastery: 0.35,
+      confidence: 0.35,
+      notes: typeof notes === "string" && notes.trim() ? notes.trim() : cleanStatement,
+      createdAt: nowIso,
+      lastTested: today,
+      nextReview: today,
+      ...(cues.length > 0 ? { cues } : {}),
+    };
+    props.push(newProp);
+    writeJsonlAtomic(propsFile, props);
+  }
+
+  let chainAdded = false;
+  const cleanPremises = Array.isArray(premises)
+    ? [...new Set(premises.map((p) => String(p || "").trim()).filter((p) => p && p !== propId))]
+    : [];
+  if (cleanPremises.length > 0) {
+    const chainKey = `${[...cleanPremises].sort().join("+")}>${propId}`;
+    const alreadyExists = existingChains.some((c) => {
+      const concl = String(c.conclusion || c.to || "").trim();
+      if (concl !== propId) return false;
+      const prems = Array.isArray(c.premises)
+        ? c.premises.map((x) => String(x || "").trim()).filter(Boolean)
+        : c.from
+          ? [String(c.from).trim()]
+          : [];
+      return `${[...new Set(prems)].sort().join("+")}>${concl}` === chainKey;
+    });
+    if (!alreadyExists) {
+      const rel = typeof relation === "string" && relation.trim() ? relation.trim() : "requires";
+      const rec = {
+        premises: cleanPremises,
+        conclusion: propId,
+        relation: rel,
+        why: cleanStatement,
+        ...(cleanPremises.length === 1 ? { from: cleanPremises[0], to: propId } : { to: propId }),
+      };
+      existingChains.push(rec);
+      writeJsonlAtomic(chainsFile, existingChains);
+      chainAdded = true;
+    }
+  }
+
+  const synced = syncGraphQuiet(workspaceRoot, kgDir);
+
+  return {
+    ok: true,
+    id: propId,
+    deduplicated,
+    matchedId: deduplicated ? propId : null,
+    matchedScore: topMatch ? topMatch.score : null,
+    cueAdded,
+    chainAdded,
+    synced,
+  };
+}
+
+function compressDueItemsJs(dueItems, chains) {
+  const dueIds = new Set(dueItems.map((d) => d.id));
+  const parentsOf = new Map();
+  for (const c of chains) {
+    const concl = String(c.conclusion || c.to || "").trim();
+    const rel = String(c.relation || "requires").trim().toLowerCase();
+    if (!concl || rel === "contrasts_with" || rel === "analogous") continue;
+    const prems = Array.isArray(c.premises)
+      ? c.premises.map((x) => String(x || "").trim()).filter(Boolean)
+      : c.from
+        ? [String(c.from).trim()]
+        : [];
+    if (!parentsOf.has(concl)) parentsOf.set(concl, new Set());
+    for (const pr of prems) {
+      if (pr && pr !== concl) parentsOf.get(concl).add(pr);
+    }
+  }
+
+  const coveredBy = new Map();
+  for (const item of dueItems) {
+    const visited = new Set();
+    const queue = [{ id: item.id, depth: 0 }];
+    while (queue.length > 0) {
+      const cur = queue.shift();
+      if (cur.depth >= 3) continue;
+      for (const pr of parentsOf.get(cur.id) || []) {
+        if (visited.has(pr)) continue;
+        visited.add(pr);
+        queue.push({ id: pr, depth: cur.depth + 1 });
+      }
+    }
+    const dueAnc = [...visited].filter((id) => dueIds.has(id) && id !== item.id);
+    if (dueAnc.length >= 2) {
+      coveredBy.set(item.id, dueAnc);
+    }
+  }
+
+  const knockedOut = new Set();
+  const kept = [];
+  for (const item of dueItems) {
+    if (knockedOut.has(item.id)) continue;
+    const cov = coveredBy.get(item.id) || [];
+    for (const ancId of cov) {
+      const ancItem = dueItems.find((x) => x.id === ancId);
+      if (ancItem && ancItem.status !== "misconception") {
+        knockedOut.add(ancId);
+      }
+    }
+    kept.push({
+      ...item,
+      ...(cov.length >= 2 ? { fireKnockouts: cov } : {}),
+    });
+  }
+  return { items: kept, knockedOutIds: [...knockedOut] };
+}
+
+export function getFrontier(workspaceRoot, { limit = 10, compress = true } = {}) {
+  const cleanLimit = Math.max(1, Math.min(50, Math.round(Number(limit) || 10)));
+  const useCompress = compress !== false;
+  const kgDir = resolveKgDir(workspaceRoot);
+  const today = new Date().toISOString().slice(0, 10);
+
+  const propositions = readJsonl(path.join(kgDir, "propositions.jsonl"));
+  const chains = readJsonl(path.join(kgDir, "chains.jsonl"));
+  const mistakes = readJsonl(path.join(kgDir, "mistakes.jsonl"));
+  const revlog = readJsonl(path.join(kgDir, "revlog.jsonl"));
+  const readingQueue = readJsonl(path.join(kgDir, "reading-queue.jsonl"));
+
+  let dueItems = null;
+  let dueCount = 0;
+  let knockedOutIds = [];
+
+  const srsScript = resolveScriptPath(workspaceRoot, "srs_engine.py");
+  if (srsScript && propositions.length > 0) {
+    const pyBin = resolvePythonBin(workspaceRoot);
+    const runDue = (withCompress) => {
+      const argv = ["-B", srsScript, "--kg-dir", kgDir, "due", "--limit", String(cleanLimit)];
+      if (withCompress) argv.push("--compress");
+      const out = execFileSync(pyBin, argv, {
+        cwd: fs.existsSync(workspaceRoot) ? workspaceRoot : process.cwd(),
+        encoding: "utf8",
+        timeout: 12000,
+      });
+      return JSON.parse(out);
+    };
+    try {
+      const parsed = runDue(useCompress);
+      if (Array.isArray(parsed?.items)) {
+        dueItems = parsed.items;
+        dueCount = Number(parsed.dueCount ?? parsed.items.length);
+        knockedOutIds = Array.isArray(parsed.knockedOutIds)
+          ? parsed.knockedOutIds
+          : Array.isArray(parsed.compressedOut)
+            ? parsed.compressedOut
+            : [];
+      }
+    } catch (err) {
+      const stderr = String(err?.stderr || err?.message || "");
+      if (useCompress && stderr.includes("unrecognized arguments")) {
+        try {
+          const parsed = runDue(false);
+          if (Array.isArray(parsed?.items)) {
+            const comp = compressDueItemsJs(parsed.items, chains);
+            dueItems = comp.items.slice(0, cleanLimit);
+            dueCount = Number(parsed.dueCount ?? parsed.items.length);
+            knockedOutIds = comp.knockedOutIds;
+          }
+        } catch {
+          dueItems = null;
+        }
+      }
+    }
+  }
+
+  if (dueItems === null) {
+    const rawDue = propositions
+      .filter((p) => {
+        const st = String(p.status || "planned");
+        const nr = typeof p.nextReview === "string" ? p.nextReview : null;
+        return st === "misconception" || st === "shaky" || (nr !== null && nr <= today);
+      })
+      .map((p) => ({
+        id: p.id,
+        title: p.title || p.id,
+        subject: p.subject || "General",
+        chapter: p.chapter || "",
+        status: p.status || "planned",
+        bktMastery: typeof p.bktMastery === "number" ? p.bktMastery : null,
+        nextReview: p.nextReview || null,
+        notes: p.notes || "",
+      }))
+      .sort((a, b) => {
+        const r = (s) => (s === "misconception" ? 0 : s === "shaky" ? 1 : 2);
+        return r(a.status) - r(b.status) || String(a.nextReview || "").localeCompare(String(b.nextReview || ""));
+      });
+    dueCount = rawDue.length;
+    if (useCompress) {
+      const comp = compressDueItemsJs(rawDue, chains);
+      dueItems = comp.items.slice(0, cleanLimit);
+      knockedOutIds = comp.knockedOutIds;
+    } else {
+      dueItems = rawDue.slice(0, cleanLimit);
+    }
+  }
+
+  const { activeChapter } = loadChapterTrackers(workspaceRoot);
+  const autopilot = activeChapter
+    ? {
+        slug: activeChapter.slug,
+        title: activeChapter.title,
+        subject: activeChapter.subject,
+        pct: activeChapter.pct,
+        topicsMastered: activeChapter.topicsMastered,
+        topicsTotal: activeChapter.topicsTotal,
+        questionsSolved: activeChapter.questionsSolved,
+        questionsTotal: activeChapter.questionsTotal,
+        nextAction: activeChapter.nextHint,
+      }
+    : null;
+
+  const catCounts = new Map();
+  for (const m of mistakes) {
+    const cat = String(m.category || "concept_gap");
+    catCounts.set(cat, (catCounts.get(cat) || 0) + 1);
+  }
+  const topCategories = [...catCounts.entries()]
+    .map(([category, count]) => ({ category, count }))
+    .sort((a, b) => b.count - a.count)
+    .slice(0, 3);
+  const topMistakeTraps = mistakes
+    .slice(-3)
+    .reverse()
+    .map((m) => ({
+      id: m.id || null,
+      category: m.category || "concept_gap",
+      subject: m.subject || "General",
+      chapter: m.chapter || "",
+      triggerCue: m.triggerCue || "",
+      wrongMove: m.wrongMove || "",
+      correctMove: m.correctMove || "",
+    }));
+
+  const calibration = computeCalibrationSummary(revlog);
+  const leechesCount = propositions.filter((p) => {
+    const lapses = Number(p.lapses ?? p?.fsrs?.lapses ?? 0);
+    const diff = Number(p.difficulty ?? p?.fsrs?.difficulty ?? 0);
+    return lapses >= 4 || diff >= 8.5;
+  }).length;
+  const readingQueueDueCount = readingQueue.filter((r) => String(r.stage || "queued") !== "crystallized").length;
+
+  return {
+    ok: true,
+    today,
+    compressed: useCompress,
+    dueCount,
+    dueItems,
+    knockedOutCount: knockedOutIds.length,
+    knockedOutIds,
+    autopilot,
+    topMistakeTraps,
+    topCategories,
+    calibration,
+    leechesCount,
+    readingQueueDueCount,
+    stats: {
+      totalPropositions: propositions.length,
+      totalChains: chains.length,
+      totalMistakes: mistakes.length,
+      totalReviews: revlog.length,
+    },
+  };
+}
+
+export function logReview(workspaceRoot, { propId, rating, confidence, cueId, misconception, durationMs }) {
+  const kgDir = resolveKgDir(workspaceRoot);
+  const revlogPath = path.join(kgDir, "revlog.jsonl");
+  const beforeSize = fs.existsSync(revlogPath) ? fs.statSync(revlogPath).size : 0;
+
+  const rated = rateFlashcard(workspaceRoot, {
+    propId,
+    rating,
+    cueId,
+    misconception,
+    confidence,
+    durationMs,
+  });
+  if (!rated.ok) return rated;
+
+  const normConf = normalizeConfidence(confidence);
+  const cleanRating = String(rating || "").trim().toLowerCase();
+  const correct = cleanRating === "good" || cleanRating === "easy";
+  const hypercorrection = Boolean(
+    rated.result?.hypercorrection || (normConf !== null && normConf >= 0.75 && !correct)
+  );
+
+  // If running against a v1 srs_engine.py that did not append revlog.jsonl, record the review event safely.
+  const afterSize = fs.existsSync(revlogPath) ? fs.statSync(revlogPath).size : 0;
+  let revlogAppended = afterSize > beforeSize;
+  if (!revlogAppended) {
+    try {
+      appendJsonlSafe(revlogPath, {
+        propId: rated.result?.id || String(propId).trim(),
+        cueId: typeof cueId === "string" && cueId.trim() ? cueId.trim() : null,
+        ts: new Date().toISOString(),
+        rating: cleanRating,
+        correct,
+        ...(normConf !== null ? { learnerConfidence: normConf } : {}),
+        ...(typeof durationMs === "number" && Number.isFinite(durationMs)
+          ? { durationMs: Math.round(durationMs) }
+          : {}),
+        hypercorrection,
+      });
+      revlogAppended = true;
+      syncGraphQuiet(workspaceRoot, kgDir);
+    } catch {
+      // Non-fatal
+    }
+  }
+
+  return {
+    ok: true,
+    id: rated.result?.id || String(propId).trim(),
+    rating: cleanRating,
+    status: rated.result?.status || null,
+    stabilityDays: rated.result?.stabilityDays ?? null,
+    difficulty: rated.result?.difficulty ?? null,
+    bktMastery: rated.result?.bktMastery ?? null,
+    nextReview: rated.result?.nextReview || null,
+    fireCredits: rated.result?.fireCredits || [],
+    fireRefreshedCount: rated.result?.fireRefreshedCount || 0,
+    fireSummary: rated.result?.fireSummary || null,
+    hypercorrection,
+    revlogAppended,
+    synced: rated.synced,
+  };
 }
 
 export function saveSketchPng(workspaceRoot, { dataUrl, label }) {

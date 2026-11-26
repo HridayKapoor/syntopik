@@ -1,11 +1,13 @@
 /**
- * ui://mlh/practice-card.html — Inline Practice Problem Card
+ * ui://syntopik/practice-card.html — Inline Practice Problem Card (Standard, Parsons & Faded)
  *
- * Parity with LearnHarness PracticeDock + Commitment & Pause Law:
- *  - Active pose: displays Markdown + LaTeX statement ONLY (NEVER mode/targets/modelSolution!)
- *  - Working trace textarea + collapsible rough-work <canvas> sketch pad (persists across hint turns)
+ * Parity with LearnHarness PracticeDock + Commitment & Pause Law + Adaptive Parsons/Faded Scaffolding:
+ *  - Active pose: displays Markdown + LaTeX statement ONLY (NEVER modelSolution, canonicalOrder, or isDistractor!)
+ *  - Standard mode: working trace textarea + collapsible rough-work <canvas> sketch pad
+ *  - Parsons / Faded mode: keyboard-accessible block ordering (↑/↓ buttons + Alt+Arrow keys),
+ *    distractor exclude/restore tray, and inline faded blank inputs for ___ segments
  *  - 3 capability-gated actions: Ask Hint | Submit Attempt | Reveal Solution
- *  - Conclude: renders outcome/rung/missClass/retest badges + verdict + verbatim committed modelSolution
+ *  - Conclude: renders outcome/rung/missClass/retest badges + verdict + canonical order + verbatim committed modelSolution
  *  - Enforces Pause Law via explicit "Next problem →" button
  */
 
@@ -23,6 +25,9 @@ const state = {
   loading: true,
   cancelled: false,
   attemptText: "",
+  parsonsOrder: [],
+  excludedIds: [],
+  fadedBlanks: {},
   busy: false,
   sentHistory: [],
   statusMsg: "",
@@ -55,9 +60,33 @@ function getProblemKey(sc) {
   return `prob-h-${hashFallbackKey(sc.statement || "")}`;
 }
 
+function isParsonsPayload(d) {
+  return Boolean(
+    d &&
+      (d.cardMode === "parsons" || d.cardMode === "faded") &&
+      Array.isArray(d.blocks) &&
+      d.blocks.length > 0
+  );
+}
+
+function initParsonsStateFromData(d) {
+  if (!isParsonsPayload(d)) {
+    state.parsonsOrder = [];
+    state.excludedIds = [];
+    state.fadedBlanks = {};
+    return;
+  }
+  state.parsonsOrder = d.blocks.map((b) => b.id);
+  state.excludedIds = [];
+  state.fadedBlanks = {};
+}
+
 function serializePracticeState() {
   return {
     attemptText: state.attemptText,
+    parsonsOrder: [...state.parsonsOrder],
+    excludedIds: [...state.excludedIds],
+    fadedBlanks: { ...state.fadedBlanks },
     sentHistory: [...state.sentHistory],
     statusMsg: state.statusMsg,
     statusKind: state.statusKind,
@@ -117,8 +146,28 @@ async function hydrateFromServer() {
     if (typeof saved.serverConcluded === "boolean") {
       state.serverConcluded = saved.serverConcluded;
     }
-    if (!state.userTouched && typeof saved.attemptText === "string") {
-      state.attemptText = saved.attemptText;
+    if (!state.userTouched) {
+      if (typeof saved.attemptText === "string") {
+        state.attemptText = saved.attemptText;
+      }
+      if (isParsonsPayload(state.data)) {
+        const validIds = new Set(state.data.blocks.map((b) => b.id));
+        if (Array.isArray(saved.parsonsOrder) && saved.parsonsOrder.length > 0) {
+          const cleanOrd = saved.parsonsOrder.filter((id) => validIds.has(id));
+          const cleanExcl = Array.isArray(saved.excludedIds)
+            ? saved.excludedIds.filter((id) => validIds.has(id) && !cleanOrd.includes(id))
+            : [];
+          const covered = new Set([...cleanOrd, ...cleanExcl]);
+          for (const b of state.data.blocks) {
+            if (!covered.has(b.id)) cleanOrd.push(b.id);
+          }
+          state.parsonsOrder = cleanOrd;
+          state.excludedIds = cleanExcl;
+        }
+        if (saved.fadedBlanks && typeof saved.fadedBlanks === "object") {
+          state.fadedBlanks = { ...saved.fadedBlanks };
+        }
+      }
     }
     if (Array.isArray(saved.sentHistory) && saved.sentHistory.length > 0) {
       state.sentHistory = saved.sentHistory;
@@ -143,6 +192,36 @@ const OUTCOME_META = {
   surrendered: { label: "Surrendered", cls: "badge-danger" },
   dismissed: { label: "Dismissed", cls: "badge-warning" },
 };
+
+function resolveFilledCode(blk) {
+  let idx = 0;
+  return String(blk.code || "").replace(/_{3,}/g, () => {
+    const key = `${blk.id}::${idx}`;
+    idx += 1;
+    const val = (state.fadedBlanks[key] || "").trim();
+    return val ? `[${val}]` : "___";
+  });
+}
+
+function buildParsonsSummaryLines(d) {
+  const byId = new Map(d.blocks.map((b) => [b.id, b]));
+  const activeBlocks = state.parsonsOrder.map((id) => byId.get(id)).filter(Boolean);
+  const exclBlocks = state.excludedIds.map((id) => byId.get(id)).filter(Boolean);
+  const letters = activeBlocks.map((b) => b.letter || b.id).join(", ");
+  const ids = activeBlocks.map((b) => b.id).join(", ");
+  const lines = [`- **Ordered blocks (${d.cardMode}):** \`${letters || "(none)"}\` (\`${ids || "none"}\`)`];
+  activeBlocks.forEach((b, i) => {
+    const pad = b.indent > 0 ? "  ".repeat(b.indent) : "";
+    const renderedCode = d.cardMode === "faded" ? resolveFilledCode(b) : b.code;
+    lines.push(`  ${i + 1}. [${b.letter || b.id}] \`${pad}${renderedCode}\``);
+  });
+  if (exclBlocks.length > 0) {
+    lines.push(
+      `- **Excluded (distractors):** ${exclBlocks.map((b) => `\`${b.letter || b.id}\` (${b.id})`).join(", ")}`
+    );
+  }
+  return lines;
+}
 
 async function maybeSaveSketch(tag) {
   if (!sketchPad || !sketchPad.hasInk() || !state.caps?.canCallTools) return null;
@@ -185,25 +264,35 @@ async function sendPracticeAction(kind) {
   try {
     const sketchPath = kind === "next" ? null : await maybeSaveSketch(kind);
     const pid = state.data.problemId || "active";
+    const parsons = isParsonsPayload(state.data);
     let text = "";
 
     if (kind === "hint") {
       const lines = [`**[Practice · Hint Request]** (\`${pid}\`)`];
+      if (parsons) lines.push(...buildParsonsSummaryLines(state.data));
       if (state.attemptText.trim()) {
         lines.push(`- **Current thinking / work so far:** ${state.attemptText.trim()}`);
-      } else {
+      } else if (!parsons) {
         lines.push(`- **Request:** Give me the next minimal non-spoiling hint rung (R0–R5).`);
       }
       if (sketchPath) lines.push(`- **Rough-work sketch:** \`${sketchPath}\``);
       text = lines.join("\n");
     } else if (kind === "attempt") {
       const lines = [`**[Practice · Attempt]** (\`${pid}\`)`];
-      lines.push(`- **Working / Answer:** ${state.attemptText.trim() || "(see sketch)"}`);
+      if (parsons) {
+        lines.push(...buildParsonsSummaryLines(state.data));
+        if (state.attemptText.trim()) {
+          lines.push(`- **Notes / Reasoning:** ${state.attemptText.trim()}`);
+        }
+      } else {
+        lines.push(`- **Working / Answer:** ${state.attemptText.trim() || "(see sketch)"}`);
+      }
       if (sketchPath) lines.push(`- **Rough-work sketch:** \`${sketchPath}\``);
       text = lines.join("\n");
     } else if (kind === "reveal") {
       const lines = [`**[Practice · Reveal Solution]** (\`${pid}\`)`];
       lines.push(`- **Request:** I'm surrendering / asking to conclude and reveal the committed model solution.`);
+      if (parsons) lines.push(...buildParsonsSummaryLines(state.data));
       if (state.attemptText.trim()) {
         lines.push(`- **Last thinking before reveal:** ${state.attemptText.trim()}`);
       }
@@ -221,7 +310,6 @@ async function sendPracticeAction(kind) {
     };
 
     if (state.caps?.canMessage) {
-      // Persist draft + pending action BEFORE sendMessage so immediate remounts never lose work.
       state.sentHistory.push(labelMap[kind] || "Sent");
       if (kind === "next") state.nextRequested = true;
       state.statusMsg = `${labelMap[kind]}.`;
@@ -252,6 +340,209 @@ async function sendPracticeAction(kind) {
   render();
 }
 
+function moveParsonsBlock(index, delta) {
+  const target = index + delta;
+  if (target < 0 || target >= state.parsonsOrder.length) return;
+  const next = [...state.parsonsOrder];
+  [next[index], next[target]] = [next[target], next[index]];
+  state.userTouched = true;
+  state.parsonsOrder = next;
+  schedulePersist(150);
+  render();
+}
+
+function excludeParsonsBlock(blockId) {
+  if (!state.parsonsOrder.includes(blockId)) return;
+  state.userTouched = true;
+  state.parsonsOrder = state.parsonsOrder.filter((id) => id !== blockId);
+  if (!state.excludedIds.includes(blockId)) {
+    state.excludedIds = [...state.excludedIds, blockId];
+  }
+  schedulePersist(150);
+  render();
+}
+
+function restoreParsonsBlock(blockId) {
+  if (!state.excludedIds.includes(blockId)) return;
+  state.userTouched = true;
+  state.excludedIds = state.excludedIds.filter((id) => id !== blockId);
+  state.parsonsOrder = [...state.parsonsOrder, blockId];
+  schedulePersist(150);
+  render();
+}
+
+function renderParsonsCodeContent(blk, isFaded) {
+  const codeWrap = document.createElement("div");
+  codeWrap.className = "parsons-code";
+  if (blk.indent > 0) {
+    codeWrap.style.paddingLeft = `${blk.indent * 14}px`;
+  }
+  const raw = String(blk.code || "");
+  if (!isFaded || !/_{3,}/.test(raw)) {
+    codeWrap.textContent = raw;
+    return codeWrap;
+  }
+
+  const parts = raw.split(/(_{3,})/g);
+  let blankIdx = 0;
+  for (const part of parts) {
+    if (/^_{3,}$/.test(part)) {
+      const key = `${blk.id}::${blankIdx}`;
+      const myIdx = blankIdx;
+      blankIdx += 1;
+      const inp = document.createElement("input");
+      inp.type = "text";
+      inp.className = "faded-blank-input";
+      inp.placeholder = "___";
+      inp.setAttribute("aria-label", `Blank ${myIdx + 1} in block ${blk.letter || blk.id}`);
+      inp.value = state.fadedBlanks[key] || "";
+      inp.disabled = state.busy;
+      inp.addEventListener("input", () => {
+        state.userTouched = true;
+        state.fadedBlanks[key] = inp.value;
+        schedulePersist();
+      });
+      codeWrap.append(inp);
+    } else if (part) {
+      codeWrap.append(document.createTextNode(part));
+    }
+  }
+  return codeWrap;
+}
+
+function renderParsonsWorkspace(d) {
+  const isFaded = d.cardMode === "faded";
+  const byId = new Map(d.blocks.map((b) => [b.id, b]));
+  const wrap = document.createElement("div");
+  wrap.className = "parsons-wrap";
+
+  const hdr = document.createElement("div");
+  hdr.className = "field-label";
+  const leftLabel = document.createElement("span");
+  leftLabel.textContent = isFaded
+    ? "Order valid steps & fill blanks (exclude distractors)"
+    : "Order valid steps (exclude any distractors)";
+  const resetBtn = document.createElement("button");
+  resetBtn.type = "button";
+  resetBtn.className = "btn btn-sm btn-ghost";
+  resetBtn.disabled = state.busy;
+  resetBtn.textContent = "Reset";
+  resetBtn.addEventListener("click", () => {
+    state.userTouched = true;
+    initParsonsStateFromData(d);
+    schedulePersist(150);
+    render();
+  });
+  hdr.append(leftLabel, resetBtn);
+  wrap.append(hdr);
+
+  const list = document.createElement("div");
+  list.className = "parsons-list";
+  list.setAttribute("role", "list");
+
+  state.parsonsOrder.forEach((blockId, idx) => {
+    const blk = byId.get(blockId);
+    if (!blk) return;
+
+    const row = document.createElement("div");
+    row.className = "parsons-row";
+    row.setAttribute("role", "listitem");
+    row.tabIndex = 0;
+    row.addEventListener("keydown", (ev) => {
+      if (ev.target && ev.target.tagName === "INPUT") return;
+      if ((ev.altKey || ev.shiftKey) && ev.key === "ArrowUp") {
+        ev.preventDefault();
+        moveParsonsBlock(idx, -1);
+      } else if ((ev.altKey || ev.shiftKey) && ev.key === "ArrowDown") {
+        ev.preventDefault();
+        moveParsonsBlock(idx, 1);
+      }
+    });
+
+    const num = document.createElement("span");
+    num.className = "parsons-index";
+    num.textContent = `${idx + 1}.`;
+
+    const letter = document.createElement("span");
+    letter.className = "opt-letter";
+    letter.textContent = blk.letter || String.fromCharCode(65 + idx);
+
+    const codeEl = renderParsonsCodeContent(blk, isFaded);
+
+    const ctrls = document.createElement("div");
+    ctrls.className = "parsons-controls";
+
+    const upBtn = document.createElement("button");
+    upBtn.type = "button";
+    upBtn.className = "btn btn-sm";
+    upBtn.disabled = state.busy || idx === 0;
+    upBtn.textContent = "↑";
+    upBtn.title = "Move block up";
+    upBtn.setAttribute("aria-label", `Move block ${blk.letter || blk.id} up`);
+    upBtn.addEventListener("click", () => moveParsonsBlock(idx, -1));
+
+    const downBtn = document.createElement("button");
+    downBtn.type = "button";
+    downBtn.className = "btn btn-sm";
+    downBtn.disabled = state.busy || idx === state.parsonsOrder.length - 1;
+    downBtn.textContent = "↓";
+    downBtn.title = "Move block down";
+    downBtn.setAttribute("aria-label", `Move block ${blk.letter || blk.id} down`);
+    downBtn.addEventListener("click", () => moveParsonsBlock(idx, 1));
+
+    const exclBtn = document.createElement("button");
+    exclBtn.type = "button";
+    exclBtn.className = "btn btn-sm btn-ghost";
+    exclBtn.disabled = state.busy || state.parsonsOrder.length <= 1;
+    exclBtn.textContent = "Exclude";
+    exclBtn.title = "Mark as distractor and remove from sequence";
+    exclBtn.addEventListener("click", () => excludeParsonsBlock(blk.id));
+
+    ctrls.append(upBtn, downBtn, exclBtn);
+    row.append(num, letter, codeEl, ctrls);
+    list.append(row);
+  });
+
+  wrap.append(list);
+
+  if (state.excludedIds.length > 0) {
+    const tray = document.createElement("div");
+    tray.className = "parsons-tray";
+    const trayTitle = document.createElement("div");
+    trayTitle.className = "subtle";
+    trayTitle.innerHTML = `<strong>Excluded as distractors (${state.excludedIds.length})</strong>`;
+    tray.append(trayTitle);
+
+    for (const blockId of state.excludedIds) {
+      const blk = byId.get(blockId);
+      if (!blk) continue;
+      const exRow = document.createElement("div");
+      exRow.className = "parsons-row excluded";
+
+      const letter = document.createElement("span");
+      letter.className = "opt-letter";
+      letter.textContent = blk.letter || "?";
+
+      const codeEl = document.createElement("div");
+      codeEl.className = "parsons-code";
+      codeEl.textContent = blk.code;
+
+      const restoreBtn = document.createElement("button");
+      restoreBtn.type = "button";
+      restoreBtn.className = "btn btn-sm";
+      restoreBtn.disabled = state.busy;
+      restoreBtn.textContent = "Restore";
+      restoreBtn.addEventListener("click", () => restoreParsonsBlock(blk.id));
+
+      exRow.append(letter, codeEl, restoreBtn);
+      tray.append(exRow);
+    }
+    wrap.append(tray);
+  }
+
+  return wrap;
+}
+
 function render() {
   root.innerHTML = "";
 
@@ -267,19 +558,26 @@ function render() {
 
   const d = state.data;
   const isConcluded = d.action === "conclude";
+  const isParsons = isParsonsPayload(d);
   const hostBlocksMessage = state.connected && state.caps && !state.caps.canMessage;
 
   const card = document.createElement("div");
   card.className = "card";
 
-  // Header (NEVER displays mode or targets!)
+  // Header (NEVER displays legacy recall/discrimination/composition mode or targets!)
   const hd = document.createElement("div");
   hd.className = "card-hd";
   const left = document.createElement("div");
   left.className = "row";
   const titleBadge = document.createElement("span");
   titleBadge.className = isConcluded ? "badge" : "badge badge-info";
-  titleBadge.textContent = isConcluded ? "Practice · Concluded" : "Practice Problem";
+  titleBadge.textContent = isConcluded
+    ? "Practice · Concluded"
+    : d.cardMode === "faded"
+      ? "Practice · Faded Parsons"
+      : d.cardMode === "parsons"
+        ? "Practice · Parsons"
+        : "Practice Problem";
   left.append(titleBadge);
   if (d.problemId) {
     const idTag = document.createElement("span");
@@ -333,7 +631,6 @@ function render() {
   const bd = document.createElement("div");
   bd.className = "card-bd";
 
-  // Problem statement
   if (d.statement) {
     const stem = document.createElement("div");
     stem.className = "stem";
@@ -342,15 +639,22 @@ function render() {
   }
 
   if (!isConcluded) {
-    // Active Practice Dock
+    if (isParsons) {
+      bd.append(renderParsonsWorkspace(d));
+    }
+
     const workWrap = document.createElement("div");
     const workLabel = document.createElement("div");
     workLabel.className = "field-label";
-    workLabel.innerHTML = `<span>Your attempt / thinking</span><span class="subtle">Iterate freely — ask hints anytime</span>`;
+    workLabel.innerHTML = isParsons
+      ? `<span>Reasoning / notes (optional)</span><span class="subtle">Explain invariant or why a distractor fails</span>`
+      : `<span>Your attempt / thinking</span><span class="subtle">Iterate freely — ask hints anytime</span>`;
     const workInput = document.createElement("textarea");
     workInput.className = "input";
-    workInput.rows = 4;
-    workInput.placeholder = "Write your setup, intermediate steps, or where you're stuck…";
+    workInput.rows = isParsons ? 2 : 4;
+    workInput.placeholder = isParsons
+      ? "Optional: note why you excluded a distractor or chose this order…"
+      : "Write your setup, intermediate steps, or where you're stuck…";
     workInput.value = state.attemptText;
     workInput.disabled = state.busy;
     workInput.addEventListener("input", () => {
@@ -371,12 +675,20 @@ function render() {
     if (!sketchPad) sketchPad = createSketchPad({ title: "Rough work sketch (kept across hints)" });
     bd.append(sketchPad.el);
   } else {
-    // Concluded verdict + verbatim committed modelSolution
     if (d.verdict) {
       const vBox = document.createElement("div");
       vBox.className = "list-item";
       vBox.innerHTML = `<div class="subtle"><strong>Verdict</strong></div><div class="stem">${renderRichText(d.verdict)}</div>`;
       bd.append(vBox);
+    }
+
+    if (Array.isArray(d.canonicalOrder) && d.canonicalOrder.length > 0) {
+      const ordBox = document.createElement("div");
+      ordBox.className = "list-item";
+      ordBox.innerHTML = `<div class="subtle"><strong>Canonical Block Order</strong></div><div class="row">${d.canonicalOrder
+        .map((id, i) => `<span class="mono-tag">${i + 1}. ${escapeHtml(id)}</span>`)
+        .join("")}</div>`;
+      bd.append(ordBox);
     }
 
     if (d.modelSolution) {
@@ -396,7 +708,6 @@ function render() {
 
   card.append(bd);
 
-  // Footer buttons (capability-gated on message)
   if (!hostBlocksMessage) {
     const ft = document.createElement("div");
     ft.className = "card-ft";
@@ -425,7 +736,7 @@ function render() {
       submitBtn.type = "button";
       submitBtn.className = "btn btn-primary";
       submitBtn.disabled = state.busy;
-      submitBtn.textContent = state.busy ? "Sending…" : "Submit Attempt";
+      submitBtn.textContent = state.busy ? "Sending…" : isParsons ? "Submit Order" : "Submit Attempt";
       submitBtn.addEventListener("click", () => sendPracticeAction("attempt"));
 
       ft.append(leftBtns, submitBtn);
@@ -471,6 +782,7 @@ function loadPayload(sc) {
     state.hydratingKey = "";
     state.userTouched = false;
     sketchPad = null;
+    initParsonsStateFromData(sc);
   }
   render();
   hydrateFromServer();

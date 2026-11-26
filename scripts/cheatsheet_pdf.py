@@ -22,6 +22,14 @@ from pathlib import Path
 from typing import Any
 
 ROOT = Path(__file__).resolve().parent.parent
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
+
+from syntopik.fsrs_core import card_retrievability, load_fsrs_parameters  # noqa: E402
+from syntopik.paths import find_binary, resolve_kg_dir  # noqa: E402
+from syntopik.schemas import slugify as _slugify_core, today_iso  # noqa: E402
+from syntopik.storage import load_jsonl, save_json_atomic  # noqa: E402
+
 DEFAULT_EXAM_TAG = "Mastery & Pitfall Sheet"
 
 ACCENT_THEMES: dict[str, dict[str, str]] = {
@@ -35,24 +43,17 @@ ACCENT_THEMES: dict[str, dict[str, str]] = {
 
 
 def find_typst() -> str:
-    home = Path.home()
-    candidates = [
-        os.environ.get("TYPST_BIN"),
-        shutil.which("typst"),
-        str(home / ".cargo" / "bin" / "typst"),
-        str(home / ".local" / "bin" / "typst"),
-        "/opt/homebrew/bin/typst",
-        "/usr/local/bin/typst",
-        "/usr/bin/typst",
-    ]
-    for candidate in candidates:
-        if candidate and Path(candidate).is_file() and os.access(candidate, os.X_OK):
-            return str(candidate)
+    env_bin = os.environ.get("TYPST_BIN")
+    if env_bin and Path(env_bin).is_file() and os.access(env_bin, os.X_OK):
+        return str(env_bin)
+    hit = find_binary("typst")
+    if hit:
+        return hit
     raise SystemExit("Typst CLI not found on PATH. Install via `brew install typst`, `winget install Typst.Typst`, or `cargo install typst-cli`.")
 
 
 def _slugify(text: str) -> str:
-    return re.sub(r"[^a-z0-9]+", "-", text.lower()).strip("-") or "revision-sheet"
+    return _slugify_core(text, default="revision-sheet", max_len=64)
 
 
 def escape_typst_text(text: str) -> str:
@@ -642,18 +643,263 @@ def count_pdf_pages(pdf_path: Path) -> int | None:
         return None
 
 
+def build_anti_mastery_spec(
+    kg_dir: Path | str | None = None,
+    *,
+    chapter: str | None = None,
+    anti_mastery: bool = True,
+    max_pages: int = 1,
+    title: str | None = None,
+) -> dict[str, Any]:
+    """Build a 1-page Anti-Mastery crib sheet spec directly from `knowledge-graph/`.
+
+    Pulls weak/misconception/trapped propositions and `mistakes.jsonl` decision cues while
+    auto-excluding already-solid nodes (`R >= 0.90` & `lapses == 0` & 0 mistake hits) when
+    `anti_mastery=True`, so 100% of A4 real estate goes to personal traps & weak invariants.
+    """
+    from datetime import datetime, timezone
+
+    resolved_kg = resolve_kg_dir(explicit=kg_dir)
+    props = load_jsonl(resolved_kg / "propositions.jsonl")
+    mistakes = load_jsonl(resolved_kg / "mistakes.jsonl")
+    revlog = load_jsonl(resolved_kg / "revlog.jsonl")
+    params = load_fsrs_parameters(resolved_kg)
+    now = datetime.now(timezone.utc)
+    today = today_iso()
+
+    ch_query = str(chapter or "").strip().lower()
+
+    def _matches_chapter(ch_val: Any, pid_val: Any = "", subj_val: Any = "") -> bool:
+        if not ch_query:
+            return True
+        ch_s = str(ch_val or "").strip().lower()
+        ch_slug = _slugify(ch_s) if ch_s else ""
+        pid_s = str(pid_val or "").strip().lower()
+        subj_s = str(subj_val or "").strip().lower()
+        return (
+            ch_query == ch_s
+            or ch_query == ch_slug
+            or ch_query in ch_s
+            or ch_query in ch_slug
+            or ch_query in pid_s
+            or ch_query == subj_s
+        )
+
+    revlog_lapses: dict[str, int] = {}
+    for ev in revlog:
+        pid = str(ev.get("propId") or "").strip()
+        r = ev.get("rating")
+        if pid and (r == 1 or str(r or "").lower() == "again"):
+            revlog_lapses[pid] = revlog_lapses.get(pid, 0) + 1
+
+    mistakes_filtered = [
+        m for m in mistakes if _matches_chapter(m.get("chapter"), m.get("propId"), m.get("subject"))
+    ]
+    mistake_hits_by_prop: dict[str, int] = {}
+    for m in mistakes_filtered:
+        pid = str(m.get("propId") or "").strip()
+        if pid:
+            mistake_hits_by_prop[pid] = mistake_hits_by_prop.get(pid, 0) + 1
+
+    included_props: list[dict[str, Any]] = []
+    excluded_solid_ids: list[str] = []
+    subjects_seen: list[str] = []
+
+    for p in props:
+        pid = str(p.get("id") or "").strip()
+        if not pid:
+            continue
+        if not _matches_chapter(p.get("chapter"), pid, p.get("subject")):
+            continue
+        subj = str(p.get("subject") or "General").strip()
+        if subj and subj not in subjects_seen:
+            subjects_seen.append(subj)
+
+        status = str(p.get("status") or "planned").strip().lower()
+        lapses = max(int(p.get("lapses") or 0), revlog_lapses.get(pid, 0))
+        m_hits = mistake_hits_by_prop.get(pid, 0)
+        due_str = str(p.get("nextReview") or "")[:10]
+
+        if isinstance(p.get("fsrs"), dict) and isinstance(p["fsrs"].get("stability"), (int, float)):
+            r_val = float(card_retrievability(p["fsrs"], now, parameters=params, fractional_days=True))
+        elif status == "solid":
+            bkt_v = float(p.get("bktMastery")) if isinstance(p.get("bktMastery"), (int, float)) else 0.92
+            r_val = 0.95 if (bkt_v >= 0.85 and (not due_str or due_str > today)) else 0.78
+        elif status == "misconception":
+            r_val = 0.15
+        elif status == "shaky":
+            r_val = 0.40
+        else:
+            r_val = 0.25
+
+        # Auto-exclude mastered solid nodes (R >= 0.90 & lapses == 0 & no personal mistake hits).
+        if anti_mastery and status == "solid" and r_val >= 0.90 and lapses == 0 and m_hits == 0:
+            excluded_solid_ids.append(pid)
+            continue
+
+        included_props.append(
+            {
+                "id": pid,
+                "title": str(p.get("title") or pid).strip(),
+                "chapter": str(p.get("chapter") or "General").strip(),
+                "status": status,
+                "notes": str(p.get("notes") or "").strip(),
+                "retrievability": round(r_val, 3),
+                "lapses": lapses,
+                "mistakeHits": m_hits,
+            }
+        )
+
+    prio_rank = {"misconception": 0, "shaky": 1, "planned": 2, "solid": 3}
+    included_props.sort(
+        key=lambda x: (
+            prio_rank.get(x["status"], 4),
+            -x["mistakeHits"],
+            -x["lapses"],
+            x["retrievability"],
+            x["id"],
+        )
+    )
+
+    cap_props = 8 if max_pages == 1 else 16
+    cap_traps = 6 if max_pages == 1 else 12
+    chosen_props = included_props[:cap_props]
+
+    sections: list[dict[str, Any]] = []
+    if chosen_props:
+        inv_bullets: list[str] = []
+        for item in chosen_props:
+            tag = item["status"].upper()
+            note = f" — {item['notes']}" if item["notes"] else ""
+            inv_bullets.append(
+                f"**[{tag} · R≈{round(item['retrievability'] * 100)}%]** `{item['id']}`: {item['title']}{note}"
+            )
+        sections.append(
+            {
+                "heading": "1. Weak & Unstable Invariants (Mastered Solid Nodes Excluded)",
+                "bullets": inv_bullets,
+            }
+        )
+
+    # Personal mistake decision rules ("If condition X -> Do Y, Avoid Z")
+    decision_bullets: list[str] = []
+    global_traps: list[str] = []
+    seen_cues: set[str] = set()
+    for m in mistakes_filtered:
+        cue = " ".join(str(m.get("triggerCue") or "").split())
+        wrong = " ".join(str(m.get("wrongMove") or "").split())
+        fix = " ".join(str(m.get("correctMove") or "").split())
+        cat = str(m.get("category") or "trap").replace("_", " ").title()
+        key = f"{cue.lower()}|{fix.lower()}"
+        if not cue or key in seen_cues:
+            continue
+        seen_cues.add(key)
+        if len(decision_bullets) < cap_traps:
+            decision_bullets.append(f"**[{cat}] If:** {cue} -> **Do:** {fix}")
+        if wrong and len(global_traps) < (5 if max_pages == 1 else 10):
+            global_traps.append(f"**[{cat}]** Avoid: {wrong} — **Instead:** {fix}")
+
+    if decision_bullets:
+        sections.append(
+            {
+                "heading": "2. Personal Decision Rules & Brain-Freeze Guardrails",
+                "bullets": decision_bullets,
+            }
+        )
+
+    if not sections:
+        sections.append(
+            {
+                "heading": "1. Clean Slate — Zero Weak Invariants",
+                "bullets": [
+                    f"Excluded {len(excluded_solid_ids)} already-mastered solid node(s) (R >= 90%, 0 lapses).",
+                    "No active misconceptions, shaky edges, or logged mistake traps match this filter.",
+                ],
+            }
+        )
+
+    subject_label = " / ".join(subjects_seen[:2]) if subjects_seen else "General"
+    sheet_title = (
+        title.strip()
+        if title and title.strip()
+        else (f"{chapter} — Anti-Mastery 1-Page Crib Sheet" if chapter else "Personal Anti-Mastery 1-Page Crib Sheet")
+    )
+    subtitle = (
+        f"Auto-excluded {len(excluded_solid_ids)} solid node(s) (R>=90%, 0 lapses) · "
+        f"Kept {len(chosen_props)} weak invariant(s) & {len(decision_bullets)} trap rule(s)"
+    )
+
+    return {
+        "slug": _slugify(chapter or "anti-mastery-crib"),
+        "title": sheet_title,
+        "subject": subject_label,
+        "examTag": "Anti-Mastery 1p Crib" if anti_mastery else DEFAULT_EXAM_TAG,
+        "subtitle": subtitle,
+        "columns": 2,
+        "margin": "7.5mm" if max_pages == 1 else "8.5mm",
+        "fontSize": "7.8pt" if max_pages == 1 else "8.3pt",
+        "sections": sections,
+        "traps": global_traps,
+        "quickChecks": [
+            "Check sign conventions & positive axis orientation before substituting numbers.",
+            "Verify validity assumptions (ideal, small-angle, boundary/edge cases) before selecting a law.",
+            "Run dimensional & limiting-case sanity check ($x \\to 0, \\infty$) on final expressions.",
+        ],
+        "antiMasteryMeta": {
+            "antiMastery": bool(anti_mastery),
+            "chapterFilter": chapter or None,
+            "maxPages": int(max_pages),
+            "includedPropIds": [x["id"] for x in chosen_props],
+            "excludedSolidIds": sorted(excluded_solid_ids),
+            "excludedSolidCount": len(excluded_solid_ids),
+            "trapRulesCount": len(decision_bullets),
+        },
+    }
+
+
 def cmd_build(args: argparse.Namespace) -> None:
-    typst_bin = find_typst()
-    in_path = Path(args.input).expanduser().resolve()
-    if not in_path.exists():
-        raise SystemExit(f"Input file not found: {in_path}")
+    from_kg = bool(getattr(args, "from_kg", False))
+    anti_mastery = bool(getattr(args, "anti_mastery", False))
+    max_pages = int(getattr(args, "pages", None) or 2)
+    spec_only = bool(getattr(args, "spec_only", False))
+    out_spec_arg = getattr(args, "out_spec", None)
 
-    if in_path.suffix.lower() == ".json":
-        spec = json.loads(in_path.read_text(encoding="utf-8"))
+    if from_kg:
+        spec = build_anti_mastery_spec(
+            getattr(args, "kg_dir", None),
+            chapter=getattr(args, "chapter", None),
+            anti_mastery=anti_mastery,
+            max_pages=max_pages,
+        )
+        base_dir = resolve_kg_dir(explicit=getattr(args, "kg_dir", None)).parent
+        slug = _slugify(str(spec.get("slug") or getattr(args, "chapter", None) or "anti-mastery-crib"))
+        input_label = f"kg:{resolve_kg_dir(explicit=getattr(args, 'kg_dir', None))}"
     else:
-        spec = parse_markdown_to_spec(in_path)
+        if not args.input:
+            raise SystemExit("Provide an input .json/.md file OR pass --from-kg [--anti-mastery].")
+        in_path = Path(args.input).expanduser().resolve()
+        if not in_path.exists():
+            raise SystemExit(f"Input file not found: {in_path}")
+        if in_path.suffix.lower() == ".json":
+            spec = json.loads(in_path.read_text(encoding="utf-8"))
+        else:
+            spec = parse_markdown_to_spec(in_path)
+        if max_pages == 1:
+            spec = dict(spec)
+            spec.setdefault("margin", "7.5mm")
+            spec.setdefault("fontSize", "7.8pt")
+        base_dir = in_path.parent
+        slug = _slugify(str(spec.get("slug") or in_path.stem))
+        input_label = str(in_path)
 
-    slug = _slugify(str(spec.get("slug") or in_path.stem))
+    if out_spec_arg:
+        save_json_atomic(Path(out_spec_arg).expanduser().resolve(), spec)
+
+    if spec_only:
+        print(json.dumps(spec, indent=2, ensure_ascii=False))
+        return
+
+    typst_bin = find_typst()
     out_pdf = (
         Path(args.out).expanduser().resolve()
         if args.out
@@ -665,7 +911,7 @@ def cmd_build(args: argparse.Namespace) -> None:
         stage_dir = Path(tmp)
         typ_src = build_typst_source(
             spec,
-            base_dir=in_path.parent,
+            base_dir=base_dir,
             stage_dir=stage_dir,
             columns_override=args.columns,
             paper=args.paper,
@@ -689,15 +935,19 @@ def cmd_build(args: argparse.Namespace) -> None:
             raise SystemExit(f"Typst compilation failed:\n{proc.stderr}\n--- Generated .typ ---\n{typ_src}")
 
     pages = count_pdf_pages(out_pdf)
-    print(json.dumps({
-        "input": str(in_path),
+    payload: dict[str, Any] = {
+        "input": input_label,
         "output": str(out_pdf),
         "pages": pages,
         "bytes": out_pdf.stat().st_size,
         "typst": typst_bin,
         "keepTyp": str(out_pdf.with_suffix(".typ")) if args.keep_typ else None,
         "withinTwoPages": (pages is not None and pages <= 2),
-    }, indent=2))
+        "withinOnePage": (pages is not None and pages <= 1),
+    }
+    if "antiMasteryMeta" in spec:
+        payload["antiMasteryMeta"] = spec["antiMasteryMeta"]
+    print(json.dumps(payload, indent=2, ensure_ascii=False))
 
 
 def cmd_schema(_args: argparse.Namespace) -> None:
@@ -740,16 +990,24 @@ def cmd_schema(_args: argparse.Namespace) -> None:
     print(json.dumps(sample, indent=2))
 
 
-def main() -> None:
+def main(argv: list[str] | None = None) -> None:
+    raw_argv = list(sys.argv[1:] if argv is None else argv)
     # Allow shorthand `cheatsheet_pdf.py input.json --out ...` without requiring `build`.
-    if len(sys.argv) >= 2 and sys.argv[1] not in ("build", "schema", "-h", "--help"):
-        sys.argv.insert(1, "build")
+    if raw_argv and raw_argv[0] not in ("build", "schema", "-h", "--help"):
+        raw_argv.insert(0, "build")
 
-    parser = argparse.ArgumentParser(description="Compile 1-2 page Syntopik Mastery & Pitfall Revision Sheet PDFs with Typst")
+    parser = argparse.ArgumentParser(description="Compile 1-2 page Syntopik Mastery, Anti-Mastery & Pitfall Revision Sheet PDFs with Typst")
     sub = parser.add_subparsers(dest="cmd", required=True)
 
-    p_b = sub.add_parser("build", help="Compile JSON or Markdown chapter summary to PDF")
-    p_b.add_argument("input", help="Path to structured .json spec or .md chapter file")
+    p_b = sub.add_parser("build", help="Compile JSON, Markdown, or live Knowledge Graph (--from-kg --anti-mastery) to PDF")
+    p_b.add_argument("input", nargs="?", default=None, help="Path to structured .json spec or .md chapter file (omit when using --from-kg)")
+    p_b.add_argument("--from-kg", action="store_true", help="Build spec directly from knowledge-graph/propositions.jsonl + mistakes.jsonl")
+    p_b.add_argument("--kg-dir", default=None, help="Override knowledge-graph directory for --from-kg")
+    p_b.add_argument("--chapter", default=None, help="Filter --from-kg to a chapter name or slug")
+    p_b.add_argument("--anti-mastery", action="store_true", help="Auto-exclude solid mastered nodes (R >= 0.90 & lapses == 0) so 100%% of page holds weak traps")
+    p_b.add_argument("--pages", type=int, choices=[1, 2], default=None, help="Target page budget (1 = ultra-dense 1-page crib layout)")
+    p_b.add_argument("--out-spec", default=None, help="Optional path to save generated JSON spec")
+    p_b.add_argument("--spec-only", action="store_true", help="Emit generated JSON spec to stdout without running Typst")
     p_b.add_argument("--out", help="Output PDF path (default: chapters/<slug>-sheet.pdf)")
     p_b.add_argument("--columns", type=int, choices=[1, 2, 3], help="Column count (default: 2)")
     p_b.add_argument("--paper", default="a4", choices=["a4", "us-letter"])
@@ -761,7 +1019,7 @@ def main() -> None:
     p_s = sub.add_parser("schema", help="Print an example structured JSON spec for cheatsheet_pdf.py")
     p_s.set_defaults(func=cmd_schema)
 
-    args = parser.parse_args()
+    args = parser.parse_args(raw_argv)
     args.func(args)
 
 

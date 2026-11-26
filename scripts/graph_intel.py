@@ -15,29 +15,40 @@ Formal Proofs to surface:
   4. Cross-Chapter Combos (`--combos`): pairs of `solid` nodes from 2 distinct
      chapters/topics sharing mathematical, algorithmic, or structural themes
      for integrative multi-concept synthesis drills.
+  5. Confusable Lookalikes (`--confusables`): pairs of nodes with high surface /
+     lexical similarity AND divergent governing premises (or explicit mistake
+     confusions) for Rohrer & Taylor discriminative-contrast interleaving.
 
-Importable helpers for `scripts/daily_plan.py` and other callers:
-  - `load_knowledge_graph(kg_dir)`
-  - `analyze_bottlenecks(G, ...)`
-  - `analyze_islands(G)`
-  - `compute_path_to(G, target_id)`
-  - `find_combos(G, ...)`
+Runs cleanly on bare Python 3.12+ (pure-stdlib Tarjan SCC / BFS / Brandes /
+PageRank fallback when `networkx` is not installed).
 """
 
 from __future__ import annotations
 
 import argparse
+import heapq
 import json
-import os
+import math
 import re
 import sys
 import unicodedata
+from collections import deque
 from pathlib import Path
-from typing import Any
-
-import networkx as nx
+from typing import Any, Callable
 
 ROOT = Path(__file__).resolve().parent.parent
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
+
+try:
+    import networkx as nx  # type: ignore[import-not-found]
+except ImportError:
+    nx = None  # type: ignore[assignment]
+
+from syntopik.paths import resolve_kg_dir as _resolve_kg_dir_core  # noqa: E402
+from syntopik.schemas import normalize_chain  # noqa: E402
+from syntopik.storage import load_jsonl  # noqa: E402
+
 DEFAULT_KG_DIR = ROOT / "knowledge-graph"
 
 FOUNDATIONAL_KINDS: frozenset[str] = frozenset(
@@ -150,84 +161,331 @@ COMBO_STOP_WORDS: frozenset[str] = frozenset(
 )
 
 
-def resolve_kg_paths(kg_dir_arg: Path | str | None = None) -> tuple[Path, Path, Path]:
-    if kg_dir_arg is not None and str(kg_dir_arg).strip():
-        kg_dir = Path(kg_dir_arg).expanduser().resolve()
-    else:
-        env_kg = (
-            os.environ.get("SYNT_KG_DIR", "").strip()
-            or os.environ.get("MLH_KG_DIR", "").strip()
-        )
-        env_ws = (
-            os.environ.get("SYNT_WORKSPACE", "").strip()
-            or os.environ.get("MLH_WORKSPACE", "").strip()
-        )
-        if env_kg:
-            kg_dir = Path(env_kg).expanduser().resolve()
-        elif env_ws:
-            kg_dir = (Path(env_ws).expanduser().resolve() / "knowledge-graph").resolve()
+# ---------------------------------------------------------------------------
+# Pure-stdlib DiGraph fallback (drop-in subset of NetworkX DiGraph API)
+# ---------------------------------------------------------------------------
+
+
+class _NodeView:
+    def __init__(self, store: dict[Any, dict[str, Any]]) -> None:
+        self._store = store
+
+    def __call__(self, data: bool = False):
+        if data:
+            return list(self._store.items())
+        return list(self._store.keys())
+
+    def __getitem__(self, key: Any) -> dict[str, Any]:
+        return self._store[key]
+
+    def __contains__(self, key: Any) -> bool:
+        return key in self._store
+
+    def __iter__(self):
+        return iter(self._store)
+
+    def __len__(self) -> int:
+        return len(self._store)
+
+
+class StdlibDiGraph:
+    """Minimal pure-stdlib directed graph implementing the subset of NetworkX API used by Syntopik."""
+
+    def __init__(self) -> None:
+        self._nodes: dict[Any, dict[str, Any]] = {}
+        self._succ: dict[Any, dict[Any, dict[str, Any]]] = {}
+        self._pred: dict[Any, dict[Any, dict[str, Any]]] = {}
+        self.graph: dict[str, Any] = {}
+        self.nodes = _NodeView(self._nodes)
+
+    def __contains__(self, n: Any) -> bool:
+        return n in self._nodes
+
+    def __len__(self) -> int:
+        return len(self._nodes)
+
+    def __getitem__(self, u: Any) -> dict[Any, dict[str, Any]]:
+        return self._succ[u]
+
+    def number_of_nodes(self) -> int:
+        return len(self._nodes)
+
+    def number_of_edges(self) -> int:
+        return sum(len(nbrs) for nbrs in self._succ.values())
+
+    def add_node(self, u: Any, **attrs: Any) -> None:
+        if u not in self._nodes:
+            self._nodes[u] = dict(attrs)
+            self._succ[u] = {}
+            self._pred[u] = {}
         else:
-            kg_dir = DEFAULT_KG_DIR.resolve()
+            self._nodes[u].update(attrs)
+
+    def add_edge(self, u: Any, v: Any, **attrs: Any) -> None:
+        if u not in self._nodes:
+            self.add_node(u)
+        if v not in self._nodes:
+            self.add_node(v)
+        edge_dict = self._succ[u].get(v)
+        if edge_dict is None:
+            edge_dict = dict(attrs)
+            self._succ[u][v] = edge_dict
+            self._pred[v][u] = edge_dict
+        else:
+            edge_dict.update(attrs)
+
+    def has_edge(self, u: Any, v: Any) -> bool:
+        return u in self._succ and v in self._succ[u]
+
+    def in_degree(self, u: Any) -> int:
+        return len(self._pred.get(u, ()))
+
+    def out_degree(self, u: Any) -> int:
+        return len(self._succ.get(u, ()))
+
+    def predecessors(self, u: Any):
+        return iter(self._pred.get(u, ()))
+
+    def successors(self, u: Any):
+        return iter(self._succ.get(u, ()))
+
+    def copy(self) -> StdlibDiGraph:
+        g = StdlibDiGraph()
+        g.graph = dict(self.graph)
+        for u, attrs in self._nodes.items():
+            g.add_node(u, **dict(attrs))
+        for u, nbrs in self._succ.items():
+            for v, eattrs in nbrs.items():
+                g.add_edge(u, v, **dict(eattrs))
+        return g
+
+    def reverse(self, copy: bool = True) -> StdlibDiGraph:
+        g = StdlibDiGraph()
+        g.graph = dict(self.graph)
+        for u, attrs in self._nodes.items():
+            g.add_node(u, **dict(attrs))
+        for u, nbrs in self._succ.items():
+            for v, eattrs in nbrs.items():
+                g.add_edge(v, u, **dict(eattrs))
+        return g
+
+    def subgraph(self, nbunch: Any) -> StdlibDiGraph:
+        keep = set(nbunch)
+        g = StdlibDiGraph()
+        g.graph = dict(self.graph)
+        for u in keep:
+            if u in self._nodes:
+                g.add_node(u, **dict(self._nodes[u]))
+        for u in keep:
+            if u in self._succ:
+                for v, eattrs in self._succ[u].items():
+                    if v in keep:
+                        g.add_edge(u, v, **dict(eattrs))
+        return g
+
+
+def _is_graph_obj(obj: Any) -> bool:
+    if isinstance(obj, StdlibDiGraph):
+        return True
+    if nx is not None and isinstance(obj, nx.DiGraph):
+        return True
+    return False
+
+
+def _graph_descendants(G: Any, u: Any) -> set[Any]:
+    if nx is not None and isinstance(G, nx.DiGraph):
+        return set(nx.descendants(G, u))
+    visited: set[Any] = set()
+    q: deque[Any] = deque(G.successors(u))
+    while q:
+        cur = q.popleft()
+        if cur in visited or cur == u:
+            continue
+        visited.add(cur)
+        for nxt in G.successors(cur):
+            if nxt not in visited and nxt != u:
+                q.append(nxt)
+    return visited
+
+
+def _graph_ancestors(G: Any, u: Any) -> set[Any]:
+    if nx is not None and isinstance(G, nx.DiGraph):
+        return set(nx.ancestors(G, u))
+    visited: set[Any] = set()
+    q: deque[Any] = deque(G.predecessors(u))
+    while q:
+        cur = q.popleft()
+        if cur in visited or cur == u:
+            continue
+        visited.add(cur)
+        for prv in G.predecessors(cur):
+            if prv not in visited and prv != u:
+                q.append(prv)
+    return visited
+
+
+def _graph_is_dag(G: Any) -> bool:
+    if nx is not None and isinstance(G, nx.DiGraph):
+        return bool(nx.is_directed_acyclic_graph(G))
+    in_deg = {u: G.in_degree(u) for u in G.nodes()}
+    q: deque[Any] = deque(u for u, d in in_deg.items() if d == 0)
+    visited = 0
+    while q:
+        u = q.popleft()
+        visited += 1
+        for v in G.successors(u):
+            in_deg[v] -= 1
+            if in_deg[v] == 0:
+                q.append(v)
+    return visited == G.number_of_nodes()
+
+
+def _graph_lex_topo_sort(G: Any, key: Callable[[Any], Any]) -> list[Any]:
+    if nx is not None and isinstance(G, nx.DiGraph):
+        return list(nx.lexicographical_topological_sort(G, key=key))
+    in_deg = {u: G.in_degree(u) for u in G.nodes()}
+    heap: list[tuple[Any, Any]] = []
+    for u, d in in_deg.items():
+        if d == 0:
+            heapq.heappush(heap, (key(u), u))
+    order: list[Any] = []
+    while heap:
+        _, u = heapq.heappop(heap)
+        order.append(u)
+        for v in G.successors(u):
+            in_deg[v] -= 1
+            if in_deg[v] == 0:
+                heapq.heappush(heap, (key(v), v))
+    if len(order) != G.number_of_nodes():
+        raise ValueError("Graph contains a cycle")
+    return order
+
+
+def _tarjan_scc(G: Any) -> list[set[Any]]:
+    """Iterative Tarjan strongly connected components algorithm (pure stdlib)."""
+    index_counter = 0
+    indices: dict[Any, int] = {}
+    lowlink: dict[Any, int] = {}
+    on_stack: set[Any] = set()
+    stack: list[Any] = []
+    sccs: list[set[Any]] = []
+
+    for start in G.nodes():
+        if start in indices:
+            continue
+        call_stack: list[tuple[Any, Any]] = [(start, iter(G.successors(start)))]
+        indices[start] = lowlink[start] = index_counter
+        index_counter += 1
+        stack.append(start)
+        on_stack.add(start)
+
+        while call_stack:
+            v, nbr_iter = call_stack[-1]
+            try:
+                w = next(nbr_iter)
+                if w not in indices:
+                    indices[w] = lowlink[w] = index_counter
+                    index_counter += 1
+                    stack.append(w)
+                    on_stack.add(w)
+                    call_stack.append((w, iter(G.successors(w))))
+                elif w in on_stack:
+                    if indices[w] < lowlink[v]:
+                        lowlink[v] = indices[w]
+            except StopIteration:
+                call_stack.pop()
+                if lowlink[v] == indices[v]:
+                    comp: set[Any] = set()
+                    while True:
+                        w = stack.pop()
+                        on_stack.remove(w)
+                        comp.add(w)
+                        if w == v:
+                            break
+                    sccs.append(comp)
+                if call_stack:
+                    parent = call_stack[-1][0]
+                    if lowlink[v] < lowlink[parent]:
+                        lowlink[parent] = lowlink[v]
+
+    return sccs
+
+
+def _graph_condensation(G: Any) -> Any:
+    if nx is not None and isinstance(G, nx.DiGraph):
+        return nx.condensation(G)
+    sccs = _tarjan_scc(G)
+    cond = StdlibDiGraph()
+    node_to_comp: dict[Any, int] = {}
+    for cid, members in enumerate(sccs):
+        cond.add_node(cid, members=set(members))
+        for m in members:
+            node_to_comp[m] = cid
+    for u in G.nodes():
+        cu = node_to_comp[u]
+        for v in G.successors(u):
+            cv = node_to_comp[v]
+            if cu != cv and not cond.has_edge(cu, cv):
+                cond.add_edge(cu, cv)
+    return cond
+
+
+def _graph_betweenness(G: Any) -> dict[Any, float]:
+    n = G.number_of_nodes()
+    if n <= 2:
+        return {u: 0.0 for u in G.nodes()}
+    if nx is not None and isinstance(G, nx.DiGraph):
+        return dict(nx.betweenness_centrality(G, normalized=True))
+    # Pure-stdlib Brandes algorithm for unweighted directed graphs.
+    cb: dict[Any, float] = {v: 0.0 for v in G.nodes()}
+    for s in G.nodes():
+        S: list[Any] = []
+        P: dict[Any, list[Any]] = {w: [] for w in G.nodes()}
+        sigma: dict[Any, float] = {w: 0.0 for w in G.nodes()}
+        sigma[s] = 1.0
+        dist: dict[Any, int] = {w: -1 for w in G.nodes()}
+        dist[s] = 0
+        Q: deque[Any] = deque([s])
+        while Q:
+            v = Q.popleft()
+            S.append(v)
+            for w in G.successors(v):
+                if dist[w] < 0:
+                    Q.append(w)
+                    dist[w] = dist[v] + 1
+                if dist[w] == dist[v] + 1:
+                    sigma[w] += sigma[v]
+                    P[w].append(v)
+        delta: dict[Any, float] = {w: 0.0 for w in G.nodes()}
+        while S:
+            w = S.pop()
+            for v in P[w]:
+                if sigma[w] > 0:
+                    delta[v] += (sigma[v] / sigma[w]) * (1.0 + delta[w])
+            if w != s:
+                cb[w] += delta[w]
+    scale = 1.0 / ((n - 1) * (n - 2))
+    return {v: val * scale for v, val in cb.items()}
+
+
+# ---------------------------------------------------------------------------
+# Path & graph builders
+# ---------------------------------------------------------------------------
+
+
+def resolve_kg_paths(kg_dir_arg: Path | str | None = None) -> tuple[Path, Path, Path]:
+    kg_dir = _resolve_kg_dir_core(explicit=kg_dir_arg)
     return kg_dir, kg_dir / "propositions.jsonl", kg_dir / "chains.jsonl"
-
-
-def load_jsonl(path: Path) -> list[dict[str, Any]]:
-    if not path.exists():
-        return []
-    rows: list[dict[str, Any]] = []
-    for raw_line in path.read_text(encoding="utf-8").splitlines():
-        line = raw_line.strip()
-        if not line:
-            continue
-        try:
-            obj = json.loads(line)
-        except Exception:
-            continue
-        if isinstance(obj, dict):
-            rows.append(obj)
-    return rows
-
-
-def normalize_chain(raw: dict[str, Any]) -> dict[str, Any] | None:
-    """Normalize legacy binary `{from, to}` and multi-premise `{premises[], conclusion}` chains."""
-    if not isinstance(raw, dict):
-        return None
-    conclusion = str(raw.get("conclusion") or raw.get("to") or "").strip()
-    if not conclusion:
-        return None
-    raw_premises = raw.get("premises")
-    premises: list[str] = []
-    if isinstance(raw_premises, list):
-        for p in raw_premises:
-            ps = str(p or "").strip()
-            if ps and ps != conclusion and ps not in premises:
-                premises.append(ps)
-    else:
-        src = str(raw.get("from") or "").strip()
-        if src and src != conclusion:
-            premises = [src]
-    if not premises:
-        return None
-    relation = str(raw.get("relation") or "requires").strip() or "requires"
-    why = str(raw.get("why") or raw.get("note") or "").strip()
-    chain_key = f"{'+'.join(sorted(premises))}>{conclusion}"
-    return {
-        "premises": premises,
-        "conclusion": conclusion,
-        "relation": relation,
-        "why": why,
-        "chainKey": chain_key,
-        "isJoint": len(premises) >= 2,
-        "arity": len(premises),
-    }
 
 
 def build_graph(
     props: list[dict[str, Any]],
     chains: list[dict[str, Any]],
-) -> tuple[nx.DiGraph, list[dict[str, Any]]]:
-    """Build a NetworkX DiGraph expanding both binary edges and multi-premise hyperedges."""
-    G = nx.DiGraph()
+) -> tuple[Any, list[dict[str, Any]]]:
+    """Build a directed graph (`nx.DiGraph` when installed, else pure-stdlib `StdlibDiGraph`)
+    expanding both binary edges and multi-premise hyperedges.
+    """
+    G: Any = nx.DiGraph() if nx is not None else StdlibDiGraph()
     for p in props:
         pid = str(p.get("id") or "").strip()
         if not pid:
@@ -242,6 +500,7 @@ def build_graph(
             pid,
             id=pid,
             title=str(p.get("title") or pid),
+            statement=str(p.get("statement") or "").strip(),
             subject=str(p.get("subject") or "General").strip() or "General",
             chapter=str(p.get("chapter") or "General").strip() or "General",
             kind=str(p.get("kind") or "derivation").strip() or "derivation",
@@ -270,6 +529,7 @@ def build_graph(
                     node_id,
                     id=node_id,
                     title=node_id,
+                    statement="",
                     subject="Unknown",
                     chapter="Unknown",
                     kind="unknown",
@@ -290,6 +550,7 @@ def build_graph(
             "why": norm["why"],
             "isJoint": norm["isJoint"],
             "arity": norm["arity"],
+            "encompassWeight": norm["encompassWeight"],
         }
         for prem in norm["premises"]:
             if G.has_edge(prem, conc):
@@ -315,48 +576,56 @@ def build_graph(
 
 def load_knowledge_graph(
     kg_dir: Path | str | None = None,
-) -> tuple[nx.DiGraph, list[dict[str, Any]], list[dict[str, Any]]]:
-    """Load `propositions.jsonl` + `chains.jsonl` into a NetworkX DiGraph."""
-    _kg_dir, props_file, chains_file = resolve_kg_paths(kg_dir)
+) -> tuple[Any, list[dict[str, Any]], list[dict[str, Any]]]:
+    """Load `propositions.jsonl` + `chains.jsonl` into a directed graph."""
+    resolved_kg, props_file, chains_file = resolve_kg_paths(kg_dir)
     props = load_jsonl(props_file)
     chains = load_jsonl(chains_file)
     G, norm_chains = build_graph(props, chains)
+    G.graph["kgDir"] = str(resolved_kg)
     return G, props, norm_chains
 
 
-def _ensure_graph(graph_or_dir: nx.DiGraph | Path | str | None) -> nx.DiGraph:
-    if isinstance(graph_or_dir, nx.DiGraph):
+def _ensure_graph(graph_or_dir: Any) -> Any:
+    if _is_graph_obj(graph_or_dir):
         return graph_or_dir
     G, _props, _chains = load_knowledge_graph(graph_or_dir)
     return G
 
 
-def _safe_reverse_pagerank(G: nx.DiGraph) -> dict[str, float]:
+def _safe_reverse_pagerank(G: Any) -> dict[str, float]:
     n = G.number_of_nodes()
     if n == 0:
         return {}
     if G.number_of_edges() == 0:
         return {node: 1.0 / n for node in G.nodes()}
     G_rev = G.reverse(copy=True)
-    try:
-        return nx.pagerank(G_rev, alpha=0.85, max_iter=200, tol=1e-6)
-    except Exception:
-        # Fallback pure-Python power iteration if SciPy/convergence ever hiccups.
-        pr = {node: 1.0 / n for node in G_rev.nodes()}
-        alpha = 0.85
-        for _ in range(50):
-            new_pr = {node: (1.0 - alpha) / n for node in G_rev.nodes()}
-            dangling_sum = sum(pr[u] for u in G_rev.nodes() if G_rev.out_degree(u) == 0)
-            for node in G_rev.nodes():
-                new_pr[node] += alpha * dangling_sum / n
-            for u in G_rev.nodes():
-                deg = G_rev.out_degree(u)
-                if deg > 0:
-                    share = alpha * pr[u] / deg
-                    for v in G_rev.successors(u):
-                        new_pr[v] += share
-            pr = new_pr
-        return pr
+    if nx is not None and isinstance(G_rev, nx.DiGraph):
+        try:
+            return dict(nx.pagerank(G_rev, alpha=0.85, max_iter=200, tol=1e-6))
+        except Exception:
+            pass
+    # Pure-Python power iteration (matches NetworkX PageRank cleanly on bare Python).
+    nodes_list = list(G_rev.nodes())
+    pr = {node: 1.0 / n for node in nodes_list}
+    alpha = 0.85
+    for _ in range(80):
+        new_pr = {node: (1.0 - alpha) / n for node in nodes_list}
+        dangling_sum = sum(pr[u] for u in nodes_list if G_rev.out_degree(u) == 0)
+        dangling_share = alpha * dangling_sum / n
+        for node in nodes_list:
+            new_pr[node] += dangling_share
+        for u in nodes_list:
+            deg = G_rev.out_degree(u)
+            if deg > 0:
+                share = alpha * pr[u] / deg
+                for v in G_rev.successors(u):
+                    new_pr[v] += share
+        diff = sum(abs(new_pr[u] - pr[u]) for u in nodes_list)
+        pr = new_pr
+        if diff < 1e-7:
+            break
+    return pr
 
 
 def _effective_bkt(attrs: dict[str, Any]) -> float:
@@ -375,8 +644,13 @@ def _effective_bkt(attrs: dict[str, Any]) -> float:
     return 0.30
 
 
+# ---------------------------------------------------------------------------
+# Graph Intelligence Analyses
+# ---------------------------------------------------------------------------
+
+
 def analyze_bottlenecks(
-    graph_or_dir: nx.DiGraph | Path | str | None,
+    graph_or_dir: Any,
     *,
     top: int = 10,
     bkt_threshold: float = 0.65,
@@ -387,14 +661,14 @@ def analyze_bottlenecks(
         return []
 
     rev_pr = _safe_reverse_pagerank(G)
-    betweenness = nx.betweenness_centrality(G, normalized=True) if G.number_of_nodes() > 2 else {u: 0.0 for u in G.nodes()}
+    betweenness = _graph_betweenness(G)
 
     candidates: list[dict[str, Any]] = []
     for u, attrs in G.nodes(data=True):
         status = str(attrs.get("status") or "planned").lower()
         raw_bkt = attrs.get("bktMastery")
         is_low_bkt = isinstance(raw_bkt, (int, float)) and float(raw_bkt) < bkt_threshold
-        desc = nx.descendants(G, u)
+        desc = _graph_descendants(G, u)
         downstream_count = len(desc)
 
         is_candidate = (
@@ -448,8 +722,6 @@ def analyze_bottlenecks(
         status_weight = STATUS_SEVERITY_WEIGHT.get(c["status"], 0.85)
         mastery_gap = max(0.0, 1.0 - c["effBkt"])
 
-        # Weighted composite anchored on downstream blast radius (50%), reverse PageRank (30%),
-        # cross-chapter reach (20%), plus small BKT tie-break for equal-topology leaves.
         impact_score = round(
             status_weight * (0.50 * norm_desc + 0.30 * norm_pr + 0.20 * norm_cross + 0.05 * mastery_gap),
             4,
@@ -496,9 +768,7 @@ def analyze_bottlenecks(
     return ranked[: max(0, int(top))]
 
 
-def analyze_islands(
-    graph_or_dir: nx.DiGraph | Path | str | None,
-) -> list[dict[str, Any]]:
+def analyze_islands(graph_or_dir: Any) -> list[dict[str, Any]]:
     """Detect zero-in-degree nodes whose kind is NOT axiom/unconditional_truth/definition."""
     G = _ensure_graph(graph_or_dir)
     status_order = {"misconception": 0, "shaky": 1, "planned": 2, "solid": 3}
@@ -513,7 +783,7 @@ def analyze_islands(
         if kind_norm in FOUNDATIONAL_KINDS:
             continue
 
-        desc_count = len(nx.descendants(G, u))
+        desc_count = len(_graph_descendants(G, u))
         out_deg = G.out_degree(u)
         status = str(attrs.get("status") or "planned").lower()
         severity = "high" if (out_deg > 0 or status in ("shaky", "misconception")) else "medium"
@@ -547,10 +817,7 @@ def analyze_islands(
     return islands
 
 
-def compute_path_to(
-    graph_or_dir: nx.DiGraph | Path | str | None,
-    target_id: str,
-) -> dict[str, Any]:
+def compute_path_to(graph_or_dir: Any, target_id: str) -> dict[str, Any]:
     """Extract ancestor subgraph of `target_id` and compute a cycle-safe topological study sequence."""
     G = _ensure_graph(graph_or_dir)
     target = str(target_id or "").strip()
@@ -569,7 +836,7 @@ def compute_path_to(
             "sequence": [],
         }
 
-    ancestors = nx.ancestors(G, target)
+    ancestors = _graph_ancestors(G, target)
     sub_nodes = ancestors | {target}
     sub = G.subgraph(sub_nodes).copy()
 
@@ -584,15 +851,14 @@ def compute_path_to(
             nid,
         )
 
-    has_cycles = not nx.is_directed_acyclic_graph(sub)
+    has_cycles = not _graph_is_dag(sub)
     cycle_groups: list[list[str]] = []
     cycle_member_set: set[str] = set()
 
     if not has_cycles:
-        ordered_ids = list(nx.lexicographical_topological_sort(sub, key=_node_tie_key))
+        ordered_ids = _graph_lex_topo_sort(sub, key=_node_tie_key)
     else:
-        # Cycle-safe SCC condensation topological sort.
-        cond = nx.condensation(sub)
+        cond = _graph_condensation(sub)
         for comp_id in cond.nodes():
             members = sorted(cond.nodes[comp_id]["members"], key=_node_tie_key)
             if len(members) > 1 or any(sub.has_edge(m, m) for m in members):
@@ -604,11 +870,10 @@ def compute_path_to(
             return (1 if target in members else 0, min(members))
 
         ordered_ids = []
-        for comp_id in nx.lexicographical_topological_sort(cond, key=_comp_tie_key):
+        for comp_id in _graph_lex_topo_sort(cond, key=_comp_tie_key):
             members = sorted(cond.nodes[comp_id]["members"], key=_node_tie_key)
             ordered_ids.extend(members)
 
-    # Index incoming hyperedges inside the ancestor subgraph for clarity.
     all_hyperedges = G.graph.get("hyperedges") or []
     incoming_by_conc: dict[str, list[dict[str, Any]]] = {}
     for he in all_hyperedges:
@@ -713,11 +978,7 @@ def _detect_structural_themes(text: str, tags: list[str]) -> set[str]:
     return matched
 
 
-def find_combos(
-    graph_or_dir: nx.DiGraph | Path | str | None,
-    *,
-    top: int = 8,
-) -> list[dict[str, Any]]:
+def find_combos(graph_or_dir: Any, *, top: int = 8) -> list[dict[str, Any]]:
     """Find cross-chapter pairs of `solid` nodes sharing structural themes/keywords/tags."""
     G = _ensure_graph(graph_or_dir)
     solid_nodes: list[dict[str, Any]] = []
@@ -733,6 +994,7 @@ def find_combos(
         text_blob = " ".join(
             [
                 str(attrs.get("title") or ""),
+                str(attrs.get("statement") or ""),
                 " ".join(attrs.get("aliases") or []),
                 str(attrs.get("notes") or ""),
                 chapter,
@@ -751,6 +1013,7 @@ def find_combos(
                     " ".join(
                         [
                             str(attrs.get("title") or ""),
+                            str(attrs.get("statement") or ""),
                             " ".join(attrs.get("aliases") or []),
                             str(attrs.get("notes") or ""),
                         ]
@@ -788,7 +1051,6 @@ def find_combos(
             bridge_terms = shared_tags[:2] + [t.replace("_", "/") for t in shared_themes[:2]] + shared_keywords[:3]
             bridge_label = ", ".join(dict.fromkeys(bridge_terms)) or "shared structure"
 
-            # Canonical deterministic ordering of pair members.
             first, second = (a, b) if a["id"] <= b["id"] else (b, a)
             raw_pairs.append(
                 {
@@ -825,7 +1087,6 @@ def find_combos(
         )
     )
 
-    # Light diversity filter so one hub node doesn't monopolize all slots when other pairs exist.
     limit = max(0, int(top))
     if limit == 0:
         return []
@@ -847,6 +1108,204 @@ def find_combos(
     if len(selected) < limit:
         selected.extend(overflow[: limit - len(selected)])
     return selected[:limit]
+
+
+def _char_trigrams(terms: set[str]) -> set[str]:
+    grams: set[str] = set()
+    for t in terms:
+        if len(t) <= 3:
+            grams.add(t)
+        else:
+            for i in range(len(t) - 2):
+                grams.add(t[i : i + 3])
+    return grams
+
+
+def find_confusables(
+    graph_or_dir: Any,
+    *,
+    kg_dir: Path | str | None = None,
+    top: int = 8,
+    min_similarity: float = 0.30,
+) -> list[dict[str, Any]]:
+    """Pair lookalike propositions with high lexical/theme similarity AND divergent `chains.jsonl`
+    governing premises (or explicit `confusedWith` hits in `mistakes.jsonl`) for interleaved
+    discriminative-contrast drills (`[A, B, A']`).
+    """
+    G = _ensure_graph(graph_or_dir)
+
+    # Load optional mistakes.jsonl for explicit `confusedWith` links.
+    confused_hits: dict[tuple[str, str], int] = {}
+    resolved_kg: Path | None = None
+    if kg_dir is not None and str(kg_dir).strip():
+        resolved_kg = Path(kg_dir).expanduser().resolve()
+    elif isinstance(G.graph.get("kgDir"), str) and G.graph["kgDir"]:
+        resolved_kg = Path(G.graph["kgDir"])
+    if resolved_kg is not None:
+        for m in load_jsonl(resolved_kg / "mistakes.jsonl"):
+            p1 = str(m.get("propId") or "").strip()
+            p2 = str(m.get("confusedWith") or "").strip()
+            if p1 and p2 and p1 != p2:
+                pair_key = (p1, p2) if p1 <= p2 else (p2, p1)
+                confused_hits[pair_key] = confused_hits.get(pair_key, 0) + 1
+
+    # Gather incoming premises (direct + contrasts_with links) from chains.jsonl.
+    premises_by_node: dict[str, set[str]] = {}
+    explicit_contrast_pairs: set[tuple[str, str]] = set()
+    for he in G.graph.get("hyperedges") or []:
+        conc = str(he.get("conclusion") or "")
+        rel = str(he.get("relation") or "requires").lower()
+        prems = [str(p) for p in (he.get("premises") or []) if str(p)]
+        if rel in ("contrasts_with", "contrasts", "contrast", "analogous"):
+            for pr in prems:
+                pk = (pr, conc) if pr <= conc else (conc, pr)
+                explicit_contrast_pairs.add(pk)
+        else:
+            premises_by_node.setdefault(conc, set()).update(prems)
+
+    # Prepare lexical/theme vectors per non-missing node.
+    nodes_info: list[dict[str, Any]] = []
+    doc_freq: dict[str, int] = {}
+    for u, attrs in G.nodes(data=True):
+        if attrs.get("missingProp"):
+            continue
+        tags = list(attrs.get("tags") or [])
+        text_blob = " ".join(
+            [
+                str(u).replace("-", " ").replace("_", " "),
+                str(attrs.get("title") or ""),
+                str(attrs.get("statement") or ""),
+                " ".join(attrs.get("aliases") or []),
+                str(attrs.get("notes") or ""),
+            ]
+        )
+        terms = _tokenize_stem_terms(text_blob)
+        for t in terms:
+            doc_freq[t] = doc_freq.get(t, 0) + 1
+        nodes_info.append(
+            {
+                "id": u,
+                "title": str(attrs.get("title") or u),
+                "subject": str(attrs.get("subject") or "General"),
+                "chapter": str(attrs.get("chapter") or "General"),
+                "status": str(attrs.get("status") or "planned"),
+                "terms": terms,
+                "trigrams": _char_trigrams(terms),
+                "themes": _detect_structural_themes(text_blob, tags),
+                "premises": set(premises_by_node.get(u, set())),
+            }
+        )
+
+    n_docs = len(nodes_info)
+    if n_docs < 2:
+        return []
+
+    idf = {t: math.log(1.0 + (n_docs - df + 0.5) / (df + 0.5)) for t, df in doc_freq.items()}
+    pairs_out: list[dict[str, Any]] = []
+
+    for i in range(n_docs):
+        a = nodes_info[i]
+        for j in range(i + 1, n_docs):
+            b = nodes_info[j]
+            first, second = (a, b) if a["id"] <= b["id"] else (b, a)
+            pair_key = (first["id"], second["id"])
+
+            # Weighted IDF Dice on stemmed terms + char-trigram Dice.
+            shared_terms = a["terms"] & b["terms"]
+            union_terms = a["terms"] | b["terms"]
+            if shared_terms and union_terms:
+                shared_w = sum(idf.get(t, 1.0) for t in shared_terms)
+                denom_w = sum(idf.get(t, 1.0) for t in a["terms"]) + sum(idf.get(t, 1.0) for t in b["terms"])
+                term_dice = (2.0 * shared_w / denom_w) if denom_w > 0 else 0.0
+            else:
+                term_dice = 0.0
+
+            tri_union = len(a["trigrams"]) + len(b["trigrams"])
+            tri_dice = (2.0 * len(a["trigrams"] & b["trigrams"]) / tri_union) if tri_union > 0 else 0.0
+            lex_sim = 0.70 * term_dice + 0.30 * tri_dice
+
+            shared_themes = sorted(a["themes"] & b["themes"])
+            theme_union = a["themes"] | b["themes"]
+            theme_sim = (len(shared_themes) / len(theme_union)) if theme_union else 0.0
+
+            surface_sim = max(lex_sim, 0.70 * lex_sim + 0.30 * theme_sim)
+
+            # Premise divergence via symmetric difference of governing premises in chains.jsonl.
+            p_a = first["premises"]
+            p_b = second["premises"]
+            p_union = p_a | p_b
+            if p_union:
+                premise_div = len(p_a ^ p_b) / len(p_union)
+            else:
+                premise_div = 0.45 if (first["chapter"].lower() != second["chapter"].lower() or shared_themes) else 0.0
+
+            mistake_hits = confused_hits.get(pair_key, 0)
+            is_explicit_contrast = pair_key in explicit_contrast_pairs
+
+            # Require either explicit confusion/contrast OR high surface lookalike + divergent premises.
+            if not (mistake_hits > 0 or is_explicit_contrast):
+                if surface_sim < min_similarity:
+                    continue
+                if premise_div <= 0.0:
+                    continue
+
+            score = (
+                0.48 * surface_sim
+                + 0.37 * premise_div
+                + 0.15 * theme_sim
+                + (0.35 * min(3, mistake_hits))
+                + (0.30 if is_explicit_contrast else 0.0)
+            )
+            distinct_a = sorted(p_a - p_b)
+            distinct_b = sorted(p_b - p_a)
+
+            pairs_out.append(
+                {
+                    "nodeA": {
+                        "id": first["id"],
+                        "title": first["title"],
+                        "subject": first["subject"],
+                        "chapter": first["chapter"],
+                        "status": first["status"],
+                    },
+                    "nodeB": {
+                        "id": second["id"],
+                        "title": second["title"],
+                        "subject": second["subject"],
+                        "chapter": second["chapter"],
+                        "status": second["status"],
+                    },
+                    "lexicalSimilarity": round(lex_sim, 3),
+                    "surfaceSimilarity": round(surface_sim, 3),
+                    "premiseDivergence": round(premise_div, 3),
+                    "sharedThemes": shared_themes,
+                    "sharedTerms": sorted(shared_terms)[:8],
+                    "distinctPremisesA": distinct_a,
+                    "distinctPremisesB": distinct_b,
+                    "confusedMistakeHits": mistake_hits,
+                    "explicitContrast": is_explicit_contrast,
+                    "confusableScore": round(score, 3),
+                    "contrastPrompt": (
+                        f"Interleaved [A, B, A'] discrimination: contrast '{first['title']}' ({first['id']}) "
+                        f"against '{second['title']}' ({second['id']}) — name the validity premise that separates them."
+                    ),
+                }
+            )
+
+    pairs_out.sort(
+        key=lambda item: (
+            -item["confusableScore"],
+            -item["confusedMistakeHits"],
+            item["nodeA"]["id"],
+            item["nodeB"]["id"],
+        )
+    )
+    return pairs_out[: max(0, int(top))]
+
+
+# ---------------------------------------------------------------------------
+# CLI reporting & entrypoint
+# ---------------------------------------------------------------------------
 
 
 def _render_human_report(payload: dict[str, Any]) -> str:
@@ -922,20 +1381,35 @@ def _render_human_report(payload: dict[str, Any]) -> str:
                 lines.append(f"     {c['drillPrompt']}")
         lines.append("")
 
+    if "confusables" in payload:
+        confs = payload["confusables"]
+        lines.append(f"## Lookalike Confusable Pairs ({len(confs)})")
+        if not confs:
+            lines.append("  None detected — no high-similarity pairs with divergent governing premises.")
+        else:
+            for idx, cf in enumerate(confs, start=1):
+                lines.append(
+                    f"  {idx}. ({cf['confusableScore']}) {cf['nodeA']['id']} <-> {cf['nodeB']['id']} "
+                    f"(sim={cf['surfaceSimilarity']}, premiseDiv={cf['premiseDivergence']})"
+                )
+                lines.append(f"     {cf['contrastPrompt']}")
+        lines.append("")
+
     return "\n".join(lines).rstrip()
 
 
 def main(argv: list[str] | None = None) -> None:
     parser = argparse.ArgumentParser(
-        description="Syntopik Knowledge Graph Intelligence: bottlenecks, memorized islands, cycle-safe study paths, and integrative cross-chapter synthesis combos."
+        description="Syntopik Knowledge Graph Intelligence: bottlenecks, memorized islands, cycle-safe study paths, synthesis combos, and lookalike confusables."
     )
     parser.add_argument("--kg-dir", help="Override knowledge-graph directory (or SYNT_KG_DIR / MLH_KG_DIR)")
     parser.add_argument("--bottlenecks", action="store_true", help="Rank shaky/misconception/low-BKT foundation bottlenecks")
     parser.add_argument("--islands", action="store_true", help="Detect zero-in-degree memorized islands (non-axiom/definition)")
     parser.add_argument("--path-to", dest="path_to", metavar="TARGET_ID", help="Compute cycle-safe topological prerequisite sequence to TARGET_ID")
     parser.add_argument("--combos", action="store_true", help="Generate integrative multi-concept synthesis pairs from solid nodes")
-    parser.add_argument("--all", action="store_true", help="Run bottlenecks, islands, and combos together")
-    parser.add_argument("--top", type=int, default=None, help="Max results (default: 10 for bottlenecks, 8 for combos)")
+    parser.add_argument("--confusables", action="store_true", help="Detect high-similarity lookalike pairs with divergent governing premises")
+    parser.add_argument("--all", action="store_true", help="Run bottlenecks, islands, combos, and confusables together")
+    parser.add_argument("--top", type=int, default=None, help="Max results (default: 10 for bottlenecks, 8 for combos/confusables)")
     parser.add_argument("--bkt-threshold", type=float, default=0.65, help="Low-BKT threshold for bottleneck detection (default: 0.65)")
     parser.add_argument("--json", action="store_true", help="Emit structured JSON output")
     args = parser.parse_args(argv)
@@ -943,22 +1417,24 @@ def main(argv: list[str] | None = None) -> None:
     run_b = args.bottlenecks or args.all
     run_i = args.islands or args.all
     run_c = args.combos or args.all
+    run_cf = args.confusables or args.all
     run_p = bool(args.path_to)
-    if not (run_b or run_i or run_c or run_p):
-        run_b = run_i = run_c = True
+    if not (run_b or run_i or run_c or run_cf or run_p):
+        run_b = run_i = run_c = run_cf = True
 
     kg_dir, _props_file, _chains_file = resolve_kg_paths(args.kg_dir)
     G, props, norm_chains = load_knowledge_graph(kg_dir)
 
     payload: dict[str, Any] = {
         "kgDir": str(kg_dir),
+        "backend": "networkx" if (nx is not None and isinstance(G, nx.DiGraph)) else "stdlib",
         "summary": {
             "propositionCount": len(props),
             "nodeCount": G.number_of_nodes(),
             "edgeCount": G.number_of_edges(),
             "uniqueChains": len(norm_chains),
             "hyperedgeCount": int(G.graph.get("hyperedgeCount", 0)),
-            "isDag": nx.is_directed_acyclic_graph(G) if G.number_of_nodes() > 0 else True,
+            "isDag": _graph_is_dag(G) if G.number_of_nodes() > 0 else True,
         },
     }
 
@@ -977,12 +1453,16 @@ def main(argv: list[str] | None = None) -> None:
         top_c = args.top if args.top is not None else 8
         payload["combos"] = find_combos(G, top=top_c)
 
+    if run_cf:
+        top_cf = args.top if args.top is not None else 8
+        payload["confusables"] = find_confusables(G, kg_dir=kg_dir, top=top_cf)
+
     if args.json:
         print(json.dumps(payload, indent=2, ensure_ascii=False))
     else:
         print(_render_human_report(payload))
 
-    if run_p and not payload["pathTo"]["found"] and not (run_b or run_i or run_c):
+    if run_p and not payload["pathTo"]["found"] and not (run_b or run_i or run_c or run_cf):
         sys.exit(1)
 
 

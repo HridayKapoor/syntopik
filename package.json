@@ -1,0 +1,54 @@
+{
+  "name": "syntopik",
+  "version": "2.0.0",
+  "description": "Local-first, harness-native AI Deep-Mastery OS: FSRS-6 + BKT + True FIRe knowledge hypergraph, deterministic STEM/CS verifiers, calm tutoring, and 2-way local Studio.",
+  "type": "module",
+  "license": "MIT",
+  "author": "Hriday Kapoor",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/HridayKapoor/syntopik.git"
+  },
+  "homepage": "https://github.com/HridayKapoor/syntopik#readme",
+  "bugs": {
+    "url": "https://github.com/HridayKapoor/syntopik/issues"
+  },
+  "engines": {
+    "node": ">=20.0.0"
+  },
+  "bin": {
+    "syntopik": "./bin/syntopik.mjs"
+  },
+  "files": [
+    "bin/",
+    "syntopik/",
+    "scripts/",
+    ".agents/skills/",
+    ".agents/hooks/",
+    ".claude-plugin/",
+    "mcp-app/mlh-studio/dist/",
+    "dashboard.html",
+    "knowledge-graph/viewer.html",
+    "knowledge-graph/reagents.json",
+    "demos/exam-cbt-template.html",
+    "AGENTS.md",
+    "GEMINI.md",
+    "CLAUDE.md",
+    "BOOTSTRAP.md",
+    "gemini-extension.json",
+    ".mcp.json",
+    "README.md",
+    "LICENSE"
+  ],
+  "keywords": [
+    "learning",
+    "mastery",
+    "fsrs",
+    "knowledge-graph",
+    "mcp",
+    "agents",
+    "stem",
+    "tutor"
+  ],
+  "dependencies": {}
+}

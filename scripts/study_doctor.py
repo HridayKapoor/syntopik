@@ -3,7 +3,7 @@
 
 Audits every Python STEM & CS verification engine, TinyTeX / Typst / FFmpeg / Node
 binary, multi-harness configuration (`Antigravity`, `Claude Code`, `OpenAI Codex`,
-`BOOTSTRAP.md`), project skill YAML frontmatter (17 skills), 26 workspace scripts,
+`BOOTSTRAP.md`), project skill YAML frontmatter (17 skills), 32 workspace scripts,
 and auto-bootstraps missing gitignored learner files via `setup_harness.py` so a
 fresh `git clone` passes with `0 warn, 0 fail`.
 """
@@ -60,7 +60,28 @@ EXPECTED_SCRIPTS: list[str] = [
     "setup_harness.py",
     "code_verify.py",
     "research_scout.py",
+    "ingest_source.py",
+    "vault_sync.py",
+    "pedagogy_eval.py",
+    "fork_replay.py",
+    "falsify_arena.py",
+    "decision_blitz.py",
     "sync-graph.mjs",
+]
+
+EXPECTED_SYNTOPIK_MODULES: list[str] = [
+    "__init__.py",
+    "paths.py",
+    "storage.py",
+    "schemas.py",
+    "fsrs_core.py",
+    "ingest.py",
+    "obsidian.py",
+    "forks.py",
+    "packs.py",
+    "pocket.py",
+    "server.py",
+    "cli.py",
 ]
 
 EXPECTED_SKILLS: list[str] = [
@@ -263,9 +284,36 @@ def _extract_yaml_description(fm: str) -> str:
     return ""
 
 
-def check_skills(ws: Path) -> dict[str, Any]:
-    skills_dir = ws / ".agents" / "skills"
-    if not skills_dir.exists():
+def _is_repo_checkout(path: Path) -> bool:
+    """Return True only for a direct Syntopik repository checkout (never wheel/_bundle/vault)."""
+    excluded = {"_bundle", "site-packages", "dist-packages", "node_modules", "_npx", ".claude", ".gemini"}
+    if excluded.intersection(path.parts):
+        return False
+    return (
+        (path / "scripts").is_dir()
+        and (path / "syntopik").is_dir()
+        and (path / "pyproject.toml").is_file()
+    )
+
+
+def _first_existing_dir(*candidates: Path) -> Path | None:
+    for c in candidates:
+        if c.is_dir():
+            return c
+    return None
+
+
+def _first_existing_file(*candidates: Path) -> Path | None:
+    for c in candidates:
+        if c.is_file():
+            return c
+    return None
+
+
+def check_skills(ws: Path, pkg_root: Path | None = None) -> dict[str, Any]:
+    pr = pkg_root or ROOT
+    skills_dir = _first_existing_dir(ws / ".agents" / "skills", pr / ".agents" / "skills", pr / "skills")
+    if skills_dir is None:
         return {"name": "Project Skills (.agents/skills)", "category": "workspace", "status": "fail", "required": True, "detail": "directory missing"}
     found = sorted(skills_dir.glob("*/SKILL.md"))
     bad: list[str] = []
@@ -305,7 +353,15 @@ def check_skills(ws: Path) -> dict[str, Any]:
     }
 
 
-def check_hooks(ws: Path) -> dict[str, Any]:
+def check_hooks(ws: Path, pkg_root: Path | None = None, *, is_repo: bool = True) -> dict[str, Any]:
+    pr = pkg_root or ROOT
+    hooks_dir = _first_existing_dir(ws / ".agents" / "hooks", pr / ".agents" / "hooks", pr / "hooks")
+    scripts = [hooks_dir / "session-start.mjs", hooks_dir / "post-graph-sync.mjs"] if hooks_dir else []
+    missing_scripts = [s.name for s in scripts if not s.exists()] if scripts else ["session-start.mjs", "post-graph-sync.mjs"]
+    if not is_repo:
+        if missing_scripts:
+            return {"name": "Lifecycle Hooks (.agents/hooks.json)", "category": "workspace", "status": "fail", "required": True, "detail": f"missing bundled hook scripts: {', '.join(missing_scripts)}"}
+        return {"name": "Lifecycle Hooks (.agents/hooks.json)", "category": "workspace", "status": "ok", "required": True, "detail": "2 bundled tri-protocol hook scripts present (external vault mode)"}
     hooks_json = ws / ".agents" / "hooks.json"
     if not hooks_json.exists():
         return {"name": "Lifecycle Hooks (.agents/hooks.json)", "category": "workspace", "status": "fail", "required": True, "detail": "hooks.json missing"}
@@ -313,10 +369,8 @@ def check_hooks(ws: Path) -> dict[str, Any]:
         data = json.loads(hooks_json.read_text(encoding="utf-8"))
     except Exception as exc:
         return {"name": "Lifecycle Hooks (.agents/hooks.json)", "category": "workspace", "status": "fail", "required": True, "detail": f"invalid JSON: {exc}"}
-    scripts = [ws / ".agents" / "hooks" / "session-start.mjs", ws / ".agents" / "hooks" / "post-graph-sync.mjs"]
-    missing = [s.name for s in scripts if not s.exists()]
-    if missing:
-        return {"name": "Lifecycle Hooks (.agents/hooks.json)", "category": "workspace", "status": "fail", "required": True, "detail": f"missing hook scripts: {', '.join(missing)}"}
+    if missing_scripts:
+        return {"name": "Lifecycle Hooks (.agents/hooks.json)", "category": "workspace", "status": "fail", "required": True, "detail": f"missing hook scripts: {', '.join(missing_scripts)}"}
     return {"name": "Lifecycle Hooks (.agents/hooks.json)", "category": "workspace", "status": "ok", "required": True, "detail": f"{len(data)} hook groups + 2 tri-protocol hook scripts present"}
 
 
@@ -419,8 +473,20 @@ def check_google_chemistry_plugin() -> dict[str, Any]:
     }
 
 
-def check_workspace_scripts(ws: Path) -> dict[str, Any]:
-    missing = [s for s in EXPECTED_SCRIPTS if not (ws / "scripts" / s).exists()]
+def check_workspace_scripts(ws: Path, pkg_root: Path | None = None) -> dict[str, Any]:
+    pr = pkg_root or ROOT
+    scripts_dir = _first_existing_dir(ws / "scripts", pr / "scripts")
+    if scripts_dir is None:
+        return {
+            "name": "Workspace Scripts (scripts/)",
+            "category": "workspace",
+            "status": "fail",
+            "required": True,
+            "count": 0,
+            "expectedCount": len(EXPECTED_SCRIPTS),
+            "detail": "scripts/ directory missing",
+        }
+    missing = [s for s in EXPECTED_SCRIPTS if not (scripts_dir / s).exists()]
     if missing:
         return {
             "name": "Workspace Scripts (scripts/)",
@@ -439,6 +505,142 @@ def check_workspace_scripts(ws: Path) -> dict[str, Any]:
         "count": len(EXPECTED_SCRIPTS),
         "expectedCount": len(EXPECTED_SCRIPTS),
         "detail": f"all {len(EXPECTED_SCRIPTS)} scripts present",
+    }
+
+
+def check_syntopik_package(ws: Path, pkg_root: Path | None = None) -> dict[str, Any]:
+    pr = pkg_root or ROOT
+    pkg_dir = _first_existing_dir(
+        ws / "syntopik",
+        pr / "syntopik",
+        pr.parent if pr.name == "_bundle" and pr.parent.name == "syntopik" else Path("/nonexistent"),
+    )
+    if pkg_dir is None:
+        try:
+            import syntopik as _synt_mod
+
+            pkg_dir = Path(_synt_mod.__file__).resolve().parent
+        except Exception:
+            pkg_dir = ws / "syntopik"
+    missing = [m for m in EXPECTED_SYNTOPIK_MODULES if not (pkg_dir / m).is_file()]
+    if missing:
+        return {
+            "name": "Core Package (syntopik/)",
+            "category": "workspace",
+            "status": "fail",
+            "required": True,
+            "count": len(EXPECTED_SYNTOPIK_MODULES) - len(missing),
+            "expectedCount": len(EXPECTED_SYNTOPIK_MODULES),
+            "detail": f"missing: {', '.join(missing)}",
+        }
+    return {
+        "name": "Core Package (syntopik/)",
+        "category": "workspace",
+        "status": "ok",
+        "required": True,
+        "count": len(EXPECTED_SYNTOPIK_MODULES),
+        "expectedCount": len(EXPECTED_SYNTOPIK_MODULES),
+        "detail": f"all {len(EXPECTED_SYNTOPIK_MODULES)} pure-stdlib modules present",
+    }
+
+
+def check_packaging_and_cli(ws: Path, *, is_repo: bool = True) -> dict[str, Any]:
+    if not is_repo:
+        return {
+            "name": "Dual Packaging & CLI (Py/Node)",
+            "category": "workspace",
+            "status": "ok",
+            "required": False,
+            "detail": "external vault / wheel mode (repo packaging manifest check skipped)",
+        }
+    issues: list[str] = []
+    pyproj = ws / "pyproject.toml"
+    pkg_json = ws / "package.json"
+    cli_bin = ws / "bin" / "syntopik.mjs"
+
+    if not pyproj.is_file():
+        issues.append("pyproject.toml missing")
+    else:
+        try:
+            pt = tomllib.loads(pyproj.read_text(encoding="utf-8"))
+            if ((pt.get("project") or {}).get("scripts") or {}).get("syntopik") != "syntopik.cli:main":
+                issues.append("pyproject.toml missing [project.scripts] syntopik = 'syntopik.cli:main'")
+        except Exception as exc:
+            issues.append(f"pyproject.toml invalid TOML ({exc})")
+
+    if not pkg_json.is_file():
+        issues.append("package.json missing")
+    else:
+        try:
+            pj = json.loads(pkg_json.read_text(encoding="utf-8"))
+            if (pj.get("bin") or {}).get("syntopik") != "./bin/syntopik.mjs":
+                issues.append("package.json missing bin.syntopik -> ./bin/syntopik.mjs")
+        except Exception as exc:
+            issues.append(f"package.json invalid JSON ({exc})")
+
+    if not cli_bin.is_file():
+        issues.append("bin/syntopik.mjs missing")
+    elif os.name != "nt" and not os.access(cli_bin, os.X_OK):
+        issues.append("bin/syntopik.mjs not executable")
+
+    if issues:
+        return {
+            "name": "Dual Packaging & CLI (Py/Node)",
+            "category": "workspace",
+            "status": "fail",
+            "required": True,
+            "detail": "; ".join(issues),
+        }
+    return {
+        "name": "Dual Packaging & CLI (Py/Node)",
+        "category": "workspace",
+        "status": "ok",
+        "required": True,
+        "detail": "pyproject.toml + package.json + executable bin/syntopik.mjs OK",
+    }
+
+
+def check_plugin_manifests(ws: Path, *, is_repo: bool = True) -> dict[str, Any]:
+    if not is_repo:
+        return {
+            "name": "Plugin & Extension Manifests",
+            "category": "plugin",
+            "status": "ok",
+            "required": False,
+            "detail": "external vault / wheel mode (repo plugin manifest check skipped)",
+        }
+    manifest_rels = (
+        ".claude-plugin/plugin.json",
+        ".claude-plugin/marketplace.json",
+        ".claude-plugin/hooks.json",
+        "gemini-extension.json",
+    )
+    issues: list[str] = []
+    for rel in manifest_rels:
+        p = ws / rel
+        if not p.is_file():
+            issues.append(f"{rel} missing")
+            continue
+        try:
+            json.loads(p.read_text(encoding="utf-8"))
+        except Exception as exc:
+            issues.append(f"{rel} invalid JSON ({exc})")
+
+    if issues:
+        return {
+            "name": "Plugin & Extension Manifests",
+            "category": "plugin",
+            "status": "fail",
+            "required": True,
+            "detail": "; ".join(issues),
+        }
+    return {
+        "name": "Plugin & Extension Manifests",
+        "category": "plugin",
+        "status": "ok",
+        "required": True,
+        "count": len(manifest_rels),
+        "detail": "4/4 valid (.claude-plugin/{plugin,marketplace,hooks}.json + gemini-extension.json)",
     }
 
 
@@ -488,8 +690,13 @@ def check_context_footprint(ws: Path) -> dict[str, Any]:
     }
 
 
-def check_mcp_studio(ws: Path) -> dict[str, Any]:
-    dist_dir = ws / "mcp-app" / "mlh-studio" / "dist"
+def check_mcp_studio(ws: Path, pkg_root: Path | None = None) -> dict[str, Any]:
+    pr = pkg_root or ROOT
+    dist_dir = _first_existing_dir(
+        ws / "mcp-app" / "mlh-studio" / "dist",
+        pr / "mcp-app" / "mlh-studio" / "dist",
+        pr / "mcp-dist",
+    ) or (ws / "mcp-app" / "mlh-studio" / "dist")
     expected_bundle = ["server.mjs", "quiz-card.html", "practice-card.html", "studio-pane.html"]
     missing = [f for f in expected_bundle if not (dist_dir / f).exists()]
 
@@ -520,9 +727,14 @@ def check_mcp_studio(ws: Path) -> dict[str, Any]:
     }
 
 
-def check_reagents_db(ws: Path) -> dict[str, Any]:
-    db_path = ws / "knowledge-graph" / "reagents.json"
-    if not db_path.exists():
+def check_reagents_db(ws: Path, pkg_root: Path | None = None) -> dict[str, Any]:
+    pr = pkg_root or ROOT
+    db_path = _first_existing_file(
+        ws / "knowledge-graph" / "reagents.json",
+        pr / "knowledge-graph" / "reagents.json",
+        pr / "reagents.json",
+    )
+    if db_path is None:
         return {"name": "Reagents DB (reagents.json)", "category": "workspace", "status": "fail", "required": True, "detail": "knowledge-graph/reagents.json missing"}
     try:
         data = json.loads(db_path.read_text(encoding="utf-8"))
@@ -546,19 +758,26 @@ def check_reagents_db(ws: Path) -> dict[str, Any]:
     }
 
 
-def check_knowledge_hub(ws: Path, kg_dir: Path) -> dict[str, Any]:
+def check_knowledge_hub(ws: Path, kg_dir: Path, pkg_root: Path | None = None) -> dict[str, Any]:
+    pr = pkg_root or ROOT
     required_files = [
         kg_dir / "propositions.jsonl",
         kg_dir / "chains.jsonl",
         kg_dir / "mistakes.jsonl",
         kg_dir / "exam-attempts.jsonl",
         kg_dir / "harness-log.jsonl",
-        ws / "knowledge-graph" / "viewer.html",
         kg_dir / "review-queue.md",
         kg_dir / "graph-data.js",
     ]
     missing = [str(p.relative_to(ws)) if p.is_relative_to(ws) else str(p) for p in required_files if not p.exists()]
-    has_dashboard = (ws / "dashboard.html").exists()
+    viewer_file = _first_existing_file(
+        ws / "knowledge-graph" / "viewer.html",
+        pr / "knowledge-graph" / "viewer.html",
+        pr / "viewer.html",
+    )
+    if viewer_file is None:
+        missing.append("knowledge-graph/viewer.html")
+    has_dashboard = _first_existing_file(ws / "dashboard.html", pr / "dashboard.html") is not None
     if missing:
         return {"name": "Knowledge Graph & Hub", "category": "workspace", "status": "fail", "required": True, "detail": f"missing: {', '.join(missing)}"}
     detail = "propositions/chains/mistakes/exams/harness-log/viewer/review-queue/graph-data.js OK" + (
@@ -567,7 +786,15 @@ def check_knowledge_hub(ws: Path, kg_dir: Path) -> dict[str, Any]:
     return {"name": "Knowledge Graph & Hub", "category": "workspace", "status": "ok" if has_dashboard else "warn", "required": True, "detail": detail}
 
 
-def check_rule_budget(ws: Path) -> dict[str, Any]:
+def check_rule_budget(ws: Path, *, is_repo: bool = True) -> dict[str, Any]:
+    if not is_repo:
+        return {
+            "name": "Rule Budget (GEMINI.md + AGENTS.md)",
+            "category": "workspace",
+            "status": "ok",
+            "required": False,
+            "detail": "external vault / wheel mode (repo rule budget check skipped)",
+        }
     rule_files = [ws / "GEMINI.md", ws / "AGENTS.md"]
     missing = [p.name for p in rule_files if not p.exists()]
     if missing:
@@ -605,7 +832,15 @@ def check_rule_budget(ws: Path) -> dict[str, Any]:
     }
 
 
-def check_regression_suite(ws: Path) -> dict[str, Any]:
+def check_regression_suite(ws: Path, *, is_repo: bool = True) -> dict[str, Any]:
+    if not is_repo:
+        return {
+            "name": "Regression Suite (test_harness.py)",
+            "category": "workspace",
+            "status": "ok",
+            "required": False,
+            "detail": "external vault / wheel mode (repo test suite check skipped)",
+        }
     test_file = ws / "tests" / "test_harness.py"
     if not test_file.exists():
         return {"name": "Regression Suite (test_harness.py)", "category": "workspace", "status": "fail", "required": True, "detail": "tests/test_harness.py missing"}
@@ -617,13 +852,26 @@ def check_regression_suite(ws: Path) -> dict[str, Any]:
 
 def run_doctor(workspace: str | Path | None = None, *, core_only: bool = False) -> dict[str, Any]:
     t0 = time.perf_counter()
+    pkg_root = ROOT
     if workspace is not None:
         ws = Path(workspace).expanduser().resolve()
     else:
         env_ws = os.environ.get("SYNT_WORKSPACE") or os.environ.get("MLH_WORKSPACE")
-        ws = Path(env_ws).expanduser().resolve() if env_ws else ROOT
+        if env_ws:
+            ws = Path(env_ws).expanduser().resolve()
+        elif _is_repo_checkout(ROOT):
+            ws = ROOT
+        else:
+            try:
+                from syntopik.paths import resolve_workspace as _resolve_ws
 
-    # Auto-bootstrap missing gitignored learner files before checking Knowledge Hub
+                ws = _resolve_ws()
+            except Exception:
+                ws = (HOME / ".syntopik").resolve()
+
+    is_repo = _is_repo_checkout(ws)
+
+    # Auto-bootstrap missing gitignored learner files in the resolved vault (NEVER in site-packages/_bundle!)
     boot_info = ensure_learner_workspace(ws)
     kg_dir = Path(boot_info["kgDir"])
 
@@ -640,16 +888,19 @@ def run_doctor(workspace: str | Path | None = None, *, core_only: bool = False) 
         checks: list[dict[str, Any]] = [
             py_check,
             check_binary_tool("node", "Node.js (Hooks & Sync)", required=True),
-            check_workspace_scripts(ws),
-            check_hooks(ws),
+            check_workspace_scripts(ws, pkg_root),
+            check_syntopik_package(ws, pkg_root),
+            check_packaging_and_cli(ws, is_repo=is_repo),
+            check_plugin_manifests(ws, is_repo=is_repo),
+            check_hooks(ws, pkg_root, is_repo=is_repo),
             check_multi_harness_configs(ws),
-            check_skills(ws),
-            check_knowledge_hub(ws, kg_dir),
-            check_reagents_db(ws),
-            check_rule_budget(ws),
+            check_skills(ws, pkg_root),
+            check_knowledge_hub(ws, kg_dir, pkg_root),
+            check_reagents_db(ws, pkg_root),
+            check_rule_budget(ws, is_repo=is_repo),
             check_context_footprint(ws),
-            check_regression_suite(ws),
-            check_mcp_studio(ws),
+            check_regression_suite(ws, is_repo=is_repo),
+            check_mcp_studio(ws, pkg_root),
         ]
     else:
         tinytex_dir = find_tinytex_bin()
@@ -693,17 +944,20 @@ def run_doctor(workspace: str | Path | None = None, *, core_only: bool = False) 
             check_binary_tool("node", "Node.js (Hooks & Sync)", required=True),
             check_binary_tool("java", "Java (py2opsin JVM)", version_arg="-version", required=False, optional_ok_when_missing=True),
             check_binary_tool("tesseract", "Tesseract (OCR fallback)", required=False, optional_ok_when_missing=True),
-            # Workspace Integrity, Multi-Harness & Plugins
-            check_workspace_scripts(ws),
-            check_hooks(ws),
+            # Workspace Integrity, Packaging, Multi-Harness & Plugins
+            check_workspace_scripts(ws, pkg_root),
+            check_syntopik_package(ws, pkg_root),
+            check_packaging_and_cli(ws, is_repo=is_repo),
+            check_plugin_manifests(ws, is_repo=is_repo),
+            check_hooks(ws, pkg_root, is_repo=is_repo),
             check_multi_harness_configs(ws),
-            check_skills(ws),
-            check_knowledge_hub(ws, kg_dir),
-            check_reagents_db(ws),
-            check_rule_budget(ws),
+            check_skills(ws, pkg_root),
+            check_knowledge_hub(ws, kg_dir, pkg_root),
+            check_reagents_db(ws, pkg_root),
+            check_rule_budget(ws, is_repo=is_repo),
             check_context_footprint(ws),
-            check_regression_suite(ws),
-            check_mcp_studio(ws),
+            check_regression_suite(ws, is_repo=is_repo),
+            check_mcp_studio(ws, pkg_root),
             check_google_chemistry_plugin(),
         ]
 

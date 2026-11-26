@@ -26,28 +26,32 @@ from pathlib import Path
 from typing import Any
 
 ROOT = Path(__file__).resolve().parent.parent
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
+
+from syntopik.paths import (  # noqa: E402
+    find_node as _find_node,
+    resolve_exams_dir as _resolve_exams_dir_core,
+    resolve_kg_dir as _resolve_kg_dir_core,
+    resolve_package_root,
+    sync_hub,
+)
+from syntopik.schemas import (  # noqa: E402
+    VALID_MISTAKE_CATEGORIES,
+    normalize_mistake_category,
+    slugify as _slugify_core,
+    today_iso,
+)
+from syntopik.storage import append_jsonl_locked, write_text_atomic  # noqa: E402
+
+PKG_ROOT = resolve_package_root()
 DEFAULT_KG_DIR = ROOT / "knowledge-graph"
 DEFAULT_EXAMS_DIR = ROOT / "exams"
-TEMPLATE_PATH = ROOT / "demos" / "exam-cbt-template.html"
-SRS_SCRIPT = ROOT / "scripts" / "srs_engine.py"
-SYNC_SCRIPT = ROOT / "scripts" / "sync-graph.mjs"
+TEMPLATE_PATH = PKG_ROOT / "demos" / "exam-cbt-template.html"
+SRS_SCRIPT = PKG_ROOT / "scripts" / "srs_engine.py"
+SYNC_SCRIPT = PKG_ROOT / "scripts" / "sync-graph.mjs"
 
 VALID_QUESTION_TYPES = ("single_correct", "multi_correct", "numerical", "matrix_match")
-VALID_MISTAKE_CATEGORIES = (
-    "concept_gap",
-    "misconception",
-    "sign_error",
-    "unit_trap",
-    "condition_missed",
-    "algebra_slip",
-    "diagram_misread",
-    "careless",
-    "time_pressure",
-    "edge_case_missed",
-    "complexity_trap",
-    "off_by_one",
-    "state_mutation_bug",
-)
 
 MIME_BY_EXT = {
     ".png": "image/png",
@@ -59,8 +63,7 @@ MIME_BY_EXT = {
 
 
 def slugify(text: str) -> str:
-    slug = re.sub(r"[^a-z0-9]+", "-", str(text).strip().lower()).strip("-")
-    return slug or "jee-cbt-exam"
+    return _slugify_core(text, default="jee-cbt-exam", max_len=0)
 
 
 def safe_script_json(value: Any) -> str:
@@ -75,47 +78,18 @@ def safe_script_json(value: Any) -> str:
     )
 
 
-def resolve_kg_dir(kg_dir_arg: str | None) -> tuple[Path, bool]:
-    if kg_dir_arg:
-        kg_dir = Path(kg_dir_arg).expanduser().resolve()
-        is_default = kg_dir == DEFAULT_KG_DIR.resolve()
-    else:
-        env_kg = os.environ.get("SYNT_KG_DIR") or os.environ.get("MLH_KG_DIR")
-        if env_kg and env_kg.strip():
-            kg_dir = Path(env_kg).expanduser().resolve()
-            is_default = kg_dir == DEFAULT_KG_DIR.resolve()
-        else:
-            kg_dir = DEFAULT_KG_DIR
-            is_default = True
+def resolve_kg_dir(kg_dir_arg: str | Path | None) -> tuple[Path, bool]:
+    kg_dir = _resolve_kg_dir_core(explicit=kg_dir_arg)
+    is_default = kg_dir == DEFAULT_KG_DIR.resolve()
     return kg_dir, is_default
 
 
 def append_jsonl(path: Path, row: dict[str, Any]) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    with path.open("a", encoding="utf-8") as fh:
-        fh.write(json.dumps(row, ensure_ascii=False) + "\n")
+    append_jsonl_locked(path, row)
 
 
-def _find_node() -> str | None:
-    hit = shutil.which("node")
-    if hit:
-        return hit
-    for cand in (Path.home() / ".local" / "bin" / "node", Path("/opt/homebrew/bin/node"), Path("/usr/local/bin/node"), Path("/usr/bin/node")):
-        if cand.is_file() and os.access(cand, os.X_OK):
-            return str(cand)
-    return None
-
-
-def sync_hub_quiet() -> None:
-    node_bin = _find_node()
-    if SYNC_SCRIPT.exists() and node_bin:
-        subprocess.run(
-            [node_bin, str(SYNC_SCRIPT), "--quiet"],
-            cwd=str(ROOT),
-            check=False,
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL,
-        )
+def sync_hub_quiet(kg_dir: Path | str | None = None, workspace: Path | str | None = None) -> None:
+    sync_hub(workspace=workspace, kg_dir=kg_dir, quiet=True)
 
 
 def _normalize_labeled_items(raw_items: Any, default_ids: list[str], kind: str, qid: str) -> list[dict[str, str]]:
@@ -205,11 +179,15 @@ def normalize_spec(raw_spec: dict[str, Any], spec_dir: Path | None = None, inlin
         if not stem:
             raise ValueError(f"Question '{qid}': non-empty 'stem' is required")
 
-        trap_cat = str(q.get("trapCategory") or "").strip()
-        if trap_cat and trap_cat not in VALID_MISTAKE_CATEGORIES:
-            raise ValueError(
-                f"Question '{qid}': invalid trapCategory '{trap_cat}' (expected one of {VALID_MISTAKE_CATEGORIES})"
-            )
+        trap_cat_raw = str(q.get("trapCategory") or "").strip()
+        trap_cat = ""
+        if trap_cat_raw:
+            try:
+                trap_cat = normalize_mistake_category(trap_cat_raw)
+            except ValueError as exc:
+                raise ValueError(
+                    f"Question '{qid}': invalid trapCategory '{trap_cat_raw}' (expected one of {VALID_MISTAKE_CATEGORIES})"
+                ) from exc
 
         nq: dict[str, Any] = {
             "id": qid,
@@ -777,13 +755,12 @@ def cmd_build(args: argparse.Namespace) -> None:
     out_path = (
         Path(args.out).expanduser().resolve()
         if args.out
-        else (DEFAULT_EXAMS_DIR / f"{spec['examSlug']}.html").resolve()
+        else (_resolve_exams_dir_core() / f"{spec['examSlug']}.html").resolve()
     )
-    out_path.parent.mkdir(parents=True, exist_ok=True)
-    out_path.write_text(compiled, encoding="utf-8")
+    write_text_atomic(out_path, compiled)
 
-    if not args.no_sync and out_path.parent == DEFAULT_EXAMS_DIR.resolve():
-        sync_hub_quiet()
+    if not args.no_sync and out_path.parent.name == "exams":
+        sync_hub_quiet(workspace=out_path.parent.parent)
 
     print(
         json.dumps(
@@ -801,27 +778,78 @@ def cmd_build(args: argparse.Namespace) -> None:
     )
 
 
-def cmd_grade(args: argparse.Namespace) -> None:
-    spec_path = Path(args.spec).expanduser().resolve()
-    attempt_path = Path(args.attempt).expanduser().resolve()
-    if not spec_path.is_file():
-        raise SystemExit(f"Spec file not found: {spec_path}")
-    if not attempt_path.is_file():
-        raise SystemExit(f"Attempt file not found: {attempt_path}")
+EXECUTION_CATEGORIES: frozenset[str] = frozenset(
+    {"sign_error", "unit_trap", "algebra_slip", "careless", "off_by_one", "state_mutation_bug"}
+)
 
-    try:
-        raw_spec = json.loads(spec_path.read_text(encoding="utf-8"))
-        spec = normalize_spec(raw_spec, spec_dir=spec_path.parent, inline_media=False)
-        attempt = json.loads(attempt_path.read_text(encoding="utf-8"))
-        if not isinstance(attempt, dict):
-            raise ValueError("Attempt JSON must be an object")
-    except Exception as exc:
-        raise SystemExit(f"Failed to load spec/attempt: {exc}")
 
-    kg_dir, is_default_kg = resolve_kg_dir(args.kg_dir)
-    slow_sec = int(args.slow_sec)
-    today = datetime.now(timezone.utc).date().isoformat()
+def _median_positive(values: list[int]) -> float:
+    pos = sorted(v for v in values if v > 0)
+    if not pos:
+        return 0.0
+    mid = len(pos) // 2
+    if len(pos) % 2 == 1:
+        return float(pos[mid])
+    return (pos[mid - 1] + pos[mid]) / 2.0
+
+
+def _classify_autopsy_bucket(
+    status: str,
+    cat: str,
+    q_time: int,
+    slow_sec: int,
+    time_ratio: float,
+) -> str:
+    """Bucket question into `knowledge`, `execution`, `time_sink`, or `solid`."""
+    is_time_sink = (
+        cat == "time_pressure"
+        or q_time > slow_sec
+        or (time_ratio >= 1.75 and q_time >= 60)
+    )
+    if status == "correct":
+        return "time_sink" if (q_time > slow_sec and time_ratio >= 2.0) else "solid"
+    if is_time_sink:
+        return "time_sink"
+    if status == "unattempted":
+        return "knowledge"
+    if cat in EXECUTION_CATEGORIES:
+        return "execution"
+    return "knowledge"
+
+
+def grade_attempt(
+    spec: dict[str, Any],
+    attempt: dict[str, Any],
+    *,
+    kg_dir: Path | str | None = None,
+    slow_sec: int = 180,
+    no_log: bool = False,
+    no_srs: bool = False,
+    no_sync: bool = False,
+) -> dict[str, Any]:
+    """Deterministically grade a normalized exam `spec` against `attempt`, update FSRS-6
+    (crediting `good` on solved `propId`s and `again` on missed `propId`s in-process),
+    log mistakes, compute a 3-bucket `knowledge`/`execution`/`time_sink` autopsy, and flag
+    3-strike escalations.
+    """
+    resolved_kg, _is_default_kg = resolve_kg_dir(kg_dir)
+    slow_threshold = int(slow_sec)
+    today = today_iso()
     attempt_id = f"ex-{uuid.uuid4().hex[:8]}"
+
+    # First pass: score every question & compute median time spent across attempted questions.
+    scored_rows: list[tuple[dict[str, Any], dict[str, Any], int, str]] = []
+    attempted_times: list[int] = []
+    for q in spec["questions"]:
+        raw_ans, q_time, ui_status = _extract_attempt_entry(attempt, q["id"])
+        sc = score_question(q, raw_ans)
+        scored_rows.append((q, sc, q_time, ui_status))
+        if sc["status"] != "unattempted" and q_time > 0:
+            attempted_times.append(q_time)
+
+    median_time = _median_positive(attempted_times)
+    if median_time <= 0.0:
+        median_time = max(30.0, slow_threshold / 2.0)
 
     total_score = 0.0
     max_score = 0.0
@@ -838,12 +866,13 @@ def cmd_grade(args: argparse.Namespace) -> None:
     chapter_bd: dict[str, dict[str, Any]] = {}
     q_details: list[dict[str, Any]] = []
     missed_items: list[tuple[dict[str, Any], dict[str, Any], int]] = []
+    correct_items: list[tuple[dict[str, Any], dict[str, Any], int]] = []
 
-    for q in spec["questions"]:
+    autopsy_buckets: dict[str, list[str]] = {"knowledge": [], "execution": [], "time_sink": []}
+    ego_traps: list[dict[str, Any]] = []
+
+    for q, sc, q_time, ui_status in scored_rows:
         qid = q["id"]
-        raw_ans, q_time, ui_status = _extract_attempt_entry(attempt, qid)
-        sc = score_question(q, raw_ans)
-
         total_score += sc["marks"]
         max_score += sc["maxMarks"]
         negative_lost += sc["negativeLost"]
@@ -859,10 +888,33 @@ def cmd_grade(args: argparse.Namespace) -> None:
         else:
             unattempted_count += 1
 
-        if q_time > slow_sec:
+        if q_time > slow_threshold:
             slow_questions.append(qid)
         if sc["negativeLost"] > 0:
             negative_trap_questions.append(qid)
+
+        if q["trapCategory"]:
+            inferred_cat = q["trapCategory"]
+        elif st == "wrong" and q_time > slow_threshold:
+            inferred_cat = "time_pressure"
+        else:
+            inferred_cat = "concept_gap"
+
+        time_ratio = round(q_time / median_time, 2) if median_time > 0 else 0.0
+        bucket = _classify_autopsy_bucket(st, inferred_cat, q_time, slow_threshold, time_ratio)
+        if bucket in autopsy_buckets:
+            autopsy_buckets[bucket].append(qid)
+        if bucket == "time_sink" and (st != "correct" or time_ratio >= 2.0):
+            ego_traps.append(
+                {
+                    "id": qid,
+                    "chapter": q["chapter"],
+                    "status": st,
+                    "marks": sc["marks"],
+                    "timeSpentSec": q_time,
+                    "timeRatio": time_ratio,
+                }
+            )
 
         subj = q["subject"]
         sb = subject_bd.setdefault(
@@ -918,7 +970,9 @@ def cmd_grade(args: argparse.Namespace) -> None:
                 "maxMarks": sc["maxMarks"],
                 "negativeLost": sc["negativeLost"],
                 "timeSpentSec": q_time,
-                "isSlow": q_time > slow_sec,
+                "timeRatio": time_ratio,
+                "isSlow": q_time > slow_threshold,
+                "autopsyBucket": bucket,
                 "studentAnswer": sc["studentAnswer"],
                 "correctAnswer": sc["correctAnswer"],
                 "detail": sc["detail"],
@@ -929,6 +983,8 @@ def cmd_grade(args: argparse.Namespace) -> None:
 
         if st in ("wrong", "partial"):
             missed_items.append((q, sc, q_time))
+        elif st == "correct":
+            correct_items.append((q, sc, q_time))
 
     for bd in subject_bd.values():
         bd["percentage"] = round((bd["score"] / bd["maxScore"]) * 100.0, 2) if bd["maxScore"] > 0 else 0.0
@@ -943,16 +999,15 @@ def cmd_grade(args: argparse.Namespace) -> None:
     accuracy_pct = round((correct_count / attempted_count) * 100.0, 2) if attempted_count > 0 else 0.0
     time_spent_sec = int(round(float(attempt.get("timeSpentSec") or sum_q_time)))
 
-    # Log mistakes & update SRS
+    # Log mistakes
     mistake_ids: list[str] = []
-    srs_updated_ids: list[str] = []
-    srs_errors: list[str] = []
-
-    if not args.no_log:
+    touched_chapters: set[str] = set()
+    touched_props: set[str] = set()
+    if not no_log:
         for q, sc, q_time in missed_items:
             if q["trapCategory"]:
                 cat = q["trapCategory"]
-            elif sc["status"] == "wrong" and q_time > slow_sec:
+            elif sc["status"] == "wrong" and q_time > slow_threshold:
                 cat = "time_pressure"
             else:
                 cat = "concept_gap"
@@ -980,45 +1035,107 @@ def cmd_grade(args: argparse.Namespace) -> None:
                 "correctMove": correct_move,
                 "sourceRef": f"exam:{spec['examSlug']}:{q['id']}",
             }
-            logged = _log_mistake_entry(kg_dir, entry)
+            logged = _log_mistake_entry(resolved_kg, entry)
             mistake_ids.append(str(logged.get("id") or entry["id"]))
+            touched_chapters.add(q["chapter"].lower())
+            if q["propId"]:
+                touched_props.add(q["propId"].lower())
 
-    if not args.no_srs and SRS_SCRIPT.is_file():
-        seen_props: set[str] = set()
-        for q, sc, _q_time in missed_items:
-            pid = q["propId"]
-            if not pid or pid in seen_props:
-                continue
-            seen_props.add(pid)
-            clean_stem = re.sub(r"\s+", " ", q["stem"]).strip()[:90]
-            prop_title = q["propTitle"] or f"{q['chapter']}: {clean_stem}"
-            note_txt = f"Missed {q['id']} in {spec['examSlug']} ({sc['status']}, {sc['marks']:+g})"
-            cmd = [
-                sys.executable,
-                str(SRS_SCRIPT),
-                "--kg-dir",
-                str(kg_dir),
-                "review",
-                pid,
-                "--rating",
-                "again",
-                "--title",
-                prop_title,
-                "--subject",
-                q["subject"],
-                "--chapter",
-                q["chapter"],
-                "--notes",
-                note_txt,
-                "--no-sync",
-            ]
-            if q["trapCategory"] == "misconception":
-                cmd.append("--misconception")
-            proc = subprocess.run(cmd, cwd=str(ROOT), capture_output=True, text=True, check=False)
-            if proc.returncode == 0:
-                srs_updated_ids.append(pid)
-            else:
-                srs_errors.append(f"{pid}: {(proc.stderr or proc.stdout).strip()}")
+    # Update SRS in-process (zero subprocess overhead; credits `good` on solved & `again` on missed).
+    srs_updated_ids: list[str] = []
+    srs_missed_ids: list[str] = []
+    srs_credited_ids: list[str] = []
+    srs_fire_credits: list[dict[str, Any]] = []
+    srs_errors: list[str] = []
+
+    if not no_srs:
+        scripts_dir = str(PKG_ROOT / "scripts")
+        if scripts_dir not in sys.path:
+            sys.path.insert(0, scripts_dir)
+        try:
+            import srs_engine  # type: ignore
+        except Exception as exc:
+            srs_engine = None
+            srs_errors.append(f"srs_engine import failed: {exc}")
+
+        if srs_engine is not None:
+            missed_props_seen: set[str] = set()
+            for q, sc, q_time in missed_items:
+                pid = q["propId"]
+                if not pid or pid in missed_props_seen:
+                    continue
+                missed_props_seen.add(pid)
+                clean_stem = re.sub(r"\s+", " ", q["stem"]).strip()[:90]
+                prop_title = q["propTitle"] or f"{q['chapter']}: {clean_stem}"
+                note_txt = f"Missed {q['id']} in {spec['examSlug']} ({sc['status']}, {sc['marks']:+g})"
+                try:
+                    srs_engine.record_review(
+                        resolved_kg,
+                        pid,
+                        "again",
+                        title=prop_title,
+                        subject=q["subject"],
+                        chapter=q["chapter"],
+                        notes=note_txt,
+                        misconception=(q["trapCategory"] == "misconception"),
+                        duration_ms=q_time * 1000 if q_time > 0 else None,
+                        no_sync=True,
+                    )
+                    srs_updated_ids.append(pid)
+                    srs_missed_ids.append(pid)
+                except Exception as exc:
+                    srs_errors.append(f"{pid}: {exc}")
+
+            credited_props_seen: set[str] = set()
+            for q, sc, q_time in correct_items:
+                pid = q["propId"]
+                if not pid or pid in missed_props_seen or pid in credited_props_seen:
+                    continue
+                credited_props_seen.add(pid)
+                clean_stem = re.sub(r"\s+", " ", q["stem"]).strip()[:90]
+                prop_title = q["propTitle"] or f"{q['chapter']}: {clean_stem}"
+                try:
+                    res = srs_engine.record_review(
+                        resolved_kg,
+                        pid,
+                        "good",
+                        title=prop_title,
+                        subject=q["subject"],
+                        chapter=q["chapter"],
+                        duration_ms=q_time * 1000 if q_time > 0 else None,
+                        no_sync=True,
+                    )
+                    srs_updated_ids.append(pid)
+                    srs_credited_ids.append(pid)
+                    if res.get("fireCredits"):
+                        srs_fire_credits.extend(res["fireCredits"])
+                except Exception as exc:
+                    srs_errors.append(f"{pid}: {exc}")
+
+    # 3-strike escalation check across mistakes.jsonl
+    three_strike_escalations: list[dict[str, Any]] = []
+    try:
+        scripts_dir = str(PKG_ROOT / "scripts")
+        if scripts_dir not in sys.path:
+            sys.path.insert(0, scripts_dir)
+        import mistake_analytics  # type: ignore
+
+        all_mistakes = mistake_analytics.load_mistakes(resolved_kg)
+        msum = mistake_analytics.summarize_mistakes(all_mistakes, top=5)
+        for esc in msum.get("escalations") or []:
+            ch_low = str(esc.get("chapter") or "").lower()
+            pr_low = str(esc.get("propId") or "").lower()
+            if (not touched_chapters and not touched_props) or (ch_low in touched_chapters) or (pr_low and pr_low in touched_props):
+                three_strike_escalations.append(esc)
+    except Exception:
+        pass
+
+    autopsy_summary = {
+        "medianTimeSec": round(median_time, 1),
+        "buckets": autopsy_buckets,
+        "counts": {k: len(v) for k, v in autopsy_buckets.items()},
+        "egoTraps": ego_traps,
+    }
 
     attempt_summary_row = {
         "id": attempt_id,
@@ -1039,61 +1156,107 @@ def cmd_grade(args: argparse.Namespace) -> None:
         "negativeMarksLost": negative_lost,
         "slowQuestions": slow_questions,
         "subjectBreakdown": subject_bd,
+        "autopsyCounts": autopsy_summary["counts"],
+        "escalationsCount": len(three_strike_escalations),
         "mistakesLogged": len(mistake_ids),
         "srsUpdated": len(srs_updated_ids),
     }
 
-    if not args.no_log:
-        append_jsonl(kg_dir / "exam-attempts.jsonl", attempt_summary_row)
+    if not no_log:
+        append_jsonl(resolved_kg / "exam-attempts.jsonl", attempt_summary_row)
 
-    if is_default_kg and not args.no_sync and (not args.no_log or not args.no_srs):
-        sync_hub_quiet()
+    if not no_sync and (not no_log or not no_srs):
+        sync_hub_quiet(kg_dir=resolved_kg)
 
-    full_report = {
+    return {
         **attempt_summary_row,
         "negativeTrapQuestions": negative_trap_questions,
         "chapterBreakdown": chapter_bd,
+        "autopsy": autopsy_summary,
+        "threeStrikeEscalations": three_strike_escalations,
         "mistakeIds": mistake_ids,
         "srsUpdatedProps": srs_updated_ids,
+        "srsMissedProps": srs_missed_ids,
+        "srsCreditedProps": srs_credited_ids,
+        "fireCredits": srs_fire_credits,
         "srsErrors": srs_errors,
         "questions": q_details,
     }
 
-    if args.out_report:
-        rp = Path(args.out_report).expanduser().resolve()
-        rp.parent.mkdir(parents=True, exist_ok=True)
-        rp.write_text(json.dumps(full_report, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
 
-    if args.json:
+def cmd_grade(args: argparse.Namespace) -> None:
+    spec_path = Path(args.spec).expanduser().resolve()
+    attempt_path = Path(args.attempt).expanduser().resolve()
+    if not spec_path.is_file():
+        raise SystemExit(f"Spec file not found: {spec_path}")
+    if not attempt_path.is_file():
+        raise SystemExit(f"Attempt file not found: {attempt_path}")
+
+    try:
+        raw_spec = json.loads(spec_path.read_text(encoding="utf-8"))
+        spec = normalize_spec(raw_spec, spec_dir=spec_path.parent, inline_media=False)
+        attempt = json.loads(attempt_path.read_text(encoding="utf-8"))
+        if not isinstance(attempt, dict):
+            raise ValueError("Attempt JSON must be an object")
+    except Exception as exc:
+        raise SystemExit(f"Failed to load spec/attempt: {exc}")
+
+    kg_dir, _ = resolve_kg_dir(getattr(args, "kg_dir", None))
+    full_report = grade_attempt(
+        spec,
+        attempt,
+        kg_dir=kg_dir,
+        slow_sec=int(getattr(args, "slow_sec", 180)),
+        no_log=bool(getattr(args, "no_log", False)),
+        no_srs=bool(getattr(args, "no_srs", False)),
+        no_sync=bool(getattr(args, "no_sync", False)),
+    )
+
+    if getattr(args, "out_report", None):
+        rp = Path(args.out_report).expanduser().resolve()
+        write_text_atomic(rp, json.dumps(full_report, indent=2, ensure_ascii=False) + "\n")
+
+    if getattr(args, "json", False):
         print(json.dumps(full_report, indent=2, ensure_ascii=False))
     else:
         print(f"=== {spec['title']} ({spec['examType']}) ===")
         print(
-            f"Score: {total_score:g} / {max_score:g} ({percentage}%) | Accuracy: {accuracy_pct}% | "
-            f"Time: {time_spent_sec}s"
+            f"Score: {full_report['score']:g} / {full_report['maxScore']:g} ({full_report['percentage']}%) | "
+            f"Accuracy: {full_report['accuracyPct']}% | Time: {full_report['timeSpentSec']}s"
         )
-        neg_label = f"-{negative_lost:g}" if negative_lost > 0 else "0"
+        neg_lost = full_report["negativeMarksLost"]
+        neg_label = f"-{neg_lost:g}" if neg_lost > 0 else "0"
         print(
-            f"Counts: {correct_count} correct, {partial_count} partial, {wrong_count} wrong, "
-            f"{unattempted_count} unattempted | Negative Marks Lost: {neg_label}"
+            f"Counts: {full_report['correctCount']} correct, {full_report['partialCount']} partial, "
+            f"{full_report['wrongCount']} wrong, {full_report['unattemptedCount']} unattempted | "
+            f"Negative Marks Lost: {neg_label}"
         )
-        if slow_questions:
-            print(f"Slow Questions (>{slow_sec}s): {', '.join(slow_questions)}")
-        if negative_trap_questions:
-            print(f"Negative-Mark Traps: {', '.join(negative_trap_questions)}")
+        ac = full_report["autopsy"]["counts"]
+        print(
+            f"Autopsy (median {full_report['autopsy']['medianTimeSec']}s): "
+            f"knowledge={ac['knowledge']} · execution={ac['execution']} · time_sink={ac['time_sink']}"
+        )
+        if full_report["slowQuestions"]:
+            print(f"Slow Questions (>{args.slow_sec}s): {', '.join(full_report['slowQuestions'])}")
+        if full_report["negativeTrapQuestions"]:
+            print(f"Negative-Mark Traps: {', '.join(full_report['negativeTrapQuestions'])}")
+        if full_report["threeStrikeEscalations"]:
+            esc_keys = ", ".join(f"{e['key']} ({e['count']}x)" for e in full_report["threeStrikeEscalations"][:4])
+            print(f"3-Strike Escalations: {esc_keys}")
         print("\nSubject Breakdown:")
-        for subj, bd in subject_bd.items():
+        for subj, bd in full_report["subjectBreakdown"].items():
             print(
                 f"  - {subj}: {bd['score']:g}/{bd['maxScore']:g} ({bd['percentage']}%) · "
                 f"{bd['correct']}C / {bd['partial']}P / {bd['wrong']}W / {bd['unattempted']}U · "
                 f"-{bd['negativeMarksLost']:g} neg · {bd['timeSpentSec']}s"
             )
         print(
-            f"\nLogged: {len(mistake_ids)} mistakes -> {kg_dir / 'mistakes.jsonl'} | "
-            f"SRS updated: {len(srs_updated_ids)} prop(s)"
+            f"\nLogged: {full_report['mistakesLogged']} mistakes -> {kg_dir / 'mistakes.jsonl'} | "
+            f"SRS updated: {full_report['srsUpdated']} prop(s) "
+            f"({len(full_report['srsCreditedProps'])} good, {len(full_report['srsMissedProps'])} again)"
         )
-        if srs_errors:
-            print(f"SRS Warnings: {'; '.join(srs_errors)}", file=sys.stderr)
+        if full_report["srsErrors"]:
+            print(f"SRS Warnings: {'; '.join(full_report['srsErrors'])}", file=sys.stderr)
 
 
 def build_parser() -> argparse.ArgumentParser:

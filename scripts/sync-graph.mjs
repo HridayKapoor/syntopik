@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-import { existsSync, mkdirSync, readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readdirSync, readFileSync, realpathSync, statSync, writeFileSync } from "node:fs";
 import { execFileSync } from "node:child_process";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -993,12 +993,301 @@ function openTarget(targetPath) {
 	}
 }
 
+function extractIsoDate(val) {
+	if (typeof val !== "string") return null;
+	const m = /^(\d{4}-\d{2}-\d{2})/.exec(val.trim());
+	return m ? m[1] : null;
+}
+
+function computeRetentionHeatmap(revlog, examAttempts, propositions, today) {
+	const endMs = Date.parse(`${today}T00:00:00Z`);
+	const safeEndMs = Number.isFinite(endMs) ? endMs : Date.now();
+	const dayMs = 24 * 60 * 60 * 1000;
+	const windowDays = 365;
+	const startMs = safeEndMs - (windowDays - 1) * dayMs;
+	const startDate = new Date(startMs).toISOString().slice(0, 10);
+
+	const buckets = new Map();
+	const ensureDay = (d) => {
+		let entry = buckets.get(d);
+		if (!entry) {
+			entry = { count: 0, reviews: 0, exams: 0 };
+			buckets.set(d, entry);
+		}
+		return entry;
+	};
+	const inWindow = (d) => Boolean(d && d >= startDate && d <= today);
+
+	const revlogPropDates = new Set();
+	for (const ev of revlog) {
+		const d = extractIsoDate(ev.ts || ev.reviewedAt || ev.date || "");
+		if (!inWindow(d)) continue;
+		const b = ensureDay(d);
+		b.count += 1;
+		b.reviews += 1;
+		if (ev.propId || ev.id) {
+			revlogPropDates.add(`${String(ev.propId || ev.id)}::${d}`);
+		}
+	}
+
+	for (const att of examAttempts) {
+		const d = extractIsoDate(att.date || att.submittedAt || att.ts || "");
+		if (!inWindow(d)) continue;
+		const b = ensureDay(d);
+		b.count += 1;
+		b.exams += 1;
+	}
+
+	for (const p of propositions) {
+		const pid = String(p.id || "");
+		const seenDates = new Set();
+		for (const rawD of [p.lastReviewed, p.lastTested, p?.fsrs?.last_review]) {
+			const d = extractIsoDate(rawD || "");
+			if (!inWindow(d) || seenDates.has(d)) continue;
+			seenDates.add(d);
+			if (pid && revlogPropDates.has(`${pid}::${d}`)) continue;
+			const b = ensureDay(d);
+			b.count += 1;
+			b.reviews += 1;
+		}
+	}
+
+	const levelFor = (c) => (c <= 0 ? 0 : c <= 2 ? 1 : c <= 5 ? 2 : c <= 9 ? 3 : 4);
+	const days = [];
+	const byDate = {};
+	let totalEvents = 0;
+	let activeDays = 0;
+	let maxDailyCount = 0;
+
+	for (let i = 0; i < windowDays; i++) {
+		const d = new Date(startMs + i * dayMs).toISOString().slice(0, 10);
+		const b = buckets.get(d);
+		const count = b ? b.count : 0;
+		const reviews = b ? b.reviews : 0;
+		const exams = b ? b.exams : 0;
+		if (count > 0) {
+			byDate[d] = count;
+			totalEvents += count;
+			activeDays += 1;
+			if (count > maxDailyCount) maxDailyCount = count;
+		}
+		days.push({ date: d, count, reviews, exams, level: levelFor(count) });
+	}
+
+	return {
+		windowDays,
+		startDate,
+		endDate: today,
+		totalEvents,
+		activeDays,
+		maxDailyCount,
+		byDate,
+		days,
+	};
+}
+
+function computeCalibration(revlog) {
+	const totalReviews = revlog.length;
+	const calibrated = [];
+	let hypercorrectionCount = 0;
+	let luckyGuessCount = 0;
+
+	for (const ev of revlog) {
+		const rating = String(ev.rating || "").trim().toLowerCase();
+		const hasCorrect = typeof ev.correct === "boolean";
+		const y = hasCorrect
+			? ev.correct
+				? 1
+				: 0
+			: rating === "good" || rating === "easy"
+				? 1
+				: rating === "again" || rating === "hard"
+					? 0
+					: null;
+		const rawConf =
+			typeof ev.learnerConfidence === "number" && Number.isFinite(ev.learnerConfidence)
+				? ev.learnerConfidence
+				: typeof ev.confidence === "number" && Number.isFinite(ev.confidence)
+					? ev.confidence
+					: null;
+		if (ev.hypercorrection === true) {
+			hypercorrectionCount += 1;
+		}
+		if (rawConf === null || y === null) continue;
+		const c = Math.max(0, Math.min(1, rawConf > 1 ? rawConf / 100 : rawConf));
+		if (ev.hypercorrection !== true && c >= 0.75 && y === 0) {
+			hypercorrectionCount += 1;
+		}
+		if (c <= 0.35 && y === 1) {
+			luckyGuessCount += 1;
+		}
+		calibrated.push({ c, y });
+	}
+
+	const windowItems = calibrated.slice(-100);
+	const n = windowItems.length;
+	if (n === 0) {
+		return {
+			sampleCount: 0,
+			totalReviews,
+			brierScore: null,
+			overconfidenceBias: null,
+			accuracy: null,
+			meanConfidence: null,
+			ece: null,
+			hypercorrectionCount,
+			luckyGuessCount,
+		};
+	}
+
+	let brierSum = 0;
+	let biasSum = 0;
+	let accSum = 0;
+	let confSum = 0;
+	const bins = Array.from({ length: 5 }, () => ({ n: 0, cSum: 0, ySum: 0 }));
+
+	for (const { c, y } of windowItems) {
+		const diff = c - y;
+		brierSum += diff * diff;
+		biasSum += diff;
+		accSum += y;
+		confSum += c;
+		const binIdx = Math.min(4, Math.floor(c * 5));
+		bins[binIdx].n += 1;
+		bins[binIdx].cSum += c;
+		bins[binIdx].ySum += y;
+	}
+
+	let ece = 0;
+	for (const b of bins) {
+		if (b.n === 0) continue;
+		ece += (b.n / n) * Math.abs(b.cSum / b.n - b.ySum / b.n);
+	}
+
+	return {
+		sampleCount: n,
+		totalReviews,
+		brierScore: Number((brierSum / n).toFixed(4)),
+		overconfidenceBias: Number((biasSum / n).toFixed(4)),
+		accuracy: Number((accSum / n).toFixed(4)),
+		meanConfidence: Number((confSum / n).toFixed(4)),
+		ece: Number(ece.toFixed(4)),
+		hypercorrectionCount,
+		luckyGuessCount,
+	};
+}
+
+function computeLeeches(propositions, revlog) {
+	const againCounts = new Map();
+	for (const ev of revlog) {
+		const pid = String(ev.propId || ev.id || "").trim();
+		if (!pid) continue;
+		if (String(ev.rating || "").trim().toLowerCase() === "again" || ev.correct === false) {
+			againCounts.set(pid, (againCounts.get(pid) || 0) + 1);
+		}
+	}
+
+	const leeches = [];
+	for (const p of propositions) {
+		const pid = String(p.id || "");
+		const rawLapses = p.lapses ?? p?.fsrs?.lapses ?? againCounts.get(pid) ?? 0;
+		const lapses = Number.isFinite(Number(rawLapses)) ? Number(rawLapses) : 0;
+		const rawDiff = p.difficulty ?? p?.fsrs?.difficulty;
+		const difficulty =
+			rawDiff !== undefined && rawDiff !== null && Number.isFinite(Number(rawDiff))
+				? Number(Number(rawDiff).toFixed(2))
+				: null;
+
+		const reasons = [];
+		if (lapses >= 4) reasons.push(`lapses=${lapses}`);
+		if (difficulty !== null && difficulty >= 8.5) reasons.push(`difficulty=${difficulty}`);
+		if (reasons.length === 0) continue;
+
+		leeches.push({
+			id: pid,
+			title: p.title || pid,
+			subject: p.subject || "General",
+			chapter: p.chapter || "",
+			status: p.status || "shaky",
+			lapses,
+			difficulty,
+			reason: reasons.join(", "),
+			notes: p.notes || "",
+		});
+	}
+
+	leeches.sort((a, b) => b.lapses - a.lapses || (b.difficulty ?? 0) - (a.difficulty ?? 0) || a.id.localeCompare(b.id));
+	return leeches;
+}
+
+function normalizeReadingQueue(rawQueue) {
+	let realRoot = root;
+	try {
+		if (existsSync(root)) realRoot = realpathSync(root);
+	} catch {
+		realRoot = root;
+	}
+	const items = rawQueue.map((item, idx) => {
+		const priority =
+			typeof item.priority === "number" && Number.isFinite(item.priority)
+				? Math.max(0, Math.min(100, Math.round(item.priority)))
+				: 50;
+		const stage = typeof item.stage === "string" && item.stage.trim() ? item.stage.trim() : "queued";
+		let relPath = typeof item.relPath === "string" && item.relPath.trim() ? toPosix(item.relPath.trim()) : "";
+		if (!relPath && typeof item.sourcePath === "string" && item.sourcePath.trim()) {
+			const rawSrc = item.sourcePath.trim();
+			if (path.isAbsolute(rawSrc)) {
+				const candSrcs = [rawSrc];
+				try {
+					if (existsSync(rawSrc)) candSrcs.push(realpathSync(rawSrc));
+				} catch {
+					// ignore
+				}
+				if (process.platform === "darwin" && rawSrc.startsWith("/var/")) {
+					candSrcs.push(`/private${rawSrc}`);
+				}
+				for (const base of [root, realRoot]) {
+					for (const src of candSrcs) {
+						const rel = path.relative(base, src);
+						if (rel && !rel.startsWith("..") && !path.isAbsolute(rel)) {
+							relPath = toPosix(rel);
+							break;
+						}
+					}
+					if (relPath) break;
+				}
+			} else if (!rawSrc.startsWith("..")) {
+				relPath = toPosix(rawSrc.replace(/^\.\/+/u, ""));
+			}
+		}
+		const out = {
+			...item,
+			id: String(item.id || `rq-${idx + 1}`),
+			title: String(item.title || item.slug || item.url || `Extract ${idx + 1}`),
+			priority,
+			stage,
+		};
+		if (relPath) out.relPath = relPath;
+		return out;
+	});
+	items.sort((a, b) => {
+		const doneA = a.stage === "crystallized" ? 1 : 0;
+		const doneB = b.stage === "crystallized" ? 1 : 0;
+		if (doneA !== doneB) return doneA - doneB;
+		if (b.priority !== a.priority) return b.priority - a.priority;
+		return String(a.nextReview || "").localeCompare(String(b.nextReview || ""));
+	});
+	return items;
+}
+
 const propositions = readJsonl(path.join(kgDir, "propositions.jsonl"));
 const rawChains = readJsonl(path.join(kgDir, "chains.jsonl"));
 const chainSummary = normalizeChains(rawChains);
 const mistakes = readJsonl(path.join(kgDir, "mistakes.jsonl"));
 const examAttempts = readJsonl(path.join(kgDir, "exam-attempts.jsonl"));
 const harnessLog = readJsonl(path.join(kgDir, "harness-log.jsonl"));
+const revlog = readJsonl(path.join(kgDir, "revlog.jsonl"));
+const rawReadingQueue = readJsonl(path.join(kgDir, "reading-queue.jsonl"));
 const reviewQueuePath = path.join(kgDir, "review-queue.md");
 const reviewQueueMarkdown = existsSync(reviewQueuePath)
 	? readFileSync(reviewQueuePath, "utf8")
@@ -1030,6 +1319,16 @@ const { today, stats, dueItems } = computeStats(
 	harnessLog,
 );
 
+const retentionHeatmap = computeRetentionHeatmap(revlog, examAttempts, propositions, today);
+const calibration = computeCalibration(revlog);
+const leeches = computeLeeches(propositions, revlog);
+const readingQueue = normalizeReadingQueue(rawReadingQueue);
+
+stats.revlogCount = revlog.length;
+stats.leechesCount = leeches.length;
+stats.readingQueueCount = readingQueue.length;
+stats.brierScore = calibration.brierScore;
+
 const studyGraph = {
 	propositions,
 	chains: chainSummary.chains,
@@ -1037,7 +1336,7 @@ const studyGraph = {
 	chainCount: chainSummary.chainCount,
 };
 const studyHub = {
-	schemaVersion: 3,
+	schemaVersion: 4,
 	generatedAt: new Date().toISOString(),
 	today,
 	workspaceName: path.basename(root),
@@ -1057,6 +1356,10 @@ const studyHub = {
 	examFiles,
 	examStats,
 	harnessLog,
+	retentionHeatmap,
+	calibration,
+	leeches,
+	readingQueue,
 };
 
 const bundle = [

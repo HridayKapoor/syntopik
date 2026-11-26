@@ -1,66 +1,69 @@
-# Syntopik — Universal Self-Configuring Agent Bootstrap (`BOOTSTRAP.md`)
+# Syntopik — Universal 10-Second Bootstrap & Multi-Harness Guide (`BOOTSTRAP.md`)
 
-Give this file (or `AGENTS.md`) to **any AI coding agent, IDE assistant, CLI harness, or chat environment** (Cursor, Windsurf, Cline, Roo Code, Zed, OpenCode, Gemini CLI, OpenAI Codex, T3 Code, Claude Code, Google Antigravity, or local/web chat with shell access) to turn the workspace into a deterministic, FSRS-backed Deep-Mastery Operating System in under 2 seconds.
+Give this file (or `AGENTS.md`) to **any AI coding agent, IDE assistant, CLI harness, or browser learner** to turn any workspace into a deterministic, FSRS-6 + FIRe Deep-Mastery Operating System in under 10 seconds.
 
 ---
 
-## Step 1 — Silent Idempotent Self-Bootstrap (`< 2s`)
+## Step 1 — 10-Second Integration Matrix (Every User & Harness)
 
-On a fresh clone, Git worktree, or first session (whenever `knowledge-graph/graph-data.js` is absent or the user says *"Set up Syntopik"*), run once:
+| User / Harness | Single 10-Second Command | What Works Immediately |
+| :--- | :--- | :--- |
+| **Browser-First / Zero-Clone Learner** | `npx github:HridayKapoor/syntopik serve --open` *(or `uvx --from git+https://github.com/HridayKapoor/syntopik syntopik serve --open`)* | Auto-creates `~/.syntopik` vault, opens live 2-way Studio (`http://127.0.0.1:4173`), PDF/URL import, FIRe flashcards, SVG occlusion, 1-click CBT grading — zero git clone. |
+| **Claude Code (Any Repo)** | `/plugin marketplace add HridayKapoor/syntopik` → `/plugin install syntopik` | All 17 `/syntopik:*` skills, `syntopik-studio` MCP (incl. ambient capture tools), and plugin-cache-safe `SessionStart` / `PostToolUse` hooks in any repo. |
+| **Cursor / Windsurf / Copilot / Cline / Roo / Codex / OpenCode** | `npx skills add HridayKapoor/syntopik` *(+ optional `npx github:HridayKapoor/syntopik attach .`)* | Installs all 17 `agentskills.io` skills + optional thin pointer rule (`.cursor/rules/syntopik.mdc`, `.windsurf/rules/syntopik.md`, `.github/instructions/syntopik.instructions.md`) + harness-native MCP config (`.vscode/mcp.json` `"servers"`, `opencode.json` `"mcp"`, `.cursor/mcp.json`). Use `--copy` if symlinks are disabled. |
+| **Google Antigravity 2.0 (Any Repo)** | `uvx --from git+https://github.com/HridayKapoor/syntopik syntopik connect antigravity` | Installs global `~/.gemini/config/plugins/syntopik/` bundle (`plugin.json`, 17 skills, rules, hooks, SEP-1865 Studio MCP) active across every workspace. |
+| **Gemini CLI (Any Repo)** | `gemini extensions install https://github.com/HridayKapoor/syntopik` | Installs `gemini-extension.json`, `GEMINI.md`, skills, hooks, and `syntopik-studio` MCP server. |
+| **Direct Git Clone / Power User** | `git clone https://github.com/HridayKapoor/syntopik && cd syntopik && syntopik serve --open` | Full local STEM/Manim/Typst stack + `syntopik doctor` + offline `file://` fallback. |
 
+### Silent Idempotent First-Run Bootstrap (`< 2s`, Bare Python 3.12 Stdlib)
+On a fresh clone or worktree (whenever `knowledge-graph/graph-data.js` is absent), run once:
 ```bash
-.venv/bin/python -B scripts/setup_harness.py auto --json 2>/dev/null || python3 scripts/setup_harness.py auto --json
+syntopik init --json 2>/dev/null || .venv/bin/python -B scripts/setup_harness.py auto --json 2>/dev/null || python3 scripts/setup_harness.py auto --json
 ```
-
-What `setup_harness.py auto` does safely and non-destructively:
-1. Creates any missing learner directories (`chapters/`, `demos/`, `exams/`, `animations/`, `sources/`, `knowledge-graph/`) and initializes empty gitignored personal ledgers (`propositions.jsonl`, `chains.jsonl`, `mistakes.jsonl`, `exam-attempts.jsonl`, `review-queue.md`, `graph-data.js`) **without ever overwriting existing study data**.
-2. Repairs `.claude/skills` directory links on Windows clones where Git checked out symlinks as plain text.
-3. Probes available local capabilities (`.venv/bin/python`, `node`, `typst`, `TinyTeX`/`latex`, `ffmpeg`, `researchctl`, and active harness configs) and returns a machine-readable JSON capability report.
-
-Optional environment overrides (honored across all Python & Node scripts, with backwards-compatible `MLH_*` fallbacks):
-- `SYNT_WORKSPACE` (fallback `MLH_WORKSPACE`) — workspace root path (useful in Git worktrees like T3 Code).
-- `SYNT_KG_DIR` (fallback `MLH_KG_DIR`) — custom/shared `knowledge-graph/` directory.
-- `SYNT_CHAPTERS_DIR` (fallback `MLH_CHAPTERS_DIR`) — custom/shared `chapters/` directory.
-- `SYNT_DATA_DIR` (fallback `MLH_DATA_DIR`) — persistent MCP Studio UI card state directory.
+Creates missing learner folders & gitignored ledgers (`propositions.jsonl`, `chains.jsonl`, `revlog.jsonl`, `mistakes.jsonl`, `reading-queue.jsonl`, `exam-attempts.jsonl`, `review-queue.md`, `graph-data.js`) without ever overwriting existing data, and repairs Windows `.claude/skills` links.
 
 ---
 
-## Step 2 — Adapt Every Learning Interaction via the 4-Axis UX Capability Matrix
+## Step 2 — Unified `syntopik` CLI Reference & Workspace Safety
 
-Syntopik never breaks when switching between a rich GUI IDE and a plain terminal CLI. Detect your host's available tools and pick the highest supported tier on each axis:
+All 8 verbs work on **bare Python 3.12+ stdlib** (or Node 20+ via `npx`) and automatically resolve bundled scripts whether inside a direct clone, wheel, or attached repository:
+
+| Command | Purpose (Direct-Clone Script Fallback) |
+| :--- | :--- |
+| `syntopik init [dir]` | Non-destructively initialize workspace or `~/.syntopik` vault (`scripts/setup_harness.py auto`). |
+| `syntopik attach <dir> [--harness auto\|all\|...] [--vault global\|local]` | Wire Syntopik into any existing repo cleanly via `.syntopik/` + `.git/info/exclude` (zero diff to tracked `.gitignore` or existing `AGENTS.md`). |
+| `syntopik connect <harness>` | Install global plugin, MCP config, or extension (`scripts/install_mcp_app.py`). |
+| `syntopik serve [--port 4173] [--open] [--workspace <dir>]` | Launch 2-way local Studio server (`127.0.0.1`, per-process CSRF token, SSE live refresh, offline `file://` fallback intact). |
+| `syntopik import <pdf\|dir\|arxiv\|youtube\|github\|url> [--chapter <slug>]` | 1-command universal importer & incremental reading queue (`scripts/ingest_source.py`). |
+| `syntopik review [--web\|--tui] [--compress] [--recover]` | Run FSRS-6 + FIRe compressed reviews or calm backlog recovery (`scripts/srs_engine.py`, `scripts/daily_plan.py`). |
+| `syntopik doctor [--fix] [--core-only]` | Verify workspace, hooks, skills, context budgets, and engines (`scripts/study_doctor.py`). |
+| `syntopik export <obsidian\|anki\|json> [--out <path>]` | Bidirectional Obsidian/Mnemonic sync (`scripts/vault_sync.py`) or Visual/IO Anki `.apkg` (`scripts/srs_engine.py export-anki`). |
+| `syntopik run <engine> [args...]` | Portable passthrough to any bundled script (`math_verify`, `code_verify`, `pdf_studio`, `pedagogy_eval`, etc.). |
+
+**Workspace Resolution Precedence** (honoring `MLH_*` fallbacks): explicit flag → `SYNT_WORKSPACE` → `$CLAUDE_PROJECT_DIR` / `cwd` (if `knowledge-graph/` or `.syntopik/` exists) → writable clone root → `~/.syntopik` (safe inside read-only plugin caches!). Optional overrides: `SYNT_KG_DIR`, `SYNT_CHAPTERS_DIR`, `SYNT_DATA_DIR`.
+
+---
+
+## Step 3 — 4-Axis Multi-Harness UX Capability Matrix
+
+Detect your host's tools and pick the highest supported tier on each axis — Syntopik degrades gracefully to plain terminal Markdown with zero lost rigor:
 
 | Learning Primitive | Tier 1 — Rich Interactive UI | Tier 2 — Native Structured Tool | Tier 3 — Universal Calm Markdown Fallback |
 | :--- | :--- | :--- | :--- |
-| **1. Graded Probe / Predict / Check** | `synt_quiz_card` (`mlh_quiz_card`) on SEP-1865 UI hosts (shuffled bare options, `"I don't know"`, `0–100%` confidence rail, thinking box, sketch pad) | Antigravity `ask_question` · Claude `AskUserQuestion` (`description: ""`) · Codex `request_user_input` (bare claims, zero leaks, include `"I don't know"`) | Single clean bordered Markdown card: bare options `A)..D)` + `E) I don't know`, inviting **choice + `0–100%` confidence + 1-line reasoning** |
-| **2. Practice Problem (`pose` / `conclude`)** | `synt_practice_card` (`mlh_practice_card`) on SEP-1865 UI hosts (server-sealed `modelSolution`, 1-active gate, sketch pad, verbatim reveal) | Terminal MCP `synt_practice_card` (renders stem cleanly while sealing `modelSolution` server-side) or verified solution pre-committed in `/tmp` | Clean Markdown stem → `R0–R5` hints (`<= 35` words, 1 rung/turn) → verbatim committed solution on conclude + **Pause Law** (*"Ready for the next problem?"*) |
-| **3. Visuals, Plots, Code Traces & Labs** | Antigravity `generative_ui` `<agent-embed>` · Claude Artifact · T3 Code `html_preview` → `html_render` | Deterministic local SVG/PNG (`math_plot.py`, `physics_draw.py`, `circuit_draw.py`, `chem_3d.py`, `pdf_studio.py annotate`) + offline `demos/<slug>.html` | Inline Mermaid diagram / KaTeX math / compact `<= 4`-row table + clickable `demos/<slug>.html` link (always reference named features/controls!) |
-| **4. Lesson DAG & Live Progress** | `synt_lesson_studio` (`mlh_lesson_studio`) side-pane (`Autopilot`, glowing SVG `Plan`, `Graph`, `Flashcards`, `Traps`) | Antigravity `update_steps` · Claude `TaskCreate`/`TaskUpdate` · Codex `update_plan` | Single 1-line top breadcrumb: `[Step 2/6 · Landmark Title · Predict -> Teach -> Check]` |
-| **5. Heavy PDFs, Research & Verification** | Parallel subagents (`invoke_subagent`, `Agent`, `spawn_agent`) | Bounded CLI calls (`pdf_studio.py`, `research_scout.py`, `math_verify.py`, `code_verify.py`, `chem_physical.py`) | Sequential bounded chunks (`<= 5` PDF pages or `<= 3` searches per turn) keeping chat calm |
+| **1. Graded Probe / Predict / Check** | `synt_quiz_card` (`mlh_quiz_card`) on SEP-1865 UI hosts (bare options, `"I don't know"`, `0–100%` confidence rail, thinking box, sketch pad) | Antigravity `ask_question` · Claude `AskUserQuestion` (`description: ""`) · Codex `request_user_input` (bare claims, zero leaks, include `"I don't know"`) | Single bordered Markdown card: bare options `A)..D)` + `E) I don't know`, inviting **choice + `0–100%` confidence + 1-line why** |
+| **2. Practice, Parsons & Bug-Hunt** | `synt_practice_card` (`mode: "standard" \| "parsons" \| "faded"`, server-sealed `modelSolution`/`canonicalOrder`, keyboard reorder + blanks) | Terminal MCP `synt_practice_card` (prints stem or shuffled `A..F` blocks while keeping solution sealed) or pre-committed `/tmp` solution | Clean Markdown stem (or `A..F` blocks) → `R0–R5` hints (`<= 35`w, 1 rung/turn) → verbatim reveal + **Pause Law** |
+| **3. Ambient Cross-Session Memory** | `synt_capture_concept`, `synt_get_frontier`, `synt_log_review` (headless MCP in any chat) | `syntopik review` / `syntopik run srs_engine ...` | Append to `knowledge-graph/propositions.jsonl` + `revlog.jsonl` via `srs_engine.py` |
+| **4. Visuals, Occlusion & Live Workbench** | `<agent-embed>` · Claude Artifact · T3 `html_render` · `syntopik serve` live 2-way Studio (SVG occlusion, FIRe cards, 1-click CBT auto-save) | Deterministic SVG/PNG (`math_plot`, `physics_draw`, `circuit_draw`, `chem_3d`, `pdf_studio annotate --occlude`) + offline `demos/<slug>.html` | Inline Mermaid / KaTeX / `<= 4`-row table + `file://` link to `demos/<slug>.html` / `dashboard.html` |
+| **5. Lesson DAG & Heavy Processing** | `synt_lesson_studio` side-pane + parallel subagents (`invoke_subagent`, `Agent`, `spawn_agent`) | `update_steps` · `TaskCreate`/`TaskUpdate` · `update_plan` + bounded CLI (`pdf_studio`, `ingest_source`, `research_scout`) | 1-line `[Step k/N · Landmark]` breadcrumb + `<= 5` PDF pages or `<= 3` searches/turn |
 
 ---
 
-## Step 3 — Portable 4-Tier Deep Research & Syllabus Discovery Cascade
+## Step 4 — Portable 4-Tier Research Cascade & Calm Ceilings
 
-When onboarding a topic without user files (`topic-onboarding` Mode B) or verifying external curriculum/paper facts, follow this strict bounded cascade (zero hardcoded user paths, max `8` curated sources in `sources/_curated/<slug>/manifest.json`):
+When scouting open sources without local files (`topic-onboarding` Mode B, max `8` curated sources in `sources/_curated/<slug>/manifest.json`):
+1. **Tier 1 (`research` MCP active)**: `web_search`, `read_url`, `batch_extract`, `crawl_page` — ALWAYS pass integer `runtime_seconds` (`60–180`) and `result_detail: "compact"`. Never retry blocked Google scrapes.
+2. **Tier 2 (`syntopik run research_scout` → portable `researchctl`)**: auto-discovers `$RESEARCHCTL_BIN` / `PATH` / `~/.local/bin/researchctl`.
+3. **Tier 3 (Built-in Web Search + Keyless Scholarly APIs)**: `syntopik run research_scout scholar "<query>" --sources arxiv,openalex,crossref,wikipedia --json` (pure stdlib HTTPS).
+4. **Tier 4 (Pure Offline First-Principles)**: synthesize from local `sources/`, `knowledge-graph/`, and deterministic verifiers (explicitly labeled `offline-constructed`, zero fabricated URLs).
 
-1. **Tier 1 — Active `research` MCP Server (if connected in session)**:
-   - Tools: `web_search`, `read_url`, `engine_search`, `batch_extract`, `reddit_search`, `reddit_post`, `reddit_browse`, `crawl_page`, `crawl_site`.
-   - **Mandatory Contract**: ALWAYS pass integer `runtime_seconds` (`60` for search/read, `90` for `batch_extract`, `120` for `crawl_page`, `<= 180` for bounded `crawl_site`) and `result_detail: "compact"` on `web_search`. Never retry blocked Google scrapes; use `web_search`.
-2. **Tier 2 — Portable `researchctl` via `scripts/research_scout.py`**:
-   - Auto-discovers `$RESEARCHCTL_BIN` → `which researchctl` → `~/.local/bin/researchctl` → `$LOCAL_RESEARCH_STACK_DIR` → sibling/home `local-research-stack`:
-     ```bash
-     .venv/bin/python -B scripts/research_scout.py search "MIT 6.824 Raft lecture notes" --json
-     .venv/bin/python -B scripts/research_scout.py read "https://pdos.csail.mit.edu/6.824/papers/raft-extended.pdf" --json
-     ```
-3. **Tier 3 — Native Harness Web Search + Keyless Scholarly APIs (`research_scout.py scholar`)**:
-   - Combine your harness's built-in search (`search_web` / `WebSearch` / `web_search`) with `scripts/research_scout.py scholar "<query>" --sources arxiv,openalex,crossref,wikipedia --json` (pure Python stdlib HTTPS, zero API keys).
-4. **Tier 4 — Pure Offline First-Principles Mode**:
-   - When offline, synthesize from local `sources/`, `knowledge-graph/`, and deterministic verifiers (`math_verify.py`, `code_verify.py`, `chem_physical.py`, `chem_3d.py`), explicitly labeling the syllabus as offline-constructed without fabricating external citations.
-
----
-
-## Step 4 — Enforce Calm Anti-Overstimulation Pacing Everywhere
-
-- **`<= 160` words of teaching prose per turn** (target `90–130` words; split larger ideas across two nodes).
-- **Strictly `1` active cognitive demand per turn** (never bundle two questions or a wall of prose + a topic switch).
-- **Zero sycophancy, zero streaks/confetti, zero unverified formulas/code** — check every non-trivial claim with `math_verify.py`, `code_verify.py`, or `chem_physical.py` before showing it, and persist progress to `knowledge-graph/` and `chapters/<slug>-tracker.json` in real time.
+**Always-On Calm Ceilings** (verified offline by `syntopik run pedagogy_eval lint|bench`): `<= 160`w prose/turn (`90–130`w target), strictly `1` active demand/turn, `<= 40`w side doubts, zero sycophancy, zero streaks/confetti, and deterministic verification before showing formulas, code, or answers.

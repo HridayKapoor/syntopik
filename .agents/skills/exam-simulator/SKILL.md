@@ -1,35 +1,35 @@
 ---
 name: exam-simulator
 description: >-
-  Build, launch, grade, and debrief 100% offline timed mastery assessments and
-  authentic NTA JEE Main & IIT JEE Advanced CBT mock exams via
-  scripts/exam_runner.py and demos/exam-cbt-template.html, plus live in-chat
-  timed micro-sprints and R0-R5 post-exam debriefs across CS, ML, math, science,
-  and competitive exams.
+  Build, run, auto-grade, and debrief offline or live-workbench timed exams and
+  NTA JEE Main/Adv CBT mocks, with 3-bucket Knowledge/Execution/Time-Sink
+  autopsy and micro-sprints.
 ---
 
-# Exam Simulator — Timed Mastery Assessments, Offline NTA JEE CBT & Surgical Debrief
+# Exam Simulator — Timed Mastery Assessments, Offline/Live CBT & 3-Bucket Autopsy
 
 Untimed study builds comprehension (Phase 1); timed simulation builds **retrieval speed, calibration under uncertainty, partial-credit judgment, and 2-pass triage** (Phase 2) across **any domain** (university midterms/finals, CS/ML technical screens, math/science tests, AND authentic NTA JEE Main & Advanced CBT):
 
-- **Mode A — Standalone Offline Timed CBT HTML (`exams/<slug>.html`)**: zero-distraction browser exam with 5-state palette, per-question stopwatch, offline LaTeX rendering, Light/Dark editorial themes, Attempt JSON export, and deterministic `exam_runner.py grade`.
+- **Mode A — Timed CBT HTML (`exams/<slug>.html`)**: zero-distraction browser exam with 5-state palette, per-question stopwatch, offline LaTeX rendering, Light/Dark themes, **1-click live auto-save & grading under `syntopik serve`** (`POST /api/exam/submit`), and 100% offline `file://` Attempt JSON export + `exam_runner.py grade`.
 - **Mode B — Live AI-Coached Micro-Assessment (`3–5` Questions Right in Chat)**: rapid 10–15 minute timed sprint or post-exam `R0–R5` miss repair directly inside your harness.
+
+*(Portable CLI: prefer `syntopik run exam_runner ...` in attached repos, or `.venv/bin/python -B scripts/exam_runner.py ...` / `python3 scripts/exam_runner.py ...` in direct clones.)*
 
 ---
 
-## Mode A — Standalone Offline Timed Exam / CBT Workflow
+## Mode A — Timed Exam / CBT Workflow
 
 ### Phase 1 — Author a 100% Verified `spec.json`
 Inspect the schema anytime:
 ```bash
-.venv/bin/python -B scripts/exam_runner.py schema
+syntopik run exam_runner schema
 ```
 
 **Mandatory Pre-Compile Verification (Zero Unverified Keys!)**:
-- **CS / Algorithms / ML**: verify outputs, edge cases, and time/space complexity via `scripts/code_verify.py`.
-- **Mathematics & Physics**: verify via `scripts/math_verify.py` (and `scripts/eduniti_pyq.py` when pulling real JEE PYQs).
-- **Chemistry**: verify via `scripts/chem_physical.py`, `scripts/chem_3d.py`, and `scripts/organic_reagents.py`.
-- **Inline Figures**: render diagrams/circuits/plots/structures as local `.svg`/`.png` files (`physics_draw.py`, `circuit_draw.py`, `math_plot.py`, `chem_3d.py`) and pass in `question.figure` — `exam_runner.py build` embeds them inline so `exams/<slug>.html` is **100% standalone offline**.
+- **CS / Algorithms / ML**: verify outputs, edge cases, and time/space complexity via `code_verify.py`.
+- **Mathematics & Physics**: verify via `math_verify.py` (and `eduniti_pyq.py` when pulling real JEE PYQs).
+- **Chemistry**: verify via `chem_physical.py`, `chem_3d.py`, and `organic_reagents.py`.
+- **Inline Figures**: render diagrams/circuits/plots/structures as local `.svg`/`.png` files (`physics_draw`, `circuit_draw`, `math_plot`, `chem_3d`) and pass in `question.figure` — `exam_runner.py build` embeds them inline so `exams/<slug>.html` works 100% offline.
 
 ### Supported Question Types & Marking Profiles (Configurable Per Exam/Question)
 
@@ -40,29 +40,36 @@ Inspect the schema anytime:
 | `numerical` | Exact/tolerance `+4 / 0` | **JEE Main Sec B**: 5 compulsory Qs/subject, **`+4 / -1 / 0`**; **JEE Adv**: `+4 / 0` or `+3 / 0`, 2-decimal range/tolerance | `answer: 4.5`, `tolerance: 0.01`, `marksWrong: 0` or `-1` |
 | `matrix_match` | Per-row partial credit | Per-row partial (`+1`/`+2` per exact row) or List-Match combos | `rows`, `cols`, `answer: {"P":["1","3"]}` |
 
-Always populate `id`, `subject`, `chapter`, `propId` (for automatic FSRS review scheduling!), `stem`, `solution`, `trapNote`, and `trapCategory` (`concept_gap`, `misconception`, `sign_error`, `unit_trap`, `condition_missed`, `algebra_slip`, `diagram_misread`, `careless`, `time_pressure`, `edge_case_missed`, `complexity_trap`, `off_by_one`, `state_mutation_bug`).
+Always populate `id`, `subject`, `chapter`, `propId` (enables automatic FSRS `good` credit on hits + `again` scheduling on misses!), `stem`, `solution`, `trapNote`, and `trapCategory` (`concept_gap`, `misconception`, `sign_error`, `unit_trap`, `condition_missed`, `algebra_slip`, `diagram_misread`, `careless`, `time_pressure`, `edge_case_missed`, `complexity_trap`, `off_by_one`, `state_mutation_bug`).
 
-### Phase 2 — Compile & Launch Offline HTML
+### Phase 2 — Compile & Launch (1-Click Live Auto-Save or Offline `file://`)
 ```bash
-.venv/bin/python -B scripts/exam_runner.py build /tmp/<slug>-spec.json --out exams/<slug>.html
+syntopik run exam_runner build /tmp/<slug>-spec.json --out exams/<slug>.html
 ```
 - **5-State Palette**: Not Visited, Not Answered, Answered (evaluated), Marked for Review (not evaluated), **Answered & Marked for Review (EVALUATED at submit/timeout!)**.
-- **Numeric Keypad & Timer**: on-screen keypad + keyboard input (no calculator in official JEE 2024–2026), `<15m` amber / `<5m` red alerts, per-question stopwatch, `localStorage` auto-save, and **"Download Attempt JSON"** on submit.
+- **Numeric Keypad & Timer**: on-screen keypad + keyboard input (no calculator in official JEE 2024–2026), `<15m` amber / `<5m` red alerts, per-question stopwatch, and `localStorage` auto-save.
+- **Live 1-Click Auto-Save (`syntopik serve --open`)**: when opened via `http://127.0.0.1:4173`, submitting `exams/<slug>.html` automatically POSTs to `/api/exam/submit`, runs deterministic grading, logs `exam-attempts.jsonl` + `mistakes.jsonl`, updates FSRS-6 + FIRe, and renders `"Graded & Saved to Knowledge Graph ✓"` immediately. On `file://`, `"Download Attempt JSON"` stays available for offline grading.
 
-### Phase 3 — Deterministic Grading & Automatic Ledger Sync
+### Phase 3 — Deterministic Grading, `good` Credit & 3-Bucket Autopsy
 ```bash
-.venv/bin/python -B scripts/exam_runner.py grade <spec.json> <attempt.json> --json
+syntopik run exam_runner grade <spec.json> <attempt.json> --json
 ```
 *(Pass `--kg-dir /tmp/... --no-sync` in tests so real ledgers stay untouched!)*
-Automatically computes exact scores/partial credit, flags slow questions (`> 180s`) & negative-mark traps, logs misses to `knowledge-graph/mistakes.jsonl`, appends `knowledge-graph/exam-attempts.jsonl`, and schedules missed `propId`s via `scripts/srs_engine.py review <propId> --rating again`.
+Automatically performs in-process:
+1. **Exact Scoring + Bidirectional FSRS Sync**: awards **`good` credit** on every correctly solved `propId` (propagating FIRe credit to prerequisites!) and schedules missed `propId`s with `--rating again`, appending `revlog.jsonl`, `mistakes.jsonl`, and `exam-attempts.jsonl`.
+2. **3-Bucket Exam Autopsy**: classifies every miss/drag into:
+   - **`knowledge`**: conceptual gaps, misconceptions, missed preconditions.
+   - **`execution`**: sign/unit/algebra/off-by-one/edge-case/careless slips on known concepts.
+   - **`time_sink`**: ego-trap questions flagged by elevated `timeSpent / medianTime` (or `> 180s`).
+3. **3-Strike Escalation**: whenever a `(micro-topic, root-cause)` pair reaches **3 strikes** in `mistakes.jsonl`, flags escalation to queue a targeted **Surgical Bug-Hunt** (`practice-drill`) + an unaided **Blank-Sheet Delayed Retest** in 4 days.
 
 ---
 
 ## Phase 4 & Mode B — Calm Surgical Debrief & Live In-Chat Micro-Sprint
 
 1. **Concise Debrief (`<= 160` words — Never Lecture Walls of Text!)**:
-   - Lead with `score / maxScore (%)`, `accuracyPct`, negative marks surrendered, and `> 3m` time sinks.
-   - Group misses by **Newman Error Tier**: *Comprehension/Model-Selection* → interleaved discrimination drills; *Process/Encoding* → pre-submit invariant/unit/edge-case sanity checks; *Executive/Pacing* → 2-pass triage.
-   - Offer **1** clear next move: live `R0–R5` non-spoiling repair on the top `2–3` misses (`synt_practice_card` / `mlh_practice_card` with Pause Law) OR a 1–2p Typst Pitfall PDF (`mistake_analytics.py export-traps` → `cheatsheet_pdf.py build`).
+   - Lead with `score / maxScore (%)`, `accuracyPct`, negative marks surrendered, and the **3-Bucket split (`Knowledge` / `Execution` / `Time-Sink`)** + any **3-Strike Escalations**.
+   - Map each bucket cleanly: *Knowledge* → interleaved discrimination/Parsons drills; *Execution* → pre-submit invariant/unit/edge-case checks; *Time-Sink* → 2-pass triage cutoff.
+   - Offer **1** clear next move: live `R0–R5` non-spoiling repair on top `2–3` misses (`synt_practice_card` + Pause Law), a 3-strike Surgical Bug-Hunt, OR a 1–2p Typst Pitfall PDF (`mistake_analytics export-traps` → `cheatsheet_pdf build`).
 2. **Live Micro-Sprint (`3–5` Verified Questions in Chat)**:
-   - Pose **1** verified question per turn (`synt_quiz_card` / `mlh_quiz_card`, native question tool, or calm Markdown card with `"I don't know"` = skip for `0` marks), track cumulative score & pacing, sync misses to `mistakes.jsonl` + `srs_engine.py`, and repair the #1 leak.
+   - Pose **1** verified question per turn (`synt_quiz_card`, native question tool, or calm Markdown card with `"I don't know"` = skip for `0` marks), track cumulative score & pacing, sync hits (`good`) & misses (`again`) to `mistakes.jsonl` + `srs_engine.py`, and repair the #1 leak.

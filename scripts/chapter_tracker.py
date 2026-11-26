@@ -40,82 +40,50 @@ from typing import Any
 SCHEMA_VERSION = 1
 
 ROOT = Path(__file__).resolve().parent.parent
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
+
+from syntopik.paths import (  # noqa: E402
+    find_node as _find_node_bin,
+    resolve_chapters_dir as _resolve_chapters_dir_core,
+    resolve_kg_dir as _resolve_kg_dir_core,
+    resolve_package_root,
+    sync_hub,
+)
+from syntopik.schemas import (  # noqa: E402
+    JEE_CORE_SUBJECTS,
+    JEE_SOURCE_KINDS,
+    LEVEL_ALIASES,
+    LEVEL_RANK,
+    MISTAKE_CATEGORY_ALIASES,
+    SUBJECT_ALIASES,
+    TARGET_DEPTH_ALIASES,
+    VALID_GOAL_PROFILES,
+    VALID_LEVELS,
+    VALID_MISTAKE_CATEGORIES,
+    VALID_SUBJECTS,
+    VALID_TARGET_DEPTHS,
+    _has_jee_source_or_title_cues,
+    is_jee_profile,
+    normalize_level,
+    normalize_level_soft,
+    normalize_mistake_category as _normalize_mistake_category_core,
+    normalize_subject as _normalize_subject_core,
+    now_iso,
+    today_iso,
+)
+from syntopik.storage import (  # noqa: E402
+    load_json as _load_json_core,
+    load_jsonl as _load_jsonl,
+    save_json_atomic as _write_json_atomic,
+)
+
 DEFAULT_CHAPTERS_DIR = ROOT / "chapters"
 DEFAULT_KG_DIR = ROOT / "knowledge-graph"
-SYNC_SCRIPT = ROOT / "scripts" / "sync-graph.mjs"
+SYNC_SCRIPT = resolve_package_root() / "scripts" / "sync-graph.mjs"
 TRACKER_SUFFIX = "-tracker.json"
 
-VALID_SUBJECTS: tuple[str, ...] = (
-    "Physics",
-    "Chemistry",
-    "Maths",
-    "Computer Science",
-    "Machine Learning",
-    "Biology",
-    "Economics",
-    "Systems",
-    "General",
-)
-JEE_CORE_SUBJECTS: frozenset[str] = frozenset({"Physics", "Chemistry", "Maths"})
-SUBJECT_ALIASES: dict[str, str] = {
-    "physics": "Physics",
-    "phy": "Physics",
-    "chemistry": "Chemistry",
-    "chem": "Chemistry",
-    "maths": "Maths",
-    "math": "Maths",
-    "mathematics": "Maths",
-    "cs": "Computer Science",
-    "comp sci": "Computer Science",
-    "compsci": "Computer Science",
-    "computer science": "Computer Science",
-    "coding": "Computer Science",
-    "programming": "Computer Science",
-    "software": "Computer Science",
-    "software engineering": "Computer Science",
-    "ml": "Machine Learning",
-    "ai": "Machine Learning",
-    "dl": "Machine Learning",
-    "deep learning": "Machine Learning",
-    "machine learning": "Machine Learning",
-    "bio": "Biology",
-    "biology": "Biology",
-    "econ": "Economics",
-    "economics": "Economics",
-    "sys": "Systems",
-    "systems": "Systems",
-    "gen": "General",
-    "general": "General",
-}
-
-VALID_GOAL_PROFILES: tuple[str, ...] = (
-    "general",
-    "course",
-    "coding",
-    "research",
-    "jee",
-    "exam",
-)
-VALID_TARGET_DEPTHS: tuple[str, ...] = (
-    "foundations",
-    "core",
-    "mastery",
-)
-TARGET_DEPTH_ALIASES: dict[str, str] = {
-    "foundations": "foundations",
-    "foundation": "foundations",
-    "basics": "foundations",
-    "intro": "foundations",
-    "easy": "foundations",
-    "core": "core",
-    "main": "core",
-    "intermediate": "core",
-    "medium": "core",
-    "mastery": "mastery",
-    "advanced": "mastery",
-    "research": "mastery",
-    "hard": "mastery",
-}
+VALID_SLICE_STAGES: tuple[str, ...] = ("queued", "extracted", "clozed", "crystallized")
 
 VALID_SOURCE_KINDS: tuple[str, ...] = (
     "whiteboard_pdf",
@@ -132,32 +100,9 @@ VALID_SOURCE_KINDS: tuple[str, ...] = (
     "syllabus",
     "official_docs",
 )
-JEE_SOURCE_KINDS: frozenset[str] = frozenset({"pyq_pdf", "pyq_bank", "module_pdf"})
 CODE_FILE_EXTS: frozenset[str] = frozenset(
     {".py", ".js", ".ts", ".tsx", ".rs", ".cpp", ".c", ".h", ".java", ".go", ".ipynb", ".sql"}
 )
-
-VALID_LEVELS: tuple[str, ...] = ("basics", "main", "advanced")
-LEVEL_ALIASES: dict[str, str] = {
-    "basics": "basics",
-    "basic": "basics",
-    "foundations": "basics",
-    "foundation": "basics",
-    "intro": "basics",
-    "introductory": "basics",
-    "easy": "basics",
-    "main": "main",
-    "core": "main",
-    "intermediate": "main",
-    "medium": "main",
-    "standard": "main",
-    "advanced": "advanced",
-    "adv": "advanced",
-    "mastery": "advanced",
-    "research": "advanced",
-    "hard": "advanced",
-}
-LEVEL_RANK: dict[str, int] = {"basics": 0, "main": 1, "advanced": 2}
 
 VALID_TOPIC_STATUSES: tuple[str, ...] = ("pending", "probed", "in_progress", "mastered")
 VALID_QUESTION_KINDS: tuple[str, ...] = (
@@ -195,37 +140,6 @@ VALID_MILESTONES: tuple[str, ...] = (
     "cbtMockPassed",
     "audioBriefBuilt",
 )
-
-VALID_MISTAKE_CATEGORIES: tuple[str, ...] = (
-    "concept_gap",
-    "misconception",
-    "sign_error",
-    "unit_trap",
-    "condition_missed",
-    "algebra_slip",
-    "diagram_misread",
-    "careless",
-    "time_pressure",
-    "edge_case_missed",
-    "complexity_trap",
-    "off_by_one",
-    "state_mutation_bug",
-)
-MISTAKE_CATEGORY_ALIASES: dict[str, str] = {
-    "edge_case": "edge_case_missed",
-    "boundary_missed": "edge_case_missed",
-    "corner_case": "edge_case_missed",
-    "tle": "complexity_trap",
-    "complexity": "complexity_trap",
-    "asymptotic_trap": "complexity_trap",
-    "index_error": "off_by_one",
-    "bounds_error": "off_by_one",
-    "mutation_bug": "state_mutation_bug",
-    "aliasing_bug": "state_mutation_bug",
-    "concurrency_bug": "state_mutation_bug",
-    "race_condition": "state_mutation_bug",
-    "syntax_slip": "careless",
-}
 
 IGNORED_DIR_NAMES: frozenset[str] = frozenset(
     {".git", ".venv", "__pycache__", "_extracted", "node_modules", "target"}
@@ -269,44 +183,12 @@ MAX_SESSION_LOG = 200
 # ---------------------------------------------------------------------------
 
 
-def now_iso() -> str:
-    return datetime.now(timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z")
-
-
-def today_iso() -> str:
-    return datetime.now(timezone.utc).date().isoformat()
-
-
 def normalize_subject(value: str) -> str:
     """Normalize common STEM/CS/ML aliases or cleanly preserve/title-case any custom subject."""
-    cleaned = re.sub(r"\s+", " ", str(value or "").strip())
-    if not cleaned:
-        raise argparse.ArgumentTypeError("Subject cannot be empty.")
-    key = re.sub(r"[-_]+", " ", cleaned.lower()).strip()
-    key = re.sub(r"\s+", " ", key)
-    if key in SUBJECT_ALIASES:
-        return SUBJECT_ALIASES[key]
-    if cleaned.lower() in SUBJECT_ALIASES:
-        return SUBJECT_ALIASES[cleaned.lower()]
-    # Preserve explicit mixed-case / acronym subjects like "NLP", "Rust", "C++", "GraphQL"
-    if not cleaned.islower():
-        return cleaned
-    return cleaned.title()
-
-
-def normalize_level(raw: str | None, *, default: str = "basics") -> str:
-    """Map canonical levels (`basics`, `main`, `advanced`) and aliases (`foundations`, `core`, `mastery`)."""
-    val = str(raw or default).strip().lower()
-    if val in LEVEL_ALIASES:
-        return LEVEL_ALIASES[val]
-    raise ValueError(
-        f"Invalid level {raw!r}; expected {VALID_LEVELS} (or aliases foundations/core/mastery)."
-    )
-
-
-def normalize_level_soft(raw: Any, default: str = "basics") -> str:
-    val = str(raw or default).strip().lower()
-    return LEVEL_ALIASES.get(val, default)
+    try:
+        return _normalize_subject_core(value)
+    except ValueError as exc:
+        raise argparse.ArgumentTypeError(str(exc)) from exc
 
 
 def normalize_goal_profile(raw: str) -> str:
@@ -356,49 +238,15 @@ def parse_bool_str(raw: str) -> bool:
 
 
 def resolve_chapters_dir(chapters_dir: Path | str | None = None) -> tuple[Path, bool]:
-    """Return `(resolved_chapters_dir, is_default)`, honoring `SYNT_CHAPTERS_DIR || MLH_CHAPTERS_DIR`."""
-    if chapters_dir is not None and str(chapters_dir).strip():
-        p = Path(chapters_dir).expanduser().resolve()
-        return p, (p == DEFAULT_CHAPTERS_DIR.resolve())
-    env_dir = (
-        os.environ.get("SYNT_CHAPTERS_DIR", "").strip()
-        or os.environ.get("MLH_CHAPTERS_DIR", "").strip()
-    )
-    if env_dir:
-        p = Path(env_dir).expanduser().resolve()
-        return p, (p == DEFAULT_CHAPTERS_DIR.resolve())
-    env_ws = (
-        os.environ.get("SYNT_WORKSPACE", "").strip()
-        or os.environ.get("MLH_WORKSPACE", "").strip()
-    )
-    if env_ws:
-        p = (Path(env_ws).expanduser().resolve() / "chapters").resolve()
-        return p, (p == DEFAULT_CHAPTERS_DIR.resolve())
-    p = DEFAULT_CHAPTERS_DIR.resolve()
-    return p, True
+    """Return `(resolved_chapters_dir, is_default)`, honoring `SYNT_CHAPTERS_DIR || MLH_CHAPTERS_DIR || SYNT_WORKSPACE`."""
+    p = _resolve_chapters_dir_core(explicit=chapters_dir)
+    return p, (p == DEFAULT_CHAPTERS_DIR.resolve())
 
 
 def resolve_kg_dir(kg_dir: Path | str | None = None) -> tuple[Path, bool]:
-    """Return `(resolved_kg_dir, is_default)`, honoring `SYNT_KG_DIR || MLH_KG_DIR`."""
-    if kg_dir is not None and str(kg_dir).strip():
-        p = Path(kg_dir).expanduser().resolve()
-        return p, (p == DEFAULT_KG_DIR.resolve())
-    env_dir = (
-        os.environ.get("SYNT_KG_DIR", "").strip()
-        or os.environ.get("MLH_KG_DIR", "").strip()
-    )
-    if env_dir:
-        p = Path(env_dir).expanduser().resolve()
-        return p, (p == DEFAULT_KG_DIR.resolve())
-    env_ws = (
-        os.environ.get("SYNT_WORKSPACE", "").strip()
-        or os.environ.get("MLH_WORKSPACE", "").strip()
-    )
-    if env_ws:
-        p = (Path(env_ws).expanduser().resolve() / "knowledge-graph").resolve()
-        return p, (p == DEFAULT_KG_DIR.resolve())
-    p = DEFAULT_KG_DIR.resolve()
-    return p, True
+    """Return `(resolved_kg_dir, is_default)`, honoring `SYNT_KG_DIR || MLH_KG_DIR || SYNT_WORKSPACE`."""
+    p = _resolve_kg_dir_core(explicit=kg_dir)
+    return p, (p == DEFAULT_KG_DIR.resolve())
 
 
 def tracker_path_for(slug: str, chapters_dir: Path | str | None = None) -> Path:
@@ -408,77 +256,19 @@ def tracker_path_for(slug: str, chapters_dir: Path | str | None = None) -> Path:
 
 def normalize_mistake_category(raw: str) -> str:
     """Normalize canonical mistake categories and coding aliases matching `mistake_analytics.py`."""
-    clean = str(raw or "").strip().lower().replace("-", "_").replace(" ", "_")
-    mapped = MISTAKE_CATEGORY_ALIASES.get(clean, clean)
-    if mapped not in VALID_MISTAKE_CATEGORIES:
-        raise ValueError(
-            f"Invalid --mistake-category {raw!r}. Expected one of: {', '.join(VALID_MISTAKE_CATEGORIES)}"
-        )
-    return mapped
+    return _normalize_mistake_category_core(raw)
 
 
-def _find_node_bin() -> str | None:
-    """Locate Node.js portably (`shutil.which` first, then common Unix/macOS install paths)."""
-    found = shutil.which("node")
-    if found:
-        return found
-    home = Path.home()
-    candidates = [
-        Path("/opt/homebrew/bin/node"),
-        Path("/usr/local/bin/node"),
-        Path("/usr/bin/node"),
-        home / ".volta" / "bin" / "node",
-        home / ".local" / "bin" / "node",
-    ]
-    nvm_dir = home / ".nvm" / "versions" / "node"
-    if nvm_dir.is_dir():
-        for vdir in sorted(nvm_dir.iterdir(), reverse=True):
-            candidates.append(vdir / "bin" / "node")
-    for cand in candidates:
-        if cand.is_file() and os.access(cand, os.X_OK):
-            return str(cand)
-    return None
-
-
-def sync_viewer() -> None:
+def sync_viewer(
+    chapters_dir: Path | str | None = None,
+    kg_dir: Path | str | None = None,
+) -> None:
     """Refresh `knowledge-graph/graph-data.js` quietly via `scripts/sync-graph.mjs`."""
-    if not SYNC_SCRIPT.exists():
-        return
-    node_bin = _find_node_bin()
-    if not node_bin:
-        return
-    subprocess.run(
-        [node_bin, str(SYNC_SCRIPT), "--quiet"],
-        cwd=str(ROOT),
-        check=False,
-        stdout=subprocess.DEVNULL,
-        stderr=subprocess.DEVNULL,
-    )
+    sync_hub(kg_dir=kg_dir, chapters_dir=chapters_dir, quiet=True)
 
 
 def _should_sync(chapters_dir: Path | str | None, kg_dir: Path | str | None, no_sync: bool) -> bool:
-    if no_sync:
-        return False
-    _, is_def_ch = resolve_chapters_dir(chapters_dir)
-    _, is_def_kg = resolve_kg_dir(kg_dir)
-    return is_def_ch and is_def_kg
-
-
-def _load_jsonl(path: Path) -> list[dict[str, Any]]:
-    if not path.exists():
-        return []
-    rows: list[dict[str, Any]] = []
-    for raw in path.read_text(encoding="utf-8").splitlines():
-        line = raw.strip()
-        if not line:
-            continue
-        try:
-            obj = json.loads(line)
-        except Exception:
-            continue
-        if isinstance(obj, dict):
-            rows.append(obj)
-    return rows
+    return not no_sync
 
 
 # ---------------------------------------------------------------------------
@@ -794,22 +584,6 @@ def default_config() -> dict[str, int]:
     return {"retestGap": 3, "dailyWarmupLimit": 3}
 
 
-def _has_jee_source_or_title_cues(title: str, sources: list[Any]) -> bool:
-    title_low = str(title or "").lower()
-    if "jee" in title_low or "nta" in title_low:
-        return True
-    for src in sources or []:
-        if not isinstance(src, dict):
-            continue
-        skind = str(src.get("kind") or "").strip().lower()
-        if skind in JEE_SOURCE_KINDS:
-            return True
-        s_blob = f"{src.get('label', '')} {src.get('notes', '')}".lower()
-        if "jee" in s_blob or "pyq" in s_blob:
-            return True
-    return False
-
-
 def default_scope_charter(
     subject: str = "General",
     sources: list[Any] | None = None,
@@ -856,19 +630,24 @@ def _normalize_scope_charter(
     return sc
 
 
-def is_jee_profile(tracker: dict[str, Any]) -> bool:
-    """Return True only when tracker explicitly targets JEE or carries JEE title/source cues."""
-    subj = str(tracker.get("subject") or "General").strip()
-    sources = list(tracker.get("sources") or [])
-    title = str(tracker.get("title") or "")
-    raw_sc = tracker.get("scopeCharter")
-    sc = _normalize_scope_charter(raw_sc, subject=subj, sources=sources, title=title)
-    gp = sc["goalProfile"]
-    if gp == "jee":
-        return True
-    if gp in {"course", "coding", "research", "exam"}:
-        return False
-    return _has_jee_source_or_title_cues(title, sources)
+def _normalize_slice(raw: dict[str, Any], idx: int) -> dict[str, Any]:
+    stage = str(raw.get("stage") or "queued").strip().lower()
+    if stage not in VALID_SLICE_STAGES:
+        stage = "queued"
+    try:
+        prio = max(0, min(100, int(raw.get("priority", 50))))
+    except (TypeError, ValueError):
+        prio = 50
+    return {
+        "id": str(raw.get("id") or f"slice-{idx + 1}").strip(),
+        "sourceId": str(raw.get("sourceId") or "").strip(),
+        "title": str(raw.get("title") or raw.get("id") or f"Slice {idx + 1}").strip(),
+        "pages": str(raw.get("pages") or raw.get("range") or "").strip(),
+        "priority": prio,
+        "stage": stage,
+        "notes": str(raw.get("notes") or "").strip(),
+        "updatedAt": str(raw.get("updatedAt") or now_iso()),
+    }
 
 
 def _normalize_tracker(data: dict[str, Any]) -> dict[str, Any]:
@@ -915,7 +694,7 @@ def _normalize_tracker(data: dict[str, Any]) -> dict[str, Any]:
         title=title,
     )
 
-    return {
+    out: dict[str, Any] = {
         "schemaVersion": int(data.get("schemaVersion") or SCHEMA_VERSION),
         "slug": str(data.get("slug") or ""),
         "title": title,
@@ -933,6 +712,20 @@ def _normalize_tracker(data: dict[str, Any]) -> dict[str, Any]:
         "config": cfg,
         "sessionLog": list(data.get("sessionLog") or [])[-MAX_SESSION_LOG:],
     }
+    if "slices" in data and isinstance(data.get("slices"), list):
+        out["slices"] = [
+            _normalize_slice(s, i)
+            for i, s in enumerate(data["slices"])
+            if isinstance(s, dict)
+        ]
+    raw_bc = data.get("nextBreadcrumb")
+    if isinstance(raw_bc, dict) and str(raw_bc.get("summary") or "").strip():
+        out["nextBreadcrumb"] = {
+            "at": str(raw_bc.get("at") or now_iso()),
+            "summary": str(raw_bc.get("summary") or "").strip(),
+            "firstMicroAction": str(raw_bc.get("firstMicroAction") or "").strip(),
+        }
+    return out
 
 
 def _append_log(tracker: dict[str, Any], event: str, detail: dict[str, Any] | None = None) -> None:
@@ -948,13 +741,6 @@ def _append_log(tracker: dict[str, Any], event: str, detail: dict[str, Any] | No
     tracker["sessionLog"] = log[-MAX_SESSION_LOG:]
 
 
-def _write_json_atomic(path: Path, payload: dict[str, Any]) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    tmp_path = path.parent / f".{path.name}.{os.getpid()}.tmp"
-    tmp_path.write_text(json.dumps(payload, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
-    os.replace(tmp_path, path)
-
-
 def list_trackers(chapters_dir: Path | str | None = None) -> list[dict[str, Any]]:
     """Load all valid `*-tracker.json` files in chapters_dir, sorted active-first."""
     cdir, _ = resolve_chapters_dir(chapters_dir)
@@ -964,19 +750,9 @@ def list_trackers(chapters_dir: Path | str | None = None) -> list[dict[str, Any]
     for fpath in sorted(cdir.iterdir()):
         if not fpath.is_file() or not fpath.name.endswith(TRACKER_SUFFIX):
             continue
-        try:
-            raw = json.loads(fpath.read_text(encoding="utf-8"))
-        except Exception:
-            continue
+        raw = _load_json_core(fpath, default=None)
         if isinstance(raw, dict) and raw.get("slug"):
             items.append(_normalize_tracker(raw))
-    items.sort(
-        key=lambda t: (
-            0 if t.get("active") else 1,
-            str(t.get("updatedAt") or ""),
-        ),
-    )
-    # Active first, then newest updatedAt first among equal active flag.
     items.sort(key=lambda t: str(t.get("updatedAt") or ""), reverse=True)
     items.sort(key=lambda t: 0 if t.get("active") else 1)
     return items
@@ -999,7 +775,7 @@ def load_tracker(slug_or_path: str | Path, chapters_dir: Path | str | None = Non
         path = tracker_path_for(str(slug_or_path), chapters_dir)
     if not path.exists():
         raise FileNotFoundError(f"Chapter tracker not found: {path}")
-    raw = json.loads(path.read_text(encoding="utf-8"))
+    raw = _load_json_core(path, strict=True)
     if not isinstance(raw, dict):
         raise ValueError(f"Invalid tracker JSON in {path}")
     return _normalize_tracker(raw)
@@ -1018,7 +794,7 @@ def save_tracker(
     path = tracker_path_for(norm["slug"], chapters_dir)
     _write_json_atomic(path, norm)
     if _should_sync(chapters_dir, kg_dir, no_sync):
-        sync_viewer()
+        sync_viewer(chapters_dir=chapters_dir, kg_dir=kg_dir)
     return path
 
 
@@ -1112,6 +888,8 @@ def compute_stats(tracker: dict[str, Any]) -> dict[str, Any]:
         }
 
     scope_charter = _normalize_scope_charter(t.get("scopeCharter"))
+    slices = t.get("slices") or []
+    slices_crystallized = sum(1 for s in slices if isinstance(s, dict) and s.get("stage") == "crystallized")
     return {
         "slug": t["slug"],
         "title": t["title"],
@@ -1136,6 +914,8 @@ def compute_stats(tracker: dict[str, Any]) -> dict[str, Any]:
         "questionsInProgress": q_counts["in_progress"],
         "questionsUnseen": q_counts["unseen"],
         "questionsPct": q_pct,
+        "slicesTotal": len(slices),
+        "slicesCrystallized": slices_crystallized,
         "overallPct": overall_pct,
         "byLevel": by_level,
         "milestones": dict(milestones),
@@ -2510,6 +2290,120 @@ def cmd_next(args: argparse.Namespace) -> None:
     _emit(nxt, args.json, lines)
 
 
+def cmd_add_slices(args: argparse.Namespace) -> None:
+    """Idempotent upsert of incremental reading slices into tracker['slices']."""
+    try:
+        tracker = load_tracker(args.slug, args.chapters_dir)
+    except (FileNotFoundError, ValueError) as exc:
+        raise SystemExit(str(exc)) from exc
+
+    raw = _load_json_payload(args.file, args.json_data)
+    if isinstance(raw, dict) and isinstance(raw.get("slices"), list):
+        incoming = raw["slices"]
+    elif isinstance(raw, list):
+        incoming = raw
+    elif isinstance(raw, dict) and raw.get("id"):
+        incoming = [raw]
+    else:
+        raise SystemExit("Slices JSON must be a list of slice objects or {'slices': [...]}.")
+
+    slices = list(tracker.get("slices") or [])
+    by_id = {s["id"]: s for s in slices if isinstance(s, dict) and s.get("id")}
+    added = 0
+    updated = 0
+    for idx, item in enumerate(incoming):
+        if not isinstance(item, dict):
+            continue
+        norm_s = _normalize_slice(item, len(slices) + idx)
+        sid = norm_s["id"]
+        if sid in by_id:
+            ex = by_id[sid]
+            for k in ("sourceId", "title", "pages", "notes"):
+                if item.get(k):
+                    ex[k] = norm_s[k]
+            if "priority" in item:
+                ex["priority"] = norm_s["priority"]
+            if "stage" in item:
+                ex["stage"] = norm_s["stage"]
+            ex["updatedAt"] = now_iso()
+            updated += 1
+        else:
+            slices.append(norm_s)
+            by_id[sid] = norm_s
+            added += 1
+
+    tracker["slices"] = slices
+    _append_log(tracker, "add_slices", {"added": added, "updated": updated})
+    save_tracker(tracker, args.chapters_dir, kg_dir=args.kg_dir, no_sync=args.no_sync)
+    payload = {"ok": True, "slug": tracker["slug"], "added": added, "updated": updated, "totalSlices": len(slices)}
+    _emit(payload, args.json, [f"Slices synced for '{tracker['slug']}': +{added} added, {updated} updated (total={len(slices)})"])
+
+
+def cmd_set_slice(args: argparse.Namespace) -> None:
+    """Update incremental reading stage/priority/notes for an existing slice."""
+    try:
+        tracker = load_tracker(args.slug, args.chapters_dir)
+    except (FileNotFoundError, ValueError) as exc:
+        raise SystemExit(str(exc)) from exc
+
+    slices = list(tracker.get("slices") or [])
+    target = next((s for s in slices if isinstance(s, dict) and s.get("id") == args.slice_id), None)
+    if target is None:
+        raise SystemExit(f"Slice '{args.slice_id}' not found in chapter '{tracker['slug']}'.")
+
+    prev_stage = target.get("stage")
+    if args.stage is not None:
+        target["stage"] = args.stage
+    if args.priority is not None:
+        target["priority"] = max(0, min(100, int(args.priority)))
+    if args.notes is not None:
+        target["notes"] = args.notes
+    target["updatedAt"] = now_iso()
+    tracker["slices"] = slices
+
+    _append_log(tracker, "set_slice", {"sliceId": args.slice_id, "from": prev_stage, "to": target["stage"]})
+    save_tracker(tracker, args.chapters_dir, kg_dir=args.kg_dir, no_sync=args.no_sync)
+    payload = {"ok": True, "slug": tracker["slug"], "slice": target}
+    _emit(payload, args.json, [f"Slice '{target['id']}': {prev_stage} -> {target['stage']} (priority={target['priority']})"])
+
+
+def cmd_checkpoint(args: argparse.Namespace) -> None:
+    """Save a calm session-exit breadcrumb (`nextBreadcrumb`) for zero-guilt cold-start re-entry."""
+    try:
+        tracker = load_tracker(args.slug, args.chapters_dir)
+    except (FileNotFoundError, ValueError) as exc:
+        raise SystemExit(str(exc)) from exc
+
+    summary = str(args.breadcrumb or "").strip()
+    if not summary:
+        raise SystemExit("--breadcrumb cannot be empty.")
+    first_action = str(getattr(args, "first_action", None) or "").strip()
+    if not first_action:
+        base = _compute_base_action(tracker)
+        first_action = str(base.get("summary") or "")
+
+    breadcrumb = {
+        "at": now_iso(),
+        "summary": summary,
+        "firstMicroAction": first_action,
+    }
+    tracker["nextBreadcrumb"] = breadcrumb
+    _append_log(tracker, "checkpoint", {"summary": summary, "firstMicroAction": first_action})
+    save_tracker(tracker, args.chapters_dir, kg_dir=args.kg_dir, no_sync=args.no_sync)
+
+    payload = {
+        "ok": True,
+        "slug": tracker["slug"],
+        "nextBreadcrumb": breadcrumb,
+    }
+    lines = [
+        f"Saved re-entry breadcrumb for '{tracker['title']}' ({tracker['slug']}):",
+        f"  Where we stopped: {summary}",
+        f"  First micro-action: {first_action or '(auto)'}",
+    ]
+    _emit(payload, args.json, lines)
+
+
 def cmd_status(args: argparse.Namespace) -> None:
     if args.all:
         trackers = list_trackers(args.chapters_dir)
@@ -2787,6 +2681,32 @@ def build_parser() -> argparse.ArgumentParser:
     p_stat.add_argument("--all", action="store_true", help="List all chapter trackers in chapters-dir")
     _add_shared_flags(p_stat)
     p_stat.set_defaults(func=cmd_status)
+
+    # 11. add-slices & set-slice (optional incremental reading progress)
+    p_asl = sub.add_parser("add-slices", help="Idempotent upsert of incremental reading slices")
+    p_asl.add_argument("slug")
+    g_asl = p_asl.add_mutually_exclusive_group(required=True)
+    g_asl.add_argument("--file", help="Path to JSON file containing slice array or {'slices': [...]}")
+    g_asl.add_argument("--json-data", help="Inline JSON string containing slice array or {'slices': [...]}")
+    _add_shared_flags(p_asl)
+    p_asl.set_defaults(func=cmd_add_slices)
+
+    p_ssl = sub.add_parser("set-slice", help="Update incremental reading stage/priority/notes for a slice")
+    p_ssl.add_argument("slug")
+    p_ssl.add_argument("slice_id")
+    p_ssl.add_argument("--stage", choices=VALID_SLICE_STAGES, default=None)
+    p_ssl.add_argument("--priority", type=int, default=None)
+    p_ssl.add_argument("--notes", default=None)
+    _add_shared_flags(p_ssl)
+    p_ssl.set_defaults(func=cmd_set_slice)
+
+    # 12. checkpoint (zero-guilt cold-start re-entry breadcrumb)
+    p_cp = sub.add_parser("checkpoint", help="Record a session-exit breadcrumb (`nextBreadcrumb`) for zero-guilt re-entry")
+    p_cp.add_argument("slug")
+    p_cp.add_argument("--breadcrumb", required=True, help="1-sentence note on where you stopped and what comes next")
+    p_cp.add_argument("--first-action", default=None, help="Optional tiny first micro-action for next session")
+    _add_shared_flags(p_cp)
+    p_cp.set_defaults(func=cmd_checkpoint)
 
     return parser
 

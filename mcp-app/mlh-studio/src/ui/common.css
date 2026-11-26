@@ -705,6 +705,143 @@ details.why-box[open] summary { margin-bottom: 8px; color: var(--mlh-fg); }
   font-size: 12px;
 }
 
+/* Parsons & Faded Block Ordering */
+.parsons-wrap {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.parsons-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.parsons-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  border: 1px solid var(--mlh-border);
+  background: var(--mlh-bg-2);
+  transition: border-color 140ms var(--synt-ease), background 140ms var(--synt-ease);
+}
+.parsons-row:focus {
+  outline: none;
+  border-color: var(--mlh-accent);
+  box-shadow: 0 0 0 2px var(--mlh-accent-soft);
+}
+.parsons-row.excluded {
+  opacity: 0.72;
+  border-style: dashed;
+  background: transparent;
+}
+.parsons-index {
+  flex: 0 0 auto;
+  width: 18px;
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--mlh-fg-3);
+  text-align: right;
+}
+.parsons-code {
+  flex: 1 1 auto;
+  min-width: 0;
+  font-family: var(--mlh-mono);
+  font-size: 12.2px;
+  line-height: 1.45;
+  color: var(--mlh-fg);
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+.parsons-controls {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+.parsons-tray {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  border: 1px dashed var(--mlh-border-2);
+  background: var(--mlh-bg);
+}
+.faded-blank-input {
+  display: inline-block;
+  width: 92px;
+  max-width: 45%;
+  margin: 0 3px;
+  padding: 2px 6px;
+  font-family: var(--mlh-mono);
+  font-size: 12px;
+  color: var(--mlh-fg);
+  background: var(--mlh-bg);
+  border: 1px solid var(--mlh-border-info);
+  border-radius: 5px;
+  outline: none;
+}
+.faded-blank-input:focus {
+  border-color: var(--mlh-accent);
+  box-shadow: 0 0 0 2px var(--mlh-accent-soft);
+}
+
+/* SVG Image Occlusion Stage */
+.io-stage {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px;
+  border-radius: 8px;
+  border: 1px solid var(--mlh-border);
+  background: var(--mlh-bg);
+}
+.io-stage svg {
+  max-width: 440px;
+  max-height: 260px;
+  margin: 0 auto;
+  display: block;
+}
+.io-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.io-mask-group {
+  cursor: pointer;
+}
+.io-mask-group:focus {
+  outline: none;
+}
+.io-mask-rect {
+  fill: var(--mlh-fg-warning);
+  fill-opacity: 1;
+  stroke: var(--mlh-bg);
+  stroke-width: 1.8;
+  transition: fill-opacity 150ms var(--synt-ease), fill 150ms var(--synt-ease), stroke 150ms var(--synt-ease);
+}
+.io-mask-group:hover .io-mask-rect,
+.io-mask-group:focus .io-mask-rect {
+  fill-opacity: 1;
+  stroke: var(--mlh-accent);
+}
+.io-mask-group.io-mask-revealed .io-mask-rect {
+  fill: var(--mlh-fg-success);
+  fill-opacity: 0.10;
+  stroke: var(--mlh-fg-success);
+  stroke-width: 1.8;
+  stroke-dasharray: 4 3;
+}
+.io-mask-group.io-mask-no-img.io-mask-revealed .io-mask-rect {
+  fill: var(--mlh-bg-success);
+  fill-opacity: 1;
+  stroke-dasharray: none;
+}
+
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after {
     transition-duration: 0.01ms !important;

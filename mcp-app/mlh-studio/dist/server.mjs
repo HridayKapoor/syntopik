@@ -18873,8 +18873,9 @@ var require_dist = __commonJS({
 
 // mcp-app/mlh-studio/src/server.mjs
 import fs3 from "node:fs";
+import os2 from "node:os";
 import path3 from "node:path";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath as fileURLToPath2 } from "node:url";
 
 // mcp-app/mlh-studio/node_modules/zod/v4/mini/parse.js
 init_core2();
@@ -22353,7 +22354,15 @@ var QY = "text/html;profile=mcp-app";
 // mcp-app/mlh-studio/src/validation.mjs
 var VALID_ROLES = /* @__PURE__ */ new Set(["probe", "predict", "check"]);
 var VALID_PRACTICE_ACTIONS = /* @__PURE__ */ new Set(["pose", "conclude"]);
-var VALID_PRACTICE_MODES = /* @__PURE__ */ new Set(["recall", "discrimination", "composition"]);
+var VALID_PRACTICE_MODES = /* @__PURE__ */ new Set([
+  "standard",
+  "parsons",
+  "faded",
+  "recall",
+  "discrimination",
+  "composition"
+]);
+var PARSONS_MODES = /* @__PURE__ */ new Set(["parsons", "faded"]);
 var VALID_OUTCOMES = /* @__PURE__ */ new Set([
   "solved",
   "solvedWithHints",
@@ -22518,10 +22527,71 @@ function validatePracticePose(rawArgs, activeProblem2) {
   let mode;
   if (args.mode !== void 0 && args.mode !== null && args.mode !== "") {
     if (typeof args.mode !== "string" || !VALID_PRACTICE_MODES.has(args.mode.trim())) {
-      errors.push(`mode must be one of recall, discrimination, or composition (got ${JSON.stringify(args.mode)}).`);
+      errors.push(
+        `mode must be one of standard, parsons, faded, recall, discrimination, or composition (got ${JSON.stringify(args.mode)}).`
+      );
     } else {
       mode = args.mode.trim();
     }
+  }
+  const isParsonsMode = Boolean(mode && PARSONS_MODES.has(mode));
+  let cleanBlocks = null;
+  let cleanCanonicalOrder = null;
+  if (args.blocks !== void 0 && args.blocks !== null) {
+    if (!Array.isArray(args.blocks) || args.blocks.length < 2) {
+      errors.push("blocks must be an array of at least 2 block objects {id, code, indent?, isDistractor?}.");
+    } else {
+      const seenBlockIds = /* @__PURE__ */ new Set();
+      cleanBlocks = [];
+      args.blocks.forEach((blk, idx) => {
+        if (!blk || typeof blk !== "object" || Array.isArray(blk)) {
+          errors.push(`blocks[${idx}] must be an object with {id, code}.`);
+          return;
+        }
+        const id = typeof blk.id === "string" ? blk.id.trim() : "";
+        const code = typeof blk.code === "string" ? blk.code : "";
+        if (!id) errors.push(`blocks[${idx}].id must be a non-empty string.`);
+        if (!code.trim()) errors.push(`blocks[${idx}].code must be a non-empty string.`);
+        if (id) {
+          if (seenBlockIds.has(id)) {
+            errors.push(`Duplicate block id "${id}". Every Parsons block id must be unique.`);
+          }
+          seenBlockIds.add(id);
+        }
+        const rawIndent = Number(blk.indent ?? 0);
+        const indent = Number.isFinite(rawIndent) ? Math.max(0, Math.min(8, Math.round(rawIndent))) : 0;
+        const isDistractor = Boolean(blk.isDistractor);
+        if (id && code.trim()) {
+          cleanBlocks.push({ id, code, indent, isDistractor });
+        }
+      });
+      const validBlockIds = new Set(cleanBlocks.map((b) => b.id));
+      if (args.canonicalOrder !== void 0 && args.canonicalOrder !== null) {
+        if (!Array.isArray(args.canonicalOrder) || args.canonicalOrder.length === 0) {
+          errors.push("canonicalOrder must be a non-empty array of block id strings.");
+        } else {
+          const dedupOrder = [];
+          const seenOrd = /* @__PURE__ */ new Set();
+          for (const rawId of args.canonicalOrder) {
+            const cid = typeof rawId === "string" ? rawId.trim() : "";
+            if (!cid || !validBlockIds.has(cid)) {
+              errors.push(`canonicalOrder contains unknown block id ${JSON.stringify(rawId)}.`);
+            } else if (!seenOrd.has(cid)) {
+              seenOrd.add(cid);
+              dedupOrder.push(cid);
+            }
+          }
+          cleanCanonicalOrder = dedupOrder;
+        }
+      } else if (cleanBlocks.length > 0) {
+        cleanCanonicalOrder = cleanBlocks.filter((b) => !b.isDistractor).map((b) => b.id);
+        if (cleanCanonicalOrder.length === 0) {
+          errors.push("Parsons blocks must contain at least one non-distractor block (or explicit canonicalOrder).");
+        }
+      }
+    }
+  } else if (isParsonsMode) {
+    errors.push(`blocks array (at least 2 items) is required when mode is "${mode}".`);
   }
   let targets = [];
   if (args.targets !== void 0 && args.targets !== null) {
@@ -22548,6 +22618,9 @@ function validatePracticePose(rawArgs, activeProblem2) {
       problemId,
       statement,
       mode,
+      isParsonsMode,
+      blocks: cleanBlocks,
+      canonicalOrder: cleanCanonicalOrder,
       targets,
       modelSolution
     }
@@ -22625,6 +22698,8 @@ import fs from "node:fs";
 import path from "node:path";
 import crypto from "node:crypto";
 import { execFileSync } from "node:child_process";
+import { fileURLToPath } from "node:url";
+var MODULE_DIR = path.dirname(fileURLToPath(import.meta.url));
 var CUE_WEIGHTS = {
   again: 4,
   hard: 3,
@@ -22643,6 +22718,80 @@ var DEFAULT_MILESTONES = {
   cbtMockPassed: false,
   audioBriefBuilt: false
 };
+function resolvePackageRoot() {
+  const candidates = [
+    path.resolve(MODULE_DIR, ".."),
+    path.resolve(MODULE_DIR, "..", "..", ".."),
+    process.env.CLAUDE_PLUGIN_ROOT || "",
+    process.env.SYNT_PACKAGE_ROOT || ""
+  ].filter(Boolean);
+  for (const cand of candidates) {
+    const abs = path.resolve(cand);
+    if (fs.existsSync(path.join(abs, "scripts", "sync-graph.mjs"))) {
+      return abs;
+    }
+  }
+  return path.resolve(MODULE_DIR, "..", "..", "..");
+}
+function resolveScriptPath(workspaceRoot, scriptName) {
+  const pkgRoot = resolvePackageRoot();
+  const candidates = [
+    path.join(workspaceRoot, "scripts", scriptName),
+    path.join(pkgRoot, "scripts", scriptName),
+    path.resolve(MODULE_DIR, "..", "scripts", scriptName),
+    path.resolve(MODULE_DIR, "..", "..", "..", "scripts", scriptName)
+  ];
+  if (process.env.CLAUDE_PLUGIN_ROOT) {
+    candidates.push(path.join(process.env.CLAUDE_PLUGIN_ROOT, "scripts", scriptName));
+  }
+  for (const cand of candidates) {
+    if (fs.existsSync(cand)) return cand;
+  }
+  return null;
+}
+function resolveKgDir(workspaceRoot) {
+  const customKg = process.env.SYNT_KG_DIR || process.env.MLH_KG_DIR || "";
+  return customKg.trim() ? path.resolve(customKg.trim()) : path.join(workspaceRoot, "knowledge-graph");
+}
+function writeJsonlAtomic(filePath, rows) {
+  fs.mkdirSync(path.dirname(filePath), { recursive: true });
+  const content = rows.length > 0 ? `${rows.map((r) => JSON.stringify(r)).join("\n")}
+` : "";
+  const tmp = path.join(
+    path.dirname(filePath),
+    `.${path.basename(filePath)}.${process.pid}.${crypto.randomBytes(4).toString("hex")}.tmp`
+  );
+  fs.writeFileSync(tmp, content, "utf8");
+  fs.renameSync(tmp, filePath);
+}
+function appendJsonlSafe(filePath, obj) {
+  fs.mkdirSync(path.dirname(filePath), { recursive: true });
+  fs.appendFileSync(filePath, `${JSON.stringify(obj)}
+`, "utf8");
+}
+function syncGraphQuiet(workspaceRoot, kgDir) {
+  const syncScript = resolveScriptPath(workspaceRoot, "sync-graph.mjs");
+  if (!syncScript) return false;
+  try {
+    const customKg = process.env.SYNT_KG_DIR || process.env.MLH_KG_DIR || "";
+    const customCh = process.env.SYNT_CHAPTERS_DIR || process.env.MLH_CHAPTERS_DIR || "";
+    const syncArgs = [syncScript, "--quiet", `--workspace=${workspaceRoot}`];
+    if (customKg.trim() || path.resolve(kgDir) !== path.resolve(path.join(workspaceRoot, "knowledge-graph"))) {
+      syncArgs.push(`--kg-dir=${kgDir}`);
+    }
+    if (customCh.trim()) {
+      syncArgs.push(`--chapters-dir=${path.resolve(customCh.trim())}`);
+    }
+    execFileSync(process.execPath, syncArgs, {
+      cwd: fs.existsSync(workspaceRoot) ? workspaceRoot : process.cwd(),
+      stdio: "ignore",
+      timeout: 1e4
+    });
+    return true;
+  } catch {
+    return false;
+  }
+}
 function isJeeTracker(tracker) {
   const scopeProfile = String(
     tracker?.scopeCharter?.goalProfile ?? tracker?.goalProfile ?? tracker?.profile ?? tracker?.config?.goalProfile ?? ""
@@ -22837,6 +22986,112 @@ function readJsonl(filePath) {
   }
   return rows;
 }
+function computeCalibrationSummary(revlog) {
+  const totalReviews = revlog.length;
+  const calibrated = [];
+  let hypercorrectionCount = 0;
+  let luckyGuessCount = 0;
+  for (const ev of revlog) {
+    const rating = String(ev.rating || "").trim().toLowerCase();
+    const hasCorrect = typeof ev.correct === "boolean";
+    const y = hasCorrect ? ev.correct ? 1 : 0 : rating === "good" || rating === "easy" ? 1 : rating === "again" || rating === "hard" ? 0 : null;
+    const rawConf = typeof ev.learnerConfidence === "number" && Number.isFinite(ev.learnerConfidence) ? ev.learnerConfidence : typeof ev.confidence === "number" && Number.isFinite(ev.confidence) ? ev.confidence : null;
+    if (ev.hypercorrection === true) {
+      hypercorrectionCount += 1;
+    }
+    if (rawConf === null || y === null) continue;
+    const c = Math.max(0, Math.min(1, rawConf > 1 ? rawConf / 100 : rawConf));
+    if (ev.hypercorrection !== true && c >= 0.75 && y === 0) {
+      hypercorrectionCount += 1;
+    }
+    if (c <= 0.35 && y === 1) {
+      luckyGuessCount += 1;
+    }
+    calibrated.push({ c, y });
+  }
+  const windowItems = calibrated.slice(-100);
+  const n = windowItems.length;
+  if (n === 0) {
+    return {
+      sampleCount: 0,
+      totalReviews,
+      brierScore: null,
+      overconfidenceBias: null,
+      accuracy: null,
+      meanConfidence: null,
+      hypercorrectionCount,
+      luckyGuessCount
+    };
+  }
+  let brierSum = 0;
+  let biasSum = 0;
+  let accSum = 0;
+  let confSum = 0;
+  for (const { c, y } of windowItems) {
+    const diff = c - y;
+    brierSum += diff * diff;
+    biasSum += diff;
+    accSum += y;
+    confSum += c;
+  }
+  return {
+    sampleCount: n,
+    totalReviews,
+    brierScore: Number((brierSum / n).toFixed(4)),
+    overconfidenceBias: Number((biasSum / n).toFixed(4)),
+    accuracy: Number((accSum / n).toFixed(4)),
+    meanConfidence: Number((confSum / n).toFixed(4)),
+    hypercorrectionCount,
+    luckyGuessCount
+  };
+}
+function inlineWorkspaceImageDataUri(workspaceRoot, rawSrc) {
+  if (typeof rawSrc !== "string" || !rawSrc.trim()) return null;
+  const src = rawSrc.trim();
+  if (src.startsWith("data:image/")) return src;
+  if (/^https?:\/\//i.test(src)) return null;
+  const absRoot = path.resolve(workspaceRoot);
+  const absCandidate = path.isAbsolute(src) ? path.resolve(src) : path.resolve(absRoot, src);
+  if (!absCandidate.startsWith(absRoot + path.sep)) return null;
+  if (!fs.existsSync(absCandidate)) return null;
+  try {
+    const st = fs.statSync(absCandidate);
+    if (!st.isFile() || st.size === 0 || st.size > 512 * 1024) return null;
+    const ext = path.extname(absCandidate).toLowerCase();
+    const mimeMap = {
+      ".svg": "image/svg+xml",
+      ".png": "image/png",
+      ".jpg": "image/jpeg",
+      ".jpeg": "image/jpeg",
+      ".webp": "image/webp"
+    };
+    const mime = mimeMap[ext];
+    if (!mime) return null;
+    const b64 = fs.readFileSync(absCandidate).toString("base64");
+    return `data:${mime};base64,${b64}`;
+  } catch {
+    return null;
+  }
+}
+function resolveCardMedia(workspaceRoot, prop, cueObj) {
+  const rawMedia = cueObj && cueObj.media || prop.media || null;
+  const rawOcc = cueObj && cueObj.occlusion || rawMedia && rawMedia.occlusion || prop.occlusion || null;
+  if (!rawMedia && !rawOcc) return { media: null, occlusion: null };
+  const media = rawMedia && typeof rawMedia === "object" && !Array.isArray(rawMedia) ? { ...rawMedia } : typeof rawMedia === "string" ? { src: rawMedia } : null;
+  let occlusion = rawOcc;
+  if (occlusion && typeof occlusion === "object" && !Array.isArray(occlusion)) {
+    occlusion = { ...occlusion };
+    if (occlusion.src && !occlusion.dataUri) {
+      const uri = inlineWorkspaceImageDataUri(workspaceRoot, occlusion.src);
+      if (uri) occlusion.dataUri = uri;
+    }
+  }
+  if (media && media.src && !media.dataUri) {
+    const uri = inlineWorkspaceImageDataUri(workspaceRoot, media.src);
+    if (uri) media.dataUri = uri;
+  }
+  return { media, occlusion };
+}
 function selectWeightedCue(prop, seed = null) {
   const cues = Array.isArray(prop.cues) ? prop.cues.filter((c) => c && typeof c === "object" && (c.q || c.a)) : [];
   if (cues.length === 0) {
@@ -22847,7 +23102,9 @@ function selectWeightedCue(prop, seed = null) {
       lastRating: null,
       synthetic: true,
       index: 0,
-      totalCues: 1
+      totalCues: 1,
+      media: prop.media || null,
+      occlusion: prop.occlusion || null
     };
   }
   const weighted = cues.map((c, idx) => {
@@ -22878,17 +23135,19 @@ function selectWeightedCue(prop, seed = null) {
     lastRating: chosen.cue.lastRating ?? null,
     synthetic: false,
     index: chosen.idx,
-    totalCues: cues.length
+    totalCues: cues.length,
+    media: chosen.cue.media || null,
+    occlusion: chosen.cue.occlusion || null
   };
 }
 function loadWorkspaceState(workspaceRoot, section = "all") {
-  const customKg = process.env.SYNT_KG_DIR || process.env.MLH_KG_DIR || "";
-  const kgDir = customKg.trim() ? path.resolve(customKg.trim()) : path.join(workspaceRoot, "knowledge-graph");
+  const kgDir = resolveKgDir(workspaceRoot);
   const today = (/* @__PURE__ */ new Date()).toISOString().slice(0, 10);
   const propositions = readJsonl(path.join(kgDir, "propositions.jsonl"));
   const chains = readJsonl(path.join(kgDir, "chains.jsonl"));
   const mistakes = readJsonl(path.join(kgDir, "mistakes.jsonl"));
   const examAttempts = readJsonl(path.join(kgDir, "exam-attempts.jsonl"));
+  const revlog = readJsonl(path.join(kgDir, "revlog.jsonl"));
   const statusCounts = { solid: 0, shaky: 0, misconception: 0, planned: 0 };
   let bktSum = 0;
   let bktCount = 0;
@@ -22904,6 +23163,7 @@ function loadWorkspaceState(workspaceRoot, section = "all") {
     const isDue = st === "misconception" || st === "shaky" || nextReview !== null && nextReview <= today || st === "planned";
     const urgency = st === "misconception" ? 0 : st === "shaky" ? 1 : nextReview && nextReview <= today ? 2 : st === "planned" ? 3 : 4;
     const cue = selectWeightedCue(p2);
+    const { media, occlusion } = resolveCardMedia(workspaceRoot, p2, cue);
     flashcards.push({
       propId: p2.id,
       title: p2.title || p2.id,
@@ -22916,7 +23176,9 @@ function loadWorkspaceState(workspaceRoot, section = "all") {
       isDue,
       urgency,
       cue,
-      cuesCount: Array.isArray(p2.cues) ? p2.cues.length : 0
+      cuesCount: Array.isArray(p2.cues) ? p2.cues.length : 0,
+      ...media ? { media } : {},
+      ...occlusion ? { occlusion } : {}
     });
   }
   flashcards.sort((a, b) => a.urgency - b.urgency || String(a.nextReview || "").localeCompare(String(b.nextReview || "")));
@@ -22947,6 +23209,7 @@ function loadWorkspaceState(workspaceRoot, section = "all") {
     };
   });
   const { chapterTrackers, activeChapter } = loadChapterTrackers(workspaceRoot);
+  const calibration = computeCalibrationSummary(revlog);
   const stats = {
     today,
     totalPropositions: propositions.length,
@@ -22959,11 +23222,13 @@ function loadWorkspaceState(workspaceRoot, section = "all") {
     reviewableDueCount,
     trackersCount: chapterTrackers.length,
     activeChapterPct: activeChapter ? activeChapter.pct : null,
-    activeChapterSlug: activeChapter ? activeChapter.slug : null
+    activeChapterSlug: activeChapter ? activeChapter.slug : null,
+    brierScore: calibration.brierScore
   };
   const payload = {
     workspaceName: path.basename(workspaceRoot),
-    stats
+    stats,
+    calibration
   };
   if (section === "all" || section === "autopilot") {
     payload.chapterTrackers = chapterTrackers;
@@ -23003,14 +23268,54 @@ function findExecutableOnPath(names) {
   return null;
 }
 function resolvePythonBin(workspaceRoot) {
-  const venvPosix = path.join(workspaceRoot, ".venv", "bin", "python");
-  if (fs.existsSync(venvPosix)) return venvPosix;
-  const venvWin = path.join(workspaceRoot, ".venv", "Scripts", "python.exe");
-  if (fs.existsSync(venvWin)) return venvWin;
+  const roots = [workspaceRoot, resolvePackageRoot()];
+  for (const r of roots) {
+    const venvPosix = path.join(r, ".venv", "bin", "python");
+    if (fs.existsSync(venvPosix)) return venvPosix;
+    const venvWin = path.join(r, ".venv", "Scripts", "python.exe");
+    if (fs.existsSync(venvWin)) return venvWin;
+  }
   const preferred = process.platform === "win32" ? ["python", "python3"] : ["python3", "python"];
   return findExecutableOnPath(preferred) || preferred[0];
 }
-function rateFlashcard(workspaceRoot, { propId, rating, cueId, misconception }) {
+function normalizeConfidence(rawConf) {
+  if (typeof rawConf !== "number" || !Number.isFinite(rawConf)) return null;
+  const val = rawConf > 1 ? rawConf / 100 : rawConf;
+  return Math.max(0, Math.min(1, Number(val.toFixed(4))));
+}
+function slugifyPart(text, maxLen = 28) {
+  return String(text || "").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, maxLen);
+}
+function tokenizeSimple(text) {
+  return String(text || "").toLowerCase().replace(/[^a-z0-9]+/g, " ").trim().split(/\s+/).filter((w2) => w2.length >= 2);
+}
+function findSimilarFallbackJs(props, query) {
+  const qNorm = String(query || "").trim().toLowerCase().replace(/\s+/g, " ");
+  const qSet = new Set(tokenizeSimple(query));
+  if (!qNorm || qSet.size === 0) return [];
+  const hits = [];
+  for (const p2 of props) {
+    const pid = String(p2.id || "").trim().toLowerCase();
+    const titleNorm = String(p2.title || "").trim().toLowerCase().replace(/\s+/g, " ");
+    if (qNorm === pid || qNorm === titleNorm) {
+      hits.push({ id: p2.id, title: p2.title || p2.id, score: 1 });
+      continue;
+    }
+    const candTokens = new Set(tokenizeSimple(`${p2.id || ""} ${p2.title || ""} ${p2.statement || ""} ${p2.notes || ""}`));
+    if (candTokens.size === 0) continue;
+    let inter = 0;
+    for (const t of qSet) {
+      if (candTokens.has(t)) inter += 1;
+    }
+    const dice = 2 * inter / (qSet.size + candTokens.size);
+    if (dice >= 0.5) {
+      hits.push({ id: p2.id, title: p2.title || p2.id, score: Number(dice.toFixed(4)) });
+    }
+  }
+  hits.sort((a, b) => b.score - a.score || String(a.id).localeCompare(String(b.id)));
+  return hits.slice(0, 3);
+}
+function rateFlashcard(workspaceRoot, { propId, rating, cueId, misconception, confidence, durationMs }) {
   const cleanId = typeof propId === "string" ? propId.trim() : "";
   const cleanRating = typeof rating === "string" ? rating.trim().toLowerCase() : "";
   if (!cleanId || !/^[A-Za-z0-9._:/-]+$/.test(cleanId)) {
@@ -23020,13 +23325,14 @@ function rateFlashcard(workspaceRoot, { propId, rating, cueId, misconception }) 
     return { ok: false, error: `rating must be again, hard, good, or easy (got ${JSON.stringify(rating)})` };
   }
   const pythonBin = resolvePythonBin(workspaceRoot);
-  const srsScript = path.join(workspaceRoot, "scripts", "srs_engine.py");
-  const customKg = process.env.SYNT_KG_DIR || process.env.MLH_KG_DIR || "";
-  const kgDir = customKg.trim() ? path.resolve(customKg.trim()) : path.join(workspaceRoot, "knowledge-graph");
-  if (!fs.existsSync(srsScript)) {
-    return { ok: false, error: `scripts/srs_engine.py not found in workspace ${workspaceRoot}` };
+  const srsScript = resolveScriptPath(workspaceRoot, "srs_engine.py");
+  const kgDir = resolveKgDir(workspaceRoot);
+  if (!srsScript) {
+    return { ok: false, error: `scripts/srs_engine.py not found in workspace ${workspaceRoot} or package root` };
   }
-  const buildArgs = (includeCue) => {
+  const normConf = normalizeConfidence(confidence);
+  const cleanDur = typeof durationMs === "number" && Number.isFinite(durationMs) && durationMs >= 0 ? Math.round(durationMs) : null;
+  const buildArgs = ({ includeCue, includeV2Flags }) => {
     const argv = ["-B", srsScript, "--kg-dir", kgDir, "review", cleanId, "--rating", cleanRating, "--no-sync"];
     if (includeCue && typeof cueId === "string" && cueId.trim()) {
       argv.push("--cue-id", cueId.trim());
@@ -23034,21 +23340,28 @@ function rateFlashcard(workspaceRoot, { propId, rating, cueId, misconception }) 
     if (misconception) {
       argv.push("--misconception");
     }
+    if (includeV2Flags && normConf !== null) {
+      argv.push("--confidence", String(normConf));
+    }
+    if (includeV2Flags && cleanDur !== null) {
+      argv.push("--duration-ms", String(cleanDur));
+    }
     return argv;
   };
   let stdout;
   try {
-    stdout = execFileSync(pythonBin, buildArgs(true), {
-      cwd: workspaceRoot,
+    stdout = execFileSync(pythonBin, buildArgs({ includeCue: true, includeV2Flags: true }), {
+      cwd: fs.existsSync(workspaceRoot) ? workspaceRoot : process.cwd(),
       encoding: "utf8",
       timeout: 15e3
     });
   } catch (err) {
     const stderr = String(err?.stderr || err?.message || "");
-    if (cueId && stderr.includes("unrecognized arguments") && stderr.includes("--cue-id")) {
+    if (stderr.includes("unrecognized arguments")) {
+      const retryIncludeCue = !(cueId && stderr.includes("--cue-id"));
       try {
-        stdout = execFileSync(pythonBin, buildArgs(false), {
-          cwd: workspaceRoot,
+        stdout = execFileSync(pythonBin, buildArgs({ includeCue: retryIncludeCue, includeV2Flags: false }), {
+          cwd: fs.existsSync(workspaceRoot) ? workspaceRoot : process.cwd(),
           encoding: "utf8",
           timeout: 15e3
         });
@@ -23059,28 +23372,408 @@ function rateFlashcard(workspaceRoot, { propId, rating, cueId, misconception }) 
       return { ok: false, error: `srs_engine.py failed: ${stderr.trim() || String(err)}` };
     }
   }
-  const syncScript = path.join(workspaceRoot, "scripts", "sync-graph.mjs");
-  if (fs.existsSync(syncScript)) {
-    try {
-      const syncArgs = [syncScript, "--quiet", `--workspace=${workspaceRoot}`];
-      if (customKg.trim()) {
-        syncArgs.push(`--kg-dir=${kgDir}`);
-      }
-      execFileSync(process.execPath, syncArgs, {
-        cwd: workspaceRoot,
-        stdio: "ignore",
-        timeout: 1e4
-      });
-    } catch {
-    }
-  }
+  const synced = syncGraphQuiet(workspaceRoot, kgDir);
   let parsed = {};
   try {
     parsed = JSON.parse(stdout);
   } catch {
     parsed = { raw: stdout.trim() };
   }
-  return { ok: true, result: parsed };
+  const fireCredits = Array.isArray(parsed.fireCredits) ? parsed.fireCredits : Array.isArray(parsed.fire_credits) ? parsed.fire_credits : [];
+  const fireRefreshedCount = fireCredits.length;
+  const fireSummary = fireRefreshedCount > 0 ? `FIRe refreshed ${fireRefreshedCount} prerequisite${fireRefreshedCount === 1 ? "" : "s"}` : null;
+  return {
+    ok: true,
+    synced,
+    result: {
+      ...parsed,
+      fireCredits,
+      fireRefreshedCount,
+      ...fireSummary ? { fireSummary } : {}
+    }
+  };
+}
+function captureConcept(workspaceRoot, { title, statement, subject, chapter, cuePrompt, cueAnswer, premises, relation, notes, kind, id }) {
+  const cleanTitle = typeof title === "string" ? title.trim() : "";
+  const cleanStatement = typeof statement === "string" ? statement.trim() : "";
+  const cleanSubject = typeof subject === "string" && subject.trim() ? subject.trim() : "General";
+  const cleanChapter = typeof chapter === "string" && chapter.trim() ? chapter.trim() : "General";
+  if (!cleanTitle) return { ok: false, error: "title must be a non-empty string." };
+  if (!cleanStatement) return { ok: false, error: "statement must be a non-empty string." };
+  const kgDir = resolveKgDir(workspaceRoot);
+  fs.mkdirSync(kgDir, { recursive: true });
+  const propsFile = path.join(kgDir, "propositions.jsonl");
+  const chainsFile = path.join(kgDir, "chains.jsonl");
+  const props = readJsonl(propsFile);
+  const existingChains = readJsonl(chainsFile);
+  let matches = [];
+  const srsScript = resolveScriptPath(workspaceRoot, "srs_engine.py");
+  if (props.length > 0 && srsScript) {
+    try {
+      const pyBin = resolvePythonBin(workspaceRoot);
+      const out = execFileSync(
+        pyBin,
+        ["-B", srsScript, "--kg-dir", kgDir, "find-similar", cleanTitle, "--top", "3", "--threshold", "0.72"],
+        {
+          cwd: fs.existsSync(workspaceRoot) ? workspaceRoot : process.cwd(),
+          encoding: "utf8",
+          timeout: 12e3
+        }
+      );
+      const parsed = JSON.parse(out);
+      if (Array.isArray(parsed?.matches)) matches = parsed.matches;
+    } catch {
+      matches = findSimilarFallbackJs(props, cleanTitle);
+    }
+  } else if (props.length > 0) {
+    matches = findSimilarFallbackJs(props, cleanTitle);
+  }
+  const topMatch = matches.length > 0 ? matches[0] : null;
+  const exactIdHit = typeof id === "string" && id.trim() ? props.find((p2) => p2.id === id.trim()) : null;
+  const dupTarget = exactIdHit || (topMatch && Number(topMatch.score) >= 0.78 ? props.find((p2) => p2.id === topMatch.id) || null : null);
+  const today = (/* @__PURE__ */ new Date()).toISOString().slice(0, 10);
+  const nowIso = (/* @__PURE__ */ new Date()).toISOString();
+  const cleanCueQ = typeof cuePrompt === "string" ? cuePrompt.trim() : "";
+  const cleanCueA = typeof cueAnswer === "string" ? cueAnswer.trim() : "";
+  let propId;
+  let deduplicated = false;
+  let cueAdded = false;
+  if (dupTarget) {
+    deduplicated = true;
+    propId = String(dupTarget.id);
+    if (cleanCueQ) {
+      if (!Array.isArray(dupTarget.cues)) dupTarget.cues = [];
+      const alreadyHasCue = dupTarget.cues.some(
+        (c) => String(c?.q || "").trim().toLowerCase() === cleanCueQ.toLowerCase()
+      );
+      if (!alreadyHasCue) {
+        const nextIdx = dupTarget.cues.length + 1;
+        dupTarget.cues.push({
+          id: `c${nextIdx}`,
+          q: cleanCueQ,
+          a: cleanCueA || cleanStatement,
+          lastRating: null,
+          reviews: 0
+        });
+        cueAdded = true;
+      }
+    }
+    if (cleanStatement && !String(dupTarget.notes || "").includes(cleanStatement)) {
+      dupTarget.notes = dupTarget.notes ? `${dupTarget.notes} | ${cleanStatement}` : cleanStatement;
+    }
+    dupTarget.updatedAt = nowIso;
+    writeJsonlAtomic(propsFile, props);
+  } else {
+    const existingIds = new Set(props.map((p2) => String(p2.id || "")));
+    let baseId = typeof id === "string" && id.trim() ? slugifyPart(id.trim(), 64) : [slugifyPart(cleanSubject, 14), slugifyPart(cleanChapter, 18), slugifyPart(cleanTitle, 28)].filter(Boolean).join("-") || `prop-${Date.now().toString(36)}`;
+    propId = baseId;
+    let suffix = 2;
+    while (existingIds.has(propId)) {
+      propId = `${baseId}-${suffix}`;
+      suffix += 1;
+    }
+    const cues = [];
+    if (cleanCueQ || cleanCueA) {
+      cues.push({
+        id: "c1",
+        q: cleanCueQ || `State and justify: ${cleanTitle}`,
+        a: cleanCueA || cleanStatement,
+        lastRating: null,
+        reviews: 0
+      });
+      cueAdded = true;
+    }
+    const newProp = {
+      id: propId,
+      subject: cleanSubject,
+      chapter: cleanChapter,
+      title: cleanTitle,
+      statement: cleanStatement,
+      kind: typeof kind === "string" && kind.trim() ? kind.trim() : "concept",
+      status: "shaky",
+      bktMastery: 0.35,
+      confidence: 0.35,
+      notes: typeof notes === "string" && notes.trim() ? notes.trim() : cleanStatement,
+      createdAt: nowIso,
+      lastTested: today,
+      nextReview: today,
+      ...cues.length > 0 ? { cues } : {}
+    };
+    props.push(newProp);
+    writeJsonlAtomic(propsFile, props);
+  }
+  let chainAdded = false;
+  const cleanPremises = Array.isArray(premises) ? [...new Set(premises.map((p2) => String(p2 || "").trim()).filter((p2) => p2 && p2 !== propId))] : [];
+  if (cleanPremises.length > 0) {
+    const chainKey = `${[...cleanPremises].sort().join("+")}>${propId}`;
+    const alreadyExists = existingChains.some((c) => {
+      const concl = String(c.conclusion || c.to || "").trim();
+      if (concl !== propId) return false;
+      const prems = Array.isArray(c.premises) ? c.premises.map((x) => String(x || "").trim()).filter(Boolean) : c.from ? [String(c.from).trim()] : [];
+      return `${[...new Set(prems)].sort().join("+")}>${concl}` === chainKey;
+    });
+    if (!alreadyExists) {
+      const rel = typeof relation === "string" && relation.trim() ? relation.trim() : "requires";
+      const rec = {
+        premises: cleanPremises,
+        conclusion: propId,
+        relation: rel,
+        why: cleanStatement,
+        ...cleanPremises.length === 1 ? { from: cleanPremises[0], to: propId } : { to: propId }
+      };
+      existingChains.push(rec);
+      writeJsonlAtomic(chainsFile, existingChains);
+      chainAdded = true;
+    }
+  }
+  const synced = syncGraphQuiet(workspaceRoot, kgDir);
+  return {
+    ok: true,
+    id: propId,
+    deduplicated,
+    matchedId: deduplicated ? propId : null,
+    matchedScore: topMatch ? topMatch.score : null,
+    cueAdded,
+    chainAdded,
+    synced
+  };
+}
+function compressDueItemsJs(dueItems, chains) {
+  const dueIds = new Set(dueItems.map((d2) => d2.id));
+  const parentsOf = /* @__PURE__ */ new Map();
+  for (const c of chains) {
+    const concl = String(c.conclusion || c.to || "").trim();
+    const rel = String(c.relation || "requires").trim().toLowerCase();
+    if (!concl || rel === "contrasts_with" || rel === "analogous") continue;
+    const prems = Array.isArray(c.premises) ? c.premises.map((x) => String(x || "").trim()).filter(Boolean) : c.from ? [String(c.from).trim()] : [];
+    if (!parentsOf.has(concl)) parentsOf.set(concl, /* @__PURE__ */ new Set());
+    for (const pr of prems) {
+      if (pr && pr !== concl) parentsOf.get(concl).add(pr);
+    }
+  }
+  const coveredBy = /* @__PURE__ */ new Map();
+  for (const item of dueItems) {
+    const visited = /* @__PURE__ */ new Set();
+    const queue = [{ id: item.id, depth: 0 }];
+    while (queue.length > 0) {
+      const cur = queue.shift();
+      if (cur.depth >= 3) continue;
+      for (const pr of parentsOf.get(cur.id) || []) {
+        if (visited.has(pr)) continue;
+        visited.add(pr);
+        queue.push({ id: pr, depth: cur.depth + 1 });
+      }
+    }
+    const dueAnc = [...visited].filter((id) => dueIds.has(id) && id !== item.id);
+    if (dueAnc.length >= 2) {
+      coveredBy.set(item.id, dueAnc);
+    }
+  }
+  const knockedOut = /* @__PURE__ */ new Set();
+  const kept = [];
+  for (const item of dueItems) {
+    if (knockedOut.has(item.id)) continue;
+    const cov = coveredBy.get(item.id) || [];
+    for (const ancId of cov) {
+      const ancItem = dueItems.find((x) => x.id === ancId);
+      if (ancItem && ancItem.status !== "misconception") {
+        knockedOut.add(ancId);
+      }
+    }
+    kept.push({
+      ...item,
+      ...cov.length >= 2 ? { fireKnockouts: cov } : {}
+    });
+  }
+  return { items: kept, knockedOutIds: [...knockedOut] };
+}
+function getFrontier(workspaceRoot, { limit = 10, compress = true } = {}) {
+  const cleanLimit = Math.max(1, Math.min(50, Math.round(Number(limit) || 10)));
+  const useCompress = compress !== false;
+  const kgDir = resolveKgDir(workspaceRoot);
+  const today = (/* @__PURE__ */ new Date()).toISOString().slice(0, 10);
+  const propositions = readJsonl(path.join(kgDir, "propositions.jsonl"));
+  const chains = readJsonl(path.join(kgDir, "chains.jsonl"));
+  const mistakes = readJsonl(path.join(kgDir, "mistakes.jsonl"));
+  const revlog = readJsonl(path.join(kgDir, "revlog.jsonl"));
+  const readingQueue = readJsonl(path.join(kgDir, "reading-queue.jsonl"));
+  let dueItems = null;
+  let dueCount = 0;
+  let knockedOutIds = [];
+  const srsScript = resolveScriptPath(workspaceRoot, "srs_engine.py");
+  if (srsScript && propositions.length > 0) {
+    const pyBin = resolvePythonBin(workspaceRoot);
+    const runDue = (withCompress) => {
+      const argv = ["-B", srsScript, "--kg-dir", kgDir, "due", "--limit", String(cleanLimit)];
+      if (withCompress) argv.push("--compress");
+      const out = execFileSync(pyBin, argv, {
+        cwd: fs.existsSync(workspaceRoot) ? workspaceRoot : process.cwd(),
+        encoding: "utf8",
+        timeout: 12e3
+      });
+      return JSON.parse(out);
+    };
+    try {
+      const parsed = runDue(useCompress);
+      if (Array.isArray(parsed?.items)) {
+        dueItems = parsed.items;
+        dueCount = Number(parsed.dueCount ?? parsed.items.length);
+        knockedOutIds = Array.isArray(parsed.knockedOutIds) ? parsed.knockedOutIds : Array.isArray(parsed.compressedOut) ? parsed.compressedOut : [];
+      }
+    } catch (err) {
+      const stderr = String(err?.stderr || err?.message || "");
+      if (useCompress && stderr.includes("unrecognized arguments")) {
+        try {
+          const parsed = runDue(false);
+          if (Array.isArray(parsed?.items)) {
+            const comp = compressDueItemsJs(parsed.items, chains);
+            dueItems = comp.items.slice(0, cleanLimit);
+            dueCount = Number(parsed.dueCount ?? parsed.items.length);
+            knockedOutIds = comp.knockedOutIds;
+          }
+        } catch {
+          dueItems = null;
+        }
+      }
+    }
+  }
+  if (dueItems === null) {
+    const rawDue = propositions.filter((p2) => {
+      const st = String(p2.status || "planned");
+      const nr = typeof p2.nextReview === "string" ? p2.nextReview : null;
+      return st === "misconception" || st === "shaky" || nr !== null && nr <= today;
+    }).map((p2) => ({
+      id: p2.id,
+      title: p2.title || p2.id,
+      subject: p2.subject || "General",
+      chapter: p2.chapter || "",
+      status: p2.status || "planned",
+      bktMastery: typeof p2.bktMastery === "number" ? p2.bktMastery : null,
+      nextReview: p2.nextReview || null,
+      notes: p2.notes || ""
+    })).sort((a, b) => {
+      const r = (s) => s === "misconception" ? 0 : s === "shaky" ? 1 : 2;
+      return r(a.status) - r(b.status) || String(a.nextReview || "").localeCompare(String(b.nextReview || ""));
+    });
+    dueCount = rawDue.length;
+    if (useCompress) {
+      const comp = compressDueItemsJs(rawDue, chains);
+      dueItems = comp.items.slice(0, cleanLimit);
+      knockedOutIds = comp.knockedOutIds;
+    } else {
+      dueItems = rawDue.slice(0, cleanLimit);
+    }
+  }
+  const { activeChapter } = loadChapterTrackers(workspaceRoot);
+  const autopilot = activeChapter ? {
+    slug: activeChapter.slug,
+    title: activeChapter.title,
+    subject: activeChapter.subject,
+    pct: activeChapter.pct,
+    topicsMastered: activeChapter.topicsMastered,
+    topicsTotal: activeChapter.topicsTotal,
+    questionsSolved: activeChapter.questionsSolved,
+    questionsTotal: activeChapter.questionsTotal,
+    nextAction: activeChapter.nextHint
+  } : null;
+  const catCounts = /* @__PURE__ */ new Map();
+  for (const m of mistakes) {
+    const cat = String(m.category || "concept_gap");
+    catCounts.set(cat, (catCounts.get(cat) || 0) + 1);
+  }
+  const topCategories = [...catCounts.entries()].map(([category, count]) => ({ category, count })).sort((a, b) => b.count - a.count).slice(0, 3);
+  const topMistakeTraps = mistakes.slice(-3).reverse().map((m) => ({
+    id: m.id || null,
+    category: m.category || "concept_gap",
+    subject: m.subject || "General",
+    chapter: m.chapter || "",
+    triggerCue: m.triggerCue || "",
+    wrongMove: m.wrongMove || "",
+    correctMove: m.correctMove || ""
+  }));
+  const calibration = computeCalibrationSummary(revlog);
+  const leechesCount = propositions.filter((p2) => {
+    const lapses = Number(p2.lapses ?? p2?.fsrs?.lapses ?? 0);
+    const diff = Number(p2.difficulty ?? p2?.fsrs?.difficulty ?? 0);
+    return lapses >= 4 || diff >= 8.5;
+  }).length;
+  const readingQueueDueCount = readingQueue.filter((r) => String(r.stage || "queued") !== "crystallized").length;
+  return {
+    ok: true,
+    today,
+    compressed: useCompress,
+    dueCount,
+    dueItems,
+    knockedOutCount: knockedOutIds.length,
+    knockedOutIds,
+    autopilot,
+    topMistakeTraps,
+    topCategories,
+    calibration,
+    leechesCount,
+    readingQueueDueCount,
+    stats: {
+      totalPropositions: propositions.length,
+      totalChains: chains.length,
+      totalMistakes: mistakes.length,
+      totalReviews: revlog.length
+    }
+  };
+}
+function logReview(workspaceRoot, { propId, rating, confidence, cueId, misconception, durationMs }) {
+  const kgDir = resolveKgDir(workspaceRoot);
+  const revlogPath = path.join(kgDir, "revlog.jsonl");
+  const beforeSize = fs.existsSync(revlogPath) ? fs.statSync(revlogPath).size : 0;
+  const rated = rateFlashcard(workspaceRoot, {
+    propId,
+    rating,
+    cueId,
+    misconception,
+    confidence,
+    durationMs
+  });
+  if (!rated.ok) return rated;
+  const normConf = normalizeConfidence(confidence);
+  const cleanRating = String(rating || "").trim().toLowerCase();
+  const correct = cleanRating === "good" || cleanRating === "easy";
+  const hypercorrection = Boolean(
+    rated.result?.hypercorrection || normConf !== null && normConf >= 0.75 && !correct
+  );
+  const afterSize = fs.existsSync(revlogPath) ? fs.statSync(revlogPath).size : 0;
+  let revlogAppended = afterSize > beforeSize;
+  if (!revlogAppended) {
+    try {
+      appendJsonlSafe(revlogPath, {
+        propId: rated.result?.id || String(propId).trim(),
+        cueId: typeof cueId === "string" && cueId.trim() ? cueId.trim() : null,
+        ts: (/* @__PURE__ */ new Date()).toISOString(),
+        rating: cleanRating,
+        correct,
+        ...normConf !== null ? { learnerConfidence: normConf } : {},
+        ...typeof durationMs === "number" && Number.isFinite(durationMs) ? { durationMs: Math.round(durationMs) } : {},
+        hypercorrection
+      });
+      revlogAppended = true;
+      syncGraphQuiet(workspaceRoot, kgDir);
+    } catch {
+    }
+  }
+  return {
+    ok: true,
+    id: rated.result?.id || String(propId).trim(),
+    rating: cleanRating,
+    status: rated.result?.status || null,
+    stabilityDays: rated.result?.stabilityDays ?? null,
+    difficulty: rated.result?.difficulty ?? null,
+    bktMastery: rated.result?.bktMastery ?? null,
+    nextReview: rated.result?.nextReview || null,
+    fireCredits: rated.result?.fireCredits || [],
+    fireRefreshedCount: rated.result?.fireRefreshedCount || 0,
+    fireSummary: rated.result?.fireSummary || null,
+    hypercorrection,
+    revlogAppended,
+    synced: rated.synced
+  };
 }
 function saveSketchPng(workspaceRoot, { dataUrl, label }) {
   if (typeof dataUrl !== "string") {
@@ -23129,7 +23822,7 @@ function isTempWorkspace(wsPath) {
 }
 function resolveDataDir(workspaceRoot, explicitDataDir) {
   const cleaned = typeof explicitDataDir === "string" ? explicitDataDir.trim() : "";
-  if (cleaned && !cleaned.includes("${PLUGIN_DATA}")) {
+  if (cleaned && !cleaned.includes("${")) {
     return path2.resolve(cleaned);
   }
   const envDir = typeof process.env.SYNT_DATA_DIR === "string" && process.env.SYNT_DATA_DIR.trim() || typeof process.env.MLH_DATA_DIR === "string" && process.env.MLH_DATA_DIR.trim() || "";
@@ -23250,6 +23943,22 @@ function sanitizePracticePatch(patch) {
     out.statusKind = patch.statusKind;
   }
   if (typeof patch.nextRequested === "boolean") out.nextRequested = patch.nextRequested;
+  if (Array.isArray(patch.parsonsOrder)) {
+    out.parsonsOrder = [...new Set(patch.parsonsOrder.map((x) => String(x).slice(0, 120)).filter(Boolean))].slice(0, 40);
+  }
+  if (Array.isArray(patch.excludedIds)) {
+    out.excludedIds = [...new Set(patch.excludedIds.map((x) => String(x).slice(0, 120)).filter(Boolean))].slice(0, 40);
+  }
+  if (patch.fadedBlanks && typeof patch.fadedBlanks === "object" && !Array.isArray(patch.fadedBlanks)) {
+    const cleanBlanks = {};
+    let count = 0;
+    for (const [k, v2] of Object.entries(patch.fadedBlanks)) {
+      if (count >= 60) break;
+      cleanBlanks[String(k).slice(0, 120)] = String(v2 ?? "").slice(0, 300);
+      count += 1;
+    }
+    out.fadedBlanks = cleanBlanks;
+  }
   return out;
 }
 function createStateStore(workspaceRoot, explicitDataDir) {
@@ -23411,7 +24120,7 @@ function createStateStore(workspaceRoot, explicitDataDir) {
 }
 
 // mcp-app/mlh-studio/src/server.mjs
-var HERE = path3.dirname(fileURLToPath(import.meta.url));
+var HERE = path3.dirname(fileURLToPath2(import.meta.url));
 function parseCliFlag(argv, flagName) {
   const eqPrefix = `${flagName}=`;
   for (let i = 0; i < argv.length; i += 1) {
@@ -23426,9 +24135,38 @@ function parseCliFlag(argv, flagName) {
   }
   return "";
 }
+function isPluginCachePath(dirPath) {
+  if (!dirPath) return false;
+  const norm = path3.resolve(dirPath).replace(/\\/g, "/");
+  return norm.includes("/.claude/plugins/cache/") || norm.includes("/.claude/plugins/marketplaces/") || norm.includes("/.gemini/extensions/") || norm.includes("/.gemini/config/plugins/") || norm.includes("/.codex/plugins/") || norm.includes("/node_modules/");
+}
+function isWritableDir(dirPath) {
+  try {
+    if (!fs3.existsSync(dirPath)) return false;
+    fs3.accessSync(dirPath, fs3.constants.W_OK);
+    return true;
+  } catch {
+    return false;
+  }
+}
+function resolveAttachedDir(dirPath) {
+  if (!dirPath || !dirPath.trim()) return "";
+  const abs = path3.resolve(dirPath.trim());
+  if (!fs3.existsSync(abs)) return "";
+  if (fs3.existsSync(path3.join(abs, "knowledge-graph"))) return abs;
+  const dotSynt = path3.join(abs, ".syntopik");
+  if (fs3.existsSync(dotSynt)) {
+    try {
+      if (fs3.statSync(dotSynt).isDirectory()) return dotSynt;
+    } catch {
+      return "";
+    }
+  }
+  return "";
+}
 function findRepoRootFallback() {
   const candidate = path3.resolve(HERE, "..", "..", "..");
-  if (fs3.existsSync(path3.join(candidate, "AGENTS.md"))) {
+  if (!isPluginCachePath(candidate) && isWritableDir(candidate) && fs3.existsSync(path3.join(candidate, "AGENTS.md"))) {
     return candidate;
   }
   return "";
@@ -23437,27 +24175,37 @@ function parseWorkspaceArg(argv) {
   const fromFlag = parseCliFlag(argv, "--workspace");
   const isGenericDotOrUnexpanded = !fromFlag || fromFlag === "." || fromFlag.includes("${");
   if (!isGenericDotOrUnexpanded) {
-    return path3.resolve(fromFlag);
+    const abs = path3.resolve(fromFlag);
+    if (!fs3.existsSync(path3.join(abs, "knowledge-graph")) && fs3.existsSync(path3.join(abs, ".syntopik", "knowledge-graph"))) {
+      return path3.join(abs, ".syntopik");
+    }
+    return abs;
   }
   const envWs = process.env.SYNT_WORKSPACE || process.env.MLH_WORKSPACE || "";
   if (envWs.trim()) {
     return path3.resolve(envWs.trim());
   }
   const claudeDir = process.env.CLAUDE_PROJECT_DIR || "";
-  if (claudeDir.trim()) {
+  if (claudeDir.trim() && !isPluginCachePath(claudeDir)) {
+    const attached = resolveAttachedDir(claudeDir);
+    if (attached) return attached;
     return path3.resolve(claudeDir.trim());
   }
-  if (fromFlag === "." && fs3.existsSync(path3.join(process.cwd(), "AGENTS.md"))) {
+  const cwdAttached = resolveAttachedDir(process.cwd());
+  if (cwdAttached && !isPluginCachePath(cwdAttached)) {
+    return cwdAttached;
+  }
+  if (fromFlag === "." && !isPluginCachePath(process.cwd()) && fs3.existsSync(path3.join(process.cwd(), "AGENTS.md"))) {
     return process.cwd();
   }
   const repoFallback = findRepoRootFallback();
   if (repoFallback) {
     return repoFallback;
   }
-  if (fromFlag && !fromFlag.includes("${")) {
+  if (fromFlag && fromFlag !== "." && !fromFlag.includes("${")) {
     return path3.resolve(fromFlag);
   }
-  return process.cwd();
+  return path3.join(os2.homedir(), ".syntopik");
 }
 var CLI_ARGS = process.argv.slice(2);
 var WORKSPACE_ROOT = parseWorkspaceArg(CLI_ARGS);
@@ -23474,14 +24222,14 @@ var UI_RESOURCES = [
   {
     uri: "ui://syntopik/practice-card.html",
     name: "Syntopik Practice Card",
-    description: "Calm inline practice problem card with server-held hidden modelSolution.",
+    description: "Calm inline practice problem card (standard, Parsons, faded) with server-held hidden modelSolution.",
     filename: "practice-card.html",
     envOverrides: ["SYNT_PRACTICE_HTML", "MLH_PRACTICE_HTML"]
   },
   {
     uri: "ui://syntopik/studio-pane.html",
     name: "Syntopik Studio",
-    description: "Live Syntopik Studio side-pane: Autopilot, Plan DAG, Knowledge Graph, FSRS-6 Flashcards, and Mistake Traps.",
+    description: "Live Syntopik Studio side-pane: Autopilot, Plan DAG, Knowledge Graph, FSRS-6 Flashcards w/ Image Occlusion, and Mistake Traps.",
     filename: "studio-pane.html",
     envOverrides: ["SYNT_STUDIO_HTML", "MLH_STUDIO_HTML"]
   },
@@ -23587,7 +24335,27 @@ var PRACTICE_INPUT_SCHEMA = {
     action: { type: "string", enum: ["pose", "conclude"] },
     problemId: { type: "string" },
     statement: { type: "string" },
-    mode: { type: "string", enum: ["recall", "discrimination", "composition"] },
+    mode: {
+      type: "string",
+      enum: ["standard", "parsons", "faded", "recall", "discrimination", "composition"]
+    },
+    blocks: {
+      type: "array",
+      items: {
+        type: "object",
+        properties: {
+          id: { type: "string" },
+          code: { type: "string" },
+          indent: { type: "integer" },
+          isDistractor: { type: "boolean" }
+        },
+        required: ["id", "code"]
+      }
+    },
+    canonicalOrder: {
+      type: "array",
+      items: { type: "string" }
+    },
     targets: { type: "array", items: { type: "string" } },
     modelSolution: { type: "string" },
     outcome: {
@@ -23616,6 +24384,45 @@ var STUDIO_INPUT_SCHEMA = {
     visitedNodeIds: { type: "array", items: { type: "string" } },
     tab: { type: "string", enum: ["autopilot", "plan", "graph", "flashcards", "traps"] }
   }
+};
+var CAPTURE_CONCEPT_SCHEMA = {
+  type: "object",
+  properties: {
+    title: { type: "string", description: "Concise concept or invariant title." },
+    statement: { type: "string", description: "Caveat-free unconditional truth or mechanism statement." },
+    subject: { type: "string", description: "Subject area (e.g., CS, ML, Physics, Math, Chemistry)." },
+    chapter: { type: "string", description: "Chapter, course, paper, or project context." },
+    cuePrompt: { type: "string", description: "Optional active recall question cue." },
+    cueAnswer: { type: "string", description: "Optional concise answer for cuePrompt." },
+    premises: {
+      type: "array",
+      items: { type: "string" },
+      description: "Optional prerequisite proposition IDs forming a hyperedge into this concept."
+    },
+    relation: { type: "string", description: "Optional chain relation (default: requires)." },
+    kind: { type: "string", description: "Optional proposition kind (default: concept)." },
+    id: { type: "string", description: "Optional explicit kebab-case proposition ID." }
+  },
+  required: ["title", "statement", "subject", "chapter"]
+};
+var GET_FRONTIER_SCHEMA = {
+  type: "object",
+  properties: {
+    limit: { type: "integer", description: "Max due items to return (default 10, max 50)." },
+    compress: { type: "boolean", description: "Enable FIRe Spaced Repetition Compression knockouts (default true)." }
+  }
+};
+var LOG_REVIEW_SCHEMA = {
+  type: "object",
+  properties: {
+    propId: { type: "string", description: "Proposition ID to review." },
+    rating: { type: "string", enum: ["again", "hard", "good", "easy"] },
+    confidence: { type: "number", description: "Optional learner confidence (0..1 or 0..100)." },
+    cueId: { type: "string", description: "Optional specific cue ID reviewed." },
+    misconception: { type: "boolean", description: "Flag as active misconception when rating is 'again'." },
+    durationMs: { type: "number", description: "Optional response duration in milliseconds." }
+  },
+  required: ["propId", "rating"]
 };
 function makeAppToolPair(suffix, title, description, inputSchema) {
   return [
@@ -23648,7 +24455,7 @@ var TOOLS = [
   {
     name: "synt_practice_card",
     title: "Syntopik Practice Problem Card",
-    description: "Pose a practice problem (locking modelSolution hidden server-side with a 1-active-problem gate) or conclude it to reveal the committed modelSolution verbatim with verdict and Pause Law.",
+    description: "Pose a practice problem (standard, parsons, or faded block ordering; locking modelSolution & canonicalOrder hidden server-side with a 1-active-problem gate) or conclude it to reveal the committed modelSolution verbatim with verdict and Pause Law.",
     inputSchema: PRACTICE_INPUT_SCHEMA,
     _meta: {
       ui: { resourceUri: "ui://syntopik/practice-card.html" }
@@ -23657,7 +24464,7 @@ var TOOLS = [
   {
     name: "synt_lesson_studio",
     title: "Syntopik Studio",
-    description: "Open or update the live Syntopik Studio pane (Autopilot progress, Plan DAG, Knowledge Graph, zero-token FSRS-6 Flashcards, Mistake Traps). All arguments optional.",
+    description: "Open or update the live Syntopik Studio pane (Autopilot progress, Plan DAG, Knowledge Graph, zero-token FSRS-6 Flashcards w/ Image Occlusion, Mistake Traps). All arguments optional.",
     inputSchema: STUDIO_INPUT_SCHEMA,
     _meta: {
       ui: { resourceUri: "ui://syntopik/studio-pane.html" },
@@ -23668,6 +24475,25 @@ var TOOLS = [
         ]
       }
     }
+  },
+  // --- Ambient Cross-Session Headless Knowledge Tools (3, zero UI spawned) ---
+  {
+    name: "synt_capture_concept",
+    title: "Capture Concept to Syntopik Knowledge Graph",
+    description: "Ambient headless capture: deduplicate via find-similar, save a verified proposition (plus optional recall cue and prerequisite hyperedge chain) to the Knowledge Graph, and sync graph-data.js.",
+    inputSchema: CAPTURE_CONCEPT_SCHEMA
+  },
+  {
+    name: "synt_get_frontier",
+    title: "Get Syntopik Study Frontier & Calibration",
+    description: "Ambient headless query: return FIRe-compressed due propositions, active Chapter Autopilot next action, top 3 recurring mistake traps, and rolling Brier calibration summary.",
+    inputSchema: GET_FRONTIER_SCHEMA
+  },
+  {
+    name: "synt_log_review",
+    title: "Log FSRS-6 + FIRe Concept Review",
+    description: "Ambient headless review: run srs_engine.py review with FIRe implicit prerequisite propagation and revlog.jsonl persistence, returning updated stability, BKT mastery, and fireCredits.",
+    inputSchema: LOG_REVIEW_SCHEMA
   },
   // Backwards-compatible mlh_* aliases
   {
@@ -23719,7 +24545,8 @@ var TOOLS = [
         propId: { type: "string" },
         rating: { type: "string", enum: ["again", "hard", "good", "easy"] },
         cueId: { type: "string" },
-        misconception: { type: "boolean" }
+        misconception: { type: "boolean" },
+        confidence: { type: "number" }
       },
       required: ["propId", "rating"]
     }
@@ -23783,6 +24610,25 @@ function formatTerminalQuizText(v2, cardId, shuffleSeed) {
     lines.push("");
     lines.push("Ask the learner for their concise derivation/explanation (or 'I don't know') and 0\u2013100% confidence.");
   }
+  return lines.join("\n");
+}
+function formatTerminalParsonsText(record2, safeShuffledBlocks) {
+  const isFaded = record2.mode === "faded";
+  const lines = [
+    `Practice problem posed (id=${record2.problemId}, ${isFaded ? "FADED PARSONS" : "PARSONS"}) \u2014 Terminal fallback (committed solution & target block order locked server-side):`,
+    "",
+    record2.statement,
+    "",
+    "Shuffled blocks (order the valid steps and omit any distractors):"
+  ];
+  for (const blk of safeShuffledBlocks) {
+    const indentPad = blk.indent > 0 ? "  ".repeat(blk.indent) : "";
+    lines.push(`${blk.letter}) ${indentPad}${blk.code}`);
+  }
+  lines.push("");
+  lines.push(
+    isFaded ? 'Ask the learner for the ordered letters (e.g., B, A, D \u2014 omitting distractors) plus values for each ___ blank before calling action="conclude".' : 'Ask the learner for the ordered letters (e.g., B, A, D \u2014 omitting distractors) before calling action="conclude".'
+  );
   return lines.join("\n");
 }
 function handleQuizCard(rawArgs, toolName, hasUiExtension) {
@@ -23866,10 +24712,15 @@ function handlePracticeCard(rawArgs, toolName, hasUiExtension) {
       return toolError(`Invalid ${toolName} pose: ${checked2.error}`);
     }
     const v2 = checked2.value;
+    const shuffleSeed = v2.isParsonsMode ? hashSeed(`${v2.problemId}:${v2.statement}`) : null;
     const record3 = {
       problemId: v2.problemId,
       statement: v2.statement,
       mode: v2.mode || null,
+      isParsonsMode: v2.isParsonsMode,
+      blocks: v2.blocks,
+      canonicalOrder: v2.canonicalOrder,
+      shuffleSeed,
       targets: v2.targets,
       modelSolution: v2.modelSolution,
       posedAt: (/* @__PURE__ */ new Date()).toISOString(),
@@ -23878,23 +24729,44 @@ function handlePracticeCard(rawArgs, toolName, hasUiExtension) {
     activeProblem = record3;
     problemHistory.set(record3.problemId, record3);
     stateStore.savePracticePose(record3);
-    const textMsg = hasUiExtension ? `Practice problem posed (id=${record3.problemId}). Committed modelSolution locked server-side; awaiting learner attempt or hint request.` : [
-      `Practice problem posed (id=${record3.problemId}) \u2014 Terminal fallback (committed modelSolution locked server-side):`,
-      "",
-      record3.statement,
-      "",
-      `Present the problem cleanly and await the learner's attempt, R0\u2013R5 hint request, or surrender before calling action="conclude".`
-    ].join("\n");
+    let safeShuffledBlocks = null;
+    if (v2.isParsonsMode && Array.isArray(v2.blocks)) {
+      const stripped = v2.blocks.map((b) => ({
+        id: b.id,
+        code: b.code,
+        indent: b.indent || 0,
+        hasBlanks: /_{3,}/.test(b.code)
+      }));
+      safeShuffledBlocks = seededShuffleOptions(stripped, shuffleSeed);
+    }
+    let textMsg;
+    if (v2.isParsonsMode && safeShuffledBlocks) {
+      textMsg = hasUiExtension ? `Practice ${v2.mode} problem posed (id=${record3.problemId}, ${safeShuffledBlocks.length} shuffled blocks). Committed solution & target block order locked server-side; awaiting learner ordering.` : formatTerminalParsonsText(record3, safeShuffledBlocks);
+    } else {
+      textMsg = hasUiExtension ? `Practice problem posed (id=${record3.problemId}). Committed modelSolution locked server-side; awaiting learner attempt or hint request.` : [
+        `Practice problem posed (id=${record3.problemId}) \u2014 Terminal fallback (committed modelSolution locked server-side):`,
+        "",
+        record3.statement,
+        "",
+        `Present the problem cleanly and await the learner's attempt, R0\u2013R5 hint request, or surrender before calling action="conclude".`
+      ].join("\n");
+    }
+    const structuredContent = {
+      kind: `${pfx}_practice_card`,
+      action: "pose",
+      problemId: record3.problemId,
+      statement: record3.statement,
+      hasHiddenSolution: true,
+      ...v2.isParsonsMode && safeShuffledBlocks ? {
+        cardMode: v2.mode,
+        blocks: safeShuffledBlocks,
+        shuffleSeed
+      } : {},
+      ...hasUiExtension ? {} : { terminalFallback: true }
+    };
     return {
       content: [{ type: "text", text: textMsg }],
-      structuredContent: {
-        kind: `${pfx}_practice_card`,
-        action: "pose",
-        problemId: record3.problemId,
-        statement: record3.statement,
-        hasHiddenSolution: true,
-        ...hasUiExtension ? {} : { terminalFallback: true }
-      }
+      structuredContent
     };
   }
   const checked = validatePracticeConclude(act.args, activeProblem, problemHistory);
@@ -23907,9 +24779,11 @@ function handlePracticeCard(rawArgs, toolName, hasUiExtension) {
     activeProblem = null;
   }
   stateStore.savePracticeConclude(record2.problemId);
+  const canonicalLine = Array.isArray(record2.canonicalOrder) && record2.canonicalOrder.length > 0 ? `Canonical block order: ${record2.canonicalOrder.join(" \u2192 ")}` : "";
   const concludeText = hasUiExtension ? `Practice problem ${record2.problemId} concluded (${outcome}${rung ? `, ${rung}` : ""}). Verbatim committed modelSolution revealed. Pause for learner go-ahead.` : [
     `Practice problem ${record2.problemId} concluded (${outcome}${rung ? `, ${rung}` : ""}).`,
     `Verdict: ${verdict}`,
+    ...canonicalLine ? [canonicalLine] : [],
     "",
     "Committed Model Solution (reveal verbatim):",
     record2.modelSolution,
@@ -23928,7 +24802,10 @@ function handlePracticeCard(rawArgs, toolName, hasUiExtension) {
       rung,
       missClass,
       retest,
-      modelSolution: record2.modelSolution
+      modelSolution: record2.modelSolution,
+      ...record2.isParsonsMode ? { cardMode: record2.mode } : {},
+      ...Array.isArray(record2.canonicalOrder) ? { canonicalOrder: record2.canonicalOrder } : {},
+      ...Array.isArray(record2.blocks) ? { blocks: record2.blocks } : {}
     }
   };
 }
@@ -24039,6 +24916,48 @@ function createServer() {
         case "synt_lesson_studio":
         case "mlh_lesson_studio":
           return handleLessonStudio(args, name);
+        case "synt_capture_concept": {
+          const res = captureConcept(WORKSPACE_ROOT, args);
+          if (!res.ok) return toolError(res.error);
+          const structuredContent = {
+            kind: "synt_capture_concept_result",
+            id: res.id,
+            deduplicated: res.deduplicated,
+            matchedId: res.matchedId,
+            matchedScore: res.matchedScore,
+            cueAdded: res.cueAdded,
+            chainAdded: res.chainAdded,
+            synced: res.synced
+          };
+          return {
+            content: [{ type: "text", text: JSON.stringify(structuredContent) }],
+            structuredContent
+          };
+        }
+        case "synt_get_frontier": {
+          const res = getFrontier(WORKSPACE_ROOT, args);
+          if (!res.ok) return toolError(res.error);
+          const structuredContent = {
+            kind: "synt_frontier",
+            ...res
+          };
+          return {
+            content: [{ type: "text", text: JSON.stringify(structuredContent) }],
+            structuredContent
+          };
+        }
+        case "synt_log_review": {
+          const res = logReview(WORKSPACE_ROOT, args);
+          if (!res.ok) return toolError(res.error);
+          const structuredContent = {
+            kind: "synt_log_review_result",
+            ...res
+          };
+          return {
+            content: [{ type: "text", text: JSON.stringify(structuredContent) }],
+            structuredContent
+          };
+        }
         case "synt_app_load_state":
         case "mlh_app_load_state": {
           const section = typeof args.section === "string" && ["all", "autopilot", "graph", "flashcards", "traps"].includes(args.section) ? args.section : "all";
@@ -24073,6 +24992,9 @@ function createServer() {
           const structuredContent = {
             kind: `${pfx}_app_rate_result`,
             review: res.result,
+            fireCredits: res.result?.fireCredits || [],
+            fireRefreshedCount: res.result?.fireRefreshedCount || 0,
+            fireSummary: res.result?.fireSummary || null,
             stats: refreshed.stats,
             flashcards: refreshed.flashcards
           };

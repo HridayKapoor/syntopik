@@ -1,0 +1,117 @@
+[build-system]
+requires = ["hatchling>=1.24"]
+build-backend = "hatchling.build"
+
+[project]
+name = "syntopik"
+version = "2.0.0"
+description = "Local-first, harness-native AI Deep-Mastery OS with FSRS-6 + BKT + True FIRe knowledge hypergraph, deterministic STEM/CS verifiers, calm tutoring, and a 2-way local Studio."
+readme = "README.md"
+license = { text = "MIT" }
+requires-python = ">=3.12"
+authors = [
+  { name = "Hriday Kapoor" },
+]
+keywords = [
+  "learning",
+  "mastery",
+  "fsrs",
+  "spaced-repetition",
+  "knowledge-graph",
+  "stem",
+  "tutor",
+  "mcp",
+  "ai-agents",
+]
+classifiers = [
+  "Development Status :: 5 - Production/Stable",
+  "Intended Audience :: Education",
+  "Intended Audience :: Developers",
+  "License :: OSI Approved :: MIT License",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3.12",
+  "Programming Language :: Python :: 3.13",
+  "Topic :: Education",
+]
+dependencies = []
+
+[project.optional-dependencies]
+fsrs = [
+  "fsrs>=6.0",
+  "genanki>=0.13",
+  "scipy>=1.13",
+]
+pdf = [
+  "pymupdf>=1.24",
+  "pymupdf4llm>=0.0.17",
+  "pdfplumber>=0.11",
+  "rapidocr-onnxruntime>=1.3",
+  "pillow>=10.0",
+]
+stem = [
+  "sympy>=1.13",
+  "scipy>=1.13",
+  "numpy>=1.26",
+  "pint>=0.24",
+  "latex2sympy2-extended>=1.0",
+  "lark>=1.1",
+  "uncertainties>=3.2",
+  "schemdraw>=0.19",
+  "matplotlib>=3.9",
+  "rdkit>=2024.3",
+  "chempy>=0.9",
+  "molmass>=2024.5",
+  "quantities>=0.15",
+  "py2opsin>=0.2",
+]
+all = [
+  "fsrs>=6.0",
+  "genanki>=0.13",
+  "scipy>=1.13",
+  "pymupdf>=1.24",
+  "pymupdf4llm>=0.0.17",
+  "pdfplumber>=0.11",
+  "rapidocr-onnxruntime>=1.3",
+  "pillow>=10.0",
+  "sympy>=1.13",
+  "numpy>=1.26",
+  "pint>=0.24",
+  "latex2sympy2-extended>=1.0",
+  "lark>=1.1",
+  "uncertainties>=3.2",
+  "schemdraw>=0.19",
+  "matplotlib>=3.9",
+  "rdkit>=2024.3",
+  "chempy>=0.9",
+  "molmass>=2024.5",
+  "quantities>=0.15",
+  "py2opsin>=0.2",
+  "manim>=0.18",
+  "edge-tts>=6.1",
+  "srt>=3.5",
+]
+
+[project.scripts]
+syntopik = "syntopik.cli:main"
+
+[project.urls]
+Homepage = "https://github.com/HridayKapoor/syntopik"
+Repository = "https://github.com/HridayKapoor/syntopik"
+Issues = "https://github.com/HridayKapoor/syntopik/issues"
+
+[tool.hatch.build.targets.wheel]
+packages = ["syntopik"]
+
+[tool.hatch.build.targets.wheel.force-include]
+"scripts" = "syntopik/_bundle/scripts"
+".agents/skills" = "syntopik/_bundle/skills"
+".agents/hooks" = "syntopik/_bundle/hooks"
+"dashboard.html" = "syntopik/_bundle/dashboard.html"
+"knowledge-graph/viewer.html" = "syntopik/_bundle/viewer.html"
+"knowledge-graph/reagents.json" = "syntopik/_bundle/reagents.json"
+"demos/exam-cbt-template.html" = "syntopik/_bundle/exam-cbt-template.html"
+"mcp-app/mlh-studio/dist" = "syntopik/_bundle/mcp-dist"
+"mcp-app/mlh-studio/plugin.json" = "syntopik/_bundle/mcp/plugin.json"
+"mcp-app/mlh-studio/assets/logo.svg" = "syntopik/_bundle/mcp/assets/logo.svg"
+"AGENTS.md" = "syntopik/_bundle/AGENTS.md"
+"BOOTSTRAP.md" = "syntopik/_bundle/BOOTSTRAP.md"

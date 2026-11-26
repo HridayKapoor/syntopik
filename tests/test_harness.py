@@ -13,6 +13,7 @@ from __future__ import annotations
 import argparse
 import concurrent.futures
 import contextlib
+import http.client
 import importlib.util
 import io
 import json
@@ -21,16 +22,23 @@ import os
 import py_compile
 import re
 import shutil
+import socket
 import sqlite3
 import subprocess
 import sys
 import tarfile
 import tempfile
+import threading
+import time
 import tomllib
 import unittest
 import unittest.mock
+import urllib.error
+import urllib.parse
+import urllib.request
 import warnings
 import zipfile
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
 
@@ -38,6 +46,8 @@ from typing import Any
 sys.dont_write_bytecode = True
 
 ROOT = Path(__file__).resolve().parent.parent
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
 SCRIPTS_DIR = ROOT / "scripts"
 SKILLS_DIR = ROOT / ".agents" / "skills"
 HOOKS_JSON = ROOT / ".agents" / "hooks.json"
@@ -136,8 +146,12 @@ class TestSyntaxAndCLI(unittest.TestCase):
     """1. Syntax compilation (zero SyntaxWarning) & CLI --help contracts."""
 
     def test_all_python_scripts_compile_without_syntax_warnings(self) -> None:
-        py_files = sorted(SCRIPTS_DIR.glob("*.py")) + sorted((ROOT / "tests").glob("*.py"))
-        self.assertGreaterEqual(len(py_files), 10, "Expected at least 10 Python files")
+        py_files = (
+            sorted((ROOT / "syntopik").glob("*.py"))
+            + sorted(SCRIPTS_DIR.glob("*.py"))
+            + sorted((ROOT / "tests").glob("*.py"))
+        )
+        self.assertGreaterEqual(len(py_files), 43, "Expected at least 43 Python files across syntopik/, scripts/, tests/")
         with tempfile.TemporaryDirectory(prefix="mlh-pycompile-") as tmp:
             tmp_dir = Path(tmp)
             for idx, py_path in enumerate(py_files):
@@ -152,6 +166,7 @@ class TestSyntaxAndCLI(unittest.TestCase):
 
     def test_all_node_scripts_syntax_check(self) -> None:
         node_files = [
+            ROOT / "bin" / "syntopik.mjs",
             SCRIPTS_DIR / "sync-graph.mjs",
             ROOT / ".agents" / "hooks" / "session-start.mjs",
             ROOT / ".agents" / "hooks" / "post-graph-sync.mjs",
@@ -189,6 +204,12 @@ class TestSyntaxAndCLI(unittest.TestCase):
             "setup_harness.py",
             "code_verify.py",
             "research_scout.py",
+            "ingest_source.py",
+            "vault_sync.py",
+            "pedagogy_eval.py",
+            "fork_replay.py",
+            "falsify_arena.py",
+            "decision_blitz.py",
         ]
 
         def _check_help(name: str) -> tuple[str, int, str, str]:
@@ -700,8 +721,8 @@ class TestHooksSkillsBudget(unittest.TestCase):
                 total_bytes += len(raw)
         self.assertLessEqual(
             total_bytes,
-            10000,
-            f"Combined GEMINI.md + AGENTS.md ({total_bytes} B) exceeds 10,000 B (~2,500 token) ceiling",
+            7500,
+            f"Combined GEMINI.md + AGENTS.md ({total_bytes} B) exceeds v2.0 7,500 B ceiling",
         )
 
 
@@ -1814,10 +1835,10 @@ class TestMcpAppStudio(unittest.TestCase):
             # 1. initialize
             self.assertIn("serverInfo", by_id[1]["result"])
 
-            # 2. tools/list: exact 14 tools (6 model-visible: synt_* + mlh_* aliases; 8 visibility:["app"])
+            # 2. tools/list: exact 17 tools (9 model-visible: 6 UI synt_*/mlh_* + 3 ambient headless; 8 visibility:["app"])
             tools = by_id[2]["result"]["tools"]
             tools_by_name = {tl["name"]: tl for tl in tools}
-            self.assertEqual(len(tools), 14)
+            self.assertEqual(len(tools), 17)
             model_tools = [tl for tl in tools if "app" not in tl.get("_meta", {}).get("ui", {}).get("visibility", [])]
             app_tools = [tl for tl in tools if tl.get("_meta", {}).get("ui", {}).get("visibility") == ["app"]]
             self.assertEqual(
@@ -1826,6 +1847,9 @@ class TestMcpAppStudio(unittest.TestCase):
                     "synt_quiz_card",
                     "synt_practice_card",
                     "synt_lesson_studio",
+                    "synt_capture_concept",
+                    "synt_get_frontier",
+                    "synt_log_review",
                     "mlh_quiz_card",
                     "mlh_practice_card",
                     "mlh_lesson_studio",
@@ -2455,12 +2479,12 @@ class TestSelfImproveAndDoctor(unittest.TestCase):
                 if folder == "grade-handwriting":
                     self.assertIn("R0", text)
                     self.assertIn("R2", text)
-                    self.assertIn("mistake_analytics.py", text)
-                    self.assertIn("math_verify.py", text)
+                    self.assertIn("mistake_analytics", text)
+                    self.assertIn("math_verify", text)
                 if folder == "chapter-autopilot":
-                    self.assertIn("chapter_tracker.py", text)
+                    self.assertIn("chapter_tracker", text)
                 if folder == "topic-onboarding":
-                    self.assertIn("research_scout.py", text)
+                    self.assertIn("research_scout", text)
                     self.assertIn("manifest", text)
 
     def test_study_doctor_zero_warn_zero_fail(self) -> None:
@@ -2468,11 +2492,12 @@ class TestSelfImproveAndDoctor(unittest.TestCase):
         self.assertEqual(proc.returncode, 0, f"study_doctor.py exited {proc.returncode}: {proc.stderr}\n{proc.stdout}")
         report = json.loads(proc.stdout)
         self.assertTrue(report["healthy"], f"Doctor unhealthy: {report['summary']}")
-        self.assertGreaterEqual(report["summary"]["total"], 45)
+        self.assertGreaterEqual(report["summary"]["total"], 48)
+        self.assertGreaterEqual(report["summary"]["ok"], 48)
         self.assertEqual(report["summary"]["warn"], 0, f"Doctor warnings: {[c for c in report['checks'] if c['status'] == 'warn']}")
         self.assertEqual(report["summary"]["fail"], 0, f"Doctor failures: {[c for c in report['checks'] if c['status'] == 'fail']}")
         checks_by_name = {c["name"]: c for c in report["checks"]}
-        self.assertGreaterEqual(checks_by_name["Workspace Scripts (scripts/)"]["count"], 26)
+        self.assertGreaterEqual(checks_by_name["Workspace Scripts (scripts/)"]["count"], 32)
         self.assertGreaterEqual(checks_by_name["Project Skills (.agents/skills)"]["count"], 17)
 
         # Bare system python3 --core-only mode (zero third-party .venv packages required)
@@ -2793,12 +2818,12 @@ class TestCodeVerifyEngine(unittest.TestCase):
         self.assertEqual(res_nadd["passedCount"], 2)
 
         # 3. `complexity`: O(1) vs O(N) vs O(N^2) + --expect verification + Node --entry & unsupported lang (#105 P0.2)
-        # Use a fixed constant-work loop (~15us, independent of n) so nanosecond OS jitter cannot skew O(1).
+        # Use a fixed constant-work loop (~15us, independent of n and int size) so OS jitter cannot skew O(1).
         const_code = (
             "def const_sum(n):\n"
-            "    acc = 0\n"
-            "    for k in range(400):\n"
-            "        acc += (n + k) & 7\n"
+            "    acc = n & 7\n"
+            "    for k in range(350):\n"
+            "        acc = (acc + k) & 7\n"
             "    return acc\n"
         )
         rc_c1, res_c1 = _cv([
@@ -2813,7 +2838,7 @@ class TestCodeVerifyEngine(unittest.TestCase):
         rc_cn, res_cn = _cv([
             "complexity", "--lang", "python", "--entry", "lin_sum", "--generator", "int",
             "--code", "def lin_sum(n):\n    t = 0\n    for i in range(n): t += i\n    return t",
-            "--sizes", "5000,10000,20000,40000", "--repeats", "3", "--expect", "O(N)", "--json",
+            "--sizes", "5000,10000,20000,40000", "--repeats", "7", "--expect", "O(N)", "--json",
         ])
         self.assertEqual(rc_cn, 0, res_cn)
         self.assertEqual(res_cn["estimatedComplexity"], "O(N)")
@@ -3587,14 +3612,14 @@ class TestGitHubHygieneAndPortability(unittest.TestCase):
         self.assertEqual(personal_leaks, [], f"Personal path leak found in tracked/non-ignored files: {personal_leaks}")
         self.assertEqual(config_node_leaks, [], f"Hardcoded Homebrew node path found in config/doc/JS files: {config_node_leaks}")
 
-        # Always-on rule budget: GEMINI.md + AGENTS.md <= 9,600 B
+        # Always-on rule budget: GEMINI.md + AGENTS.md <= 7,500 B (v2.0 diet)
         agents_bytes = (ROOT / "AGENTS.md").read_bytes()
         gemini_bytes = (ROOT / "GEMINI.md").read_bytes()
         combined_rules = len(agents_bytes) + len(gemini_bytes)
         self.assertLessEqual(
             combined_rules,
-            9600,
-            f"Combined GEMINI.md + AGENTS.md ({combined_rules} B) exceeds 9,600 B ceiling",
+            7500,
+            f"Combined GEMINI.md + AGENTS.md ({combined_rules} B) exceeds v2.0 7,500 B ceiling",
         )
 
         # CLAUDE.md starts with @AGENTS.md and has no YAML frontmatter
@@ -3626,6 +3651,2060 @@ class TestGitHubHygieneAndPortability(unittest.TestCase):
             doc_path = ROOT / doc_name
             self.assertTrue(doc_path.is_file(), f"Missing top-level doc: {doc_name}")
             self.assertGreater(doc_path.stat().st_size, 200, f"Top-level doc unexpectedly small: {doc_name}")
+
+
+class TestFireCalibrationAndStdlibCore(unittest.TestCase):
+    """23. Syntopik v2.0 Pure-Stdlib Core: True FIRe, SRC, Calibration, Recover, Leeches, Graph Intel, Daily Plan, Crib Sheet & Exam Autopsy."""
+
+    def test_fire_calibration_src_recover_leeches_graph_intel_daily_plan_crib_and_exam(self) -> None:
+        import syntopik.fsrs_core as fc
+
+        srs = load_script_module("srs_engine.py")
+        gi = load_script_module("graph_intel.py")
+        dp = load_script_module("daily_plan.py")
+        cs = load_script_module("cheatsheet_pdf.py")
+        er = load_script_module("exam_runner.py")
+        ct = load_script_module("chapter_tracker.py")
+
+        def _cap(fn, argv: list[str]) -> dict[str, Any]:
+            buf = _EncodedStringIO()
+            with contextlib.redirect_stdout(buf):
+                fn(argv)
+            return json.loads(buf.getvalue())
+
+        with tempfile.TemporaryDirectory(prefix="synt-v2-core-") as tmp:
+            t = Path(tmp)
+            kg = t / "knowledge-graph"
+            ch = t / "chapters"
+            kg.mkdir()
+            ch.mkdir()
+
+            now = datetime.now(timezone.utc)
+            today_str = now.date().isoformat()
+            d_14_ago = (now - timedelta(days=14)).isoformat()
+            d_10_ago_date = (now - timedelta(days=10)).date().isoformat()
+            d_1h_ago = (now - timedelta(hours=1)).isoformat()
+            d_future = (now + timedelta(days=20)).date().isoformat()
+            d_yesterday = (now - timedelta(days=1)).date().isoformat()
+
+            # 1. Seed DAG for True FIRe propagation, (1-R_u) early-review discount, misconception protection & leeches
+            props = [
+                {
+                    "id": "p-root",
+                    "subject": "Physics",
+                    "chapter": "Mechanics",
+                    "title": "Newton second law restoring force dynamics",
+                    "kind": "axiom",
+                    "status": "solid",
+                    "bktMastery": 0.80,
+                    "nextReview": d_yesterday,
+                    "lastReviewed": d_14_ago,
+                    "fsrs": {
+                        "card_id": 1001,
+                        "state": 2,
+                        "step": None,
+                        "stability": 4.0,
+                        "difficulty": 4.5,
+                        "due": (now - timedelta(days=2)).isoformat(),
+                        "last_review": d_14_ago,
+                    },
+                },
+                {
+                    "id": "p-early",
+                    "subject": "Physics",
+                    "chapter": "Mechanics",
+                    "title": "Freshly reviewed conservation law",
+                    "kind": "axiom",
+                    "status": "solid",
+                    "bktMastery": 0.90,
+                    "nextReview": d_future,
+                    "lastReviewed": d_1h_ago,
+                    "fsrs": {
+                        "card_id": 1002,
+                        "state": 2,
+                        "step": None,
+                        "stability": 12.0,
+                        "difficulty": 3.0,
+                        "due": (now + timedelta(days=12)).isoformat(),
+                        "last_review": d_1h_ago,
+                    },
+                },
+                {
+                    "id": "p-misc",
+                    "subject": "Physics",
+                    "chapter": "Oscillations",
+                    "title": "Phasor velocity direction sign rule",
+                    "kind": "derivation",
+                    "status": "misconception",
+                    "bktMastery": 0.15,
+                    "nextReview": d_yesterday,
+                    "fsrs": {
+                        "card_id": 1003,
+                        "state": 2,
+                        "step": None,
+                        "stability": 1.0,
+                        "difficulty": 8.0,
+                        "due": (now - timedelta(days=3)).isoformat(),
+                        "last_review": d_14_ago,
+                    },
+                },
+                {
+                    "id": "p-mid",
+                    "subject": "Physics",
+                    "chapter": "Oscillations",
+                    "title": "Spring block oscillation equation frequency period",
+                    "kind": "derivation",
+                    "status": "shaky",
+                    "bktMastery": 0.45,
+                    "nextReview": d_yesterday,
+                    "fsrs": {
+                        "card_id": 1004,
+                        "state": 2,
+                        "step": None,
+                        "stability": 2.5,
+                        "difficulty": 5.5,
+                        "due": (now - timedelta(days=1)).isoformat(),
+                        "last_review": d_14_ago,
+                    },
+                },
+                {
+                    "id": "p-top",
+                    "subject": "Physics",
+                    "chapter": "Oscillations",
+                    "title": "Composite spring block oscillation frequency period analysis",
+                    "kind": "derivation",
+                    "status": "shaky",
+                    "bktMastery": 0.50,
+                    "nextReview": d_yesterday,
+                    "fsrs": {
+                        "card_id": 1005,
+                        "state": 2,
+                        "step": None,
+                        "stability": 3.0,
+                        "difficulty": 5.0,
+                        "due": (now - timedelta(days=1)).isoformat(),
+                        "last_review": d_14_ago,
+                    },
+                },
+                {
+                    "id": "p-leech",
+                    "subject": "Physics",
+                    "chapter": "Oscillations",
+                    "title": "Chronic leech trap card",
+                    "kind": "formula",
+                    "status": "shaky",
+                    "lapses": 5,
+                    "bktMastery": 0.20,
+                    "nextReview": d_yesterday,
+                    "fsrs": {
+                        "card_id": 1006,
+                        "state": 2,
+                        "step": None,
+                        "stability": 0.5,
+                        "difficulty": 9.2,
+                        "due": (now - timedelta(days=1)).isoformat(),
+                        "last_review": d_14_ago,
+                    },
+                },
+                {
+                    "id": "p-rocksolid",
+                    "subject": "Physics",
+                    "chapter": "Oscillations",
+                    "title": "Already rock-solid mastered truth",
+                    "kind": "axiom",
+                    "status": "solid",
+                    "lapses": 0,
+                    "bktMastery": 0.98,
+                    "nextReview": d_future,
+                    "lastReviewed": d_1h_ago,
+                    "fsrs": {
+                        "card_id": 1007,
+                        "state": 2,
+                        "step": None,
+                        "stability": 90.0,
+                        "difficulty": 2.0,
+                        "due": (now + timedelta(days=90)).isoformat(),
+                        "last_review": d_1h_ago,
+                    },
+                },
+            ]
+            chains = [
+                {"from": "p-root", "to": "p-mid", "relation": "derives"},
+                {"from": "p-misc", "to": "p-mid", "relation": "requires"},
+                {"premises": ["p-mid", "p-early"], "conclusion": "p-top", "relation": "derives"},
+            ]
+            (kg / "propositions.jsonl").write_text("\n".join(json.dumps(p) for p in props) + "\n", encoding="utf-8")
+            (kg / "chains.jsonl").write_text("\n".join(json.dumps(c) for c in chains) + "\n", encoding="utf-8")
+
+            # (a) True FIRe review on p-top: refreshes p-mid & p-root, early-discounts p-early, NEVER auto-clears p-misc
+            rev_top = srs.record_review(
+                kg,
+                "p-top",
+                "good",
+                confidence=0.85,
+                duration_ms=4200,
+                no_sync=True,
+            )
+            fc_by_id = {c["propId"]: c for c in rev_top.get("fireCredits", [])}
+            self.assertIn("p-mid", fc_by_id, f"Expected FIRe credit on p-mid: {rev_top}")
+            self.assertIn("p-root", fc_by_id, f"Expected transitive FIRe credit on p-root: {rev_top}")
+            # Early-review (1 - R_u) discount: p-early (reviewed 1h ago, R_u ~ 1) gets strictly less credit than overdue p-root
+            early_eff = fc_by_id.get("p-early", {}).get("credit", 0.0)
+            root_eff = fc_by_id["p-root"]["credit"]
+            self.assertGreater(root_eff, early_eff)
+            self.assertLess(early_eff, 0.05)
+
+            props_after = {
+                row["id"]: row
+                for row in (json.loads(ln) for ln in (kg / "propositions.jsonl").read_text(encoding="utf-8").splitlines() if ln.strip())
+            }
+            self.assertEqual(props_after["p-misc"]["status"], "misconception", "FIRe MUST NOT auto-clear misconception!")
+            self.assertGreater(float(props_after["p-root"].get("implicitCredit") or 0.0), 0.0)
+            self.assertTrue(props_after["p-root"].get("lastImplicitReview"))
+
+            # (b) revlog.jsonl + Brier / Hypercorrection / Lucky-Guess damper
+            rev_hc = srs.record_review(kg, "p-mid", "again", confidence=0.95, duration_ms=3100, no_sync=True)
+            self.assertTrue(rev_hc.get("hypercorrection"))
+            rev_lg = srs.record_review(kg, "p-mid", "good", confidence=0.20, duration_ms=8500, no_sync=True)
+            self.assertTrue(rev_lg.get("luckyGuess"))
+
+            bkt_lucky = fc.bkt_update(0.30, True, learner_confidence=0.20)
+            bkt_confident = fc.bkt_update(0.30, True, learner_confidence=0.90)
+            self.assertLess(bkt_lucky, bkt_confident, "Lucky-guess damper must restrain low-confidence BKT jump")
+
+            revlog_rows = [
+                json.loads(ln)
+                for ln in (kg / "revlog.jsonl").read_text(encoding="utf-8").splitlines()
+                if ln.strip()
+            ]
+            self.assertGreaterEqual(len(revlog_rows), 3)
+            cal = fc.compute_calibration(revlog_rows)
+            self.assertGreaterEqual(cal["count"], 3)
+            self.assertIsInstance(cal["brierScore"], float)
+            self.assertGreaterEqual(cal["hypercorrectionCount"], 1)
+            self.assertGreaterEqual(cal["luckyGuessCount"], 1)
+
+            # (c) leeches CLI flags chronic lapse/high-difficulty card
+            leech_res = _cap(srs.main, ["leeches", "--kg-dir", str(kg)])
+            self.assertGreaterEqual(leech_res["leechCount"], 1)
+            self.assertIn("p-leech", [x["id"] for x in leech_res["leeches"]])
+
+            # (d) due --compress knockouts on a 5-node due chain
+            kg_src = t / "kg-src"
+            kg_src.mkdir()
+            src_props = [
+                {"id": f"d{i}", "subject": "CS", "chapter": "Graphs", "title": f"Step {i}", "status": "shaky", "nextReview": d_yesterday}
+                for i in range(1, 6)
+            ]
+            src_chains = [
+                {"from": "d1", "to": "d2", "relation": "derives"},
+                {"from": "d2", "to": "d3", "relation": "derives"},
+                {"from": "d3", "to": "d4", "relation": "derives"},
+                {"from": "d4", "to": "d5", "relation": "derives"},
+            ]
+            (kg_src / "propositions.jsonl").write_text("\n".join(json.dumps(p) for p in src_props) + "\n", encoding="utf-8")
+            (kg_src / "chains.jsonl").write_text("\n".join(json.dumps(c) for c in src_chains) + "\n", encoding="utf-8")
+            due_comp = _cap(srs.main, ["due", "--compress", "--kg-dir", str(kg_src), "--today", today_str])
+            self.assertTrue(due_comp["compressed"])
+            self.assertEqual(due_comp["originalDueCount"], 5)
+            self.assertLess(due_comp["dueCount"], 5)
+            self.assertGreaterEqual(due_comp["knockedOutCount"], 2)
+
+            # (e) recover --daily-cap 5 --days 6 --apply smooths overdue pile
+            kg_rec = t / "kg-rec"
+            kg_rec.mkdir()
+            overdue_props = [
+                {
+                    "id": f"ov-{i:02d}",
+                    "subject": "Math",
+                    "chapter": "Calculus",
+                    "title": f"Overdue node {i}",
+                    "status": "solid",
+                    "nextReview": d_10_ago_date,
+                    "fsrs": {"stability": 3.0, "difficulty": 5.0, "due": d_14_ago, "last_review": d_14_ago},
+                }
+                for i in range(22)
+            ]
+            (kg_rec / "propositions.jsonl").write_text("\n".join(json.dumps(p) for p in overdue_props) + "\n", encoding="utf-8")
+            (kg_rec / "chains.jsonl").write_text("", encoding="utf-8")
+            rec_res = _cap(srs.main, ["recover", "--daily-cap", "5", "--days", "6", "--today", today_str, "--apply", "--no-sync", "--kg-dir", str(kg_rec)])
+            self.assertTrue(rec_res["applied"])
+            self.assertEqual(rec_res["dailyCap"], 5)
+            self.assertGreaterEqual(len(rec_res["rescheduleMap"]), 15)
+            for day_bucket in rec_res.get("schedule", []):
+                self.assertLessEqual(day_bucket["count"], 5)
+
+            # (f) graph_intel.py forced pure-stdlib Tarjan/PageRank + --confusables
+            kg_gi = t / "kg-gi"
+            kg_gi.mkdir()
+            gi_props = [
+                {"id": "prem-a", "subject": "Physics", "chapter": "SHM", "title": "Hooke restoring force axiom", "kind": "axiom", "status": "solid", "bktMastery": 0.95},
+                {"id": "prem-b", "subject": "Physics", "chapter": "SHM", "title": "Small angle pendulum torque axiom", "kind": "axiom", "status": "solid", "bktMastery": 0.95},
+                {"id": "conf-a", "subject": "Physics", "chapter": "SHM", "title": "Spring oscillation angular frequency restoring equilibrium period", "kind": "derivation", "status": "shaky", "bktMastery": 0.40},
+                {"id": "conf-b", "subject": "Physics", "chapter": "SHM", "title": "Pendulum oscillation angular frequency restoring equilibrium period", "kind": "derivation", "status": "shaky", "bktMastery": 0.40},
+                {"id": "cyc-1", "subject": "Physics", "chapter": "SHM", "title": "Cycle node one", "kind": "derivation", "status": "shaky", "bktMastery": 0.30},
+                {"id": "cyc-2", "subject": "Physics", "chapter": "SHM", "title": "Cycle node two", "kind": "derivation", "status": "planned", "bktMastery": 0.20},
+            ]
+            gi_chains = [
+                {"from": "prem-a", "to": "conf-a", "relation": "derives"},
+                {"from": "prem-b", "to": "conf-b", "relation": "derives"},
+                {"from": "conf-a", "to": "cyc-1", "relation": "requires"},
+                {"from": "cyc-1", "to": "cyc-2", "relation": "requires"},
+                {"from": "cyc-2", "to": "cyc-1", "relation": "requires"},
+            ]
+            (kg_gi / "propositions.jsonl").write_text("\n".join(json.dumps(p) for p in gi_props) + "\n", encoding="utf-8")
+            (kg_gi / "chains.jsonl").write_text("\n".join(json.dumps(c) for c in gi_chains) + "\n", encoding="utf-8")
+            with unittest.mock.patch.object(gi, "nx", None):
+                gi_res = _cap(gi.main, ["--all", "--path-to", "cyc-2", "--kg-dir", str(kg_gi), "--json"])
+            self.assertEqual(gi_res.get("backend"), "stdlib")
+            self.assertGreaterEqual(len(gi_res["bottlenecks"]), 1)
+            self.assertTrue(gi_res["pathTo"]["sequence"])
+            self.assertGreaterEqual(len(gi_res["confusables"]), 1)
+            pair_ids = {gi_res["confusables"][0]["nodeA"]["id"], gi_res["confusables"][0]["nodeB"]["id"]}
+            self.assertEqual(pair_ids, {"conf-a", "conf-b"})
+
+            # (g) daily_plan.py: --micro 5, --energy low|normal|deep, --resume (daysAbsent >= 4), --triage-hours 48
+            kg_dp = t / "kg-dp"
+            ch_dp = t / "ch-dp"
+            kg_dp.mkdir()
+            ch_dp.mkdir()
+            d_10_ago_iso = (now - timedelta(days=10)).isoformat()
+            d_3_ago_iso = (now - timedelta(days=3)).isoformat()
+            # Choose stability=2.4 & 10 days elapsed -> R ~ 0.75 (inside [0.60, 0.85] warm-start band)
+            dp_props = [
+                {
+                    "id": "p-warm",
+                    "subject": "Physics",
+                    "chapter": "SHM",
+                    "title": "Warm-start SHM energy conservation",
+                    "kind": "derivation",
+                    "status": "solid",
+                    "bktMastery": 0.82,
+                    "nextReview": d_yesterday,
+                    "lastReviewed": d_10_ago_iso,
+                    "fsrs": {"stability": 3.2, "difficulty": 4.0, "due": d_3_ago_iso, "last_review": d_10_ago_iso},
+                },
+                {
+                    "id": "p-weak",
+                    "subject": "Physics",
+                    "chapter": "SHM",
+                    "title": "High-yield SHM phasor bottleneck",
+                    "kind": "derivation",
+                    "status": "misconception",
+                    "bktMastery": 0.15,
+                    "nextReview": d_yesterday,
+                    "lastReviewed": d_10_ago_iso,
+                    "fsrs": {"stability": 0.8, "difficulty": 7.5, "due": d_3_ago_iso, "last_review": d_10_ago_iso},
+                },
+                {
+                    "id": "p-coldleaf",
+                    "subject": "Physics",
+                    "chapter": "SHM",
+                    "title": "Unseen cold leaf derivation",
+                    "kind": "derivation",
+                    "status": "planned",
+                    "bktMastery": 0.10,
+                },
+                {
+                    "id": "p-solid",
+                    "subject": "Physics",
+                    "chapter": "SHM",
+                    "title": "Locked-in rock solid leaf",
+                    "kind": "axiom",
+                    "status": "solid",
+                    "lapses": 0,
+                    "bktMastery": 0.99,
+                    "nextReview": d_future,
+                    "lastReviewed": d_10_ago_iso,
+                    "fsrs": {"stability": 200.0, "difficulty": 1.5, "due": (now + timedelta(days=190)).isoformat(), "last_review": d_10_ago_iso},
+                },
+            ]
+            (kg_dp / "propositions.jsonl").write_text("\n".join(json.dumps(p) for p in dp_props) + "\n", encoding="utf-8")
+            (kg_dp / "chains.jsonl").write_text(
+                json.dumps({"from": "p-weak", "to": "p-warm", "relation": "derives"}) + "\n",
+                encoding="utf-8",
+            )
+            (kg_dp / "mistakes.jsonl").write_text(
+                json.dumps({
+                    "id": "m-aa112233", "date": d_10_ago_date, "subject": "Physics", "chapter": "SHM",
+                    "propId": "p-weak", "category": "sign_error",
+                    "triggerCue": "Phasor velocity sign", "wrongMove": "Picked shortest chord ignoring +v",
+                    "correctMove": "Check quadrant velocity direction", "sourceRef": "test",
+                }) + "\n",
+                encoding="utf-8",
+            )
+            _cap(ct.main, ["init", "shm", "--title", "SHM", "--subject", "Physics", "--set-active", "--chapters-dir", str(ch_dp), "--kg-dir", str(kg_dp), "--no-sync", "--json"])
+            _cap(ct.main, ["checkpoint", "shm", "--breadcrumb", "Paused right after phasor Q2", "--first-action", "Check p-warm", "--chapters-dir", str(ch_dp), "--kg-dir", str(kg_dp), "--no-sync", "--json"])
+            # Backdate tracker updatedAt so daysAbsent reflects 10 days away
+            tpath = ch_dp / "shm-tracker.json"
+            tdata = json.loads(tpath.read_text(encoding="utf-8"))
+            tdata["updatedAt"] = d_10_ago_iso
+            tpath.write_text(json.dumps(tdata), encoding="utf-8")
+
+            micro = _cap(dp.main, ["--micro", "5", "--kg-dir", str(kg_dp), "--chapters-dir", str(ch_dp), "--today", today_str, "--json"])
+            self.assertEqual(micro["mode"], "micro")
+            self.assertEqual(micro["totalMinutes"], 5)
+
+            for em in ("low", "normal", "deep"):
+                p_em = _cap(dp.main, ["--minutes", "45", "--energy", em, "--kg-dir", str(kg_dp), "--chapters-dir", str(ch_dp), "--today", today_str, "--json"])
+                self.assertEqual(p_em["energyMode"], em)
+                if em == "low":
+                    self.assertIn("Zero New Theory", p_em["blocks"][1]["title"])
+
+            p_resume = _cap(dp.main, ["--minutes", "45", "--resume", "--kg-dir", str(kg_dp), "--chapters-dir", str(ch_dp), "--today", today_str, "--json"])
+            self.assertIsNotNone(p_resume["reentry"])
+            self.assertGreaterEqual(p_resume["reentry"]["daysAbsent"], 4)
+            self.assertTrue(p_resume["reentry"]["suppressOverdueCount"])
+            self.assertEqual(p_resume["reentry"]["warmStartPropId"], "p-warm")
+            self.assertIn("Paused right after phasor Q2", str(p_resume["reentry"]["breadcrumb"]))
+
+            triage = _cap(dp.main, ["--triage-hours", "48", "--sleep-hours", "7", "--kg-dir", str(kg_dp), "--chapters-dir", str(ch_dp), "--today", today_str, "--json"])
+            self.assertEqual(triage["mode"], "exam_triage")
+            self.assertGreater(triage["sleepProtectedHours"], 0)
+            self.assertGreater(triage["usableStudyHours"], 0)
+            self.assertEqual(set(triage["buckets"].keys()), {"salvage_70pct", "protect_20pct", "explicitly_cut"})
+            salvage_ids = {x["propId"] for x in triage["buckets"]["salvage_70pct"]}
+            self.assertIn("p-weak", salvage_ids)
+
+            # (h) cheatsheet_pdf.py --from-kg --anti-mastery --spec-only (zero Typst required!)
+            crib_spec = _cap(cs.main, ["build", "--from-kg", "--kg-dir", str(kg), "--anti-mastery", "--pages", "1", "--spec-only"])
+            meta = crib_spec["antiMasteryMeta"]
+            self.assertIn("p-rocksolid", meta["excludedSolidIds"])
+            self.assertIn("p-misc", meta["includedPropIds"])
+            self.assertNotIn("p-rocksolid", meta["includedPropIds"])
+
+            # (i) exam_runner.py in-process `good` credit + 3-bucket autopsy
+            kg_ex = t / "kg-ex"
+            kg_ex.mkdir()
+            (kg_ex / "propositions.jsonl").write_text(
+                "\n".join(
+                    json.dumps(x)
+                    for x in [
+                        {"id": "p-solved", "subject": "Physics", "chapter": "SHM", "title": "Solved concept", "status": "shaky", "bktMastery": 0.45},
+                        {"id": "p-know", "subject": "Physics", "chapter": "SHM", "title": "Concept gap node", "status": "shaky", "bktMastery": 0.30},
+                        {"id": "p-exec", "subject": "Physics", "chapter": "SHM", "title": "Execution slip node", "status": "solid", "bktMastery": 0.80},
+                    ]
+                ) + "\n",
+                encoding="utf-8",
+            )
+            (kg_ex / "chains.jsonl").write_text("", encoding="utf-8")
+            opts = [{"id": "A", "text": "A"}, {"id": "B", "text": "B"}, {"id": "C", "text": "C"}, {"id": "D", "text": "D"}]
+            ex_spec = er.normalize_spec({
+                "examSlug": "v2-autopsy-test",
+                "title": "v2 Autopsy Test",
+                "examType": "JEE Main",
+                "durationMinutes": 20,
+                "questions": [
+                    {"id": "Q1", "type": "single_correct", "subject": "Physics", "chapter": "SHM", "propId": "p-solved", "stem": "Q1", "options": opts, "answer": "A"},
+                    {"id": "Q2", "type": "single_correct", "subject": "Physics", "chapter": "SHM", "propId": "p-know", "trapCategory": "misconception", "stem": "Q2", "options": opts, "answer": "B"},
+                    {"id": "Q3", "type": "single_correct", "subject": "Physics", "chapter": "SHM", "propId": "p-exec", "trapCategory": "algebra_slip", "stem": "Q3", "options": opts, "answer": "C"},
+                    {"id": "Q4", "type": "single_correct", "subject": "Physics", "chapter": "SHM", "stem": "Q4", "options": opts, "answer": "D"},
+                ],
+            })
+            ex_attempt = {
+                "examSlug": "v2-autopsy-test",
+                "timeSpentSec": 500,
+                "responses": {
+                    "Q1": {"answer": "A", "status": "answered", "timeSpentSec": 40},
+                    "Q2": {"answer": "C", "status": "answered", "timeSpentSec": 50},
+                    "Q3": {"answer": "A", "status": "answered", "timeSpentSec": 45},
+                    "Q4": {"answer": "D", "status": "answered", "timeSpentSec": 300},
+                },
+            }
+            graded = er.grade_attempt(ex_spec, ex_attempt, kg_dir=kg_ex, slow_sec=180, no_sync=True)
+            self.assertEqual(graded["srsErrors"], [])
+            self.assertGreaterEqual(graded["srsUpdated"], 3)
+            ex_props = {
+                r["id"]: r
+                for r in (json.loads(ln) for ln in (kg_ex / "propositions.jsonl").read_text(encoding="utf-8").splitlines() if ln.strip())
+            }
+            self.assertGreater(ex_props["p-solved"]["bktMastery"], 0.45, "In-process exam_runner must credit `good` on solved propIds!")
+            buckets = graded["autopsy"]["buckets"]
+            self.assertIn("Q2", buckets["knowledge"])
+            self.assertIn("Q3", buckets["execution"])
+            self.assertIn("Q4", buckets["time_sink"])
+
+    def test_scipy_lbfgsb_optimizer_when_available(self) -> None:
+        if importlib.util.find_spec("scipy") is None:
+            self.skipTest("scipy not installed (bare-stdlib mode)")
+
+        import syntopik.fsrs_core as fc
+
+        # Synthesize 120 chronological revlog rows across 12 cards with slower forgetting than defaults
+        base_dt = datetime(2026, 1, 1, 10, 0, tzinfo=timezone.utc)
+        rows: list[dict[str, Any]] = []
+        for step in range(10):
+            for c_idx in range(12):
+                cid = f"card-{c_idx}"
+                ts = (base_dt + timedelta(days=step * 4 + (c_idx % 3), hours=c_idx)).isoformat()
+                elapsed = 0.0 if step == 0 else float(4 + (c_idx % 3))
+                # Deterministic pattern: longer-retention learner succeeds ~92% of the time
+                rating = 1 if (step in (2, 7) and c_idx % 6 == 0) else 3
+                rows.append({
+                    "ts": ts,
+                    "propId": cid,
+                    "rating": rating,
+                    "elapsedDays": elapsed,
+                    "stability": max(0.5, 2.0 + step * 1.5),
+                })
+
+        res = fc.optimize_fsrs_params(rows, min_reviews=100, max_iter=30)
+        self.assertTrue(res.get("optimized"), f"Optimizer did not run SciPy L-BFGS-B: {res}")
+        self.assertEqual(len(res["parameters"]), 21)
+        self.assertEqual(len(res["candidateParameters"]), 21)
+        self.assertIsInstance(res["defaultOosLogLoss"], float)
+        self.assertIsInstance(res["optimizedOosLogLoss"], float)
+        self.assertTrue(math.isfinite(res["optimizedOosLogLoss"]))
+        self.assertLess(res["optimizedTrainLogLoss"], res["defaultTrainLogLoss"])
+
+
+class TestUniversalIngestObsidianAndPedagogy(unittest.TestCase):
+    """24. Syntopik v2.0 Universal Source Ingestion, Bidirectional Obsidian/Mnemonic Sync & Pedagogy Linter."""
+
+    def test_ingest_youtube_arxiv_repo_url_and_reading_queue(self) -> None:
+        import syntopik.ingest as ing
+
+        with tempfile.TemporaryDirectory(prefix="synt-v2-ingest-") as tmp:
+            ws = Path(tmp) / "ws"
+            (ws / "knowledge-graph").mkdir(parents=True)
+            (ws / "chapters").mkdir(parents=True)
+
+            # 1. Mocked YouTube VTT (~12 min -> multiple chunks with [mm:ss] links + Active Pause-Points)
+            vtt_lines = ["WEBVTT", ""]
+            for i in range(18):
+                t0 = i * 40
+                t1 = t0 + 35
+                h0, m0, s0 = t0 // 3600, (t0 % 3600) // 60, t0 % 60
+                h1, m1, s1 = t1 // 3600, (t1 % 3600) // 60, t1 % 60
+                vtt_lines.append(f"{h0:02d}:{m0:02d}:{s0:02d}.000 --> {h1:02d}:{m1:02d}:{s1:02d}.000")
+                vtt_lines.append(f"Segment {i + 1} explains consensus leader election invariants and quorum safety.")
+                vtt_lines.append("")
+            yt = ing.ingest_youtube(
+                "https://www.youtube.com/watch?v=dQw4w9WgXcQ",
+                workspace=ws,
+                slug="raft-lecture",
+                vtt_text="\n".join(vtt_lines),
+                register_tracker=True,
+                subject="Distributed Systems",
+                title="Raft Consensus Lecture",
+            )
+            self.assertTrue(yt["ok"])
+            lec_md = Path(yt["lecturePath"]).read_text(encoding="utf-8")
+            self.assertIn("[00:00]", lec_md)
+            self.assertIn("Active Pause-Point", lec_md)
+            self.assertTrue((ws / "chapters" / "raft-lecture-tracker.json").is_file())
+
+            # 2. Mocked arXiv Atom XML -> Keshav 3-Pass guide
+            atom_xml = """<?xml version="1.0" encoding="UTF-8"?>
+            <feed xmlns="http://www.w3.org/2005/Atom">
+              <entry>
+                <id>http://arxiv.org/abs/1706.03762v7</id>
+                <updated>2023-08-02T00:00:00Z</updated>
+                <published>2017-06-12T00:00:00Z</published>
+                <title>Attention Is All You Need</title>
+                <summary>We propose the Transformer, a model architecture relying entirely on self-attention.</summary>
+                <author><name>Ashish Vaswani</name></author>
+                <author><name>Noam Shazeer</name></author>
+                <link title="pdf" href="http://arxiv.org/pdf/1706.03762v7" rel="related" type="application/pdf"/>
+              </entry>
+            </feed>"""
+            ax = ing.ingest_arxiv(
+                "1706.03762",
+                workspace=ws,
+                slug="transformer-paper",
+                atom_xml=atom_xml,
+                subject="Machine Learning",
+            )
+            self.assertTrue(ax["ok"])
+            keshav_md = Path(ax["guidePath"]).read_text(encoding="utf-8")
+            self.assertIn("Attention Is All You Need", keshav_md)
+            self.assertIn("Pass 1", keshav_md)
+            self.assertIn("Pass 2", keshav_md)
+            self.assertIn("Pass 3", keshav_md)
+
+            # 3. Local repo Golden-Path scan (skips .git, node_modules, .venv)
+            dummy_repo = Path(tmp) / "sample-repo"
+            (dummy_repo / "src").mkdir(parents=True)
+            (dummy_repo / "tests").mkdir(parents=True)
+            (dummy_repo / ".git").mkdir(parents=True)
+            (dummy_repo / "node_modules" / "pkg").mkdir(parents=True)
+            (dummy_repo / ".venv" / "lib").mkdir(parents=True)
+            (dummy_repo / "README.md").write_text("# Sample Repo\nFast graph engine.\n", encoding="utf-8")
+            (dummy_repo / "src" / "main.py").write_text("def main():\n    return 42\n", encoding="utf-8")
+            (dummy_repo / "tests" / "test_main.py").write_text("def test_ok():\n    assert True\n", encoding="utf-8")
+            (dummy_repo / ".git" / "HEAD").write_text("ref: refs/heads/main\n", encoding="utf-8")
+            (dummy_repo / "node_modules" / "pkg" / "index.js").write_text("module.exports = 1;\n", encoding="utf-8")
+            (dummy_repo / ".venv" / "lib" / "site.py").write_text("x = 1\n", encoding="utf-8")
+
+            rp = ing.ingest_repo(dummy_repo, workspace=ws, slug="sample-repo")
+            self.assertTrue(rp["ok"])
+            repo_map = Path(rp["repoMapPath"]).read_text(encoding="utf-8")
+            self.assertIn("src/main.py", repo_map)
+            self.assertNotIn("node_modules", repo_map)
+            self.assertNotIn(".venv/lib", repo_map)
+
+            # 4. `url` strict scheme & SSRF guards reject file://, javascript:, ftp://, loopback & link-local IPs
+            for bad_url in (
+                "file:///etc/passwd",
+                "javascript:alert(1)",
+                "ftp://example.org/a",
+                "http://127.0.0.1/",
+                "http://[::1]/",
+                "http://169.254.169.254/latest/meta-data/",
+                "http://localhost:4173/api/state",
+            ):
+                with self.subTest(bad_url=bad_url):
+                    with self.assertRaises(ValueError):
+                        ing.validate_http_url(bad_url)
+                    with self.assertRaises(ValueError):
+                        ing.ingest_url(bad_url, workspace=ws, slug="bad-url")
+            bad_cli = run_cli([
+                sys.executable, "-B", str(SCRIPTS_DIR / "ingest_source.py"),
+                "url", "file:///etc/passwd", "--workspace", str(ws),
+            ])
+            self.assertNotEqual(bad_cli.returncode, 0)
+
+            html_doc = "<html><head><title>Quorum Basics</title></head><body><h1>Quorum Basics</h1><p>Two majorities always intersect.</p></body></html>"
+            u_res = ing.ingest_url("https://example.org/quorum", workspace=ws, slug="quorum-doc", html_text=html_doc)
+            self.assertTrue(u_res["ok"])
+            self.assertIn("Two majorities always intersect.", Path(u_res["articlePath"]).read_text(encoding="utf-8"))
+
+            # 5. Incremental reading queue: add | due | advance (queued -> extracted -> clozed -> crystallized)
+            q_lo = ing.queue_add("Low priority excerpt", "sources/a.md", workspace=ws, slug="s1", priority=25, item_id="rq-low")
+            q_hi = ing.queue_add("High priority excerpt", "sources/b.md", workspace=ws, slug="s1", priority=95, item_id="rq-high")
+            self.assertEqual(q_lo["stage"], "queued")
+            self.assertEqual(q_hi["stage"], "queued")
+
+            due_q = ing.queue_due(workspace=ws, limit=50)
+            ids_ranked = [it["id"] for it in due_q["items"]]
+            self.assertIn("rq-high", ids_ranked)
+            self.assertIn("rq-low", ids_ranked)
+            self.assertLess(ids_ranked.index("rq-high"), ids_ranked.index("rq-low"))
+
+            s1 = ing.queue_advance("rq-high", workspace=ws)
+            self.assertEqual(s1["item"]["stage"], "extracted")
+            s2 = ing.queue_advance("rq-high", workspace=ws)
+            self.assertEqual(s2["item"]["stage"], "clozed")
+            s3 = ing.queue_advance("rq-high", workspace=ws, linked_prop_id="cs-quorum-1")
+            self.assertEqual(s3["item"]["stage"], "crystallized")
+
+    def test_obsidian_vault_sync_markers_wikilinks_and_fsrs_preservation(self) -> None:
+        import syntopik.obsidian as obs
+
+        with tempfile.TemporaryDirectory(prefix="synt-v2-obsidian-") as tmp:
+            ws = Path(tmp) / "ws"
+            kg = ws / "knowledge-graph"
+            vault = Path(tmp) / "obsidian-vault"
+            kg.mkdir(parents=True)
+
+            props = [
+                {
+                    "id": "phys-shm-law",
+                    "subject": "Physics",
+                    "chapter": "SHM",
+                    "title": "Restoring force proportional to displacement",
+                    "kind": "axiom",
+                    "status": "solid",
+                    "bktMastery": 0.88,
+                    "nextReview": "2026-12-10",
+                    "fsrs": {"stability": 14.5, "difficulty": 3.2, "due": "2026-12-10T12:00:00+00:00"},
+                },
+                {
+                    "id": "phys-shm-period",
+                    "subject": "Physics",
+                    "chapter": "SHM",
+                    "title": "SHM period T = 2*pi*sqrt(m/k)",
+                    "kind": "derivation",
+                    "status": "shaky",
+                    "bktMastery": 0.40,
+                },
+            ]
+            (kg / "propositions.jsonl").write_text("\n".join(json.dumps(p) for p in props) + "\n", encoding="utf-8")
+            (kg / "chains.jsonl").write_text(
+                json.dumps({"from": "phys-shm-law", "to": "phys-shm-period", "relation": "derives", "why": "Solve ODE"}) + "\n",
+                encoding="utf-8",
+            )
+            (kg / "mistakes.jsonl").write_text(
+                json.dumps({
+                    "id": "m-11112222", "date": "2026-11-25", "subject": "Physics", "chapter": "SHM",
+                    "propId": "phys-shm-period", "category": "sign_error",
+                    "triggerCue": "Vertical spring", "wrongMove": "Included g in T",
+                    "correctMove": "Gravity shifts x_eq only", "sourceRef": "test",
+                }) + "\n",
+                encoding="utf-8",
+            )
+
+            # 1. Export to Obsidian vault -> minimal YAML, [[wikilinks]], Trap-MOC.md, markers
+            exp1 = obs.export_vault(vault, workspace=ws, kg_dir=kg)
+            self.assertTrue(exp1["ok"])
+            self.assertTrue((vault / "Trap-MOC.md").is_file())
+            md_files = list(vault.rglob("*.md"))
+            law_file = next(p for p in md_files if "syntopik_id: phys-shm-law" in p.read_text(encoding="utf-8"))
+            law_txt = law_file.read_text(encoding="utf-8")
+            self.assertIn(obs.SYNT_BEGIN, law_txt)
+            self.assertIn(obs.SYNT_END, law_txt)
+            self.assertIn("[[", law_txt)
+            fm_part = law_txt.split("---", 2)[1]
+            self.assertNotIn("stability", fm_part)
+            self.assertNotIn("fsrs", fm_part)
+
+            # 2. Add custom YAML, personal prose outside markers, :::cue block, and {{c1::...}} cloze
+            custom_block = (
+                "\nMy personal insight above stays forever.\n\n"
+                ":::cue {propId: phys-shm-law, id: c-vault-1, kind: recall}\n"
+                "Q: What sign relates restoring force F and displacement x?\n"
+                "A: Opposite sign: F = -kx.\n"
+                ":::\n\n"
+                "Key invariant: {{c1::restoring force::physics}} always points toward equilibrium.\n"
+            )
+            edited = law_txt.replace("syntopik_id: phys-shm-law", "syntopik_id: phys-shm-law\ncustom_author_tag: keep-me", 1)
+            edited = edited + custom_block
+            law_file.write_text(edited, encoding="utf-8")
+
+            # 3. Re-export MUST preserve custom YAML and user prose outside markers
+            exp2 = obs.export_vault(vault, workspace=ws, kg_dir=kg)
+            self.assertTrue(exp2["ok"])
+            re_txt = law_file.read_text(encoding="utf-8")
+            self.assertIn("custom_author_tag: keep-me", re_txt)
+            self.assertIn("My personal insight above stays forever.", re_txt)
+
+            # 4. Import twice (idempotent) -> imports :::cue + {{c1::...}} AND preserves FSRS stability & bktMastery!
+            imp1 = obs.import_vault(vault, workspace=ws, kg_dir=kg, no_sync=True)
+            self.assertTrue(imp1["ok"])
+            self.assertGreaterEqual(imp1["cuesAdded"], 2)
+            self.assertGreaterEqual(imp1["cuesParsed"], 1)
+            self.assertGreaterEqual(imp1["clozesParsed"], 1)
+            imp2 = obs.import_vault(vault, workspace=ws, kg_dir=kg, no_sync=True)
+            self.assertTrue(imp2["ok"])
+            self.assertEqual(imp2["cuesAdded"], 0)
+
+            reloaded = {
+                r["id"]: r
+                for r in (json.loads(ln) for ln in (kg / "propositions.jsonl").read_text(encoding="utf-8").splitlines() if ln.strip())
+            }
+            self.assertEqual(reloaded["phys-shm-law"]["fsrs"]["stability"], 14.5)
+            self.assertEqual(reloaded["phys-shm-law"]["bktMastery"], 0.88)
+            cue_ids = [c["id"] for c in reloaded["phys-shm-law"].get("cues", [])]
+            self.assertIn("c-vault-1", cue_ids)
+            self.assertEqual(len(cue_ids), len(set(cue_ids)), "Repeated import duplicated cues!")
+
+            # 5. Marker & fence breakout hardening: literal `<!-- syntopik:end -->` and `:::` stay byte-for-byte idempotent!
+            reloaded["phys-shm-period"]["notes"] = "Trap note <!-- syntopik:end -->\n:::\nstill inside managed block"
+            reloaded["phys-shm-period"]["cues"] = [
+                {"id": "c-fence", "q": "Check line 1\n:::\nCheck line 2", "a": "Answer survives ::: fence cleanly.", "kind": "recall"}
+            ]
+            (kg / "propositions.jsonl").write_text(
+                "\n".join(json.dumps(r) for r in reloaded.values()) + "\n",
+                encoding="utf-8",
+            )
+            obs.export_vault(vault, workspace=ws, kg_dir=kg)
+            period_file = next(p for p in vault.rglob("*.md") if "syntopik_id: phys-shm-period" in p.read_text(encoding="utf-8"))
+            snap_1 = period_file.read_text(encoding="utf-8")
+            obs.export_vault(vault, workspace=ws, kg_dir=kg)
+            snap_2 = period_file.read_text(encoding="utf-8")
+            self.assertEqual(snap_1, snap_2, "Obsidian re-export mutated/duplicated note containing marker/fence strings!")
+            obs.import_vault(vault, workspace=ws, kg_dir=kg, no_sync=True)
+            re_after = {
+                r["id"]: r
+                for r in (json.loads(ln) for ln in (kg / "propositions.jsonl").read_text(encoding="utf-8").splitlines() if ln.strip())
+            }
+            c_fence = next(c for c in re_after["phys-shm-period"].get("cues", []) if c["id"] == "c-fence")
+            self.assertIn("Answer survives", c_fence["a"])
+
+    def test_pedagogy_eval_bench_lint_and_check_card(self) -> None:
+        pe = load_script_module("pedagogy_eval.py")
+
+        # 1. Built-in 15-scenario golden benchmark passes 15/15
+        bench = pe.run_benchmark()
+        self.assertTrue(bench["ok"])
+        self.assertEqual(bench["total"], 15)
+        self.assertEqual(bench["passed"], 15)
+
+        # 2. `lint` catches sycophancy & >160w prose, passes calm concise turn
+        syco = pe.lint_turn("Great question! You nailed it! Predict the equilibrium shift.")
+        self.assertFalse(syco["passed"])
+        self.assertIn("zero_sycophancy", {v["rule"] for v in syco["violations"]})
+
+        long_turn = " ".join(["invariant"] * 175) + " What happens next?"
+        over = pe.lint_turn(long_turn, mode="teach")
+        self.assertFalse(over["passed"])
+        self.assertTrue(any("word" in v["rule"] or "prose" in v["rule"] for v in over["violations"]))
+
+        clean = pe.lint_turn(
+            "Constant external force shifts equilibrium $x_0 = mg/k$ without changing curvature $k$.\n\n"
+            "$$T = 2\\pi\\sqrt{\\frac{m}{k}}$$\n\n"
+            "Does doubling gravity change $T$?",
+            mode="teach",
+        )
+        self.assertTrue(clean["passed"], clean)
+
+        # 3. `check-card` catches `"because"` justification leak & missing `"I don't know"`
+        bad_card = pe.check_quiz_card({
+            "role": "check",
+            "question": "How does gravity affect a vertical spring period?",
+            "options": [
+                {"id": "a", "label": "Unchanged because gravity only shifts equilibrium"},
+                {"id": "b", "label": "Period decreases"},
+            ],
+            "explanation": "Restoring stiffness k is unchanged.",
+            "correctAnswer": "a",
+        })
+        self.assertFalse(bad_card["passed"])
+        bad_rules = {v["rule"] for v in bad_card["violations"]}
+        self.assertIn("option_justification_leak", bad_rules)
+        self.assertIn("missing_idk_option", bad_rules)
+
+
+class TestMoonshotEnginesAndPocketPacks(unittest.TestCase):
+    """25. Syntopik v2.0 Moonshot Engines (Fork Replay, Falsify Arena, Decision Blitz) + Portable Study Packs & Pocket Deck."""
+
+    def test_fork_replay_falsify_arena_and_decision_blitz(self) -> None:
+        import syntopik.forks as fk
+
+        fa = load_script_module("falsify_arena.py")
+        db = load_script_module("decision_blitz.py")
+
+        with tempfile.TemporaryDirectory(prefix="synt-v2-moonshots-") as tmp:
+            ws = Path(tmp) / "ws"
+            kg = ws / "knowledge-graph"
+            ch = ws / "chapters"
+            kg.mkdir(parents=True)
+            ch.mkdir(parents=True)
+
+            # Seed propositions & mistakes for arena lemma persistence + blitz build
+            seed_props = [
+                {"id": "cs-binsearch", "subject": "CS", "chapter": "Search", "title": "Binary search inclusive loop invariant lo <= hi", "status": "shaky", "bktMastery": 0.4},
+                {"id": "phys-work-spring", "subject": "Physics", "chapter": "Work-Energy", "title": "Spring restoring work equals minus delta U", "status": "shaky", "bktMastery": 0.4},
+                {"id": "phys-work-friction", "subject": "Physics", "chapter": "Work-Energy", "title": "Kinetic friction work sign depends on ground displacement", "status": "shaky", "bktMastery": 0.4},
+                {"id": "phys-shm-spring", "subject": "Physics", "chapter": "SHM", "title": "Spring block time period invariant under constant force", "status": "solid", "bktMastery": 0.85},
+            ]
+            (kg / "propositions.jsonl").write_text("\n".join(json.dumps(p) for p in seed_props) + "\n", encoding="utf-8")
+            (kg / "chains.jsonl").write_text("", encoding="utf-8")
+            (kg / "mistakes.jsonl").write_text(
+                "\n".join(
+                    json.dumps(m)
+                    for m in [
+                        {
+                            "id": "m-f1111111", "date": "2026-11-25", "subject": "Physics", "chapter": "Work-Energy",
+                            "propId": "phys-work-spring", "category": "sign_error",
+                            "triggerCue": "Spring stretched x1 to x2", "wrongMove": "Used +1/2 k (x2^2 - x1^2)",
+                            "correctMove": "Use -delta U = 1/2 k (x1^2 - x2^2)", "sourceRef": "test",
+                        },
+                        {
+                            "id": "m-f2222222", "date": "2026-11-25", "subject": "Physics", "chapter": "Work-Energy",
+                            "propId": "phys-work-friction", "category": "condition_missed",
+                            "triggerCue": "Two stacked blocks with friction", "wrongMove": "Assumed friction work always negative",
+                            "correctMove": "Check block displacement relative to ground", "sourceRef": "test",
+                        },
+                    ]
+                ) + "\n",
+                encoding="utf-8",
+            )
+
+            # 1. Blunder FEN Fork Replay: repeat-blunder refutation WITHOUT leaking winning move + mutation + latency
+            win_secret = "1/2*k*(x1**2 - x2**2)"
+            cap_f = fk.capture_fork(
+                prop_id="phys-work-spring",
+                prefix_steps=["F_s(x) = -k*x", "W_s = integral_{x1}^{x2} F_s dx"],
+                fork_prompt="Evaluate work done by spring from x1 to x2",
+                sealed_blunder="1/2*k*(x2**2 - x1**2)",
+                sealed_winning_move=win_secret,
+                refutation_msg="Stretching x2 > x1 opposes restoring force, so W_s must be negative!",
+                verify_spec={"engine": "math"},
+                workspace=ws,
+                kg_dir=kg,
+            )
+            fid = cap_f["id"]
+            due_f = fk.list_due_forks(workspace=ws, kg_dir=kg, include_sealed=False)
+            self.assertNotIn(win_secret, json.dumps(due_f), "list_due_forks leaked sealedWinningMove!")
+
+            # Repeat exact blunder -> plays refutation WITHOUT leaking winning move!
+            chk_blunder = fk.check_fork_move(fid, "0.5*k*(x2^2 - x1^2)", latency_ms=11000, workspace=ws, kg_dir=kg)
+            self.assertTrue(chk_blunder["repeatedBlunder"])
+            self.assertFalse(chk_blunder["correct"])
+            self.assertIn("must be negative", chk_blunder["refutation"])
+            self.assertIsNone(chk_blunder["winningMove"])
+            self.assertNotIn(win_secret, json.dumps(chk_blunder), "Repeat blunder leaked winning move!")
+
+            # Submit algebraically equivalent winning move faster -> win + Woodpecker latency compression!
+            chk_win = fk.check_fork_move(fid, "k*(x1**2 - x2**2)/2", latency_ms=3500, workspace=ws, kg_dir=kg)
+            self.assertTrue(chk_win["correct"])
+            self.assertEqual(chk_win["winCount"], 1)
+            self.assertGreater(chk_win["latencyTrend"]["compressionRatio"], 2.0)
+
+            mut = fk.mutate_fork(fid, seed=7, workspace=ws, kg_dir=kg, include_sealed=False)
+            self.assertTrue(mut["ok"])
+            self.assertNotIn("sealedWinningMove", mut["variant"])
+
+            # 2. Adversarial Counterexample Arena: kill mutant with ZERO survivor leak + Lakatos lemma repair
+            ar = fa.create_arena(
+                prop_id="cs-binsearch",
+                domain="code",
+                claim="Return index of target in sorted list or -1",
+                entry="bsearch",
+                sealed_reference={
+                    "code": (
+                        "def bsearch(a, t):\n"
+                        "    lo, hi = 0, len(a) - 1\n"
+                        "    while lo <= hi:\n"
+                        "        m = (lo + hi) // 2\n"
+                        "        if a[m] == t: return m\n"
+                        "        if a[m] < t: lo = m + 1\n"
+                        "        else: hi = m - 1\n"
+                        "    return -1\n"
+                    )
+                },
+                sealed_mutants=[
+                    {
+                        "id": "m-offbyone",
+                        "trapTag": "strict_lt_loop",
+                        "code": (
+                            "def bsearch(a, t):\n"
+                            "    lo, hi = 0, len(a) - 1\n"
+                            "    while lo < hi:\n"
+                            "        m = (lo + hi) // 2\n"
+                            "        if a[m] == t: return m\n"
+                            "        if a[m] < t: lo = m + 1\n"
+                            "        else: hi = m - 1\n"
+                            "    return -1\n"
+                        ),
+                    },
+                    {
+                        "id": "m-secret-survivor",
+                        "trapTag": "SECRET_EMPTY_CRASH_TAG",
+                        "code": (
+                            "def bsearch(a, t):\n"
+                            "    if a[0] == t: return 0\n"
+                            "    return -1\n"
+                        ),
+                    },
+                ],
+                assumption_predicates=["len(args) == 2"],
+                workspace=ws,
+                kg_dir=kg,
+            )
+            aid = ar["id"]
+            t1 = fa.test_arena_input(aid, json.dumps({"args": [[5], 5]}), workspace=ws, kg_dir=kg)
+            self.assertTrue(t1["validAssumption"], t1)
+            self.assertIn("m-offbyone", t1["killed"])
+            self.assertEqual(t1["survivedCount"], 1)
+            t1_dump = json.dumps(t1)
+            self.assertNotIn("m-secret-survivor", t1_dump, "Surviving mutant ID leaked!")
+            self.assertNotIn("SECRET_EMPTY_CRASH_TAG", t1_dump, "Surviving mutant trapTag leaked!")
+            self.assertNotIn("a[0]", t1_dump, "Surviving mutant code leaked!")
+
+            t2 = fa.test_arena_input(aid, json.dumps({"args": [[], 5]}), workspace=ws, kg_dir=kg)
+            self.assertIn("m-secret-survivor", t2["killed"])
+            self.assertEqual(t2["survivedCount"], 0)
+            self.assertTrue(t2["allKilled"])
+
+            lemma = "Invariant requires inclusive lo <= hi and empty-list guard."
+            rep = fa.repair_arena_lemma(aid, lemma, workspace=ws, kg_dir=kg)
+            self.assertTrue(rep["ok"])
+            self.assertTrue(rep["persistedToProp"])
+            reloaded_props = {
+                r["id"]: r
+                for r in (json.loads(ln) for ln in (kg / "propositions.jsonl").read_text(encoding="utf-8").splitlines() if ln.strip())
+            }
+            self.assertIn(lemma, reloaded_props["cs-binsearch"].get("boundaryConditions", []))
+
+            # 3. ShadowBox Decision Blitz: sealed build + grade + Newman Tier-1 stats
+            blitz = db.build_blitz(n=3, seed=42, workspace=ws, kg_dir=kg, chapters_dir=ch)
+            self.assertTrue(blitz["ok"])
+            self.assertGreaterEqual(len(blitz["items"]), 2)
+            # Sealed key must NOT leak in public blitz payload
+            self.assertNotIn("answerKey", json.dumps(blitz))
+            first_item = blitz["items"][0]
+            self.assertIn("I don't know", json.dumps(first_item))
+
+            # Grade 2 decisions (1 via sealed blitz session, 1 explicit) and verify Newman Tier-1 stats
+            sessions = json.loads((kg / "blitz-sessions.json").read_text(encoding="utf-8"))
+            sealed_key = sessions[blitz["blitzId"]]["items"][first_item["itemId"]]
+            g1 = db.grade_decision(
+                blitz_id=blitz["blitzId"],
+                item_id=first_item["itemId"],
+                kill_cue_answer=sealed_key["killCue"],
+                first_move_answer=sealed_key["firstMove"],
+                rejected_decoy_answer=sealed_key["rejectedDecoy"],
+                decision_ms=11000,
+                workspace=ws,
+                kg_dir=kg,
+            )
+            self.assertTrue(g1["ok"])
+            self.assertEqual(g1["fieldsHit"], 3)
+            self.assertEqual(g1["itemAccuracy"], 1.0)
+            self.assertIn("expertLensDiff", g1)
+
+            g2 = db.grade_decision(
+                prop_id="phys-work-friction",
+                kill_cue_hit=True,
+                first_move_hit=True,
+                decoy_hit=True,
+                decision_ms=15000,
+                workspace=ws,
+                kg_dir=kg,
+            )
+            self.assertTrue(g2["ok"])
+            stats = db.compute_decision_stats(workspace=ws, kg_dir=kg)
+            self.assertEqual(stats["totalDecisions"], 2)
+            self.assertAlmostEqual(stats["medianDecisionSec"], 13.0, places=2)
+            self.assertEqual(stats["speedAccuracyZone"], "expert_fluent")
+
+            # 4. Security hardening (#172 P0.1): falsify_arena & forks reject RCE + 9**9**8 DoS in < 0.5s with zero execution
+            canary = Path(tmp) / "rce_canary.txt"
+            math_ar = fa.create_arena(
+                prop_id="phys-work-spring",
+                domain="math",
+                claim="Check polynomial identity",
+                sealed_reference={"expr": "x + 1"},
+                sealed_mutants=[{"id": "m-bad", "trapTag": "wrong_const", "expr": "x + 2"}],
+                workspace=ws,
+                kg_dir=kg,
+            )
+            rce_payload = f"__import__('os').system('touch {canary}')"
+            open_payload = f"open({str(canary)!r}, 'w').write('pwn')"
+            t0 = time.monotonic()
+            for payload in (rce_payload, open_payload, "9**9**8"):
+                # Arena math input: must reject cleanly without executing or hanging
+                try:
+                    ar_res = fa.test_arena_input(math_ar["id"], json.dumps({"x": payload}), workspace=ws, kg_dir=kg)
+                    self.assertFalse(ar_res.get("allKilled", False))
+                except ValueError:
+                    pass
+                # Fork math move: must reject cleanly without executing or hanging
+                fk_res = fk.check_fork_move(fid, payload, workspace=ws, kg_dir=kg)
+                self.assertFalse(fk_res["correct"])
+            elapsed_sec = time.monotonic() - t0
+            self.assertLess(elapsed_sec, 0.5, f"RCE/DoS guard took too long ({elapsed_sec:.3f}s)")
+            self.assertFalse(canary.exists(), "RCE payload executed in falsify_arena or forks!")
+
+    def test_portable_study_packs_security_and_pocket_deck_qr(self) -> None:
+        import syntopik.packs as pk
+        import syntopik.pocket as po
+
+        with tempfile.TemporaryDirectory(prefix="synt-v2-pack-pocket-") as tmp:
+            t = Path(tmp)
+            ws_src = t / "ws-src"
+            kg_src = ws_src / "knowledge-graph"
+            ch_src = ws_src / "chapters"
+            kg_src.mkdir(parents=True)
+            ch_src.mkdir(parents=True)
+
+            src_props = [
+                {
+                    "id": "shm-root",
+                    "subject": "Physics",
+                    "chapter": "SHM",
+                    "title": "Linear restoring force F = -kx",
+                    "kind": "axiom",
+                    "status": "solid",
+                    "bktMastery": 0.95,
+                    "lapses": 0,
+                    "nextReview": "2026-12-20",
+                    "lastReviewed": "2026-11-25T10:00:00Z",
+                    "notes": "PRIVATE_PERSONAL_NOTE_NEVER_EXPORT",
+                    "fsrs": {"stability": 30.0, "difficulty": 2.0, "due": "2026-12-20T10:00:00+00:00"},
+                },
+                {
+                    "id": "shm-energy",
+                    "subject": "Physics",
+                    "chapter": "SHM",
+                    "title": "Total SHM mechanical energy E = 1/2 k A^2",
+                    "kind": "derivation",
+                    "status": "shaky",
+                    "bktMastery": 0.45,
+                    "nextReview": "2026-11-20",
+                    "fsrs": {"stability": 2.0, "difficulty": 5.5, "due": "2026-11-20T10:00:00+00:00"},
+                },
+            ]
+            (kg_src / "propositions.jsonl").write_text("\n".join(json.dumps(p) for p in src_props) + "\n", encoding="utf-8")
+            (kg_src / "chains.jsonl").write_text(
+                json.dumps({"from": "shm-root", "to": "shm-energy", "relation": "derives"}) + "\n",
+                encoding="utf-8",
+            )
+            (kg_src / "mistakes.jsonl").write_text("", encoding="utf-8")
+
+            # 1. Export Study Pack -> zero PII fields + valid SHA-256 checksums
+            pack_zip = t / "shm.syntopik-pack.zip"
+            exp = pk.export_pack("SHM", workspace=ws_src, kg_dir=kg_src, chapters_dir=ch_src, out_path=pack_zip, author="Test")
+            self.assertTrue(exp["ok"])
+            self.assertTrue(pack_zip.is_file())
+            ver = pk.verify_pack(pack_zip)
+            self.assertTrue(ver["ok"], ver)
+
+            with zipfile.ZipFile(pack_zip, "r") as zf:
+                pack_data_txt = zf.read(pk.DATA_NAME).decode("utf-8")
+            self.assertNotIn("PRIVATE_PERSONAL_NOTE_NEVER_EXPORT", pack_data_txt)
+            pack_data = json.loads(pack_data_txt)
+            for p_item in pack_data["propositions"]:
+                for pii_field in ("fsrs", "bktMastery", "nextReview", "lapses", "notes", "lastReviewed"):
+                    self.assertNotIn(pii_field, p_item, f"PII field {pii_field!r} leaked into exported pack!")
+
+            # 2. Tamper & stripped-checksum rejection (SHA-256 mismatch AND missing checksums both fail closed!)
+            tampered_zip = t / "tampered.syntopik-pack.zip"
+            with zipfile.ZipFile(pack_zip, "r") as zin, zipfile.ZipFile(tampered_zip, "w") as zout:
+                for info in zin.infolist():
+                    data = zin.read(info.filename)
+                    if info.filename == pk.DATA_NAME:
+                        data = data + b" "
+                    zout.writestr(info, data)
+            ver_tamper = pk.verify_pack(tampered_zip)
+            self.assertFalse(ver_tamper["ok"])
+
+            stripped_zip = t / "stripped-checksums.syntopik-pack.zip"
+            with zipfile.ZipFile(pack_zip, "r") as zin, zipfile.ZipFile(stripped_zip, "w") as zout:
+                for info in zin.infolist():
+                    if info.filename == pk.CHECKSUMS_NAME:
+                        continue
+                    data = zin.read(info.filename)
+                    if info.filename == pk.MANIFEST_NAME:
+                        mf = json.loads(data.decode("utf-8"))
+                        mf.pop("sha256", None)
+                        mf.pop("contentSha256", None)
+                        data = json.dumps(mf).encode("utf-8")
+                    zout.writestr(info, data)
+            ver_stripped = pk.verify_pack(stripped_zip)
+            self.assertFalse(ver_stripped["ok"], f"Stripped-checksum ZIP must fail verify_pack: {ver_stripped}")
+
+            # 2b. `export_pack(..., include_exams=True)` excludes personal `*-attempt-*.json` while keeping exam specs
+            ex_src_dir = ws_src / "exams"
+            ex_src_dir.mkdir(parents=True, exist_ok=True)
+            (ex_src_dir / "shm-mock.json").write_text(
+                json.dumps({
+                    "examSlug": "shm-mock",
+                    "title": "SHM Mock",
+                    "subject": "Physics",
+                    "chapter": "SHM",
+                    "questions": [{"id": "Q1", "subject": "Physics", "chapter": "SHM", "stem": "Check T", "answer": "A"}],
+                }),
+                encoding="utf-8",
+            )
+            (ex_src_dir / "shm-attempt-20261126T120000Z.json").write_text(
+                json.dumps({
+                    "examSlug": "shm-mock",
+                    "startedAt": "2026-11-26T12:00:00Z",
+                    "submittedAt": "2026-11-26T12:10:00Z",
+                    "timeSpentSec": 600,
+                    "responses": {"Q1": {"answer": "LEARNER_SECRET_RESPONSE"}},
+                }),
+                encoding="utf-8",
+            )
+            pack_with_exams = t / "shm-exams.syntopik-pack.zip"
+            exp_ex = pk.export_pack(
+                "SHM", workspace=ws_src, kg_dir=kg_src, chapters_dir=ch_src,
+                out_path=pack_with_exams, include_exams=True,
+            )
+            self.assertTrue(exp_ex["ok"])
+            with zipfile.ZipFile(pack_with_exams, "r") as zf:
+                ex_data_txt = zf.read(pk.DATA_NAME).decode("utf-8")
+            self.assertNotIn("LEARNER_SECRET_RESPONSE", ex_data_txt)
+            self.assertNotIn("shm-attempt-", ex_data_txt)
+            self.assertIn("shm-mock", ex_data_txt)
+
+            # 3. Zip-slip rejection
+            zipslip_zip = t / "zipslip.syntopik-pack.zip"
+            with zipfile.ZipFile(zipslip_zip, "w") as zf:
+                zf.writestr("../escape.txt", "pwn")
+            self.assertFalse(pk.verify_pack(zipslip_zip)["ok"])
+
+            # 4. POSIX symlink rejection
+            symlink_zip = t / "symlink.syntopik-pack.zip"
+            with zipfile.ZipFile(symlink_zip, "w") as zf:
+                zi = zipfile.ZipInfo("evil-link")
+                zi.create_system = 3
+                zi.external_attr = (0o120777 << 16)
+                zf.writestr(zi, "/etc/passwd")
+            self.assertFalse(pk.verify_pack(symlink_zip)["ok"])
+
+            # 5. Non-destructive `suspend-all` import preserves existing `solid` FSRS!
+            ws_dst = t / "ws-dst"
+            kg_dst = ws_dst / "knowledge-graph"
+            ch_dst = ws_dst / "chapters"
+            kg_dst.mkdir(parents=True)
+            ch_dst.mkdir(parents=True)
+            existing_solid = {
+                "id": "shm-root",
+                "subject": "Physics",
+                "chapter": "SHM",
+                "title": "Linear restoring force F = -kx",
+                "kind": "axiom",
+                "status": "solid",
+                "bktMastery": 0.96,
+                "fsrs": {"stability": 42.0, "difficulty": 1.8, "due": "2027-01-10T00:00:00+00:00"},
+            }
+            (kg_dst / "propositions.jsonl").write_text(json.dumps(existing_solid) + "\n", encoding="utf-8")
+            (kg_dst / "chains.jsonl").write_text("", encoding="utf-8")
+
+            imp = pk.import_pack(pack_zip, workspace=ws_dst, kg_dir=kg_dst, chapters_dir=ch_dst, mode="suspend-all", no_sync=True)
+            self.assertTrue(imp["ok"])
+            dst_props = {
+                r["id"]: r
+                for r in (json.loads(ln) for ln in (kg_dst / "propositions.jsonl").read_text(encoding="utf-8").splitlines() if ln.strip())
+            }
+            self.assertEqual(dst_props["shm-root"]["status"], "solid")
+            self.assertEqual(dst_props["shm-root"]["fsrs"]["stability"], 42.0)
+            self.assertIn("shm-energy", dst_props)
+            self.assertEqual(dst_props["shm-energy"]["status"], "planned")
+
+            # 6. Zero-CDN Offline Pocket HTML + XSS SVG Sanitization + Idempotent Sync (FSRS + FIRe) + Pure-Stdlib QR
+            xss_prop = dict(src_props[1])
+            xss_prop["svg"] = (
+                '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">'
+                '<script>alert("xss")</script>'
+                '<image href="x" onerror="window.__PWN__=1"/>'
+                '<rect width="50" height="50" fill="#4f46e5"/></svg>'
+            )
+            (kg_src / "propositions.jsonl").write_text(
+                "\n".join(json.dumps(p) for p in [src_props[0], xss_prop]) + "\n",
+                encoding="utf-8",
+            )
+            pocket_html = t / "pocket-review.html"
+            p_exp = po.export_pocket_html(workspace=ws_src, out_path=pocket_html, limit=10, kg_dir=kg_src)
+            self.assertTrue(p_exp["ok"])
+            self.assertTrue(pocket_html.is_file())
+            html_txt = pocket_html.read_text(encoding="utf-8")
+            self.assertIsNone(re.search(r"<(?:script|link)\b[^>]*\b(?:src|href)\s*=\s*['\"]https?://", html_txt, re.I))
+            self.assertIn("shm-energy", html_txt)
+            self.assertNotIn("onerror=", html_txt.lower(), "Pocket HTML failed to strip SVG onerror handler!")
+            self.assertNotIn('alert("xss")', html_txt, "Pocket HTML failed to strip SVG <script> payload!")
+            self.assertIn("data:image/svg+xml", html_txt, "Pocket HTML must render SVG via <img src='data:image/svg+xml,...'>")
+            self.assertIn("<img", html_txt)
+
+            sync_payload = {
+                "schemaVersion": 1,
+                "reviews": [
+                    {
+                        "reviewId": "pkt-rev-001",
+                        "propId": "shm-energy",
+                        "rating": "good",
+                        "confidence": 0.85,
+                        "durationMs": 4000,
+                        "ts": datetime.now(timezone.utc).isoformat(),
+                    }
+                ],
+            }
+            s1 = po.import_pocket_sync(workspace=ws_src, sync_path=sync_payload, kg_dir=kg_src, no_sync=True)
+            self.assertTrue(s1["ok"])
+            self.assertEqual(s1["importedCount"], 1)
+            self.assertEqual(s1["skippedDuplicateCount"], 0)
+            rev_count_1 = len([ln for ln in (kg_src / "revlog.jsonl").read_text(encoding="utf-8").splitlines() if ln.strip()])
+
+            # Re-importing exact same reviewId MUST be idempotent (0 imported, 1 duplicate skipped)
+            s2 = po.import_pocket_sync(workspace=ws_src, sync_path=sync_payload, kg_dir=kg_src, no_sync=True)
+            self.assertTrue(s2["ok"])
+            self.assertEqual(s2["importedCount"], 0)
+            self.assertEqual(s2["skippedDuplicateCount"], 1)
+            rev_count_2 = len([ln for ln in (kg_src / "revlog.jsonl").read_text(encoding="utf-8").splitlines() if ln.strip()])
+            self.assertEqual(rev_count_1, rev_count_2)
+
+            # Pure-stdlib QR encoder (matrix, SVG, ASCII)
+            qr_url = "http://192.168.1.42:4173/pocket?pair=demo-token-123"
+            mat = po.encode_qr_matrix(qr_url)
+            self.assertGreaterEqual(len(mat), 21)
+            self.assertEqual(len(mat), len(mat[0]))
+            svg = po.render_qr_svg(qr_url)
+            self.assertIn("<svg", svg)
+            self.assertIn("<rect", svg)
+            ascii_qr = po.render_qr_ascii(qr_url)
+            self.assertGreaterEqual(len(ascii_qr.splitlines()), 10)
+
+
+class TestLocalStudioServerLive(unittest.TestCase):
+    """26. Syntopik v2.0 2-Way Live Local Studio Server: Security, REST Routes, SSE & LAN Pocket Scoping."""
+
+    def test_local_studio_server_security_routes_sse_and_lan_pocket_scoping(self) -> None:
+        import syntopik.forks as fk
+        import syntopik.server as srv_mod
+
+        fa = load_script_module("falsify_arena.py")
+        ct = load_script_module("chapter_tracker.py")
+
+        def _req(
+            port: int,
+            method: str,
+            path: str,
+            *,
+            headers: dict[str, str] | None = None,
+            body: Any = None,
+        ) -> tuple[int, dict[str, str], bytes]:
+            conn = http.client.HTTPConnection("127.0.0.1", port, timeout=6.0)
+            try:
+                hdrs = dict(headers or {})
+                raw_body: bytes | None = None
+                if body is not None:
+                    raw_body = json.dumps(body).encode("utf-8") if not isinstance(body, (bytes, str)) else (
+                        body.encode("utf-8") if isinstance(body, str) else body
+                    )
+                    hdrs.setdefault("Content-Type", "application/json")
+                conn.request(method, path, body=raw_body, headers=hdrs)
+                resp = conn.getresponse()
+                data = resp.read()
+                resp_hdrs = {k.lower(): v for k, v in resp.getheaders()}
+                return resp.status, resp_hdrs, data
+            finally:
+                conn.close()
+
+        with tempfile.TemporaryDirectory(prefix="synt-v2-server-") as tmp:
+            ws = Path(tmp) / "ws"
+            kg = ws / "knowledge-graph"
+            ch = ws / "chapters"
+            kg.mkdir(parents=True)
+            ch.mkdir(parents=True)
+
+            now = datetime.now(timezone.utc)
+            d_old = (now - timedelta(days=12)).isoformat()
+            d_past = (now - timedelta(days=5)).date().isoformat()
+            props = [
+                {
+                    "id": "p-anc",
+                    "subject": "Physics",
+                    "chapter": "SHM",
+                    "title": "Restoring force law",
+                    "kind": "axiom",
+                    "status": "solid",
+                    "bktMastery": 0.80,
+                    "nextReview": d_past,
+                    "fsrs": {"stability": 3.0, "difficulty": 4.0, "due": d_old, "last_review": d_old},
+                },
+                {
+                    "id": "p-child",
+                    "subject": "Physics",
+                    "chapter": "SHM",
+                    "title": "SHM angular frequency",
+                    "kind": "derivation",
+                    "status": "shaky",
+                    "bktMastery": 0.45,
+                    "nextReview": d_past,
+                    "fsrs": {"stability": 2.0, "difficulty": 5.0, "due": d_old, "last_review": d_old},
+                },
+            ] + [
+                {
+                    "id": f"p-ov-{i}",
+                    "subject": "Physics",
+                    "chapter": "SHM",
+                    "title": f"Overdue item {i}",
+                    "kind": "formula",
+                    "status": "solid",
+                    "nextReview": d_past,
+                    "fsrs": {"stability": 3.0, "difficulty": 5.0, "due": d_old, "last_review": d_old},
+                }
+                for i in range(12)
+            ]
+            (kg / "propositions.jsonl").write_text("\n".join(json.dumps(p) for p in props) + "\n", encoding="utf-8")
+            (kg / "chains.jsonl").write_text(
+                json.dumps({"from": "p-anc", "to": "p-child", "relation": "derives"}) + "\n",
+                encoding="utf-8",
+            )
+            (kg / "mistakes.jsonl").write_text("", encoding="utf-8")
+
+            # Seed tracker, fork, and arena inside /tmp workspace
+            buf_ct = _EncodedStringIO()
+            with contextlib.redirect_stdout(buf_ct):
+                ct.main(["init", "shm", "--title", "SHM", "--subject", "Physics", "--set-active", "--chapters-dir", str(ch), "--kg-dir", str(kg), "--no-sync", "--json"])
+                ct.main([
+                    "add-topics", "shm",
+                    "--json-data", json.dumps([{"id": "t1", "order": 1, "title": "Restoring Law", "level": "basics"}]),
+                    "--chapters-dir", str(ch), "--kg-dir", str(kg), "--no-sync", "--json",
+                ])
+
+            fork_rec = fk.capture_fork(
+                prop_id="p-child",
+                prefix_steps=["F = -kx"],
+                fork_prompt="Write omega",
+                sealed_blunder="k/m",
+                sealed_winning_move="sqrt(k/m)",
+                refutation_msg="Dimensional check: k/m has units s^-2, not s^-1!",
+                verify_spec={"engine": "math"},
+                workspace=ws,
+                kg_dir=kg,
+            )
+            arena_rec = fa.create_arena(
+                prop_id="p-child",
+                domain="code",
+                claim="Return max of non-empty list",
+                entry="my_max",
+                sealed_reference={"code": "def my_max(xs):\n    return max(xs)\n"},
+                sealed_mutants=[{"id": "m-zero", "trapTag": "neg_bug", "code": "def my_max(xs):\n    m = 0\n    for x in xs:\n        if x > m: m = x\n    return m\n"}],
+                assumption_predicates=["len(args[0]) >= 1"],
+                workspace=ws,
+                kg_dir=kg,
+            )
+
+            # 1. Start default loopback Studio server on ephemeral port=0
+            srv = srv_mod.create_server(workspace=ws, host="127.0.0.1", port=0, lan=False)
+            t_srv = threading.Thread(target=srv.serve_forever, kwargs={"poll_interval": 0.05}, daemon=True)
+            t_srv.start()
+            try:
+                port = srv.bound_port
+
+                # (a) GET /api/capabilities
+                st, _h, raw = _req(port, "GET", "/api/capabilities")
+                self.assertEqual(st, 200)
+                cap = json.loads(raw)
+                self.assertTrue(cap["live"])
+                token = cap["token"]
+                self.assertEqual(token, srv.csrf_token)
+
+                # (b) Security gates: missing/wrong X-Syntopik-Token, bad Origin, path traversal -> 403
+                st_no_tok, _, _ = _req(port, "POST", "/api/review", body={"propId": "p-child", "rating": "good"})
+                self.assertEqual(st_no_tok, 403)
+                st_bad_tok, _, _ = _req(
+                    port, "POST", "/api/review",
+                    headers={"X-Syntopik-Token": "wrong-token"},
+                    body={"propId": "p-child", "rating": "good"},
+                )
+                self.assertEqual(st_bad_tok, 403)
+                st_bad_org, _, _ = _req(port, "GET", "/api/state", headers={"Origin": "https://evil.example"})
+                self.assertEqual(st_bad_org, 403)
+                st_trav, _, _ = _req(port, "GET", "/chapters/../../etc/passwd")
+                self.assertEqual(st_trav, 403)
+
+                auth_hdr = {"X-Syntopik-Token": token}
+
+                # (c) GET /api/state
+                st_state, _, raw_state = _req(port, "GET", "/api/state")
+                self.assertEqual(st_state, 200)
+                state_obj = json.loads(raw_state)
+                self.assertTrue(state_obj["ok"])
+                self.assertEqual(state_obj["hub"]["schemaVersion"], 4)
+                self.assertGreaterEqual(state_obj["arenasCount"], 1)
+
+                # (d) SSE /api/events receives ready -> then changed upon POST /api/review
+                sse_events: list[dict[str, Any]] = []
+                sse_ready = threading.Event()
+                sse_changed = threading.Event()
+
+                def _sse_reader() -> None:
+                    c = http.client.HTTPConnection("127.0.0.1", port, timeout=5.0)
+                    try:
+                        c.request("GET", "/api/events")
+                        r = c.getresponse()
+                        while not sse_changed.is_set():
+                            line = r.fp.readline()
+                            if not line:
+                                break
+                            dec = line.decode("utf-8", errors="ignore").strip()
+                            if dec.startswith("data:"):
+                                ev = json.loads(dec[5:].strip())
+                                sse_events.append(ev)
+                                if ev.get("type") == "ready":
+                                    sse_ready.set()
+                                elif ev.get("type") == "changed":
+                                    sse_changed.set()
+                                    break
+                    except Exception:
+                        pass
+                    finally:
+                        c.close()
+
+                t_sse = threading.Thread(target=_sse_reader, daemon=True)
+                t_sse.start()
+                self.assertTrue(sse_ready.wait(timeout=3.0), "SSE stream did not emit ready event")
+
+                # (e) POST /api/review persists propositions.jsonl + revlog.jsonl + FIRe & wakes SSE!
+                st_rev, _, raw_rev = _req(
+                    port, "POST", "/api/review", headers=auth_hdr,
+                    body={"propId": "p-child", "rating": "good", "confidence": 0.9},
+                )
+                self.assertEqual(st_rev, 200, raw_rev)
+                rev_json = json.loads(raw_rev)
+                self.assertTrue(rev_json["ok"])
+                self.assertGreaterEqual(rev_json["fireRefreshedCount"], 1)
+                self.assertTrue((kg / "revlog.jsonl").is_file())
+                self.assertTrue(sse_changed.wait(timeout=3.0), "SSE stream did not receive changed event on POST /api/review")
+                t_sse.join(timeout=2.0)
+
+                # (f) POST /api/recover
+                st_rec, _, raw_rec = _req(port, "POST", "/api/recover", headers=auth_hdr, body={"dailyCap": 4, "days": 5})
+                self.assertEqual(st_rec, 200, raw_rec)
+                rec_json = json.loads(raw_rec)
+                self.assertTrue(rec_json["applied"])
+                self.assertGreaterEqual(rec_json["rescheduledCount"], 1)
+
+                # (g) POST /api/exam/submit -> 3-bucket autopsy & persists attempts/mistakes
+                opts = [{"id": "A", "text": "A"}, {"id": "B", "text": "B"}]
+                st_ex, _, raw_ex = _req(
+                    port, "POST", "/api/exam/submit", headers=auth_hdr,
+                    body={
+                        "examSlug": "srv-mock",
+                        "spec": {
+                            "examSlug": "srv-mock",
+                            "title": "Server Mock",
+                            "durationMinutes": 10,
+                            "questions": [
+                                {"id": "Q1", "type": "single_correct", "subject": "Physics", "chapter": "SHM", "propId": "p-child", "stem": "Q1", "options": opts, "answer": "A"},
+                                {"id": "Q2", "type": "single_correct", "subject": "Physics", "chapter": "SHM", "trapCategory": "misconception", "stem": "Q2", "options": opts, "answer": "B"},
+                            ],
+                        },
+                        "attempt": {
+                            "examSlug": "srv-mock",
+                            "timeSpentSec": 90,
+                            "responses": {
+                                "Q1": {"answer": "A", "status": "answered", "timeSpentSec": 40},
+                                "Q2": {"answer": "A", "status": "answered", "timeSpentSec": 50},
+                            },
+                        },
+                    },
+                )
+                self.assertEqual(st_ex, 200, raw_ex)
+                ex_json = json.loads(raw_ex)
+                self.assertTrue(ex_json["ok"])
+                self.assertIn("knowledge", ex_json["autopsy"])
+                self.assertIn("execution", ex_json["autopsy"])
+                self.assertIn("time_sink", ex_json["autopsy"])
+                self.assertTrue((kg / "exam-attempts.jsonl").is_file())
+                self.assertTrue((kg / "mistakes.jsonl").read_text(encoding="utf-8").strip())
+
+                # (h) POST /api/tracker/topic & POST /api/tracker/milestone
+                st_tp, _, raw_tp = _req(
+                    port, "POST", "/api/tracker/topic", headers=auth_hdr,
+                    body={"slug": "shm", "topicId": "t1", "status": "mastered"},
+                )
+                self.assertEqual(st_tp, 200, raw_tp)
+                self.assertEqual(json.loads(raw_tp)["status"], "mastered")
+
+                st_ms, _, raw_ms = _req(
+                    port, "POST", "/api/tracker/milestone", headers=auth_hdr,
+                    body={"slug": "shm", "key": "probed", "value": True},
+                )
+                self.assertEqual(st_ms, 200, raw_ms)
+                self.assertTrue(json.loads(raw_ms)["milestones"]["probed"])
+
+                # (i) POST /api/forks/check & POST /api/arena/submit
+                st_fk, _, raw_fk = _req(
+                    port, "POST", "/api/forks/check", headers=auth_hdr,
+                    body={"forkId": fork_rec["id"], "move": "k/m", "latencyMs": 5000},
+                )
+                self.assertEqual(st_fk, 200, raw_fk)
+                fk_json = json.loads(raw_fk)
+                self.assertTrue(fk_json["repeatedBlunder"])
+                self.assertIsNone(fk_json["winningMove"])
+
+                st_ar, _, raw_ar = _req(
+                    port, "POST", "/api/arena/submit", headers=auth_hdr,
+                    body={"arenaId": arena_rec["id"], "input": [[-5, -2]]},
+                )
+                self.assertEqual(st_ar, 200, raw_ar)
+                ar_json = json.loads(raw_ar)
+                self.assertIn("m-zero", ar_json["killed"])
+                self.assertEqual(ar_json["survivedCount"], 0)
+
+                # (j) Wave 3A hardening (#172): /demos/ jail, forged Host, unknown ID 404, downloadable pack export
+                st_leak_srv, _, _ = _req(port, "GET", "/demos/syntopik/server.py")
+                self.assertIn(st_leak_srv, (403, 404))
+                st_leak_kg, _, _ = _req(port, "GET", "/demos/knowledge-graph/propositions.jsonl")
+                self.assertIn(st_leak_kg, (403, 404))
+                st_cbt, _, raw_cbt = _req(port, "GET", "/demos/exam-cbt-template.html")
+                self.assertEqual(st_cbt, 200)
+                self.assertIn(b"<!DOCTYPE html>", raw_cbt)
+
+                st_bad_host, _, _ = _req(port, "GET", "/api/capabilities", headers={"Host": "[::1]evil.com"})
+                self.assertEqual(st_bad_host, 403)
+
+                st_fk_404, _, _ = _req(
+                    port, "POST", "/api/forks/check", headers=auth_hdr,
+                    body={"forkId": "fork-does-not-exist", "move": "1"},
+                )
+                self.assertEqual(st_fk_404, 404)
+                st_ar_404, _, _ = _req(
+                    port, "POST", "/api/arena/submit", headers=auth_hdr,
+                    body={"arenaId": "arena-does-not-exist", "input": [1]},
+                )
+                self.assertEqual(st_ar_404, 404)
+
+                st_pk_exp, _, raw_pk_exp = _req(
+                    port, "POST", "/api/pack/export", headers=auth_hdr,
+                    body={"target": "SHM"},
+                )
+                self.assertEqual(st_pk_exp, 200, raw_pk_exp)
+                pk_json = json.loads(raw_pk_exp)
+                self.assertTrue(str(pk_json.get("url", "")).startswith("/chapters/"), pk_json)
+                st_pk_dl, _, raw_pk_dl = _req(port, "GET", pk_json["url"])
+                self.assertEqual(st_pk_dl, 200)
+                self.assertTrue(raw_pk_dl.startswith(b"PK\x03\x04"))
+            finally:
+                srv.shutdown()
+                srv.server_close()
+                t_srv.join(timeout=3.0)
+
+            # 2. Opt-in `--lan` server: one-time QR pair cookie strictly scoped to `/pocket`, `/api/pocket/state`, `POST /api/review/batch`
+            srv_lan = srv_mod.create_server(workspace=ws, host="127.0.0.1", port=0, lan=True)
+            t_lan = threading.Thread(target=srv_lan.serve_forever, kwargs={"poll_interval": 0.05}, daemon=True)
+            t_lan.start()
+            try:
+                lport = srv_lan.bound_port
+                pair_tok = srv_lan.pair_token
+                self.assertTrue(pair_tok)
+                lan_host = f"192.168.1.99:{lport}"
+
+                # Unpaired LAN client blocked on /api/pocket/state
+                st_unp, _, _ = _req(lport, "GET", "/api/pocket/state", headers={"Host": lan_host})
+                self.assertEqual(st_unp, 403)
+
+                # One-time pair token -> 302 + HttpOnly SameSite=Lax cookie
+                st_pair, hdrs_pair, _ = _req(lport, "GET", f"/pocket?pair={pair_tok}", headers={"Host": lan_host})
+                self.assertEqual(st_pair, 302)
+                set_cookie = hdrs_pair.get("set-cookie", "")
+                self.assertIn("syntopik_pocket_session=", set_cookie)
+                self.assertIn("HttpOnly", set_cookie)
+                cookie_pair = set_cookie.split(";", 1)[0]
+
+                # Second reuse of one-time pair token MUST be rejected (403)
+                st_reuse, _, _ = _req(lport, "GET", f"/pocket?pair={pair_tok}", headers={"Host": lan_host})
+                self.assertEqual(st_reuse, 403)
+
+                # POST /api/export/pocket rotates a fresh valid pair token after the first is consumed!
+                st_rot, _, raw_rot = _req(
+                    lport, "POST", "/api/export/pocket",
+                    headers={"X-Syntopik-Token": srv_lan.csrf_token},
+                    body={"limit": 10},
+                )
+                self.assertEqual(st_rot, 200, raw_rot)
+                rot_json = json.loads(raw_rot)
+                rot_url = str(rot_json.get("lanUrl") or "")
+                self.assertIn("pair=", rot_url)
+                rot_tok = urllib.parse.parse_qs(urllib.parse.urlsplit(rot_url).query).get("pair", [""])[0]
+                self.assertTrue(rot_tok and rot_tok != pair_tok)
+                st_pair2, hdrs_pair2, _ = _req(lport, "GET", f"/pocket?pair={rot_tok}", headers={"Host": lan_host})
+                self.assertEqual(st_pair2, 302)
+                self.assertIn("syntopik_pocket_session=", hdrs_pair2.get("set-cookie", ""))
+
+                # Valid LAN cookie succeeds ONLY on the 3 Pocket routes
+                st_pkt, _, raw_pkt = _req(lport, "GET", "/pocket", headers={"Host": lan_host, "Cookie": cookie_pair})
+                self.assertEqual(st_pkt, 200)
+                self.assertIn(b"<!DOCTYPE html>", raw_pkt)
+
+                st_ps, _, raw_ps = _req(lport, "GET", "/api/pocket/state", headers={"Host": lan_host, "Cookie": cookie_pair})
+                self.assertEqual(st_ps, 200)
+                self.assertTrue(json.loads(raw_ps)["ok"])
+
+                st_rb, _, raw_rb = _req(
+                    lport, "POST", "/api/review/batch",
+                    headers={"Host": lan_host, "Origin": f"http://{lan_host}", "Cookie": cookie_pair},
+                    body={"reviews": [{"reviewId": "lan-rev-1", "propId": "p-child", "rating": "good"}]},
+                )
+                self.assertEqual(st_rb, 200, raw_rb)
+                self.assertTrue(json.loads(raw_rb)["ok"])
+
+                # STRICT SCOPE GUARD: LAN cookie MUST get 403 on `/api/state` and `POST /api/import`!
+                st_blk_state, _, _ = _req(lport, "GET", "/api/state", headers={"Host": lan_host, "Cookie": cookie_pair})
+                self.assertEqual(st_blk_state, 403)
+                st_blk_imp, _, _ = _req(
+                    lport, "POST", "/api/import",
+                    headers={"Host": lan_host, "Origin": f"http://{lan_host}", "Cookie": cookie_pair},
+                    body={"target": "https://example.org"},
+                )
+                self.assertEqual(st_blk_imp, 403)
+            finally:
+                srv_lan.shutdown()
+                srv_lan.server_close()
+                t_lan.join(timeout=3.0)
+
+
+class TestPackagingAttachAndAmbientMcp(unittest.TestCase):
+    """27. Syntopik v2.0 Packaging Manifests, Non-Destructive `syntopik attach`, & 17-Tool Ambient/Parsons MCP."""
+
+    def test_packaging_manifests_cli_and_non_destructive_git_attach(self) -> None:
+        import syntopik.cli as cli_mod
+
+        # 1. Validate pyproject.toml (zero required deps, Python >=3.12, hatchling force-include)
+        pyp = tomllib.loads((ROOT / "pyproject.toml").read_text(encoding="utf-8"))
+        self.assertEqual(pyp["project"]["name"], "syntopik")
+        self.assertEqual(pyp["project"]["version"], "2.0.0")
+        self.assertEqual(pyp["project"]["dependencies"], [])
+        self.assertEqual(pyp["project"]["scripts"]["syntopik"], "syntopik.cli:main")
+        force_inc = pyp["tool"]["hatch"]["build"]["targets"]["wheel"]["force-include"]
+        self.assertIn("scripts", force_inc)
+
+        # 2. Validate package.json + bin/syntopik.mjs --help / --version
+        pkg = json.loads((ROOT / "package.json").read_text(encoding="utf-8"))
+        self.assertEqual(pkg["name"], "syntopik")
+        self.assertEqual(pkg["version"], "2.0.0")
+        self.assertEqual(pkg["dependencies"], {})
+        self.assertEqual(pkg["bin"]["syntopik"], "./bin/syntopik.mjs")
+
+        h_proc = run_cli(["node", str(ROOT / "bin" / "syntopik.mjs"), "--help"])
+        self.assertEqual(h_proc.returncode, 0, h_proc.stderr)
+        self.assertIn("syntopik", h_proc.stdout.lower())
+        v_proc = run_cli(["node", str(ROOT / "bin" / "syntopik.mjs"), "--version"])
+        self.assertEqual(v_proc.returncode, 0, v_proc.stderr)
+        self.assertIn("2.0.0", v_proc.stdout)
+
+        # 3. Validate .claude-plugin/{marketplace,plugin,hooks}.json & gemini-extension.json
+        cp_mkt = json.loads((ROOT / ".claude-plugin" / "marketplace.json").read_text(encoding="utf-8"))
+        cp_plg = json.loads((ROOT / ".claude-plugin" / "plugin.json").read_text(encoding="utf-8"))
+        cp_hks = json.loads((ROOT / ".claude-plugin" / "hooks.json").read_text(encoding="utf-8"))
+        gem_ext = json.loads((ROOT / "gemini-extension.json").read_text(encoding="utf-8"))
+
+        self.assertEqual(cp_mkt["name"], "syntopik")
+        self.assertEqual(cp_plg["version"], "2.0.0")
+        self.assertTrue(cp_plg["skills"].startswith("./"))
+        self.assertIn("SessionStart", cp_hks["hooks"])
+        self.assertIn("PostToolUse", cp_hks["hooks"])
+        self.assertEqual(gem_ext["name"], "syntopik")
+        self.assertEqual(gem_ext["contextFileName"], "GEMINI.md")
+
+        # 4. Non-destructive `syntopik attach` on dummy /tmp git repos (Python CLI + Node CLI)
+        host_agents = "# Existing Host Repo AGENTS.md — DO NOT MODIFY\n"
+        host_claude = "# Existing Host Repo CLAUDE.md — DO NOT MODIFY\n"
+        host_gitignore = "*.log\ndist/\n"
+
+        with tempfile.TemporaryDirectory(prefix="synt-v2-attach-") as tmp:
+            for mode_name in ("python", "node"):
+                repo = Path(tmp) / f"host-{mode_name}"
+                repo.mkdir(parents=True)
+                self.assertEqual(subprocess.run(["git", "init", "-q"], cwd=str(repo), check=False).returncode, 0)
+                subprocess.run(["git", "config", "user.email", "test@example.com"], cwd=str(repo), check=True)
+                subprocess.run(["git", "config", "user.name", "Syntopik Test"], cwd=str(repo), check=True)
+                (repo / "AGENTS.md").write_text(host_agents, encoding="utf-8")
+                (repo / "CLAUDE.md").write_text(host_claude, encoding="utf-8")
+                (repo / ".gitignore").write_text(host_gitignore, encoding="utf-8")
+                subprocess.run(["git", "add", "."], cwd=str(repo), check=True)
+                subprocess.run(["git", "commit", "-q", "-m", "initial"], cwd=str(repo), check=True)
+
+                if mode_name == "python":
+                    att = cli_mod.attach_workspace(repo, harness="auto", vault="local")
+                    self.assertTrue(att["ok"])
+                else:
+                    p_att = run_cli(["node", str(ROOT / "bin" / "syntopik.mjs"), "attach", str(repo), "--vault", "local", "--json"])
+                    self.assertEqual(p_att.returncode, 0, p_att.stderr)
+                    self.assertTrue(json.loads(p_att.stdout)["ok"])
+
+                # Host files 100% preserved byte-for-byte & `git status --short` completely EMPTY!
+                self.assertEqual((repo / "AGENTS.md").read_text(encoding="utf-8"), host_agents)
+                self.assertEqual((repo / "CLAUDE.md").read_text(encoding="utf-8"), host_claude)
+                self.assertEqual((repo / ".gitignore").read_text(encoding="utf-8"), host_gitignore)
+                st_out = subprocess.check_output(["git", "status", "--short"], cwd=str(repo), text=True)
+                self.assertEqual(st_out.strip(), "", f"{mode_name} attach polluted git status: {st_out!r}")
+                excl = (repo / ".git" / "info" / "exclude").read_text(encoding="utf-8")
+                self.assertIn(".syntopik/", excl)
+                self.assertTrue((repo / ".syntopik" / "knowledge-graph" / "propositions.jsonl").is_file())
+
+            # 5. Wave 3A CLI/Attach parity (#172 P0.5 & P1.9): `syntopik.cli sync --json` strict JSON & Node `attach --harness gemini`
+            gem_repo = Path(tmp) / "host-gemini-node"
+            gem_repo.mkdir(parents=True)
+            self.assertEqual(subprocess.run(["git", "init", "-q"], cwd=str(gem_repo), check=False).returncode, 0)
+            subprocess.run(["git", "config", "user.email", "test@example.com"], cwd=str(gem_repo), check=True)
+            subprocess.run(["git", "config", "user.name", "Syntopik Test"], cwd=str(gem_repo), check=True)
+            (gem_repo / "README.md").write_text("# Host\n", encoding="utf-8")
+            subprocess.run(["git", "add", "."], cwd=str(gem_repo), check=True)
+            subprocess.run(["git", "commit", "-q", "-m", "initial"], cwd=str(gem_repo), check=True)
+
+            p_gem = run_cli([
+                "node", str(ROOT / "bin" / "syntopik.mjs"),
+                "attach", str(gem_repo), "--harness", "gemini", "--vault", "local", "--json",
+            ])
+            self.assertEqual(p_gem.returncode, 0, p_gem.stderr)
+            self.assertTrue(json.loads(p_gem.stdout)["ok"])
+            gem_settings = gem_repo / ".gemini" / "settings.json"
+            self.assertTrue(gem_settings.is_file(), "Node attach --harness gemini did not write .gemini/settings.json")
+            self.assertIn("syntopik-studio", json.loads(gem_settings.read_text(encoding="utf-8")).get("mcpServers", {}))
+            self.assertEqual(subprocess.check_output(["git", "status", "--short"], cwd=str(gem_repo), text=True).strip(), "")
+
+            sync_ws = gem_repo / ".syntopik"
+            p_sync = run_cli([
+                sys.executable, "-B", "-m", "syntopik.cli",
+                "sync", "--workspace", str(sync_ws), "--json",
+            ])
+            self.assertEqual(p_sync.returncode, 0, p_sync.stderr)
+            sync_parsed = json.loads(p_sync.stdout)
+            self.assertTrue(sync_parsed.get("ok"), sync_parsed)
+
+    def test_mcp_stdio_v2_17_tools_ambient_and_parsons_zero_leak(self) -> None:
+        server_mjs = ROOT / "mcp-app" / "mlh-studio" / "dist" / "server.mjs"
+        self.assertTrue(server_mjs.is_file())
+
+        with tempfile.TemporaryDirectory(prefix="synt-v2-mcp-") as tmp:
+            t = Path(tmp)
+            ws = t / "ws"  # Deliberately NO ws/scripts/ -> tests PACKAGE_ROOT fallback!
+            kg = ws / "knowledge-graph"
+            ch = ws / "chapters"
+            kg.mkdir(parents=True)
+            ch.mkdir(parents=True)
+            (kg / "propositions.jsonl").write_text(
+                json.dumps({
+                    "id": "cs-base-heap",
+                    "subject": "CS",
+                    "chapter": "Graphs",
+                    "title": "Binary min-heap extract-min invariant",
+                    "kind": "axiom",
+                    "status": "solid",
+                    "bktMastery": 0.85,
+                    "nextReview": "2020-01-01",
+                }) + "\n",
+                encoding="utf-8",
+            )
+            (kg / "chains.jsonl").write_text("", encoding="utf-8")
+            (kg / "mistakes.jsonl").write_text("", encoding="utf-8")
+            data_dir = t / "mcp-data"
+
+            secret_sol = "SECRET_PARSONS_SOLUTION_9182"
+            reqs = [
+                {
+                    "jsonrpc": "2.0",
+                    "id": 1,
+                    "method": "initialize",
+                    "params": {
+                        "protocolVersion": "2024-11-05",
+                        "capabilities": {},  # Terminal non-UI mode!
+                        "clientInfo": {"name": "syntopik-v2-unittest", "version": "2.0"},
+                    },
+                },
+                {"jsonrpc": "2.0", "method": "notifications/initialized"},
+                {"jsonrpc": "2.0", "id": 2, "method": "tools/list", "params": {}},
+                {
+                    "jsonrpc": "2.0",
+                    "id": 3,
+                    "method": "tools/call",
+                    "params": {
+                        "name": "synt_capture_concept",
+                        "arguments": {
+                            "id": "cs-dijkstra-relax",
+                            "title": "Dijkstra greedy edge relaxation invariant",
+                            "statement": "With non-negative weights, popped vertex distance is final.",
+                            "subject": "CS",
+                            "chapter": "Graphs",
+                            "cuePrompt": "Why do negative edges break Dijkstra?",
+                            "cueAnswer": "A later negative edge can lower an already-popped vertex distance.",
+                            "premises": ["cs-base-heap"],
+                        },
+                    },
+                },
+                {
+                    "jsonrpc": "2.0",
+                    "id": 4,
+                    "method": "tools/call",
+                    "params": {
+                        "name": "synt_capture_concept",
+                        "arguments": {
+                            "title": "Dijkstra greedy edge relaxation invariant",
+                            "statement": "Duplicate title capture should deduplicate.",
+                            "subject": "CS",
+                            "chapter": "Graphs",
+                        },
+                    },
+                },
+                {
+                    "jsonrpc": "2.0",
+                    "id": 5,
+                    "method": "tools/call",
+                    "params": {
+                        "name": "synt_log_review",
+                        "arguments": {
+                            "propId": "cs-dijkstra-relax",
+                            "rating": "good",
+                            "confidence": 85,
+                            "durationMs": 3200,
+                        },
+                    },
+                },
+                {
+                    "jsonrpc": "2.0",
+                    "id": 6,
+                    "method": "tools/call",
+                    "params": {
+                        "name": "synt_get_frontier",
+                        "arguments": {"limit": 10, "compress": True},
+                    },
+                },
+                {
+                    "jsonrpc": "2.0",
+                    "id": 7,
+                    "method": "tools/call",
+                    "params": {
+                        "name": "synt_practice_card",
+                        "arguments": {
+                            "action": "pose",
+                            "problemId": "parsons-dijkstra-1",
+                            "mode": "parsons",
+                            "statement": "Order the valid Dijkstra relaxation steps (omit the distractor).",
+                            "blocks": [
+                                {"id": "blk-pop", "code": "d, u = heappop(pq)", "indent": 0},
+                                {"id": "blk-skip", "code": "if d > dist[u]: continue", "indent": 0},
+                                {"id": "blk-dist", "code": "if d < dist[u]: break", "indent": 0, "isDistractor": True},
+                            ],
+                            "canonicalOrder": ["blk-pop", "blk-skip"],
+                            "modelSolution": secret_sol,
+                        },
+                    },
+                },
+                {
+                    "jsonrpc": "2.0",
+                    "id": 8,
+                    "method": "tools/call",
+                    "params": {
+                        "name": "synt_practice_card",
+                        "arguments": {
+                            "action": "conclude",
+                            "problemId": "parsons-dijkstra-1",
+                            "outcome": "solved",
+                            "verdict": "Exact stale-entry guard chosen.",
+                            "rung": None,
+                        },
+                    },
+                },
+            ]
+
+            proc = run_cli(
+                ["node", str(server_mjs), f"--workspace={ws}", f"--data-dir={data_dir}"],
+                stdin_text="\n".join(json.dumps(r) for r in reqs) + "\n",
+                timeout=15.0,
+            )
+            self.assertEqual(proc.returncode, 0, proc.stderr)
+            by_id = {
+                int(m["id"]): m
+                for m in (json.loads(ln) for ln in proc.stdout.splitlines() if ln.strip())
+                if "id" in m
+            }
+
+            # 1. Exact 17 tools & single com.google.antigravity/ui entrypoint ONLY on synt_lesson_studio
+            tools = by_id[2]["result"]["tools"]
+            self.assertEqual(len(tools), 17)
+            tool_names = {tl["name"] for tl in tools}
+            for ambient in ("synt_capture_concept", "synt_get_frontier", "synt_log_review"):
+                self.assertIn(ambient, tool_names)
+            ep_tools = [
+                tl["name"]
+                for tl in tools
+                if tl.get("_meta", {}).get("com.google.antigravity/ui", {}).get("entrypoints")
+            ]
+            self.assertEqual(ep_tools, ["synt_lesson_studio"])
+
+            # 2. synt_capture_concept creates + deduplicates
+            cap1 = by_id[3]["result"]
+            self.assertFalse(cap1.get("isError", False), cap1)
+            self.assertEqual(cap1["structuredContent"]["id"], "cs-dijkstra-relax")
+            self.assertTrue(cap1["structuredContent"]["cueAdded"])
+            self.assertTrue(cap1["structuredContent"]["chainAdded"])
+
+            cap2 = by_id[4]["result"]
+            self.assertFalse(cap2.get("isError", False), cap2)
+            self.assertTrue(cap2["structuredContent"]["deduplicated"])
+
+            # 3. synt_log_review persists revlog.jsonl
+            rev_r = by_id[5]["result"]
+            self.assertFalse(rev_r.get("isError", False), rev_r)
+            self.assertTrue((kg / "revlog.jsonl").is_file())
+
+            # 4. synt_get_frontier returns due items & calibration summary
+            fr_r = by_id[6]["result"]
+            self.assertFalse(fr_r.get("isError", False), fr_r)
+            self.assertEqual(fr_r["structuredContent"]["kind"], "synt_frontier")
+
+            # 5. Parsons pose in terminal mode: ZERO leak of modelSolution, canonicalOrder, or isDistractor!
+            pose_r = by_id[7]["result"]
+            self.assertFalse(pose_r.get("isError", False), pose_r)
+            pose_dump = json.dumps(pose_r)
+            self.assertNotIn(secret_sol, pose_dump, "Parsons pose leaked modelSolution!")
+            self.assertNotIn("canonicalOrder", pose_dump, "Parsons pose leaked canonicalOrder!")
+            self.assertNotIn("isDistractor", pose_dump, "Parsons pose leaked isDistractor!")
+            self.assertEqual(len(pose_r["structuredContent"]["blocks"]), 3)
+            self.assertTrue(pose_r["structuredContent"]["terminalFallback"])
+
+            # 6. Parsons conclude reveals canonicalOrder & modelSolution verbatim
+            conc_r = by_id[8]["result"]
+            self.assertFalse(conc_r.get("isError", False), conc_r)
+            self.assertEqual(conc_r["structuredContent"]["modelSolution"], secret_sol)
+            self.assertEqual(conc_r["structuredContent"]["canonicalOrder"], ["blk-pop", "blk-skip"])
+
+
+class TestV2ContextDietAndHygiene(unittest.TestCase):
+    """28. Syntopik v2.0 Context-Budget Diet, 17-Skill YAML Budget, Zero Leaks/Pycache & Live SHM Integrity."""
+
+    def test_v2_context_diet_skills_hygiene_no_pycache_and_shm_intact(self) -> None:
+        # 1. Combined AGENTS.md + GEMINI.md <= 7,500 B (v2.0 Context-Budget Diet)
+        agents_raw = (ROOT / "AGENTS.md").read_bytes()
+        gemini_raw = (ROOT / "GEMINI.md").read_bytes()
+        combined = len(agents_raw) + len(gemini_raw)
+        self.assertLessEqual(combined, 7500, f"AGENTS.md + GEMINI.md ({combined} B) exceeds 7,500 B v2.0 budget")
+        self.assertFalse(agents_raw.decode("utf-8").lstrip().startswith("---"))
+        self.assertFalse(gemini_raw.decode("utf-8").lstrip().startswith("---"))
+
+        # 2. Exact 17/17 valid skills with total YAML description bytes < 3,600 B
+        skill_files = sorted(SKILLS_DIR.glob("*/SKILL.md"))
+        self.assertEqual(len(skill_files), 17)
+        total_desc_bytes = 0
+        for sk in skill_files:
+            fm = parse_yaml_frontmatter(sk.read_text(encoding="utf-8"))
+            self.assertIsNotNone(fm, f"{sk} missing YAML frontmatter")
+            assert fm is not None
+            self.assertEqual(fm.get("name"), sk.parent.name)
+            desc = fm.get("description", "")
+            self.assertGreaterEqual(len(desc), 15)
+            self.assertNotIn("<", desc)
+            self.assertNotIn(">", desc)
+            total_desc_bytes += len(desc.encode("utf-8"))
+        self.assertLess(total_desc_bytes, 3600, f"17-skill YAML descriptions ({total_desc_bytes} B) >= 3,600 B ceiling")
+
+        # 3. Zero /Users/ (or personal home) leaks across tracked + non-ignored repo files
+        personal_re = re.compile(
+            r"(?:/Users/[A-Za-z0-9._-]+(?:/|[\"'\s]|$)|/home/[A-Za-z0-9._-]+(?:/|[\"'\s]|$)|C:\\Users\\[A-Za-z0-9._-]+\\)"
+        )
+        tracked = run_cli(["git", "ls-files"]).stdout.splitlines()
+        untracked = run_cli(["git", "ls-files", "--others", "--exclude-standard"]).stdout.splitlines()
+        leaks: list[str] = []
+        for rel in sorted(set(tracked + untracked)):
+            if not rel or rel.startswith((".venv/", ".git/", "node_modules/", "mcp-app/mlh-studio/node_modules/")):
+                continue
+            p = ROOT / rel
+            if not p.is_file() or p.is_symlink():
+                continue
+            raw = p.read_bytes()
+            if b"\x00" in raw[:4096]:
+                continue
+            if personal_re.search(raw.decode("utf-8", errors="ignore")):
+                leaks.append(rel)
+        self.assertEqual(leaks, [], f"Personal path leaks detected: {leaks}")
+
+        # 4. Zero __pycache__ directories anywhere outside .venv / node_modules
+        stray_pycache: list[str] = []
+        for dirpath, dirnames, _ in os.walk(ROOT):
+            rel_dir = Path(dirpath).relative_to(ROOT)
+            parts = rel_dir.parts
+            if parts and parts[0] in (".venv", ".git", "node_modules"):
+                dirnames[:] = []
+                continue
+            if "node_modules" in parts:
+                dirnames[:] = []
+                continue
+            if "__pycache__" in dirnames:
+                stray_pycache.append(str(rel_dir / "__pycache__"))
+        self.assertEqual(stray_pycache, [], f"Stray __pycache__ directories found outside .venv: {stray_pycache}")
+
+        # 5. Live SHM files never tracked in git; when present locally, verify 4/4 live SHM files + 4/4 extracted dirs intact
+        live_shm_files = [
+            ROOT / "chapters" / "shm-tracker.json",
+            ROOT / "knowledge-graph" / "propositions.jsonl",
+            ROOT / "knowledge-graph" / "mistakes.jsonl",
+            ROOT / "knowledge-graph" / "review-queue.md",
+        ]
+        tracked_set = set(tracked)
+        for lf in live_shm_files:
+            self.assertNotIn(str(lf.relative_to(ROOT)), tracked_set)
+
+        if live_shm_files[0].is_file():
+            for lf in live_shm_files:
+                self.assertTrue(lf.is_file() and lf.stat().st_size > 0, f"Live SHM file missing or empty: {lf}")
+            shm_tracker = json.loads(live_shm_files[0].read_text(encoding="utf-8"))
+            self.assertEqual(shm_tracker.get("slug"), "shm")
+            self.assertEqual(len(shm_tracker.get("topics", [])), 10)
+            self.assertEqual(len(shm_tracker.get("questions", [])), 172)
+            shm_props = [
+                json.loads(ln)
+                for ln in live_shm_files[1].read_text(encoding="utf-8").splitlines()
+                if ln.strip()
+            ]
+            self.assertGreaterEqual(len(shm_props), 3)
+            shm_extracted = ROOT / "sources" / "_extracted"
+            if shm_extracted.is_dir():
+                for dname in (
+                    "426-simple-harmonic-motion-shm-simple-harmonic-motion-module",
+                    "eduniti-pyqs",
+                    "shm",
+                    "shm-final",
+                ):
+                    dp_dir = shm_extracted / dname
+                    self.assertTrue(dp_dir.is_dir() and any(dp_dir.iterdir()), f"Live SHM extracted dir missing: {dp_dir}")
 
 
 if __name__ == "__main__":

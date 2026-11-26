@@ -55,6 +55,7 @@ const state = {
   fcShowAll: false,
   fcIndex: 0,
   fcRevealed: false,
+  fcUnmaskedIds: new Set(),
   fcRatingBusy: false,
   fcToast: "",
   fcToastKind: "info",
@@ -383,9 +384,19 @@ async function rateActiveFlashcard(card, rating) {
       if (Array.isArray(sc.flashcards)) state.flashcards = sc.flashcards;
       const rev = sc.review || {};
       const bktPct = typeof rev.bktMastery === "number" ? ` · BKT ${Math.round(rev.bktMastery * 100)}%` : "";
-      state.fcToast = `Rated "${rating}" · next review ${rev.nextReview || "updated"}${bktPct} (0 model tokens)`;
+      const fireCount = Array.isArray(rev.fireCredits)
+        ? rev.fireCredits.length
+        : Array.isArray(sc.fireCredits)
+          ? sc.fireCredits.length
+          : Number(rev.fireRefreshedCount || sc.fireRefreshedCount || 0);
+      const fireText =
+        fireCount > 0
+          ? ` · FIRe refreshed ${fireCount} prerequisite${fireCount === 1 ? "" : "s"}`
+          : "";
+      state.fcToast = `Rated "${rating}" · next ${rev.nextReview || "updated"}${bktPct}${fireText}`;
       state.fcToastKind = "success";
       state.fcRevealed = false;
+      state.fcUnmaskedIds = new Set();
       const deck = getActiveFlashcardDeck();
       if (state.fcIndex >= deck.length) state.fcIndex = 0;
     }
@@ -850,6 +861,170 @@ function renderGraphList(listWrap) {
   }
 }
 
+function extractOcclusionSpec(card) {
+  if (!card || typeof card !== "object") return null;
+  const media = card.cue?.media || card.media || null;
+  const rawOcc =
+    card.cue?.occlusion ||
+    media?.occlusion ||
+    card.occlusion ||
+    (Array.isArray(media?.masks) ? media : null);
+  if (!rawOcc) return null;
+
+  let masks = [];
+  let src = media?.src || "";
+  let dataUri = media?.dataUri || "";
+  let width = Number(media?.width || 0);
+  let height = Number(media?.height || 0);
+  let mode = media?.mode || "hide_all";
+
+  if (Array.isArray(rawOcc)) {
+    masks = rawOcc;
+  } else if (typeof rawOcc === "object") {
+    masks = Array.isArray(rawOcc.masks) ? rawOcc.masks : [];
+    if (rawOcc.src) src = rawOcc.src;
+    if (rawOcc.dataUri) dataUri = rawOcc.dataUri;
+    if (rawOcc.width) width = Number(rawOcc.width);
+    if (rawOcc.height) height = Number(rawOcc.height);
+    if (rawOcc.mode) mode = rawOcc.mode;
+  }
+
+  const normalizedMasks = masks
+    .filter((m) => m && typeof m === "object")
+    .map((m, idx) => {
+      const bbox = Array.isArray(m.bbox) && m.bbox.length >= 4
+        ? m.bbox.map((v) => Number(v) || 0)
+        : [Number(m.x) || 0, Number(m.y) || 0, Number(m.w ?? m.width) || 0, Number(m.h ?? m.height) || 0];
+      return {
+        id: String(m.id || `m${idx + 1}`),
+        bbox,
+        label: String(m.label || m.answer || m.text || m.id || `Region ${idx + 1}`),
+        propId: m.propId ? String(m.propId) : null,
+      };
+    })
+    .filter((m) => m.bbox[2] > 0 && m.bbox[3] > 0);
+
+  if (normalizedMasks.length === 0) return null;
+  return {
+    src,
+    dataUri,
+    width: width > 0 ? width : 640,
+    height: height > 0 ? height : 360,
+    mode,
+    masks: normalizedMasks,
+  };
+}
+
+function renderOcclusionWidget(occSpec) {
+  const wrap = document.createElement("div");
+  wrap.className = "io-stage";
+
+  const W = occSpec.width;
+  const H = occSpec.height;
+  const allNormalized = occSpec.masks.every(
+    ({ bbox: [x, y, w, h] }) => x >= 0 && y >= 0 && x + w <= 1.05 && y + h <= 1.05
+  );
+
+  const revealedCount = occSpec.masks.filter(
+    (m) => state.fcRevealed || state.fcUnmaskedIds.has(m.id)
+  ).length;
+
+  const bar = document.createElement("div");
+  bar.className = "io-toolbar";
+  const info = document.createElement("span");
+  info.className = "subtle";
+  info.textContent = `Image Occlusion · ${revealedCount}/${occSpec.masks.length} revealed (click masks to inspect)`;
+
+  const toggleAllBtn = document.createElement("button");
+  toggleAllBtn.type = "button";
+  toggleAllBtn.className = "btn btn-sm";
+  const allOpen = revealedCount === occSpec.masks.length;
+  toggleAllBtn.textContent = allOpen ? "Re-mask" : "Reveal all";
+  toggleAllBtn.addEventListener("click", () => {
+    if (allOpen) {
+      state.fcUnmaskedIds = new Set();
+    } else {
+      state.fcUnmaskedIds = new Set(occSpec.masks.map((m) => m.id));
+    }
+    render();
+  });
+  bar.append(info, toggleAllBtn);
+  wrap.append(bar);
+
+  const hasBgImage = Boolean(occSpec.dataUri);
+  const svgParts = [];
+  if (hasBgImage) {
+    svgParts.push(
+      `<image href="${escapeHtml(occSpec.dataUri)}" x="0" y="0" width="${W}" height="${H}" preserveAspectRatio="xMidYMid meet" />`
+    );
+  } else {
+    svgParts.push(
+      `<rect x="1" y="1" width="${W - 2}" height="${H - 2}" rx="8" fill="var(--mlh-bg)" stroke="var(--mlh-border)" stroke-width="1.5"/>`
+    );
+    if (occSpec.src) {
+      svgParts.push(
+        `<text x="14" y="22" font-size="11" font-family="var(--mlh-mono)" fill="var(--mlh-fg-3)">${escapeHtml(occSpec.src)}</text>`
+      );
+    }
+  }
+
+  for (let i = 0; i < occSpec.masks.length; i += 1) {
+    const m = occSpec.masks[i];
+    const [rx, ry, rw, rh] = allNormalized
+      ? [m.bbox[0] * W, m.bbox[1] * H, m.bbox[2] * W, m.bbox[3] * H]
+      : m.bbox;
+    const isRevealed = state.fcRevealed || state.fcUnmaskedIds.has(m.id);
+    const shortLabel = m.label.length > 26 ? `${m.label.slice(0, 25)}…` : m.label;
+    const maskCls = `io-mask-group${isRevealed ? " io-mask-revealed" : ""}${hasBgImage ? " io-mask-over-img" : " io-mask-no-img"}`;
+    const maskText = !isRevealed || !hasBgImage
+      ? `<text x="${rx + rw / 2}" y="${ry + rh / 2 + 4}" text-anchor="middle" font-size="12" font-weight="600" fill="${isRevealed ? "var(--mlh-fg-success)" : "var(--mlh-fg-inv)"}">${escapeHtml(isRevealed ? shortLabel : `${i + 1} · ?`)}</text>`
+      : "";
+    svgParts.push(
+      `<g class="${maskCls}" data-mask-id="${escapeHtml(m.id)}" role="button" tabindex="0" aria-label="${escapeHtml(isRevealed ? `Revealed: ${m.label}` : `Reveal occluded region ${i + 1}`)}">` +
+        `<rect class="io-mask-rect" x="${rx}" y="${ry}" width="${rw}" height="${rh}" rx="6"/>` +
+        maskText +
+        `</g>`
+    );
+  }
+
+  const svgBox = document.createElement("div");
+  svgBox.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${W} ${H}" width="100%" style="height:auto;display:block;border-radius:7px">${svgParts.join("")}</svg>`;
+
+  const toggleMask = (maskId) => {
+    if (state.fcUnmaskedIds.has(maskId)) state.fcUnmaskedIds.delete(maskId);
+    else state.fcUnmaskedIds.add(maskId);
+    render();
+  };
+  svgBox.querySelectorAll(".io-mask-group").forEach((g) => {
+    const mid = g.getAttribute("data-mask-id");
+    g.addEventListener("click", () => toggleMask(mid));
+    g.addEventListener("keydown", (ev) => {
+      if (ev.key === "Enter" || ev.key === " ") {
+        ev.preventDefault();
+        toggleMask(mid);
+      }
+    });
+  });
+  wrap.append(svgBox);
+
+  const revealedMasks = occSpec.masks.filter(
+    (m) => state.fcRevealed || state.fcUnmaskedIds.has(m.id)
+  );
+  if (revealedMasks.length > 0) {
+    const legend = document.createElement("div");
+    legend.className = "row";
+    for (const m of revealedMasks) {
+      const pill = document.createElement("span");
+      pill.className = "badge badge-success";
+      pill.textContent = `${m.id}: ${m.label}`;
+      legend.append(pill);
+    }
+    wrap.append(legend);
+  }
+
+  return wrap;
+}
+
 function renderFlashcardsTab(container) {
   const deck = getActiveFlashcardDeck();
   const topBar = document.createElement("div");
@@ -870,6 +1045,7 @@ function renderFlashcardsTab(container) {
     state.fcShowAll = !state.fcShowAll;
     state.fcIndex = 0;
     state.fcRevealed = false;
+    state.fcUnmaskedIds = new Set();
     render();
   });
   topBar.append(leftInfo, modeBtn);
@@ -907,6 +1083,11 @@ function renderFlashcardsTab(container) {
   qEl.className = "stem";
   qEl.innerHTML = renderRichText(card.cue?.q || card.title);
   fc.append(qEl);
+
+  const occSpec = extractOcclusionSpec(card);
+  if (occSpec) {
+    fc.append(renderOcclusionWidget(occSpec));
+  }
 
   if (!state.fcRevealed) {
     const flipBtn = document.createElement("button");
@@ -956,6 +1137,7 @@ function renderFlashcardsTab(container) {
           state.fcToast = `Rated "${r.label}" locally (standalone preview).`;
           state.fcToastKind = "info";
           state.fcRevealed = false;
+          state.fcUnmaskedIds = new Set();
           state.fcIndex = (state.fcIndex + 1) % deck.length;
           render();
         }
@@ -977,6 +1159,7 @@ function renderFlashcardsTab(container) {
     prev.addEventListener("click", () => {
       state.fcIndex = (state.fcIndex - 1 + deck.length) % deck.length;
       state.fcRevealed = false;
+      state.fcUnmaskedIds = new Set();
       render();
     });
     const next = document.createElement("button");
@@ -986,6 +1169,7 @@ function renderFlashcardsTab(container) {
     next.addEventListener("click", () => {
       state.fcIndex = (state.fcIndex + 1) % deck.length;
       state.fcRevealed = false;
+      state.fcUnmaskedIds = new Set();
       render();
     });
     nav.append(prev, next);

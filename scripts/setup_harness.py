@@ -65,18 +65,22 @@ _None active._
 MINIMAL_GRAPH_DATA_JS = (
     "// Auto-generated fallback by scripts/setup_harness.py when Node.js is unavailable.\n"
     'window.__STUDY_GRAPH__ = {"propositions":[],"chains":[],"normalizedEdges":[],"chainCount":0};\n'
-    'window.__STUDY_HUB__ = {"schemaVersion":3,"generatedAt":"","today":"","workspaceName":"Syntopik",'
+    'window.__STUDY_HUB__ = {"schemaVersion":4,"generatedAt":"","today":"","workspaceName":"Syntopik",'
     '"stats":{"totalNodes":0,"totalEdges":0,"chainCount":0,"hyperedgeCount":0,'
     '"counts":{"solid":0,"shaky":0,"misconception":0,"planned":0,"other":0},'
     '"avgBktMastery":null,"bktTrackedCount":0,"dueCount":0,"subjects":[],"chaptersCount":0,'
     '"revisionSheetsCount":0,"trackersCount":0,"activeChapterPct":null,"audioBriefsCount":0,'
     '"demosCount":0,"animationsCount":0,"sourcesCount":0,"mistakesCount":0,"examsCount":0,'
-    '"examAttemptsCount":0,"harnessLogCount":0},'
+    '"examAttemptsCount":0,"harnessLogCount":0,"revlogCount":0,"leechesCount":0,'
+    '"readingQueueCount":0,"brierScore":null},'
     '"dueItems":[],"reviewQueueMarkdown":"","chapters":[],"chapterTrackers":[],"activeChapterTracker":null,'
     '"audioBriefs":[],"demos":[],"animations":[],"sources":[],"mistakes":[],'
     '"mistakeStats":{"total":0,"byCategory":[],"byChapter":[],"bySubject":[]},'
-    '"examAttempts":[],"examFiles":[],"examStats":{"totalAttempts":0,"avgPercentage":null,"latest":null},'
-    '"harnessLog":[]};\n'
+    '"examAttempts":[],"examFiles":[],"examStats":{"attemptsCount":0,"avgPct":null,"latestAttempt":null},'
+    '"harnessLog":[],'
+    '"retentionHeatmap":{"windowDays":365,"startDate":"","endDate":"","totalEvents":0,"activeDays":0,"maxDailyCount":0,"byDate":{},"days":[]},'
+    '"calibration":{"sampleCount":0,"totalReviews":0,"brierScore":null,"overconfidenceBias":null,"accuracy":null,"meanConfidence":null,"ece":null,"hypercorrectionCount":0,"luckyGuessCount":0},'
+    '"leeches":[],"readingQueue":[]};\n'
 )
 
 
@@ -846,12 +850,23 @@ def build_parser() -> argparse.ArgumentParser:
     p_mcp.add_argument("--status-only", action="store_true", help="Check MCP installation status without modifying ~/.gemini")
     p_mcp.add_argument("--target", default=None, help="Optional custom plugin installation directory (for sandbox testing)")
 
+    p_att = sub.add_parser("attach", parents=[common], help="Non-destructively attach Syntopik to any repository (delegates to syntopik.cli)")
+    p_att.add_argument("target_dir", nargs="?", default=".", help="Target repository directory")
+    p_att.add_argument(
+        "--harness",
+        choices=["auto", "all", "claude", "cursor", "windsurf", "copilot", "codex", "antigravity", "opencode", "gemini"],
+        default="auto",
+        help="Target harness adapter(s) to wire",
+    )
+    p_att.add_argument("--vault", choices=["global", "local"], default="global", help="Study vault location")
+    p_att.add_argument("--copy-skills", action="store_true", help="Copy .agents/skills instead of symlinking")
+
     return parser
 
 
 def main(argv: list[str] | None = None) -> int:
     raw_argv = list(sys.argv[1:] if argv is None else argv)
-    known_cmds = {"auto", "status", "init-data", "configure", "install-mcp", "-h", "--help"}
+    known_cmds = {"auto", "status", "init-data", "configure", "install-mcp", "attach", "-h", "--help"}
     if not raw_argv or (raw_argv[0].startswith("-") and not any(tok in known_cmds for tok in raw_argv)):
         raw_argv = ["auto", *raw_argv]
 
@@ -891,6 +906,22 @@ def main(argv: list[str] | None = None) -> int:
         mcp_res = run_install_mcp(ws, action=action, target_dir=getattr(args, "target", None))
         report["ok"] = bool(mcp_res.get("ok"))
         report["mcp"] = mcp_res
+        report["capabilities"] = inspect_capabilities(ws)
+    elif cmd == "attach":
+        root_str = str(ROOT)
+        if root_str not in sys.path:
+            sys.path.insert(0, root_str)
+        from syntopik.cli import attach_workspace
+
+        att_res = attach_workspace(
+            args.target_dir,
+            harness=args.harness,
+            vault=args.vault,
+            copy_skills=bool(getattr(args, "copy_skills", False)),
+        )
+        report["attach"] = att_res
+        report["ok"] = bool(att_res.get("ok", True))
+        report["workspace"] = str(att_res.get("targetDir", ws))
         report["capabilities"] = inspect_capabilities(ws)
     else:
         parser.error(f"Unknown command: {cmd}")

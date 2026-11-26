@@ -1,0 +1,15 @@
+{
+  "name": "syntopik",
+  "displayName": "Syntopik",
+  "version": "2.0.0",
+  "description": "Universal AI Deep-Mastery OS with FSRS-6 hypergraph, deterministic verification, and SEP-1865 Studio cards.",
+  "author": {
+    "name": "Hriday Kapoor",
+    "url": "https://github.com/HridayKapoor"
+  },
+  "license": "MIT",
+  "repository": "https://github.com/HridayKapoor/syntopik",
+  "skills": "./.agents/skills",
+  "hooks": "./.claude-plugin/hooks.json",
+  "mcpServers": "./.mcp.json"
+}

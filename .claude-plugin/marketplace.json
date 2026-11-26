@@ -1,0 +1,31 @@
+{
+  "$schema": "https://json.schemastore.org/claude-code-marketplace.json",
+  "name": "syntopik",
+  "description": "Local-first AI Deep-Mastery OS: FSRS-6 + BKT knowledge hypergraph, deterministic STEM/CS verifiers, calm tutoring, and offline CBT exams.",
+  "owner": {
+    "name": "Hriday Kapoor",
+    "url": "https://github.com/HridayKapoor"
+  },
+  "metadata": {
+    "version": "2.0.0",
+    "pluginRoot": "./"
+  },
+  "plugins": [
+    {
+      "name": "syntopik",
+      "displayName": "Syntopik",
+      "description": "17 mastery skills, SEP-1865 Studio MCP App, and live Knowledge Graph hooks.",
+      "version": "2.0.0",
+      "source": "./",
+      "category": "learning",
+      "tags": [
+        "learning",
+        "fsrs",
+        "knowledge-graph",
+        "stem",
+        "cs",
+        "tutor"
+      ]
+    }
+  ]
+}

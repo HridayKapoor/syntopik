@@ -573,7 +573,7 @@ export function bootstrapMcpApp(appName, { onToolInput, onToolResult, onToolCanc
     window.matchMedia("(prefers-color-scheme: dark)").matches;
   applyDocumentTheme(prefersDark ? "dark" : "light");
 
-  const app = new App({ name: appName, version: "1.0.0" }, {});
+  const app = new App({ name: appName, version: "2.0.0" }, {});
   let connected = false;
 
   const applyHostCtx = (ctx) => {

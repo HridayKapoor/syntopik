@@ -25,6 +25,12 @@ import unicodedata
 from pathlib import Path
 from typing import Any
 
+ROOT = Path(__file__).resolve().parent.parent
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
+
+from syntopik.storage import save_json_atomic  # noqa: E402
+
 import pymupdf as fitz
 import pymupdf4llm
 
@@ -924,11 +930,15 @@ def _resolve_marks_px(marks: list[dict[str, Any]], width: int, height: int) -> l
         color = str(raw.get("color") or default_colors[mtype]).strip()
         label = str(raw.get("label") if raw.get("label") is not None else raw.get("text", "")).strip()
         dashed = bool(raw.get("dashed", False))
+        mark_id = str(raw.get("id") or f"m{idx + 1}").strip()
+        prop_id = str(raw.get("propId") or raw.get("prop_id") or "").strip()
 
         if mtype == "arrow":
             x1, y1 = _resolve_xy(raw.get("from"), width, height, coords, "from")
             x2, y2 = _resolve_xy(raw.get("to"), width, height, coords, "to")
             resolved.append({
+                "id": mark_id,
+                "propId": prop_id,
                 "type": "arrow",
                 "from": (x1, y1),
                 "to": (x2, y2),
@@ -945,6 +955,8 @@ def _resolve_marks_px(marks: list[dict[str, Any]], width: int, height: int) -> l
             x0, x1 = (rx0, rx1) if rx0 <= rx1 else (rx1, rx0)
             y0, y1 = (ry0, ry1) if ry0 <= ry1 else (ry1, ry0)
             resolved.append({
+                "id": mark_id,
+                "propId": prop_id,
                 "type": "box",
                 "rect": (x0, y0, x1, y1),
                 "label": label,
@@ -956,6 +968,8 @@ def _resolve_marks_px(marks: list[dict[str, Any]], width: int, height: int) -> l
             r_raw = float(raw.get("r", 0.06 if coords == "norm" else 36.0))
             r_px = r_raw if coords == "px" else r_raw * min_dim
             resolved.append({
+                "id": mark_id,
+                "propId": prop_id,
                 "type": "circle",
                 "center": (cx, cy),
                 "r": max(4.0, r_px),
@@ -969,6 +983,8 @@ def _resolve_marks_px(marks: list[dict[str, Any]], width: int, height: int) -> l
             if anchor not in ("start", "middle", "end"):
                 anchor = "start"
             resolved.append({
+                "id": mark_id,
+                "propId": prop_id,
                 "type": "label",
                 "at": (ax, ay),
                 "text": label,
@@ -1468,6 +1484,83 @@ def _build_annotated_html(svg_text: str, title: str | None = None, marks_count: 
 """
 
 
+def _build_occlusion_spec(
+    src_path: str,
+    width: int,
+    height: int,
+    marks_px: list[dict[str, Any]],
+    *,
+    mode: str = "hide_one",
+) -> dict[str, Any]:
+    """Build declarative SVG occlusion JSON (`masks: [{id, bbox, label, propId}]`) from marks."""
+    w_f = float(max(1, width))
+    h_f = float(max(1, height))
+    metrics = _annotation_metrics(width, height)
+    fs = metrics["font_size"]
+
+    masks: list[dict[str, Any]] = []
+    for idx, m in enumerate(marks_px, start=1):
+        mtype = m["type"]
+        if mtype == "box":
+            x0, y0, x1, y1 = m["rect"]
+        elif mtype == "circle":
+            cx, cy = m["center"]
+            r = m["r"]
+            x0, y0, x1, y1 = cx - r, cy - r, cx + r, cy + r
+        elif mtype == "arrow":
+            tx, ty = m["to"]
+            pad = max(18.0, fs * 1.1)
+            x0, y0, x1, y1 = tx - pad, ty - pad, tx + pad, ty + pad
+        else:  # label
+            ax, ay = m["at"]
+            txt = str(m.get("text") or "")
+            est_w = max(48.0, len(txt) * fs * 0.62)
+            est_h = max(24.0, fs * 1.4)
+            anchor = m.get("anchor", "start")
+            if anchor == "middle":
+                x0 = ax - est_w / 2.0
+            elif anchor == "end":
+                x0 = ax - est_w
+            else:
+                x0 = ax
+            y0 = ay - fs
+            x1, y1 = x0 + est_w, y0 + est_h
+
+        x0_c = max(0.0, min(w_f - 1.0, x0))
+        y0_c = max(0.0, min(h_f - 1.0, y0))
+        x1_c = max(x0_c + 1.0, min(w_f, x1))
+        y1_c = max(y0_c + 1.0, min(h_f, y1))
+        bw = x1_c - x0_c
+        bh = y1_c - y0_c
+
+        label_text = str(m.get("text") if mtype == "label" else m.get("label") or "").strip()
+        masks.append(
+            {
+                "id": str(m.get("id") or f"m{idx}"),
+                "bbox": [
+                    round(x0_c / w_f, 4),
+                    round(y0_c / h_f, 4),
+                    round(bw / w_f, 4),
+                    round(bh / h_f, 4),
+                ],
+                "bboxPx": [round(x0_c, 1), round(y0_c, 1), round(bw, 1), round(bh, 1)],
+                "label": label_text,
+                "propId": str(m.get("propId") or ""),
+            }
+        )
+
+    occ_mode = str(mode or "hide_one").strip().lower()
+    if occ_mode not in ("hide_one", "hide_all"):
+        occ_mode = "hide_one"
+    return {
+        "src": src_path,
+        "width": width,
+        "height": height,
+        "mode": occ_mode,
+        "masks": masks,
+    }
+
+
 def cmd_annotate(args: argparse.Namespace) -> None:
     """Crop a PDF figure (or load an image) and overlay high-contrast white-halo SVG + PNG + HTML marks."""
     from PIL import Image
@@ -1521,6 +1614,7 @@ def cmd_annotate(args: argparse.Namespace) -> None:
         raise SystemExit(f"--out must end in .svg or .png (got '{out_path.name}')")
 
     svg_text = _build_annotated_svg(base_png_bytes, width, height, marks_px, title=args.title)
+    want_occlude = bool(getattr(args, "occlude", False))
 
     png_verify_path: str | None = None
     if out_ext == ".svg":
@@ -1528,6 +1622,10 @@ def cmd_annotate(args: argparse.Namespace) -> None:
         out_path.write_text(svg_text, encoding="utf-8")
         if args.out_png:
             p_png = Path(args.out_png).expanduser().resolve()
+            _rasterize_annotated_png(base_img, marks_px, p_png)
+            png_verify_path = str(p_png)
+        elif want_occlude:
+            p_png = out_path.with_suffix(".png")
             _rasterize_annotated_png(base_img, marks_px, p_png)
             png_verify_path = str(p_png)
     else:
@@ -1549,7 +1647,31 @@ def cmd_annotate(args: argparse.Namespace) -> None:
         )
         html_embed_path = str(p_html)
 
-    payload = {
+    occlusion_json_path: str | None = None
+    occlusion_spec: dict[str, Any] | None = None
+    if want_occlude:
+        occ_out_arg = getattr(args, "occlude_out", None)
+        occ_path = (
+            Path(occ_out_arg).expanduser().resolve()
+            if occ_out_arg
+            else out_path.with_name(f"{out_path.stem}.occlude.json")
+        )
+        # Save clean unannotated base PNG alongside occlusion JSON so masks cover clean image regions.
+        clean_base_path = out_path.with_name(f"{out_path.stem}.base.png")
+        clean_base_path.parent.mkdir(parents=True, exist_ok=True)
+        base_img.save(str(clean_base_path), format="PNG")
+        occ_spec = _build_occlusion_spec(
+            str(clean_base_path),
+            width,
+            height,
+            marks_px,
+            mode=str(getattr(args, "occlude_mode", "hide_one") or "hide_one"),
+        )
+        save_json_atomic(occ_path, occ_spec)
+        occlusion_json_path = str(occ_path)
+        occlusion_spec = occ_spec
+
+    payload: dict[str, Any] = {
         "source": source_desc,
         "width": width,
         "height": height,
@@ -1558,6 +1680,9 @@ def cmd_annotate(args: argparse.Namespace) -> None:
         "pngVerify": png_verify_path,
         "htmlEmbed": html_embed_path,
     }
+    if occlusion_json_path is not None:
+        payload["occlusionJson"] = occlusion_json_path
+        payload["occlusion"] = occlusion_spec
     print(json.dumps(payload, indent=2, ensure_ascii=False))
 
 
@@ -1624,6 +1749,9 @@ def main() -> None:
     p_ann.add_argument("--out", required=True, help="Output file path (.svg or .png)")
     p_ann.add_argument("--out-png", help="Optional Pillow rasterized verification PNG path for read_file Vision check")
     p_ann.add_argument("--out-html", help="Optional flush, zero-CDN HTML embed path ready for <agent-embed>")
+    p_ann.add_argument("--occlude", action="store_true", help="Emit declarative SVG occlusion JSON (masks: [{id, bbox, label, propId}]) alongside white-halo PNG")
+    p_ann.add_argument("--occlude-out", help="Optional output path for occlusion JSON (default: <out_stem>.occlude.json)")
+    p_ann.add_argument("--occlude-mode", choices=["hide_one", "hide_all"], default="hide_one", help="Image occlusion masking mode (default: hide_one)")
     p_ann.add_argument("--title", help="Optional figure title/caption")
     p_ann.add_argument("--json", action="store_true", help="Emit JSON summary to stdout (default)")
     p_ann.set_defaults(func=cmd_annotate)

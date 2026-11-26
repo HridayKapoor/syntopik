@@ -1,16 +1,16 @@
 ---
 name: visual-and-demo
 description: >-
-  Render live inline interactive HTML widgets, verified geometric SVG diagrams,
-  algorithm/system visualizations, exact SymPy coordinate/3D plots
-  (scripts/math_plot.py), and annotated PDF figures across Antigravity
-  generative_ui, Claude Artifacts, T3 Code, and offline demos/ archives. Never
-  show an unverified visual.
+  Render verified inline interactive HTML labs, geometric SVGs, algorithm
+  traces, exact SymPy 2D/3D plots, and annotated PDF figures across Antigravity,
+  Claude Artifacts, T3 Code, and offline archives.
 ---
 
 # Visual & Interactive Demo Builder — Anti-Split-Attention, Verified Every Time
 
 A visual earns its place **only** when geometry, state transitions, data-structure mutation, or dynamic parameter sweeps make an invariant obvious in 3 seconds better than prose. **Correctness is non-negotiable**: one flipped vector, wrong pointer edge, overlapping label, or broken slider poisons intuition.
+
+*(Portable CLI: prefer `syntopik run <engine> ...` in attached repos, or `.venv/bin/python -B scripts/<engine>.py ...` in direct clones.)*
 
 ---
 
@@ -32,9 +32,9 @@ Pick the highest visual tier supported by your active harness (`BOOTSTRAP.md`), 
 2. **Surface B — T3 Code (`html_preview` → `html_render`) & Claude Desktop Artifacts**:
    - Preview via `html_preview` (verifying PNG + zero console errors) and publish via `html_render` with the exact `contentHeight` (or emit a self-contained zero-CDN HTML Artifact in Claude Desktop).
 3. **Surface C — Claude Code CLI, OpenAI Codex CLI & Any Terminal/IDE Harness**:
-   - Save a **100% offline zero-CDN** interactive HTML lab to `demos/<slug>.html` (using Syntopik's calm *Warm Obsidian* `#111315` / *Archival Vellum* `#F7F5F0` Dark/Light toggle) + render crisp static `.png`/`.svg` figures (`math_plot.py`, `physics_draw.py`, `circuit_draw.py`, `chem_3d.py`, `pdf_studio.py annotate`) + inline Mermaid (`graph TD`, `sequenceDiagram`, `stateDiagram-v2`), providing a clickable `file://` link to `demos/<slug>.html`.
+   - Save a **100% offline zero-CDN** interactive HTML lab to `demos/<slug>.html` (using Syntopik's calm *Warm Obsidian* `#111315` / *Archival Vellum* `#F7F5F0` Dark/Light toggle) + render crisp static `.png`/`.svg` figures (`math_plot`, `physics_draw`, `circuit_draw`, `chem_3d`, `pdf_studio annotate [--occlude]`) + inline Mermaid (`graph TD`, `sequenceDiagram`, `stateDiagram-v2`), providing a clickable `file://` link to `demos/<slug>.html`.
 4. **Permanent Offline Hub Archive (`demos/<slug>.html`)**:
-   - Regardless of harness, save reusable interactive labs (zero external CDN tags!) to `demos/<slug>.html` so `dashboard.html` (**Interactive Labs**) preserves them 100% offline.
+   - Regardless of harness, save reusable interactive labs (zero external CDN tags!) to `demos/<slug>.html` so `dashboard.html` and `syntopik serve` (**Interactive Labs**) preserve them 100% offline.
 
 ---
 
@@ -42,14 +42,14 @@ Pick the highest visual tier supported by your active harness (`BOOTSTRAP.md`), 
 
 - **Coordinate Geometry, Argand, Integrals, 3D Skew Lines & Functions (`scripts/math_plot.py`)**:
   ```bash
-  .venv/bin/python -B scripts/math_plot.py conic --type ellipse --a 4 --b 2.5 --tangent-t 45 --show-director --show-normal --out demos/ellipse.html --json
-  .venv/bin/python -B scripts/math_plot.py argand --loci "circle:1+2j,3;perp-bisector:0,4" --points "0;1+2j;4" --out demos/argand.png --json
-  .venv/bin/python -B scripts/math_plot.py integral --expr "sin(x)" --a 0 --b "2*pi" --out demos/integral.html --json
-  .venv/bin/python -B scripts/math_plot.py vector3d --lines "0,0,0|1,1,0;0,0,2|1,-1,0" --out demos/skew-3d.html --json
-  .venv/bin/python -B scripts/math_plot.py func --exprs "x**3 - 3*x" --xmin -3 --xmax 3 --mark-roots --mark-extrema --mark-inflection --out demos/cubic.png --json
+  syntopik run math_plot conic --type ellipse --a 4 --b 2.5 --tangent-t 45 --show-director --show-normal --out demos/ellipse.html --json
+  syntopik run math_plot argand --loci "circle:1+2j,3;perp-bisector:0,4" --points "0;1+2j;4" --out demos/argand.png --json
+  syntopik run math_plot integral --expr "sin(x)" --a 0 --b "2*pi" --out demos/integral.html --json
+  syntopik run math_plot vector3d --lines "0,0,0|1,1,0;0,0,2|1,-1,0" --out demos/skew-3d.html --json
+  syntopik run math_plot func --exprs "x**3 - 3*x" --xmin -3 --xmax 3 --mark-roots --mark-extrema --mark-inflection --out demos/cubic.png --json
   ```
-- **CS / Algorithms / ML Visualizers**: step-by-step interactive Canvas/SVG visualizers (Raft log replication, B-tree splits, DP table fill, attention weights, gradient descent trajectories) — pre-verify reference traces via `scripts/code_verify.py`!
-- **Physics, Circuits, Chemistry & PDF Crops**: `scripts/physics_draw.py`, `scripts/circuit_draw.py`, `scripts/chem_3d.py`, `scripts/organic_reagents.py`, `scripts/pdf_studio.py annotate`.
+- **CS / Algorithms / ML Visualizers**: step-by-step interactive Canvas/SVG visualizers (Raft log replication, B-tree splits, DP table fill, attention weights, gradient descent trajectories) — pre-verify reference traces via `code_verify.py`!
+- **Physics, Circuits, Chemistry & PDF Crops**: `physics_draw.py`, `circuit_draw.py`, `chem_3d.py`, `organic_reagents.py`, `pdf_studio.py annotate [--occlude]`.
 
 ---
 

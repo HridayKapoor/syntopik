@@ -63,8 +63,12 @@ jobs:
         run: |
           python3 -B -W error::SyntaxWarning - <<'PY'
           import pathlib, py_compile, tempfile, warnings
-          py_files = sorted(pathlib.Path("scripts").glob("*.py")) + sorted(pathlib.Path("tests").glob("*.py"))
-          assert len(py_files) >= 25, f"Expected >=25 Python files, found {len(py_files)}"
+          py_files = (
+              sorted(pathlib.Path("syntopik").glob("*.py"))
+              + sorted(pathlib.Path("scripts").glob("*.py"))
+              + sorted(pathlib.Path("tests").glob("*.py"))
+          )
+          assert len(py_files) >= 43, f"Expected >=43 Python files, found {len(py_files)}"
           with tempfile.TemporaryDirectory(prefix="synt-ci-pyc-") as tmp:
               tmp_dir = pathlib.Path(tmp)
               for idx, path in enumerate(py_files):
@@ -74,10 +78,29 @@ jobs:
           print(f"py_compile OK ({len(py_files)} files, 0 SyntaxWarnings)")
           PY
           node --check \
+            bin/syntopik.mjs \
             .agents/hooks/session-start.mjs \
             .agents/hooks/post-graph-sync.mjs \
             scripts/sync-graph.mjs \
             mcp-app/mlh-studio/dist/server.mjs
+
+      - name: Unified CLI & Node wrapper smoke check
+        run: |
+          python3 -B - <<'PY'
+          import json, subprocess, sys
+          proc = subprocess.run(
+              [sys.executable, "-B", "-m", "syntopik.cli", "doctor", "--core-only", "--json"],
+              capture_output=True, text=True, check=False,
+          )
+          assert proc.returncode == 0, f"syntopik.cli doctor failed ({proc.returncode}): {proc.stderr}\n{proc.stdout}"
+          report = json.loads(proc.stdout)
+          assert report.get("healthy") is True, f"Unhealthy CLI doctor: {report.get('summary')}"
+          assert report["summary"]["warn"] == 0, f"CLI doctor warnings: {report['summary']}"
+          assert report["summary"]["fail"] == 0, f"CLI doctor failures: {report['summary']}"
+          print(f"syntopik.cli doctor OK ({report['summary']['ok']}/{report['summary']['total']} ok)")
+          PY
+          node bin/syntopik.mjs --help > /dev/null
+          node bin/syntopik.mjs --version
 
       - name: Pure-stdlib & Node sandboxed unittest suite
         env:
@@ -87,6 +110,7 @@ jobs:
             test_harness.TestSyntaxAndCLI.test_all_python_scripts_compile_without_syntax_warnings \
             test_harness.TestSyntaxAndCLI.test_all_node_scripts_syntax_check \
             test_harness.TestHooksSkillsBudget \
+            test_harness.TestExamRunner \
             test_harness.TestMcpAppStudio \
             test_harness.TestP3BackupAndHubSync \
             test_harness.TestSelfImproveAndDoctor.test_p0_and_p1_skills_exist_with_valid_frontmatter \
@@ -94,8 +118,15 @@ jobs:
             test_harness.TestSetupHarnessFreshClone \
             test_harness.TestCodeVerifyEngine \
             test_harness.TestResearchScout \
+            test_harness.TestUniversalAutopilot \
             test_harness.TestTriProtocolHooksAndMcp \
-            test_harness.TestGitHubHygieneAndPortability
+            test_harness.TestGitHubHygieneAndPortability \
+            test_harness.TestFireCalibrationAndStdlibCore \
+            test_harness.TestUniversalIngestObsidianAndPedagogy \
+            test_harness.TestMoonshotEnginesAndPocketPacks \
+            test_harness.TestLocalStudioServerLive \
+            test_harness.TestPackagingAttachAndAmbientMcp \
+            test_harness.TestV2ContextDietAndHygiene
 
       - name: Public release hygiene & config gate
         run: |
@@ -117,6 +148,15 @@ jobs:
               "knowledge-graph/chains.jsonl",
               "knowledge-graph/mistakes.jsonl",
               "knowledge-graph/exam-attempts.jsonl",
+              "knowledge-graph/exam-config.json",
+              "knowledge-graph/study-config.json",
+              "knowledge-graph/revlog.jsonl",
+              "knowledge-graph/fsrs-params.json",
+              "knowledge-graph/reading-queue.jsonl",
+              "knowledge-graph/forks.jsonl",
+              "knowledge-graph/arenas.jsonl",
+              "knowledge-graph/decisions.jsonl",
+              "knowledge-graph/blitz-sessions.json",
               "knowledge-graph/review-queue.md",
               "knowledge-graph/graph-data.js",
           }
@@ -152,13 +192,19 @@ jobs:
               assert len(raw) < 24576, f"{name} exceeds 24 KB limit"
               assert not raw.decode("utf-8").lstrip().startswith("---"), f"{name} must not have YAML frontmatter"
 
-          # 3. Validate TOML & JSON multi-harness configuration files
-          tomllib.loads((root / ".codex" / "config.toml").read_text(encoding="utf-8"))
+          # 3. Validate TOML & JSON multi-harness, packaging & plugin configuration files
+          for toml_rel in (".codex/config.toml", "pyproject.toml"):
+              tomllib.loads((root / toml_rel).read_text(encoding="utf-8"))
           for json_rel in (
+              "package.json",
               ".agents/hooks.json",
               ".claude/settings.json",
               ".codex/hooks.json",
               ".mcp.json",
+              ".claude-plugin/plugin.json",
+              ".claude-plugin/marketplace.json",
+              ".claude-plugin/hooks.json",
+              "gemini-extension.json",
               "mcp-app/mlh-studio/plugin.json",
               "mcp-app/mlh-studio/mcp_config.json",
               "knowledge-graph/reagents.json",

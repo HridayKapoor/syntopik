@@ -30,53 +30,31 @@ from typing import Any
 import uuid
 
 ROOT = Path(__file__).resolve().parent.parent
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
+
+from syntopik.paths import resolve_kg_dir as _resolve_kg_dir_core, resolve_package_root, sync_hub  # noqa: E402
+from syntopik.schemas import (  # noqa: E402
+    MISTAKE_CATEGORY_ALIASES as CATEGORY_ALIASES,
+    VALID_MISTAKE_CATEGORIES,
+    VALID_MISTAKE_CATEGORIES_SET as VALID_CATEGORIES_SET,
+    normalize_mistake_category as _normalize_cat_core,
+)
+from syntopik.storage import append_jsonl_locked, load_jsonl as _load_jsonl_core, write_text_atomic  # noqa: E402
+
 DEFAULT_KG_DIR = ROOT / "knowledge-graph"
-SYNC_SCRIPT = ROOT / "scripts" / "sync-graph.mjs"
+SYNC_SCRIPT = resolve_package_root() / "scripts" / "sync-graph.mjs"
 MISTAKES_FILENAME = "mistakes.jsonl"
 DEFAULT_EXAM_TAG = "Mastery & Pitfall Sheet"
 
-VALID_CATEGORIES: list[str] = [
-    "concept_gap",
-    "misconception",
-    "sign_error",
-    "unit_trap",
-    "condition_missed",
-    "algebra_slip",
-    "diagram_misread",
-    "careless",
-    "time_pressure",
-    "edge_case_missed",
-    "complexity_trap",
-    "off_by_one",
-    "state_mutation_bug",
-]
-VALID_CATEGORIES_SET: frozenset[str] = frozenset(VALID_CATEGORIES)
-
-CATEGORY_ALIASES: dict[str, str] = {
-    "edge_case": "edge_case_missed",
-    "boundary_missed": "edge_case_missed",
-    "corner_case": "edge_case_missed",
-    "tle": "complexity_trap",
-    "complexity": "complexity_trap",
-    "asymptotic_trap": "complexity_trap",
-    "index_error": "off_by_one",
-    "bounds_error": "off_by_one",
-    "mutation_bug": "state_mutation_bug",
-    "aliasing_bug": "state_mutation_bug",
-    "concurrency_bug": "state_mutation_bug",
-    "race_condition": "state_mutation_bug",
-    "syntax_slip": "careless",
-}
+VALID_CATEGORIES: list[str] = list(VALID_MISTAKE_CATEGORIES)
 
 
 def normalize_category(raw: str) -> str:
-    clean = str(raw or "").strip().lower().replace("-", "_").replace(" ", "_")
-    mapped = CATEGORY_ALIASES.get(clean, clean)
-    if mapped not in VALID_CATEGORIES_SET:
-        raise argparse.ArgumentTypeError(
-            f"Invalid category {raw!r}. Must be one of: {', '.join(VALID_CATEGORIES)}"
-        )
-    return mapped
+    try:
+        return _normalize_cat_core(raw)
+    except ValueError as exc:
+        raise argparse.ArgumentTypeError(str(exc)) from exc
 
 # Grounded in Newman's Error Analysis (NEA), Rohrer interleaving, and Kornell & Bjork errorful learning.
 TIER_META: dict[str, dict[str, str]] = {
@@ -184,18 +162,9 @@ DEFAULT_QUICK_CHECKS: list[str] = [
 
 
 def resolve_kg_paths(kg_dir_arg: Path | str | None = None) -> tuple[Path, Path, bool]:
-    """Resolve `(kg_dir, mistakes_file, is_default)` safely (honoring SYNT_KG_DIR / MLH_KG_DIR)."""
-    if kg_dir_arg is not None and str(kg_dir_arg).strip():
-        kg_dir = Path(kg_dir_arg).expanduser().resolve()
-        is_default = kg_dir == DEFAULT_KG_DIR.resolve()
-    else:
-        env_kg = os.environ.get("SYNT_KG_DIR") or os.environ.get("MLH_KG_DIR")
-        if env_kg and env_kg.strip():
-            kg_dir = Path(env_kg).expanduser().resolve()
-            is_default = kg_dir == DEFAULT_KG_DIR.resolve()
-        else:
-            kg_dir = DEFAULT_KG_DIR.resolve()
-            is_default = True
+    """Resolve `(kg_dir, mistakes_file, is_default)` honoring SYNT_KG_DIR / MLH_KG_DIR / SYNT_WORKSPACE."""
+    kg_dir = _resolve_kg_dir_core(explicit=kg_dir_arg)
+    is_default = kg_dir == DEFAULT_KG_DIR.resolve()
     return kg_dir, kg_dir / MISTAKES_FILENAME, is_default
 
 
@@ -206,45 +175,12 @@ def load_mistakes(path_or_dir: Path | str | None = None) -> list[dict[str, Any]]
     else:
         p = Path(path_or_dir).expanduser().resolve()
         file_path = p if p.suffix.lower() == ".jsonl" else (p / MISTAKES_FILENAME)
-
-    if not file_path.exists():
-        return []
-
-    rows: list[dict[str, Any]] = []
-    for raw_line in file_path.read_text(encoding="utf-8").splitlines():
-        line = raw_line.strip()
-        if not line:
-            continue
-        try:
-            obj = json.loads(line)
-        except Exception:
-            continue
-        if isinstance(obj, dict):
-            rows.append(obj)
-    return rows
+    return _load_jsonl_core(file_path)
 
 
-def _find_node() -> str | None:
-    hit = shutil.which("node")
-    if hit:
-        return hit
-    for cand in (Path.home() / ".local" / "bin" / "node", Path("/opt/homebrew/bin/node"), Path("/usr/local/bin/node"), Path("/usr/bin/node")):
-        if cand.is_file() and os.access(cand, os.X_OK):
-            return str(cand)
-    return None
-
-
-def sync_viewer() -> None:
+def sync_viewer(kg_dir: Path | str | None = None) -> None:
     """Refresh `knowledge-graph/graph-data.js` quietly via `scripts/sync-graph.mjs`."""
-    node_bin = _find_node()
-    if SYNC_SCRIPT.exists() and node_bin:
-        subprocess.run(
-            [node_bin, str(SYNC_SCRIPT), "--quiet"],
-            cwd=str(ROOT),
-            check=False,
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL,
-        )
+    sync_hub(kg_dir=kg_dir, quiet=True)
 
 
 def validate_date(date_str: str | None = None) -> str:
@@ -292,11 +228,13 @@ def append_mistake(
     wrong_move: str | None = None,
     correct_move: str | None = None,
     prop_id: str | None = None,
+    confused_with: str | None = None,
     source_ref: str | None = None,
     date: str | None = None,
     mistake_id: str | None = None,
     id: str | None = None,  # noqa: A002 - matches JSON schema key for kwargs callers
     propId: str | None = None,
+    confusedWith: str | None = None,
     triggerCue: str | None = None,
     wrongMove: str | None = None,
     correctMove: str | None = None,
@@ -308,18 +246,11 @@ def append_mistake(
 
     Supports both dict style (`append_mistake(kg_dir, {...})`) and keyword style
     (`append_mistake(kg_dir, subject=..., chapter=..., category=..., ...)`).
-    Only invokes `sync-graph.mjs --quiet` when targeting the real default
-    `knowledge-graph/` directory and syncing is not disabled.
     """
-    resolved_dir, mistakes_file, is_default = resolve_kg_paths(kg_dir)
+    resolved_dir, mistakes_file, _is_default = resolve_kg_paths(kg_dir)
 
     raw_category = _pick_str(category, None, entry, "category")
-    clean_cat = raw_category.lower().replace("-", "_").replace(" ", "_")
-    rec_category = CATEGORY_ALIASES.get(clean_cat, clean_cat)
-    if rec_category not in VALID_CATEGORIES_SET:
-        raise ValueError(
-            f"Invalid category {raw_category!r}. Must be one of: {', '.join(VALID_CATEGORIES)}"
-        )
+    rec_category = _normalize_cat_core(raw_category)
 
     rec_subject = _pick_str(subject, None, entry, "subject", default="General") or "General"
     rec_chapter = _pick_str(chapter, None, entry, "chapter")
@@ -327,6 +258,7 @@ def append_mistake(
     rec_wrong_move = _pick_str(wrong_move, wrongMove, entry, "wrongMove", "wrong_move")
     rec_correct_move = _pick_str(correct_move, correctMove, entry, "correctMove", "correct_move")
     rec_prop_id = _pick_str(prop_id, propId, entry, "propId", "prop_id", default="")
+    rec_confused_with = _pick_str(confused_with, confusedWith, entry, "confusedWith", "confused_with", default="")
     rec_source_ref = _pick_str(source_ref, sourceRef, entry, "sourceRef", "source_ref", default="")
     rec_date = validate_date(_pick_str(date, None, entry, "date", default="") or None)
     rec_id = _pick_str(id, mistake_id, entry, "id", "mistake_id", default="") or generate_mistake_id()
@@ -356,23 +288,14 @@ def append_mistake(
         "correctMove": rec_correct_move,
         "sourceRef": rec_source_ref,
     }
+    if rec_confused_with:
+        record["confusedWith"] = rec_confused_with
 
-    resolved_dir.mkdir(parents=True, exist_ok=True)
-    needs_leading_newline = False
-    if mistakes_file.exists() and mistakes_file.stat().st_size > 0:
-        with mistakes_file.open("rb") as fh:
-            fh.seek(-1, 2)
-            needs_leading_newline = fh.read(1) != b"\n"
+    append_jsonl_locked(mistakes_file, record)
 
-    line = json.dumps(record, ensure_ascii=False) + "\n"
-    with mistakes_file.open("a", encoding="utf-8") as fh:
-        if needs_leading_newline:
-            fh.write("\n")
-        fh.write(line)
-
-    should_sync = is_default and (not no_sync) and (sync is not False)
+    should_sync = (not no_sync) and (sync is not False)
     if should_sync:
-        sync_viewer()
+        sync_viewer(resolved_dir)
 
     return record
 
@@ -455,12 +378,14 @@ def summarize_mistakes(
 
     prop_groups: dict[str, list[tuple[int, dict[str, Any]]]] = {}
     cc_groups: dict[tuple[str, str], list[tuple[int, dict[str, Any]]]] = {}
+    confused_counter: Counter[tuple[str, str]] = Counter()
 
     for idx, row in enumerate(filtered):
         cat = str(row.get("category", "")).strip() or "unknown"
         subj = str(row.get("subject", "")).strip() or "General"
         chap = str(row.get("chapter", "")).strip() or "General"
         prop = str(row.get("propId", "")).strip()
+        confused = str(row.get("confusedWith", "")).strip()
 
         cat_counts[cat] += 1
 
@@ -475,6 +400,9 @@ def summarize_mistakes(
 
         if prop:
             prop_groups.setdefault(prop.lower(), []).append((idx, row))
+            if confused and confused.lower() != prop.lower():
+                pair = (prop, confused) if prop <= confused else (confused, prop)
+                confused_counter[pair] += 1
         cc_groups.setdefault((chap.lower(), cat), []).append((idx, row))
 
     by_category: list[dict[str, Any]] = []
@@ -549,7 +477,8 @@ def summarize_mistakes(
             if cues and corrects
             else (corrects[0] if corrects else CATEGORY_META.get(primary_cat, {}).get("remediation", ""))
         )
-        return {
+        is_escalated = len(group_rows) >= 3
+        trap_obj: dict[str, Any] = {
             "kind": kind,
             "key": key,
             "propId": prop_val,
@@ -557,12 +486,18 @@ def summarize_mistakes(
             "subject": primary_subj,
             "category": primary_cat,
             "count": len(group_rows),
+            "escalated": is_escalated,
             "triggerCues": cues[:4],
             "wrongMoves": wrongs[:3],
             "correctMoves": corrects[:3],
             "actionCue": action_cue,
             "remediation": CATEGORY_META.get(primary_cat, {}).get("remediation", ""),
         }
+        if is_escalated:
+            trap_obj["escalationAction"] = (
+                "3-strike escalation: queue targeted Bug-Hunt + unaided Blank-Sheet Delayed Retest in 4 days."
+            )
+        return trap_obj
 
     for _prop_key, items in prop_groups.items():
         if len(items) < 2:
@@ -583,6 +518,11 @@ def summarize_mistakes(
         )
 
     repeat_traps.sort(key=lambda t: (-t["count"], t["chapter"].lower(), t["category"], t["key"].lower()))
+    escalations = [t for t in repeat_traps if t.get("escalated")]
+    confused_pairs = [
+        {"nodeA": a, "nodeB": b, "count": cnt}
+        for (a, b), cnt in sorted(confused_counter.items(), key=lambda kv: (-kv[1], kv[0][0], kv[0][1]))
+    ]
 
     remediation_focus = [
         {
@@ -609,6 +549,8 @@ def summarize_mistakes(
         "hottestChapters": hottest_chapters,
         "bySubject": by_subject,
         "repeatTraps": repeat_traps,
+        "escalations": escalations,
+        "confusedPairs": confused_pairs,
         "remediationFocus": remediation_focus,
         "recent": recent,
         "filters": {
@@ -946,6 +888,7 @@ def cmd_log(args: argparse.Namespace) -> None:
             wrong_move=args.wrong_move,
             correct_move=args.correct_move,
             prop_id=args.prop_id,
+            confused_with=getattr(args, "confused_with", ""),
             source_ref=args.source_ref,
             date=args.date,
             mistake_id=args.id,
@@ -1061,6 +1004,7 @@ def build_parser() -> argparse.ArgumentParser:
     p_log.add_argument("--wrong-move", required=True, help="What went wrong / erroneous step taken")
     p_log.add_argument("--correct-move", required=True, help="Correct invariant, check, or procedure")
     p_log.add_argument("--prop-id", default="", help="Optional Knowledge Graph proposition ID")
+    p_log.add_argument("--confused-with", default="", help="Optional confusable lookalike proposition ID")
     p_log.add_argument("--source-ref", default="", help="Optional source/PYQ/exam reference")
     p_log.add_argument("--date", default=None, help="Override date (YYYY-MM-DD, default: today UTC)")
     p_log.add_argument("--id", default=None, help="Override mistake ID (default: m-<8hex>)")

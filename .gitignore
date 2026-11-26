@@ -19,6 +19,14 @@ knowledge-graph/chains.jsonl
 knowledge-graph/mistakes.jsonl
 knowledge-graph/exam-attempts.jsonl
 knowledge-graph/exam-config.json
+knowledge-graph/study-config.json
+knowledge-graph/revlog.jsonl
+knowledge-graph/fsrs-params.json
+knowledge-graph/reading-queue.jsonl
+knowledge-graph/forks.jsonl
+knowledge-graph/arenas.jsonl
+knowledge-graph/decisions.jsonl
+knowledge-graph/blitz-sessions.json
 knowledge-graph/review-queue.md
 knowledge-graph/graph-data.js
 chapters/*
@@ -29,6 +37,7 @@ sources/*
 !sources/.gitkeep
 sources/_extracted/
 sources/_curated/
+sources/_ingested/
 demos/*
 !demos/.gitkeep
 !demos/*-template.html
@@ -36,6 +45,10 @@ animations/*
 !animations/.gitkeep
 !animations/sample_*.py
 *-backup-*.tar.gz
+*.syntopik-pack.zip
+.syntopik/
+dist/
+*.egg-info/
 .mlh-studio-state/
 .syntopik-studio-state/
 .*-studio-state/

@@ -3,6 +3,7 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%2336538C'/%3E%3Ctext x='16' y='21.5' text-anchor='middle' font-family='system-ui,sans-serif' font-size='15' font-weight='800' fill='%23FCFBF8'%3ESY%3C/text%3E%3C/svg%3E" />
 <title>__EXAM_TITLE__ — Syntopik Timed Assessment &amp; CBT</title>
 <style>
   :root, [data-theme="light"] {
@@ -1052,6 +1053,171 @@
   }
   .toast.show { opacity: 1; }
 
+  /* Syntopik v2.0 Live Studio & 3-Bucket Exam Autopsy */
+  .live-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 4px 10px;
+    border-radius: 999px;
+    background: rgba(78, 159, 118, 0.22);
+    border: 1px solid rgba(110, 200, 150, 0.45);
+    color: #e9f9ef;
+    font-size: 11px;
+    font-weight: 650;
+    white-space: nowrap;
+  }
+  .live-badge[hidden] { display: none; }
+  .live-dot {
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: #59c98f;
+    display: inline-block;
+  }
+  .live-save-banner {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    flex-wrap: wrap;
+    padding: 10px 14px;
+    border-radius: 9px;
+    margin-bottom: 14px;
+    font-size: 13px;
+    font-weight: 600;
+    border: 1px solid var(--border);
+    background: var(--bg-subtle);
+    color: var(--text);
+  }
+  .live-save-banner.saved {
+    background: var(--green-bg);
+    border-color: var(--green);
+    color: var(--green-strong);
+  }
+  [data-theme="dark"] .live-save-banner.saved {
+    color: var(--green);
+  }
+  .live-save-banner.saving {
+    background: var(--accent-bg);
+    border-color: var(--accent);
+    color: var(--accent);
+  }
+  .autopsy-panel {
+    margin-top: 16px;
+    padding: 14px 16px;
+    border-radius: 11px;
+    border: 1px solid var(--border);
+    background: var(--bg-subtle);
+  }
+  .autopsy-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    flex-wrap: wrap;
+    margin-bottom: 10px;
+  }
+  .autopsy-head h3 {
+    margin: 0;
+    font-size: 13.5px;
+    font-weight: 750;
+    letter-spacing: -0.01em;
+  }
+  .autopsy-grid {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 10px;
+  }
+  .autopsy-card {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-top: 3px solid var(--accent);
+    border-radius: 9px;
+    padding: 11px 12px;
+    display: flex;
+    flex-direction: column;
+    gap: 7px;
+  }
+  .autopsy-card.bucket-knowledge { border-top-color: var(--red); }
+  .autopsy-card.bucket-execution { border-top-color: var(--amber); }
+  .autopsy-card.bucket-time_sink { border-top-color: var(--purple); }
+  .autopsy-card-top {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 6px;
+    font-size: 12px;
+    font-weight: 700;
+  }
+  .autopsy-count {
+    font-family: "SF Mono", ui-monospace, Menlo, monospace;
+    font-size: 13px;
+    font-weight: 750;
+  }
+  .autopsy-desc {
+    font-size: 11.5px;
+    color: var(--muted);
+    line-height: 1.4;
+  }
+  .autopsy-chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 5px;
+  }
+  .autopsy-chip {
+    font-family: "SF Mono", ui-monospace, Menlo, monospace;
+    font-size: 11px;
+    font-weight: 650;
+    padding: 2px 7px;
+    border-radius: 6px;
+    border: 1px solid var(--border-strong);
+    background: var(--bg-subtle);
+    color: var(--text);
+    cursor: pointer;
+  }
+  .autopsy-chip:hover {
+    border-color: var(--accent);
+    background: var(--accent-bg);
+    color: var(--accent);
+  }
+  .ego-traps-strip {
+    margin-top: 11px;
+    padding-top: 10px;
+    border-top: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 6px;
+    font-size: 12px;
+  }
+  .ego-tag {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 3px 8px;
+    border-radius: 999px;
+    background: var(--amber-bg);
+    border: 1px solid var(--amber);
+    color: var(--amber);
+    font-size: 11px;
+    font-weight: 650;
+  }
+  .escalation-strip {
+    margin-top: 10px;
+    padding: 9px 12px;
+    border-radius: 8px;
+    border: 1px solid var(--border);
+    border-left: 3px solid var(--red);
+    background: var(--bg-card);
+    font-size: 12px;
+    color: var(--text-2);
+    line-height: 1.45;
+  }
+  @media (max-width: 720px) {
+    .autopsy-grid { grid-template-columns: 1fr; }
+  }
+
   /* Offline Pure-JS Math Typography */
   .math-inline {
     font-family: "Cambria Math", "STIX Two Math", "Times New Roman", Georgia, serif;
@@ -1173,6 +1339,7 @@
       </div>
     </div>
     <div class="header-controls">
+      <span class="live-badge" id="liveStudioBadge" hidden><span class="live-dot"></span>Live Studio</span>
       <div class="timer-pill" id="timerPill" title="Remaining Exam Time">
         <span class="timer-lbl">Time Left</span>
         <span id="timerText">00:00:00</span>
@@ -1872,6 +2039,173 @@ window.__EXAM_SPEC__ = __EXAM_SPEC_JSON__;
   let state = loadState();
   // Draft answer holds in-progress edits on the currently displayed question until Save/Clear/Switch
   let draftAnswer = null;
+  let liveCaps = { live: false, token: "" };
+  let liveSubmissionState = { status: "idle", response: null, error: null };
+
+  async function probeLiveCapabilities() {
+    if (window.location.protocol === "file:") {
+      liveCaps = { live: false, token: "" };
+      return liveCaps;
+    }
+    try {
+      const res = await fetch("/api/capabilities", { cache: "no-store" });
+      if (!res.ok) return liveCaps;
+      const caps = await res.json();
+      if (caps && caps.live) {
+        liveCaps = {
+          live: true,
+          token: String(caps.token || ""),
+          version: String(caps.version || ""),
+        };
+        const badge = document.getElementById("liveStudioBadge");
+        if (badge) badge.hidden = false;
+        const note = document.getElementById("autosaveNote");
+        if (note && !state.submitted) {
+          note.textContent = "Live Studio Connected — Auto-Grades on Submit";
+        }
+      }
+    } catch (_e) {
+      // Quietly stay in 100% offline mode with zero console errors.
+    }
+    return liveCaps;
+  }
+
+  function normalizeAutopsyPayload(resp) {
+    if (!resp || typeof resp !== "object") return null;
+    const raw = (resp.autopsy && typeof resp.autopsy === "object")
+      ? resp.autopsy
+      : (resp.scored && resp.scored.autopsy && typeof resp.scored.autopsy === "object" ? resp.scored.autopsy : null);
+    if (!raw) return null;
+    const buckets = (raw.buckets && typeof raw.buckets === "object") ? raw.buckets : raw;
+    const toList = function (v) {
+      if (Array.isArray(v)) return v;
+      if (v && typeof v === "object" && Array.isArray(v.qids)) return v.qids;
+      return [];
+    };
+    const knowledge = toList(buckets.knowledge);
+    const execution = toList(buckets.execution);
+    const timeSink = toList(buckets.time_sink || buckets.timeSink);
+    const egoTraps = Array.isArray(raw.egoTraps)
+      ? raw.egoTraps
+      : (Array.isArray(resp.egoTraps) ? resp.egoTraps : []);
+    const escalations = Array.isArray(raw.escalations)
+      ? raw.escalations
+      : (Array.isArray(resp.escalations)
+        ? resp.escalations
+        : (Array.isArray(resp.scored && resp.scored.threeStrikeEscalations) ? resp.scored.threeStrikeEscalations : []));
+    const medianTimeSec = raw.medianTimeSec != null
+      ? Number(raw.medianTimeSec)
+      : (resp.scored && resp.scored.autopsy && resp.scored.autopsy.medianTimeSec != null
+        ? Number(resp.scored.autopsy.medianTimeSec)
+        : null);
+    return {
+      knowledge: knowledge,
+      execution: execution,
+      time_sink: timeSink,
+      egoTraps: egoTraps,
+      escalations: escalations,
+      medianTimeSec: Number.isFinite(medianTimeSec) ? medianTimeSec : null
+    };
+  }
+
+  function qidFromEntry(entry) {
+    if (typeof entry === "string") return entry;
+    if (entry && typeof entry === "object") return String(entry.qid || entry.id || entry.questionId || "");
+    return "";
+  }
+
+  function renderLiveAutopsyHtml() {
+    if (liveSubmissionState.status === "idle") return "";
+    if (liveSubmissionState.status === "saving") {
+      return '<div class="live-save-banner saving"><span>Grading attempt &amp; updating Knowledge Graph…</span></div>';
+    }
+    if (liveSubmissionState.status === "error") {
+      return '<div class="live-save-banner"><span>Offline fallback — use <strong>Download Attempt JSON</strong> below to grade later.</span></div>';
+    }
+    const resp = liveSubmissionState.response || {};
+    const scored = resp.scored || {};
+    const autopsy = normalizeAutopsyPayload(resp);
+    const srsCount = typeof scored.srsUpdated === "number" ? scored.srsUpdated : (Array.isArray(scored.srsUpdatedProps) ? scored.srsUpdatedProps.length : null);
+    const misCount = typeof scored.mistakesLogged === "number" ? scored.mistakesLogged : (Array.isArray(scored.mistakeIds) ? scored.mistakeIds.length : null);
+    const metaParts = [];
+    if (srsCount !== null) metaParts.push(srsCount + " FSRS updated");
+    if (misCount !== null) metaParts.push(misCount + " mistake" + (misCount === 1 ? "" : "s") + " logged");
+
+    let html =
+      '<div class="live-save-banner saved">' +
+        '<span>Graded &amp; Saved to Knowledge Graph ✓</span>' +
+        (metaParts.length ? '<span style="font-size:12px;opacity:0.9;">' + escHtml(metaParts.join(" · ")) + "</span>" : "") +
+      "</div>";
+
+    if (autopsy) {
+      const renderBucket = function (key, title, desc, items) {
+        const chips = items.length
+          ? items.map(function (it) {
+              const qid = qidFromEntry(it);
+              if (!qid) return "";
+              return '<button type="button" class="autopsy-chip" data-jump-qid="' + escHtml(qid) + '">' + escHtml(qid) + "</button>";
+            }).join("")
+          : '<span style="font-size:11.5px;color:var(--muted);">None flagged</span>';
+        return '<div class="autopsy-card bucket-' + key + '">' +
+          '<div class="autopsy-card-top"><span>' + escHtml(title) + '</span><span class="autopsy-count">' + items.length + "</span></div>" +
+          '<div class="autopsy-desc">' + escHtml(desc) + "</div>" +
+          '<div class="autopsy-chips">' + chips + "</div>" +
+        "</div>";
+      };
+
+      const egoHtml = autopsy.egoTraps.length
+        ? '<div class="ego-traps-strip"><strong>Ego-Trap Tags:</strong>' +
+            autopsy.egoTraps.map(function (et) {
+              const qid = qidFromEntry(et);
+              const extra = (et && typeof et === "object" && et.timeSpentSec) ? (" · " + formatMS(et.timeSpentSec)) : "";
+              return '<span class="ego-tag">Ego-Trap · ' + escHtml((qid || String(et)) + extra) + "</span>";
+            }).join("") +
+          "</div>"
+        : "";
+
+      const escHtmlBlock = autopsy.escalations.length
+        ? '<div class="escalation-strip"><strong>3-Strike Escalations:</strong> ' +
+            autopsy.escalations.map(function (e) {
+              if (typeof e === "string") return escHtml(e);
+              const label = [e.category || "trap", e.chapter || e.propId || "", e.count ? ("×" + e.count) : ""].filter(Boolean).join(" · ");
+              return escHtml(label || JSON.stringify(e));
+            }).join(" &nbsp;|&nbsp; ") +
+          "</div>"
+        : "";
+
+      html +=
+        '<div class="autopsy-panel">' +
+          '<div class="autopsy-head">' +
+            "<h3>3-Bucket Exam Autopsy</h3>" +
+            (autopsy.medianTimeSec !== null ? '<span class="badge">Median pace: ' + escHtml(formatMS(autopsy.medianTimeSec)) + "</span>" : "") +
+          "</div>" +
+          '<div class="autopsy-grid">' +
+            renderBucket("knowledge", "Knowledge", "Conceptual gaps or misconceptions to re-derive.", autopsy.knowledge) +
+            renderBucket("execution", "Execution", "Algebra, sign, unit, or edge-case slips.", autopsy.execution) +
+            renderBucket("time_sink", "Time-Sink", "Over-invested time relative to paper pace.", autopsy.time_sink) +
+          "</div>" +
+          egoHtml +
+          escHtmlBlock +
+        "</div>";
+    }
+    return html;
+  }
+
+  function refreshLiveAutopsySlot() {
+    const slot = document.getElementById("liveAutopsySlot");
+    if (!slot) return;
+    slot.innerHTML = renderLiveAutopsyHtml();
+    slot.querySelectorAll("[data-jump-qid]").forEach(function (btn) {
+      btn.addEventListener("click", function () {
+        const qid = btn.getAttribute("data-jump-qid");
+        const idx = QUESTIONS.findIndex(function (q) { return q.id === qid; });
+        if (idx >= 0) {
+          closeModal("summaryModal");
+          navigateTo(idx, null);
+        }
+      });
+    });
+  }
 
   function cloneVal(v) {
     return v == null ? null : JSON.parse(JSON.stringify(v));
@@ -2564,7 +2898,7 @@ window.__EXAM_SPEC__ = __EXAM_SPEC_JSON__;
     openModal("confirmModal");
   }
 
-  function finalizeSubmit(autoReason) {
+  async function submitExam(autoReason) {
     if (hasUnsavedDraftChange()) {
       const q = QUESTIONS[state.currentIndex];
       const wasMarked = !!(q && state.responses[q.id] && state.responses[q.id].markedForReview);
@@ -2579,6 +2913,44 @@ window.__EXAM_SPEC__ = __EXAM_SPEC_JSON__;
     saveState();
     renderAll();
     openSummaryModal(autoReason);
+
+    if (window.location.protocol === "file:") return;
+
+    const caps = liveCaps.live ? liveCaps : await probeLiveCapabilities();
+    if (!caps || !caps.live) return;
+
+    liveSubmissionState = { status: "saving", response: null, error: null };
+    refreshLiveAutopsySlot();
+
+    try {
+      const headers = { "Content-Type": "application/json" };
+      if (caps.token) headers["X-Syntopik-Token"] = caps.token;
+      const res = await fetch("/api/exam/submit", {
+        method: "POST",
+        headers: headers,
+        body: JSON.stringify({
+          examSlug: SPEC.examSlug || "exam",
+          spec: SPEC,
+          attempt: buildAttemptPayload()
+        })
+      });
+      const data = await res.json().catch(function () { return {}; });
+      if (!res.ok || data.ok === false) {
+        throw new Error(data.error || ("HTTP " + res.status));
+      }
+      liveSubmissionState = { status: "saved", response: data, error: null };
+      refreshLiveAutopsySlot();
+      const note = document.getElementById("autosaveNote");
+      if (note) note.textContent = "Graded & Saved to Knowledge Graph ✓";
+      showToast("Graded & Saved to Knowledge Graph ✓");
+    } catch (err) {
+      liveSubmissionState = { status: "error", response: null, error: err && err.message ? err.message : "offline" };
+      refreshLiveAutopsySlot();
+    }
+  }
+
+  function finalizeSubmit(autoReason) {
+    submitExam(autoReason);
   }
 
   function openSummaryModal(autoReason) {
@@ -2596,6 +2968,7 @@ window.__EXAM_SPEC__ = __EXAM_SPEC_JSON__;
     const cliCmd = ".venv/bin/python scripts/exam_runner.py grade <spec.json> " + slug + "-attempt.json";
     document.getElementById("summaryModalBody").innerHTML =
       (autoReason ? '<p style="color:var(--red);font-weight:700;">' + escHtml(autoReason) + "</p>" : "") +
+      '<div id="liveAutopsySlot"></div>' +
       '<div class="kpi-grid">' +
         '<div class="kpi-card"><div class="k-lbl">Score</div><div class="k-val">' + s.score + " / " + s.maxScore + "</div></div>" +
         '<div class="kpi-card"><div class="k-lbl">Percentage</div><div class="k-val">' + s.pct + "%</div></div>" +
@@ -2607,7 +2980,8 @@ window.__EXAM_SPEC__ = __EXAM_SPEC_JSON__;
       '<table class="summary-table"><thead><tr><th>Subject</th><th>Score</th><th>Correct</th><th>Partial</th><th>Wrong</th><th>Skipped</th><th>Time</th></tr></thead><tbody>' +
       subjRows + "</tbody></table>" +
       (s.slow.length ? '<p style="margin-top:12px;color:var(--amber);font-weight:650;">Slow Questions (&gt;3 min): ' + escHtml(s.slow.join(", ")) + "</p>" : "") +
-      '<p style="margin-top:12px;font-size:12.5px;color:var(--muted);">Download <code>' + escHtml(slug) + '-attempt.json</code> and grade it into your Knowledge Graph &amp; Mistake Log via:<br><code>' + escHtml(cliCmd) + "</code></p>";
+      '<p style="margin-top:12px;font-size:12.5px;color:var(--muted);">Download <code>' + escHtml(slug) + '-attempt.json</code> anytime for offline backup, or grade offline via:<br><code>' + escHtml(cliCmd) + "</code></p>";
+    refreshLiveAutopsySlot();
     openModal("summaryModal");
   }
 
@@ -2860,6 +3234,9 @@ window.__EXAM_SPEC__ = __EXAM_SPEC_JSON__;
     saveState();
   }
   renderAll();
+  if (window.location.protocol !== "file:") {
+    probeLiveCapabilities();
+  }
 })();
 </script>
 </body>

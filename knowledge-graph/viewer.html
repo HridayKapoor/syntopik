@@ -3,6 +3,7 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%2336538C'/%3E%3Ctext x='16' y='21.5' text-anchor='middle' font-family='system-ui,sans-serif' font-size='15' font-weight='800' fill='%23FCFBF8'%3ESY%3C/text%3E%3C/svg%3E" />
 <title>Syntopik — Knowledge Hypergraph</title>
 <style>
   :root, [data-theme="dark"] {
@@ -515,6 +516,164 @@
   }
   .toast.show { opacity: 1; transform: translateY(0); }
 
+  /* Syntopik v2.0 Live Studio & Inspector Extensions */
+  .live-pill {
+    font-size: 11px;
+    font-weight: 600;
+    gap: 6px;
+  }
+  .live-pill.is-live {
+    color: var(--solid);
+    background: var(--solid-bg);
+    border-color: transparent;
+  }
+  .live-dot {
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: var(--muted);
+    display: inline-block;
+    flex-shrink: 0;
+  }
+  .live-pill.is-live .live-dot {
+    background: var(--solid);
+  }
+  .quick-review-box {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 11px 12px;
+    display: flex;
+    flex-direction: column;
+    gap: 9px;
+  }
+  .quick-review-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: var(--muted);
+  }
+  .conf-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 11.5px;
+    color: var(--text-2);
+  }
+  .conf-row input[type="range"] {
+    flex: 1;
+    accent-color: var(--accent);
+    cursor: pointer;
+  }
+  .conf-val {
+    font-family: "SF Mono", ui-monospace, Menlo, monospace;
+    font-size: 11px;
+    min-width: 34px;
+    text-align: right;
+    color: var(--text);
+  }
+  .rate-grid {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 6px;
+  }
+  .rate-btn {
+    justify-content: center;
+    padding: 6px 6px;
+    font-size: 11.5px;
+    font-weight: 600;
+    border-radius: 7px;
+  }
+  .rate-btn.again { color: var(--misconception); background: var(--misconception-bg); border-color: transparent; }
+  .rate-btn.hard { color: var(--shaky); background: var(--shaky-bg); border-color: transparent; }
+  .rate-btn.good { color: var(--solid); background: var(--solid-bg); border-color: transparent; }
+  .rate-btn.easy { color: var(--accent); background: var(--accent-bg); border-color: transparent; }
+  .rate-btn:hover:not(:disabled) { filter: brightness(1.08); border-color: currentColor; }
+  .rate-btn:disabled { opacity: 0.55; cursor: not-allowed; }
+  .bc-list {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+  .bc-item {
+    padding: 8px 10px;
+    border-radius: 8px;
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-left: 3px solid var(--shaky);
+    font-size: 12px;
+    line-height: 1.48;
+    color: var(--text-2);
+  }
+  .bc-meta {
+    margin-top: 4px;
+    font-size: 10.5px;
+    color: var(--muted);
+    font-family: "SF Mono", ui-monospace, Menlo, monospace;
+  }
+
+  @media (max-width: 1380px) {
+    header {
+      padding: 7px 12px;
+      gap: 6px;
+      flex-wrap: nowrap;
+    }
+    .brand {
+      gap: 6px;
+      margin-right: 0;
+      flex-shrink: 0;
+    }
+    .hide-compact {
+      display: none;
+    }
+    .back-link {
+      padding: 4px 7px;
+      font-size: 11.5px;
+    }
+    header h1 {
+      font-size: 13px;
+    }
+    .controls {
+      gap: 5px;
+      flex-wrap: nowrap;
+    }
+    select, input[type="search"], button {
+      padding: 4px 7px;
+      font-size: 11.5px;
+      white-space: nowrap;
+    }
+    select {
+      max-width: 108px;
+      min-width: 78px;
+      flex: 0 1 104px;
+    }
+    input[type="search"] {
+      min-width: 96px;
+      flex: 0 1 132px;
+    }
+    button, .pill {
+      flex-shrink: 0;
+    }
+    .pill {
+      padding: 3px 7px;
+      font-size: 11px;
+      gap: 4px;
+    }
+    .spacer {
+      min-width: 4px;
+    }
+  }
+  @media (max-width: 1080px) {
+    header, .controls { flex-wrap: wrap; }
+  }
   @media (max-width: 900px) {
     main { grid-template-columns: 1fr; grid-template-rows: 1fr 290px; }
     aside#inspector { border-left: none; border-top: 1px solid var(--border); }
@@ -524,8 +683,8 @@
 <body>
 <header>
   <div class="brand">
-    <a class="back-link" href="../dashboard.html" title="Back to Syntopik Hub">← Syntopik Hub</a>
-    <h1>Syntopik · Knowledge Graph</h1>
+    <a class="back-link" href="../dashboard.html" title="Back to Syntopik Hub">← <span class="hide-compact">Syntopik </span>Hub</a>
+    <h1><span class="hide-compact">Syntopik · </span>Knowledge Graph</h1>
   </div>
   <div class="controls">
     <select id="subjectFilter" aria-label="Filter by subject"><option value="">All subjects</option></select>
@@ -542,6 +701,7 @@
     <button id="layoutToggleBtn" title="Switch between Layered DAG and Subject Clusters">Layout: Layered DAG</button>
     <button id="fitBtn" title="Fit entire graph to viewport">Fit View</button>
     <span class="spacer"></span>
+    <span class="pill live-pill" id="liveStatusPill" title="Studio connection mode"><span class="live-dot"></span>Offline</span>
     <span class="pill" id="countPill">0 nodes · 0 edges</span>
     <span class="pill accent" id="bktAvgPill" title="Average Bayesian Knowledge Tracing mastery">BKT —</span>
     <button id="themeToggleBtn" title="Toggle Dark / Light theme">☀ Light</button>
@@ -616,6 +776,11 @@
   let selectedId = null;
   let lastPositions = new Map();
   let lastBounds = null;
+  let liveCaps = { live: false, token: "", version: "", workspaceName: "", lan: null };
+  let sseSource = null;
+  let sseRefreshTimer = null;
+  let reviewBusy = false;
+  let quickConfidencePct = 70;
 
   const esc = (s) => String(s ?? "").replace(/[&<>"]/gu, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
 
@@ -692,6 +857,158 @@
     return typeof raw === "number" && Number.isFinite(raw) ? raw : null;
   }
 
+  function getLapses(n) {
+    const raw = n?.lapses ?? n?.fsrs?.lapses;
+    return typeof raw === "number" && Number.isFinite(raw) ? raw : 0;
+  }
+
+  function getImplicitCredit(n) {
+    const raw = n?.implicitCredit;
+    return typeof raw === "number" && Number.isFinite(raw) ? raw : 0;
+  }
+
+  function isLeech(n) {
+    const diff = getDifficulty(n);
+    return getLapses(n) >= 4 || (diff !== null && diff >= 8.5);
+  }
+
+  function updateLiveStatusUI() {
+    const pill = document.getElementById("liveStatusPill");
+    if (!pill) return;
+    if (liveCaps.live) {
+      pill.classList.add("is-live");
+      pill.innerHTML = `<span class="live-dot"></span>Live Studio`;
+      pill.title = `Connected to Syntopik Studio${liveCaps.version ? ` v${liveCaps.version}` : ""}`;
+    } else {
+      pill.classList.remove("is-live");
+      pill.innerHTML = `<span class="live-dot"></span>Offline`;
+      pill.title = "Offline read-only mode";
+    }
+  }
+
+  async function apiPost(endpoint, payload) {
+    const headers = { "Content-Type": "application/json" };
+    if (liveCaps.token) headers["X-Syntopik-Token"] = liveCaps.token;
+    const res = await fetch(endpoint, {
+      method: "POST",
+      headers,
+      body: JSON.stringify(payload || {}),
+    });
+    const body = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      throw new Error(body.error || `Request failed (${res.status})`);
+    }
+    return body;
+  }
+
+  async function probeLiveCapabilities() {
+    if (window.location.protocol === "file:") {
+      liveCaps = { live: false, token: "", version: "", workspaceName: "", lan: null };
+      updateLiveStatusUI();
+      return false;
+    }
+    try {
+      const res = await fetch("/api/capabilities", { cache: "no-store" });
+      if (!res.ok) throw new Error("unavailable");
+      const caps = await res.json();
+      if (caps && caps.live) {
+        liveCaps = {
+          live: true,
+          token: String(caps.token || ""),
+          version: String(caps.version || ""),
+          workspaceName: String(caps.workspaceName || ""),
+          lan: caps.lan || null,
+        };
+        updateLiveStatusUI();
+        return true;
+      }
+    } catch {
+      // Quietly remain in read-only mode with zero console noise.
+    }
+    liveCaps = { live: false, token: "", version: "", workspaceName: "", lan: null };
+    updateLiveStatusUI();
+    return false;
+  }
+
+  async function refreshFromLiveState(shouldFit = false) {
+    if (!liveCaps.live) return false;
+    try {
+      const res = await fetch("/api/state", { cache: "no-store" });
+      if (!res.ok) return false;
+      const state = await res.json();
+      const g = state && state.graph ? state.graph : null;
+      if (!g) return false;
+      data = {
+        propositions: Array.isArray(g.propositions) ? g.propositions : [],
+        chains: normalizeChains(g.chains),
+      };
+      populateFilters();
+      render(shouldFit);
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  function connectLiveEvents() {
+    if (!liveCaps.live || typeof EventSource === "undefined") return;
+    if (sseSource) {
+      try { sseSource.close(); } catch { /* ignore */ }
+      sseSource = null;
+    }
+    try {
+      sseSource = new EventSource("/api/events");
+      sseSource.addEventListener("message", (ev) => {
+        try {
+          const msg = JSON.parse(ev.data || "{}");
+          if (!msg || msg.type === "ping" || msg.type === "heartbeat") return;
+          if (msg.type === "changed" || msg.type === "sync" || msg.type === "state") {
+            clearTimeout(sseRefreshTimer);
+            sseRefreshTimer = setTimeout(() => { refreshFromLiveState(false); }, 250);
+          }
+        } catch { /* ignore malformed ping */ }
+      });
+      sseSource.onerror = () => {
+        // EventSource handles reconnects calmly without console spam.
+      };
+    } catch { /* ignore */ }
+  }
+
+  async function submitNodeReview(propId, rating, confidence) {
+    if (!liveCaps.live || reviewBusy) return;
+    reviewBusy = true;
+    const curNode = data.propositions.find((p) => p.id === propId);
+    if (curNode) renderInspector(curNode);
+    try {
+      const payload = { propId, rating };
+      if (typeof confidence === "number" && Number.isFinite(confidence)) {
+        payload.confidence = Number(confidence.toFixed(2));
+      }
+      const res = await apiPost("/api/review", payload);
+      const fireCount = Array.isArray(res.fireCredits)
+        ? res.fireCredits.length
+        : Number(res.fireRefreshedCount || 0);
+      const nextDue = res?.node?.nextReview ? ` · next ${String(res.node.nextReview).slice(0, 10)}` : "";
+      const firePart = res.fireSummary
+        ? ` · ${res.fireSummary}`
+        : fireCount > 0
+          ? ` · FIRe refreshed ${fireCount} prerequisite${fireCount === 1 ? "" : "s"}`
+          : "";
+      showToast(`Rated "${rating}"${nextDue}${firePart}`);
+      if (res.node && res.node.id) {
+        const idx = data.propositions.findIndex((p) => p.id === res.node.id);
+        if (idx >= 0) data.propositions[idx] = { ...data.propositions[idx], ...res.node };
+      }
+      await refreshFromLiveState(false);
+    } catch (err) {
+      showToast(`Review failed: ${err?.message || "offline"}`);
+    } finally {
+      reviewBusy = false;
+      const updated = data.propositions.find((p) => p.id === propId);
+      if (updated && selectedId === propId) renderInspector(updated);
+    }
+  }
+
   function getNextReview(n) {
     if (typeof n.nextReview === "string" && n.nextReview.trim()) return n.nextReview.trim().slice(0, 10);
     if (typeof n?.fsrs?.due === "string" && n.fsrs.due.trim()) return n.fsrs.due.trim().slice(0, 10);
@@ -701,7 +1018,7 @@
   function getRetrievability(n) {
     const stab = getStability(n);
     if (stab === null || stab <= 0) return null;
-    const lastStr = n?.fsrs?.last_review || n.lastTested;
+    const lastStr = n?.fsrs?.last_review || n.lastReviewed || n.lastTested;
     const lastDay = parseDateUtcDays(lastStr);
     const todayDay = parseDateUtcDays(getTodayIso());
     if (lastDay === null || todayDay === null) return null;
@@ -1569,6 +1886,12 @@
     const statusCls = ["solid", "shaky", "misconception", "planned"].includes(n.status) ? n.status : "planned";
     const cues = Array.isArray(n.cues) ? n.cues.filter((c) => c && typeof c === "object") : [];
     const aliases = Array.isArray(n.aliases) ? n.aliases.filter((a) => typeof a === "string" && a.trim()) : [];
+    const lapses = getLapses(n);
+    const implicitCredit = getImplicitCredit(n);
+    const leech = isLeech(n);
+    const boundaryConditions = Array.isArray(n.boundaryConditions)
+      ? n.boundaryConditions.filter((bc) => bc !== null && bc !== undefined && String(typeof bc === "string" ? bc : (bc.lemma || bc.condition || bc.text || bc.note || "")).trim())
+      : [];
 
     const renderPremiseChip = (pid) => {
       const target = byId.get(pid);
@@ -1634,6 +1957,7 @@
       </div>
       <div class="detail-meta">
         <span class="pill ${statusCls}"><span class="dot" style="background:${statusVar(n.status)}"></span>${esc(n.status || "planned")}</span>
+        ${leech ? `<span class="pill shaky" title="Repeated lapses or high difficulty — re-derive or split into smaller ideas">Leech</span>` : ""}
         ${n.kind ? `<span class="pill">${esc(n.kind)}</span>` : ""}
         ${n.subject ? `<span class="pill">${esc(n.subject)}</span>` : ""}
         ${n.chapter ? `<span class="pill">${esc(n.chapter)}</span>` : ""}
@@ -1653,15 +1977,60 @@
           <span class="metric-value">${formatStability(stab)}</span>
           <span class="metric-sub">${diff !== null ? `Difficulty ${diff.toFixed(1)}/10` : "Unrated card"}${retr !== null ? ` · R≈${Math.round(retr * 100)}%` : ""}</span>
         </div>
+        <div class="metric-box">
+          <span class="metric-label">FIRe Credit</span>
+          <span class="metric-value" style="color:${implicitCredit > 0 ? "var(--solid)" : "var(--text)"}">${implicitCredit.toFixed(2)}</span>
+          <span class="metric-sub">${n.lastImplicitReview ? `Implicit ${esc(String(n.lastImplicitReview).slice(0, 10))}` : "Prerequisite credit"}</span>
+        </div>
+        <div class="metric-box">
+          <span class="metric-label">Lapses</span>
+          <span class="metric-value" style="color:${leech ? "var(--shaky)" : "var(--text)"}">${lapses}</span>
+          <span class="metric-sub">${leech ? "Leech · re-derive" : "FSRS lapse count"}</span>
+        </div>
       </div>
 
       <div class="metric-box">
         <span class="metric-label">Next Review Countdown</span>
         <span style="font-size:13.5px;font-weight:650;color:${cd.overdue ? "var(--misconception)" : cd.dueToday ? "var(--shaky)" : "var(--text)"}">${esc(cd.text)}</span>
-        <span class="metric-sub">${n.lastTested ? `Last tested: ${esc(n.lastTested)}` : "Never tested yet"}</span>
+        <span class="metric-sub">${n.lastReviewed ? `Last reviewed: ${esc(String(n.lastReviewed).slice(0, 10))}` : n.lastTested ? `Last tested: ${esc(String(n.lastTested).slice(0, 10))}` : n?.fsrs?.last_review ? `Last reviewed: ${esc(String(n.fsrs.last_review).slice(0, 10))}` : "Never tested yet"}</span>
       </div>
 
+      ${liveCaps.live ? `
+        <div class="quick-review-box">
+          <div class="quick-review-head">
+            <span>Live FSRS-6 Review</span>
+            <span>FIRe Enabled</span>
+          </div>
+          <label class="conf-row">
+            <span>Confidence</span>
+            <input type="range" id="inspectorConfSlider" min="0" max="100" step="5" value="${quickConfidencePct}" aria-label="Recall confidence percentage" />
+            <span class="conf-val" id="inspectorConfVal">${quickConfidencePct}%</span>
+          </label>
+          <div class="rate-grid">
+            <button type="button" class="rate-btn again" data-rate="again" ${reviewBusy ? "disabled" : ""}>Again</button>
+            <button type="button" class="rate-btn hard" data-rate="hard" ${reviewBusy ? "disabled" : ""}>Hard</button>
+            <button type="button" class="rate-btn good" data-rate="good" ${reviewBusy ? "disabled" : ""}>Good</button>
+            <button type="button" class="rate-btn easy" data-rate="easy" ${reviewBusy ? "disabled" : ""}>Easy</button>
+          </div>
+        </div>
+      ` : ""}
+
       ${n.notes ? `<div class="notes-box">${esc(n.notes)}</div>` : ""}
+
+      ${boundaryConditions.length ? `
+        <div>
+          <div class="section-heading">Boundary Conditions (${boundaryConditions.length})</div>
+          <ul class="bc-list">
+            ${boundaryConditions.map((bc) => {
+              const txt = typeof bc === "string" ? bc : (bc.lemma || bc.condition || bc.text || bc.note || "");
+              const metaBits = typeof bc === "object" && bc
+                ? [bc.arenaId ? `arena:${bc.arenaId}` : "", bc.date ? String(bc.date).slice(0, 10) : ""].filter(Boolean)
+                : [];
+              return `<li class="bc-item">${esc(txt)}${metaBits.length ? `<div class="bc-meta">${esc(metaBits.join(" · "))}</div>` : ""}</li>`;
+            }).join("")}
+          </ul>
+        </div>
+      ` : ""}
 
       <button id="copyNodePromptBtn" style="justify-content:center;width:100%;">Copy Drill Prompt for This Concept</button>
 
@@ -1704,6 +2073,20 @@
     document.getElementById("copyNodePromptBtn").addEventListener("click", () => {
       const prompt = `Drill me on ${n.id} ("${n.title || n.id}") without spoilers using fresh scenarios, verify my reasoning, and update my FSRS + BKT rating with scripts/srs_engine.py.`;
       copyText(prompt, "Copied concept drill prompt ✓");
+    });
+    const confSlider = document.getElementById("inspectorConfSlider");
+    const confVal = document.getElementById("inspectorConfVal");
+    if (confSlider && confVal) {
+      confSlider.addEventListener("input", () => {
+        quickConfidencePct = Number(confSlider.value);
+        confVal.textContent = `${quickConfidencePct}%`;
+      });
+    }
+    document.querySelectorAll("#inspector [data-rate]").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        const rating = btn.getAttribute("data-rate");
+        submitNodeReview(n.id, rating, quickConfidencePct / 100);
+      });
     });
     document.querySelectorAll("#inspector [data-jump]").forEach((el) => {
       el.addEventListener("click", (ev) => {
@@ -1763,8 +2146,19 @@
   async function init() {
     applyTheme(safeStorageGet("study-harness-theme") || "dark");
 
-    let rawData;
-    if (window.location.protocol !== "file:") {
+    let rawData = null;
+    const isLive = await probeLiveCapabilities();
+    if (isLive) {
+      try {
+        const res = await fetch("/api/state", { cache: "no-store" });
+        if (res.ok) {
+          const st = await res.json();
+          if (st && st.graph) rawData = st.graph;
+        }
+      } catch { /* fall back below */ }
+    }
+
+    if (!rawData && window.location.protocol !== "file:") {
       try {
         const [propositions, chains] = await Promise.all([
           loadJsonl("./propositions.jsonl"),
@@ -1774,7 +2168,7 @@
       } catch {
         rawData = window.__STUDY_GRAPH__ || { propositions: [], chains: [] };
       }
-    } else {
+    } else if (!rawData) {
       rawData = window.__STUDY_GRAPH__ || { propositions: [], chains: [] };
     }
 
@@ -1787,6 +2181,10 @@
     const params = new URLSearchParams(window.location.search);
     if (params.get("node")) selectedId = params.get("node");
     render(true);
+
+    if (isLive) {
+      connectLiveEvents();
+    }
   }
 
   // Event wiring
