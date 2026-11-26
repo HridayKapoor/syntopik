@@ -10141,7 +10141,7 @@ class TestV32UniversalCompatImportersAndExamReadiness(unittest.TestCase):
                             "    return 2 * x\n",
                             "assert double_val(4) == 8\n",
                             "assert math.isclose(double_val(1.5), 3.0, abs_tol=1e-6)\n",
-                            f"assert __import__('os').system('touch {canary}') == 0\n",
+                            f"assert __import__('os').system({f'touch {canary}'!r}) == 0\n",
                         ],
                         "outputs": [],
                     },
