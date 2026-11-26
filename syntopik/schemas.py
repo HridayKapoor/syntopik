@@ -99,6 +99,8 @@ def default_encompass_weight(relation: str, is_joint: bool = False) -> float:
     rel = str(relation or "requires").strip().lower()
     if rel in ZERO_ENCOMPASS_RELATIONS:
         return 0.0
+    if rel == "isomorphic_to":
+        return 0.25
     if is_joint:
         return 0.35
     if rel in BINARY_FULL_RELATIONS:
@@ -113,7 +115,8 @@ def normalize_chain(raw: dict[str, Any]) -> dict[str, Any] | None:
 
     Always populates `encompassWeight` (honoring explicit `encompassWeight` in `[0.0, 1.0]`,
     otherwise defaulting to `0.50` binary `requires`/`derives`, `0.35` per joint premise,
-    and `0.0` for `contrasts_with`/`analogous`).
+    `0.25` for `isomorphic_to`, and `0.0` for `contrasts_with`/`analogous`). Preserves
+    Rosetta isomorphism metadata (`archetypeId`, `breaksAt`, `createdAt`) when present.
     """
     if not isinstance(raw, dict):
         return None
@@ -149,7 +152,7 @@ def normalize_chain(raw: dict[str, Any]) -> dict[str, Any] | None:
     else:
         encompass_weight = default_encompass_weight(relation, is_joint=is_joint)
 
-    return {
+    out: dict[str, Any] = {
         "premises": premises,
         "conclusion": conclusion,
         "relation": relation,
@@ -159,6 +162,24 @@ def normalize_chain(raw: dict[str, Any]) -> dict[str, Any] | None:
         "arity": len(premises),
         "encompassWeight": encompass_weight,
     }
+
+    arch_id = str(raw.get("archetypeId") or "").strip()
+    if arch_id:
+        out["archetypeId"] = arch_id
+
+    raw_breaks = raw.get("breaksAt")
+    if isinstance(raw_breaks, list):
+        clean_breaks = [str(b).strip() for b in raw_breaks if str(b).strip()]
+        if clean_breaks or relation.lower() == "isomorphic_to":
+            out["breaksAt"] = clean_breaks
+    elif isinstance(raw_breaks, str) and raw_breaks.strip():
+        out["breaksAt"] = [raw_breaks.strip()]
+
+    created_at = str(raw.get("createdAt") or "").strip()
+    if created_at:
+        out["createdAt"] = created_at
+
+    return out
 
 
 # ---------------------------------------------------------------------------

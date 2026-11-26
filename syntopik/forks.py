@@ -468,19 +468,62 @@ def _estimate_poly_degree(node: ast.AST) -> int:
     return 0
 
 
+_MAX_SYMPY_EXPANDED_TERMS = 64
+
+
+def _count_additive_terms(node: ast.AST) -> int:
+    """Upper-bound estimate of expanded additive monomials for an AST subtree."""
+    if isinstance(node, ast.Expression):
+        return _count_additive_terms(node.body)
+    if isinstance(node, ast.UnaryOp):
+        return _count_additive_terms(node.operand)
+    if isinstance(node, ast.BinOp):
+        if isinstance(node.op, (ast.Add, ast.Sub)):
+            return min(100_000, _count_additive_terms(node.left) + _count_additive_terms(node.right))
+        if isinstance(node.op, ast.Mult):
+            return min(100_000, _count_additive_terms(node.left) * _count_additive_terms(node.right))
+        if isinstance(node.op, ast.Pow):
+            base_terms = _count_additive_terms(node.left)
+            if base_terms <= 1:
+                return 1
+            exp_val = _try_const_numeric(node.right)
+            if exp_val is None or not math.isfinite(float(exp_val)):
+                return 100_000
+            exp_int = int(math.ceil(abs(float(exp_val))))
+            if exp_int <= 0:
+                return 1
+            if base_terms > 32 or exp_int > 32:
+                return 100_000
+            return min(100_000, math.comb(base_terms + exp_int - 1, exp_int))
+    return 1
+
+
 def _has_high_symbolic_expansion_risk(parsed: ast.AST) -> bool:
-    """Return True if SymPy simplify()/expand() could experience polynomial blowup."""
+    """Return True if SymPy simplify()/expand() could experience combinatorial polynomial blowup."""
     has_add_sub = _contains_add_sub(parsed)
     for node in ast.walk(parsed):
         if isinstance(node, ast.BinOp) and isinstance(node.op, ast.Pow):
             exp_val = _try_const_numeric(node.right)
             if not _is_atomic_base(node.left):
-                if exp_val is None or abs(float(exp_val)) > _MAX_SYMPY_COMPOUND_EXPONENT:
+                if exp_val is None or not math.isfinite(float(exp_val)):
                     return True
-                if _contains_pow(node.left) and abs(float(exp_val)) > 2:
+                exp_abs = abs(float(exp_val))
+                if exp_abs > _MAX_SYMPY_COMPOUND_EXPONENT:
                     return True
-            elif exp_val is None or abs(float(exp_val)) > _MAX_COMPOUND_EXPONENT:
+                if _contains_pow(node.left) and exp_abs > 2:
+                    return True
+                terms = _count_additive_terms(node.left)
+                exp_int = int(math.ceil(exp_abs))
+                if terms >= 3 and exp_abs > 3:
+                    return True
+                if terms >= 2 and exp_int >= 2:
+                    est = 100_000 if (terms > 32 or exp_int > 32) else math.comb(terms + exp_int - 1, exp_int)
+                    if est > _MAX_SYMPY_EXPANDED_TERMS:
+                        return True
+            elif exp_val is None or not math.isfinite(float(exp_val)) or abs(float(exp_val)) > _MAX_COMPOUND_EXPONENT:
                 return True
+    if _count_additive_terms(parsed) > _MAX_SYMPY_EXPANDED_TERMS:
+        return True
     if has_add_sub and _estimate_poly_degree(parsed) > _MAX_COMPOUND_EXPONENT:
         return True
     return False

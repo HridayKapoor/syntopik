@@ -27,6 +27,7 @@ from syntopik.sim_eval import (  # noqa: E402
     format_markdown_table,
     render_ablation_svg,
     render_calibration_svg,
+    replay_learner_history,
     run_simulation,
 )
 
@@ -85,12 +86,72 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Assert strict deterministic CI regression gates (exit non-zero on failure)",
     )
+    parser.add_argument(
+        "--replay",
+        action="store_true",
+        help="Replay local chronological revlog.jsonl (70/30 TimeSeriesSplit) to evaluate/calibrate learner_model hyperparameters",
+    )
+    parser.add_argument(
+        "--workspace",
+        type=Path,
+        default=None,
+        help="Workspace directory for --replay (default: auto-resolved Syntopik workspace)",
+    )
+    parser.add_argument(
+        "--apply",
+        action="store_true",
+        help="With --replay, persist calibratedHyperparams into learner-profile.json when OOS composite loss improves >= 0.005",
+    )
+    parser.add_argument(
+        "--min-events",
+        type=int,
+        default=12,
+        help="Minimum confidence-rated reviews required for --replay (default: 12)",
+    )
     return parser
 
 
 def main(argv: list[str] | None = None) -> int:
     parser = build_parser()
     args = parser.parse_args(argv)
+
+    if args.replay:
+        t0 = time.perf_counter()
+        replay_res = replay_learner_history(
+            args.workspace,
+            min_events=args.min_events,
+            apply_if_improved=args.apply,
+        )
+        replay_res["elapsedMs"] = round((time.perf_counter() - t0) * 1000.0, 1)
+        if args.json:
+            print(json.dumps(replay_res, indent=2, ensure_ascii=False))
+        elif replay_res.get("insufficientData"):
+            print(
+                f"Replay skipped (insufficient data): {replay_res['eventCount']}/{replay_res['minEvents']} "
+                f"confidence-rated reviews in {replay_res['workspace']}."
+            )
+        else:
+            sp = replay_res["split"]
+            b_oos = replay_res["baselineMetrics"]["oos"]
+            c_oos = replay_res["candidateMetrics"]["oos"]
+            print(
+                f"Longitudinal Policy Replay ({sp['trainEvents']} train / {sp['testEvents']} OOS test, "
+                f"grid={replay_res['gridEvaluated']}, {replay_res['elapsedMs']} ms)"
+            )
+            print(
+                f"  Baseline OOS:  composite={b_oos['compositeLoss']:.5f} "
+                f"(Brier={b_oos['brierScore']:.4f}, LogLoss={b_oos['logLoss']:.4f}, ER={b_oos['erMismatchRate']:.4f})"
+            )
+            print(
+                f"  Candidate OOS: composite={c_oos['compositeLoss']:.5f} "
+                f"(Brier={c_oos['brierScore']:.4f}, LogLoss={c_oos['logLoss']:.4f}, ER={c_oos['erMismatchRate']:.4f})"
+            )
+            print(
+                f"  OOS Gain: {replay_res['oosImprovement']:+.5f} "
+                f"(threshold >= {replay_res['minOosGainThreshold']:.3f}) | "
+                f"improved={replay_res['improved']} | applied={replay_res['applied']}"
+            )
+        return 0 if replay_res.get("ok") else 1
 
     t0 = time.perf_counter()
     results = run_simulation(days=args.days, seed=args.seed)

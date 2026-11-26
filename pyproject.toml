@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "syntopik"
-version = "3.0.0"
+version = "3.1.0"
 description = "Local-first, harness-native AI Deep-Mastery OS with FSRS-6 + BKT + True FIRe knowledge hypergraph, deterministic STEM/CS verifiers, calm tutoring, and a 2-way local Studio."
 readme = "README.md"
 license = { text = "MIT" }
@@ -102,10 +102,14 @@ Issues = "https://github.com/HridayKapoor/syntopik/issues"
 [tool.hatch.build.targets.sdist]
 artifacts = [
   "mcp-app/mlh-studio/dist/**",
+  "syntopik/data/*.json",
 ]
 
 [tool.hatch.build.targets.wheel]
 packages = ["syntopik"]
+artifacts = [
+  "syntopik/data/*.json",
+]
 
 [tool.hatch.build.targets.wheel.force-include]
 "scripts" = "syntopik/_bundle/scripts"

@@ -1,9 +1,9 @@
 # Syntopik
 
-**Personal AI Teacher & Cognitive Mastery OS — deterministic learner psychology, Bayesian causal root-cause probing, FIRe-compressed FSRS-6 memory, and a playable 6-station Mastery Gymnasium across any AI harness or browser.**
+**Personal AI Teacher & Cognitive Mastery OS — deterministic learner psychology, Structural Isomorphism Rosetta transfer, Bayesian causal root-cause probing, FIRe-compressed FSRS-6 memory, offline CRDT multi-device sync, and a playable 6-station Mastery Gymnasium across any AI harness or browser.**
 
 [![3-OS CI](https://github.com/HridayKapoor/syntopik/actions/workflows/ci.yml/badge.svg)](https://github.com/HridayKapoor/syntopik/actions/workflows/ci.yml)
-[![Release v3.0.0](https://img.shields.io/badge/Release-v3.0.0-C76E3A.svg)](./CHANGELOG.md)
+[![Release v3.1.0](https://img.shields.io/badge/Release-v3.1.0-C76E3A.svg)](./CHANGELOG.md)
 [![Python 3.12+ Pure Stdlib](https://img.shields.io/badge/Python-3.12%2B%20Pure%20Stdlib-2B7A52.svg)](#quick-start)
 [![Zero External CDNs](https://img.shields.io/badge/UI-Zero%20External%20CDNs-4D8B6F.svg)](#visual-showcase)
 [![License: MIT](https://img.shields.io/badge/License-MIT-36538C.svg)](./LICENSE)
@@ -44,13 +44,13 @@ Zero-CDN, calm editorial interfaces in **Warm Obsidian & Vellum Ink** (Dark) and
 
 ---
 
-## Why Syntopik v3.0 Replaces a Static AI Prompt with a Real Private Teacher
+## Why Syntopik v3.1 Replaces a Static AI Prompt with a Real Private Teacher
 
-| Existing Approach | Where It Breaks | How **Syntopik v3.0** Solves It |
+| Existing Approach | Where It Breaks | How **Syntopik v3.1** Solves It |
 | :--- | :--- | :--- |
-| **Prompt-Only Socratic Wrappers** *(ChatGPT Study Mode, custom system prompts)* | Walls of text, session amnesia, sycophancy, VARK learning-style pseudoscience, unverified math/code, and guessing what to teach next. | **Closed-Loop Brainstem (`syntopik next`) + 3-Cadence Non-VARK Learner Psychology** (`<= 160`w calm ceilings, Kalyuga Expertise-Reversal scaffolding, 6-state affect guardrails, zero VARK myths, verified `40/40` TutorBench). |
-| **Standalone BYOK Apps & Paid Flashcard Decks** *(Electron tutors, paywalled mobile apps)* | Extra API bills, flat cards with zero prerequisite credit, mastery inflation from MCQ recognition alone, red-backlog burnout after missed weeks. | **100% Harness-Native + Zero-Clone `syntopik serve`** (`20` pure-stdlib `syntopik/` modules, `dependencies = []`), **True FIRe + SRC**, **4-Tier Evidence Ledger (`T1–T4`)**, **Calm Catch-Up**, and **Free ~20 KB Offline Pocket HTML5 Deck**. |
-| **Passive RAG & Vibe-Coding Loops** *(NotebookLM → Chat → copy-paste code)* | *Epistemic Drift* (unverified claims memorized), superficial completion without diagnosing prerequisite breaks, coding bugs never turned into durable mental models. | **Bayesian Noisy-OR Causal Root-Cause Probing ($\Delta H$)** + **Playable 6-Station Mastery Gym** + **Anti-Vibe-Coding Work Mentor (`syntopik debrief`)** + **Deterministic CAS / Code / Chemistry Verifiers**. |
+| **Prompt-Only Socratic Wrappers** *(ChatGPT Study Mode, custom system prompts)* | Walls of text, session amnesia, sycophancy, VARK learning-style pseudoscience, unverified math/code, and guessing what to teach next. | **Closed-Loop Brainstem (`syntopik next`) + 3-Cadence Non-VARK Learner Psychology** (`<= 160`w calm ceilings, Kalyuga Expertise-Reversal scaffolding, 6-state affect guardrails, OOS longitudinal replay calibration, zero VARK myths, verified `40/40` TutorBench). |
+| **Standalone BYOK Apps & Paid Flashcard Decks** *(Electron tutors, paywalled mobile apps)* | Extra API bills, cloud lock-in, flat cards with zero prerequisite or cross-domain credit, mastery inflation from MCQ recognition alone, red-backlog burnout. | **100% Harness-Native + Zero-Clone `syntopik serve`** (`22` pure-stdlib `syntopik/` modules, `dependencies = []`), **True FIRe + Rosetta `0.25` Cross-Domain Credit**, **Offline-First CRDT Multi-Device Sync**, **4-Tier Evidence (`T1–T4`)**, **Calm Catch-Up**, and **Free ~20 KB Pocket HTML5 Deck**. |
+| **Passive RAG & Vibe-Coding Loops** *(NotebookLM → Chat → copy-paste code)* | *Epistemic Drift* (unverified claims memorized), superficial completion without diagnosing prerequisite breaks, handwritten slips and coding bugs never turned into durable mental models. | **Bayesian Noisy-OR Causal Probing ($\Delta H$)** + **Proof-Graph Handwriting Diff (`syntopik proof-diff`)** + **Playable 6-Station Mastery Gym** + **Anti-Vibe-Coding Work Mentor (`syntopik debrief`)** + **Deterministic CAS / Code / Chemistry Verifiers**. |
 
 ### 1. Three-Cadence Non-VARK Adaptive Learner Psychology (`syntopik/learner_model.py`)
 Syntopik explicitly rejects debunked VARK ("visual / auditory / kinesthetic") learning-style myths (Pashler et al., Rogowsky et al.) and instead implements empirically grounded **Aptitude-Treatment Interaction (ATI)**:
@@ -77,6 +77,12 @@ Syntopik explicitly rejects debunked VARK ("visual / auditory / kinesthetic") le
   - **Post-Exam Semester Sunset (`syntopik sunset <slug> --apply`)**: Snapshots finished chapters to `chapters/_archived/*.syntopik-pack.zip`, retires ~80% leaf trivia (`archived: true`), and keeps ~20% load-bearing axioms at $R=0.80$.
   - **Multi-Course Buffer-Protected Auto-Pacer + `.ics` (`syntopik pace --rebalance --ics study.ics`)**: 20% guilt-free slack buffer across multiple exams + pure-stdlib RFC-5545 calendar export.
   - **48-Hour Exam Triage & Anti-Mastery Crib Sheet (`syntopik triage --exam-in 48h --sleep-hours 7 --crib-sheet`)**, **Calm Backlog Recovery (`syntopik review --recover --daily-cap 15`)**, **Cold-Start Re-Entry (`syntopik review --resume`)**, **Offline ~20 KB Pocket Commute HTML + Opt-In LAN QR (`syntopik export pocket`, `syntopik serve --lan`)**, **Universal Ingestion (`syntopik import`)**, and **Bidirectional Obsidian / Mnemonic Sync (`syntopik export obsidian`)**.
+
+### 4. Four v3.1 Breakthroughs: Cross-Domain Transfer, Offline CRDT Sync, Policy Replay & Proof-Graph Diff
+- **Structural Isomorphism Rosetta Engine + `0.25` Cross-Domain FIRe (`syntopik/isomorphism.py`, `syntopik/data/archetypes.json`, `syntopik rosetta`)**: Grounded in Gentner Structure-Mapping & Paynter Bond Graphs across **10 curated cross-domain archetypes** (e.g., Damped SHM ↔ Series RLC ↔ PID ↔ Momentum SGD; Dijkstra ↔ Viterbi ↔ DAG DP; Softmax ↔ Boltzmann; Raft ↔ BFT ↔ Dynamo Quorums). Persists idempotent `isomorphic_to` chords carrying explicit **`breaksAt` negative-transfer guards**, emits bijection openers via `syntopik next` / `synt_next_move` (`isomorphicBridge`), and propagates gentle `0.25` (capped `<= 0.30`) bidirectional cross-domain FIRe credit without ever auto-clearing `misconception` twins or triggering SRC prerequisite knockouts.
+- **Offline-First CRDT Multi-Device Delta Sync (`syntopik/sync_delta.py`, `syntopik sync-delta`)**: Exports and merges SHA-256 tamper-evident `syntopik-delta-v1` snapshots (`10 MiB` cap, strict slug jail, fail-closed integrity checks) across laptops/desktops/mobile with mathematically convergent **join-semilattice CRDTs** — G-Set ledger union, monotonic chapter-tracker progress lattices (never regressing `mastered`/`solved`, ORing milestones), weighted per-device domain Elo, and deterministic SHA-256 re-chaining of `evidence-ledger.jsonl` with zero cloud lock-in.
+- **Longitudinal Learner Telemetry Replay (`syntopik/sim_eval.py`, `benchmarks/syntopik_bench.py --replay`, `syntopik calibrate-policy`)**: Replays your local chronological `revlog.jsonl` on a strict **70/30 TimeSeriesSplit** to calibrate bounded `learner_model.py` Elo/affect/Kalyuga hyperparameters — `--apply` adopts `calibratedHyperparams` strictly when out-of-sample composite loss improves by `>= 0.005`.
+- **Structured Proof-Graph Handwriting Diff (`scripts/derivation_forge.py diff`, `syntopik proof-diff`)**: Aligns Vision-transcribed handwritten derivation steps directly against `derivations.jsonl` Causal Step DAGs, localizes `earliestBreakLine` + `errorKind` (`sign_flip`, `missing_factor`, `wrong_substitution`, `skipped_step`, `invalid_algebra`), returns zero-leak `R0–R2` nudges, auto-spawns Blunder FEN Forks (`forks.jsonl`), and surfaces the highest-$\Delta H$ causal ancestor `diagnosticProbe`.
 
 ---
 
@@ -137,10 +143,10 @@ Zero mandatory pip or npm dependencies (`dependencies = []` / `{}`) across **mac
 | :--- | :--- | :--- |
 | **Live Browser Demo (Zero Install)** | [hridaykapoor.github.io/syntopik](https://hridaykapoor.github.io/syntopik/) | Full interactive Teacher Studio, Mastery Gym, `:::explore` labs, and 3 starter packs directly in your browser. |
 | **Zero-Clone Local Studio** | `npx github:HridayKapoor/syntopik demo --open`<br>`uvx --from git+https://github.com/HridayKapoor/syntopik syntopik serve --open` | Auto-creates `~/.syntopik` (or `~/.syntopik-demo`), launches 2-way Studio (`http://127.0.0.1:4173`) with Live Chalkboard, Mastery Gym, FIRe flashcards, SVG occlusion, URL/PDF drop, and CBT exams. |
-| **Claude Code (Any Repo)** | `/plugin marketplace add HridayKapoor/syntopik`<br>`/plugin install syntopik` | All 17 `/syntopik:*` skills, 21-tool `syntopik-studio` v3.0 MCP App (incl. `synt_next_move` & `synt_whiteboard_step`), and Windows-safe, plugin-cache-safe hooks. |
+| **Claude Code (Any Repo)** | `/plugin marketplace add HridayKapoor/syntopik`<br>`/plugin install syntopik` | All 17 `/syntopik:*` skills, 21-tool `syntopik-studio` v3.1 MCP App (incl. `synt_next_move` w/ Rosetta bridges & `synt_whiteboard_step`), and Windows-safe, plugin-cache-safe hooks. |
 | **Cursor / Windsurf / Copilot / Codex / OpenCode** | `npx skills add HridayKapoor/syntopik`<br>`npx github:HridayKapoor/syntopik attach .` | Auto-detects installed harnesses (`--harness auto`), wires thin pointer rules + native MCP configs (`.vscode/mcp.json` `"servers"`, `opencode.json` `"mcp"`, `.cursor/mcp.json`, `.codex/config.toml`) + `.git/info/exclude` with zero diff to host `AGENTS.md` or `.gitignore`. |
-| **Google Antigravity 2.0 (Any Repo)** | `syntopik connect antigravity`<br>*(or `uvx --from git+https://github.com/HridayKapoor/syntopik syntopik connect antigravity`)* | Installs global `~/.gemini/config/plugins/syntopik/` bundle (`plugin.json`, 17 skills, rules, hooks, and 21-tool SEP-1865 Studio v3.0 MCP App). |
-| **Gemini CLI (Any Repo)** | `gemini extensions install https://github.com/HridayKapoor/syntopik` | Installs `gemini-extension.json`, `GEMINI.md` (`@AGENTS.md` on line 1), 17 skills, hooks, and `syntopik-studio` v3.0 MCP server. |
+| **Google Antigravity 2.0 (Any Repo)** | `syntopik connect antigravity`<br>*(or `uvx --from git+https://github.com/HridayKapoor/syntopik syntopik connect antigravity`)* | Installs global `~/.gemini/config/plugins/syntopik/` bundle (`plugin.json`, 17 skills, rules, hooks, and 21-tool SEP-1865 Studio v3.1 MCP App). |
+| **Gemini CLI (Any Repo)** | `gemini extensions install https://github.com/HridayKapoor/syntopik` | Installs `gemini-extension.json`, `GEMINI.md` (`@AGENTS.md` on line 1), 17 skills, hooks, and `syntopik-studio` v3.1 MCP server. |
 | **Standalone Clone / Full STEM** | `git clone https://github.com/HridayKapoor/syntopik && cd syntopik && syntopik serve --open` | Adds optional local SymPy/Pint, RDKit/ChemPy, Schemdraw, Typst, RapidOCR, Manim, and offline `file://` fallback. |
 
 ---
@@ -150,28 +156,32 @@ Zero mandatory pip or npm dependencies (`dependencies = []` / `{}`) across **mac
 ```mermaid
 flowchart LR
     Learner["Learner (Browser Studio, Mobile Pocket, or Any AI Harness)"] --> Entry["Zero-Clone CLI & Packaging (syntopik CLI / npx / uvx / Claude Plugin / Gemini Ext / 3 Starter Packs)"]
-    Entry --> Harness["Windows-Safe Hooks, 17 Skills & 21-Tool MCP App (AGENTS+GEMINI = 7,281 B <= 9,500 B)"]
+    Entry --> Harness["Windows-Safe Hooks, 17 Skills & 21-Tool MCP App (AGENTS+GEMINI = 7,467 B <= 9,500 B)"]
     Entry --> Server["2-Way Local Studio Server (syntopik/server.py: 127.0.0.1 CSRF + SSE Chalkboard + Opt-In LAN /pocket)"]
-    Harness --> Core["20 Pure-Stdlib syntopik/ Modules (Learner Psych, Brainstem, Root-Cause, Evidence, FIRe, Explorable, Work Mentor, Sim-Eval)"]
-    Harness --> Scripts["36 Deterministic scripts/ Engines (Derivation Forge, Viva Chamber, Fork/Arena/Blitz, 40-Case TutorBench, Code/CAS/Chem/PDF/Typst)"]
+    Harness --> Core["22 Pure-Stdlib syntopik/ Modules (Learner Psych, Brainstem, Rosetta 10 Archetypes, CRDT Sync, Root-Cause, Evidence, FIRe, Explorable, Work Mentor, Sim-Eval)"]
+    Harness --> Scripts["36 Deterministic scripts/ Engines (Derivation Forge + Proof-Diff, Viva Chamber, Fork/Arena/Blitz, 40-Case TutorBench, Code/CAS/Chem/PDF/Typst)"]
     Server --> Core
     Server --> Scripts
-    Core --> State["Gitignored Local Privacy Vault (Hypergraph, Learner Profile, Hash-Chained Evidence, Whiteboard, Forks/Arenas/Derivations/Viva)"]
+    Core --> State["Gitignored Local Privacy Vault (Hypergraph, Learner Profile, Hash-Chained Evidence, Sync State, Whiteboard, Forks/Arenas/Derivations/Viva)"]
     Scripts --> State
-    State --> UI["Zero-CDN Editorial Studio (dashboard.html + 6-Station Gym, viewer.html Causal Halos, CBT Exams, ~20 KB Pocket HTML, Dossier)"]
+    State --> UI["Zero-CDN Editorial Studio (dashboard.html + 6-Station Gym, viewer.html Causal Halos & Rosetta Chords, CBT Exams, ~20 KB Pocket HTML, Dossier)"]
     UI --> Learner
 ```
 
 ---
 
-## Verified Unified `syntopik` v3.0 CLI Reference
+## Verified Unified `syntopik` v3.1 CLI Reference
 
 Every command and flag below is verified against `syntopik/cli.py` and `bin/syntopik.mjs` and runs on **bare Python 3.12+ stdlib** (with native zero-Python Node support for `init`, `attach`, `sync`, `mcp`, `hook`):
 
 | Command | Role |
 | :--- | :--- |
 | `syntopik demo [--pack raft-consensus\|shm-physics\|transformers-attention\|all] [--open] [--port 4173]` | Load bundled zero-PII starter pack(s) into `~/.syntopik-demo` and optionally open Studio in browser. |
-| `syntopik next [--energy low\|normal\|deep] [--domain <name>] [--event <name>] [--json]` | **Pedagogical Brainstem**: emit the single highest-leverage teacher move (`<= 180`-token envelope). |
+| `syntopik next [--energy low\|normal\|deep] [--domain <name>] [--event <name>] [--json]` | **Pedagogical Brainstem**: emit the single highest-leverage teacher move (`<= 180`-token envelope + Rosetta `isomorphicBridge`). |
+| `syntopik rosetta [scan\|bridge\|link\|archetypes] [--prop-id <id>] [--source <id>] [--target <id>] [--archetype <id>] [--breaks-at <note>] [--min-score 0.35] [--json]` | **Structural Isomorphism Rosetta Engine**: scan 10 archetypes, emit bijection openers, and link `isomorphic_to` chords (`0.25` FIRe). |
+| `syntopik sync-delta [export\|merge\|verify\|status] [--out <path>] [--file <path>] [--since <iso>] [--dry-run] [--json]` | **Offline-First CRDT Sync**: export, SHA-256 verify, and monotonically merge multi-device `syntopik-delta-v1` snapshots. |
+| `syntopik calibrate-policy [--apply] [--min-events 12] [--workspace <dir>] [--json]` | **Longitudinal Policy Replay**: 70/30 chronological TimeSeriesSplit replay of `revlog.jsonl` adopting bounded gains `>= 0.005`. |
+| `syntopik proof-diff --id <derivation_id> --steps-json <json_or_path> [--no-spawn-fork] [--kg-dir <dir>] [--json]` | **Proof-Graph Handwriting Diff**: align handwritten steps against `derivations.jsonl` with zero-leak `R0–R2` nudges, auto-fork & $\Delta H$ probe. |
 | `syntopik profile [status\|calibrate\|policy\|override\|reset] [--prose-density terse\|standard\|rich] [--set KEY=VALUE]` | Inspect, calibrate (non-VARK Tier-1), compile Kalyuga `TeachingPolicy`, override, or reset Learner Profile. |
 | `syntopik drop <inputs...> [--slug <slug>] [--title "<title>"] [--json]` | 10-second mixed-source kickoff (PDF, URL, YouTube, repo, notes) with Teacher-First spine classification. |
 | `syntopik serve [--port 4173] [--host 127.0.0.1] [--lan] [--open] [--workspace <dir>]` | Launch 2-way local Studio + Mastery Gym server (`127.0.0.1`, CSRF token, SSE; optional `--lan` Pocket QR). |
@@ -248,26 +258,26 @@ Syntopik routes plain English automatically — zero student CLI logistics requi
 
 ---
 
-## Exact v3.0.0 Component Inventory
+## Exact v3.1.0 Component Inventory
 
-- **Turn-0 Context Budget**: `AGENTS.md` (`4,757 B`) + `GEMINI.md` (`2,524 B`, `@AGENTS.md` on line 1) = **`7,281 B`** (strictly `<= 9,500 B` unified ceiling, `-21.2%` vs v1.0.0); `CLAUDE.md` (`2,809 B`, `21` lines); `17` portable skills (`<= 3,400 B` YAML descriptions, zero `<...>` or script filenames).
-- **20 Pure-Stdlib Core Modules (`syntopik/`, `dependencies = []`)**: `__init__.py`, `paths.py`, `storage.py`, `schemas.py`, `fsrs_core.py`, `learner_model.py`, `root_cause.py`, `evidence.py`, `brainstem.py`, `explorable.py`, `work_mentor.py`, `whiteboard.py`, `sim_eval.py`, `ingest.py`, `obsidian.py`, `forks.py`, `packs.py`, `pocket.py`, `server.py`, `cli.py`.
+- **Turn-0 Context Budget & Health Gates**: `AGENTS.md` (`4,901 B`) + `GEMINI.md` (`2,566 B`, `@AGENTS.md` on line 1) = **`7,467 B`** (`<= 7,500 B` target / `<= 9,500 B` ceiling); `CLAUDE.md` (`2,924 B`, `21` lines); `17` portable skills (`<= 3,400 B` YAML descriptions, zero `<...>` or script filenames); **`49/49`** full doctor & **`16/16`** `--core-only` doctor (`0 warn, 0 fail`).
+- **22 Pure-Stdlib Core Modules (`syntopik/`, `dependencies = []`) + 10 Rosetta Archetypes (`syntopik/data/archetypes.json`)**: `__init__.py`, `paths.py`, `storage.py`, `schemas.py`, `fsrs_core.py`, `learner_model.py`, `root_cause.py`, `evidence.py`, `brainstem.py`, `explorable.py`, `work_mentor.py`, `whiteboard.py`, `sim_eval.py`, `isomorphism.py`, `sync_delta.py`, `ingest.py`, `obsidian.py`, `forks.py`, `packs.py`, `pocket.py`, `server.py`, `cli.py` (`26` unified CLI verbs).
 - **36 Local Deterministic Engines (`scripts/` — 35 Python + 1 Node) + `benchmarks/syntopik_bench.py`**:
-  - *Psychology, Memory, Brainstem & Benchmarks*: `learner_profile.py`, `srs_engine.py`, `graph_intel.py`, `daily_plan.py`, `chapter_tracker.py`, `mistake_analytics.py`, `pedagogy_eval.py` (`40/40` TutorBench), `benchmarks/syntopik_bench.py` (`7/7` ablation gates), `build_starter_packs.py`, `setup_harness.py`, `study_doctor.py`, `backup_harness.py`, `install_mcp_app.py`, `sync-graph.mjs` (`schemaVersion: 5`).
-  - *Mastery Gym & Timed Exams*: `fork_replay.py`, `falsify_arena.py`, `decision_blitz.py`, `derivation_forge.py`, `viva_chamber.py`, `exam_runner.py`.
+  - *Psychology, Memory, Brainstem, Sync & Benchmarks*: `learner_profile.py`, `srs_engine.py`, `graph_intel.py` (`--rosetta`), `daily_plan.py`, `chapter_tracker.py`, `mistake_analytics.py`, `pedagogy_eval.py` (`40/40` TutorBench), `benchmarks/syntopik_bench.py` (`7/7` ablation gates + `--replay`), `build_starter_packs.py`, `setup_harness.py`, `study_doctor.py` (`49/49` / `16/16`), `backup_harness.py`, `install_mcp_app.py`, `sync-graph.mjs` (`schemaVersion: 5`).
+  - *Mastery Gym & Timed Exams*: `fork_replay.py`, `falsify_arena.py`, `decision_blitz.py`, `derivation_forge.py` (blackout + axiom-cut + `diff`), `viva_chamber.py`, `exam_runner.py`.
   - *Ingestion, Obsidian, CS, Math, Physics, Chemistry, PDFs & Media*: `ingest_source.py`, `research_scout.py`, `vault_sync.py`, `code_verify.py`, `math_verify.py`, `math_plot.py`, `physics_draw.py`, `circuit_draw.py`, `chem_physical.py`, `chem_3d.py`, `organic_reagents.py`, `eduniti_pyq.py`, `pdf_studio.py`, `cheatsheet_pdf.py`, `audio_brief.py`, `manim_helpers.py`, `narrate_video.py`.
 - **17 Progressive-Disclosure Skills (`.agents/skills/` mirrored at `.claude/skills/`)**:
   `topic-onboarding` · `chapter-autopilot` · `teach-chapter` · `practice-drill` · `grade-handwriting` · `exam-simulator` · `universal-pdf-study` · `ingest-chapter` · `visual-and-demo` · `revision-sheets` · `knowledge-graph` · `physics-circuits-and-units` · `physical-chemistry` · `organic-chemistry-tutor` · `manim-animator` · `subagent-orchestrator` · `harness-self-improve`.
-- **21 MCP Tools (`mcp-app/mlh-studio/` v3.0.0 — `syntopik-studio`)**:
-  `synt_quiz_card`, `synt_practice_card` (`standard`/`parsons`/`faded`/`blackout`), `synt_lesson_studio`, 5 internal app-only studio tools (incl. `synt_app_update_profile`), 5 ambient headless tools (`synt_next_move`, `synt_whiteboard_step`, `synt_capture_concept`, `synt_get_frontier`, `synt_log_review`), plus 8 backwards-compatible `mlh_*` aliases.
+- **21 MCP Tools (`mcp-app/mlh-studio/` v3.1.0 — `syntopik-studio`)**:
+  `synt_quiz_card`, `synt_practice_card` (`standard`/`parsons`/`faded`/`blackout`), `synt_lesson_studio`, 5 internal app-only studio tools (incl. `synt_app_update_profile`), 5 ambient headless tools (`synt_next_move` w/ `isomorphicBridge`, `synt_whiteboard_step`, `synt_capture_concept`, `synt_get_frontier` w/ `rosettaBridgesCount` & `syncDeviceId`, `synt_log_review`), plus 8 backwards-compatible `mlh_*` aliases.
 
 ---
 
 ## Documentation, Security & License
 
-- [`BOOTSTRAP.md`](./BOOTSTRAP.md) — 10-second multi-harness integration guide, `syntopik` v3.0 CLI reference & 4-axis UX matrix.
-- [`SELF_IMPROVEMENT_BLUEPRINT.md`](./SELF_IMPROVEMENT_BLUEPRINT.md) — Complete engineering record through Phase 6 (`v3.0.0`), regression watchlist & `v3.1+` roadmap.
+- [`BOOTSTRAP.md`](./BOOTSTRAP.md) — 10-second multi-harness integration guide, `syntopik` v3.1 CLI reference & 4-axis UX matrix.
+- [`SELF_IMPROVEMENT_BLUEPRINT.md`](./SELF_IMPROVEMENT_BLUEPRINT.md) — Complete engineering record through Phase 7 (`v3.1.0`), regression watchlist & forward roadmap.
 - [`CONTRIBUTING.md`](./CONTRIBUTING.md) — Architecture invariants, `9,500 B` context budget, `40/40` TutorBench & `Syntopik-Eval` verification gates.
-- [`SECURITY.md`](./SECURITY.md) — Local-first privacy, `127.0.0.1` CSRF & `--lan` scoped pairing, zero-PII fail-closed packs, AST-whitelist RPN, and sandbox boundaries.
-- [`CHANGELOG.md`](./CHANGELOG.md) — Full release history (`v3.0.0`, `v2.0.0`, `v1.0.0`).
+- [`SECURITY.md`](./SECURITY.md) — Local-first privacy, `127.0.0.1` CSRF & `--lan` scoped pairing, zero-PII fail-closed packs, tamper-evident CRDT sync, AST-whitelist RPN, and sandbox boundaries.
+- [`CHANGELOG.md`](./CHANGELOG.md) — Full release history (`v3.1.0`, `v3.0.0`, `v2.0.0`, `v1.0.0`).
 - Licensed under the [MIT License](./LICENSE).

@@ -269,11 +269,18 @@ def verify_ledger_chain(kg_dir: Path | str) -> dict[str, Any]:
 # ---------------------------------------------------------------------------
 
 
+_NON_CAUSAL_RELATIONS: frozenset[str] = frozenset(
+    {"isomorphic_to", "contrasts_with", "contrasts", "contrast", "analogous", "contradicts", "unrelated"}
+)
+
+
 def _build_downstream_metrics(chains: list[dict[str, Any]]) -> tuple[dict[str, int], dict[str, set[str]]]:
     adj: dict[str, set[str]] = {}
     for raw in chains:
         nc = normalize_chain(raw)
         if not nc or float(nc["encompassWeight"]) <= 0.0:
+            continue
+        if str(nc.get("relation") or "").strip().lower() in _NON_CAUSAL_RELATIONS:
             continue
         conc = nc["conclusion"]
         for prem in nc["premises"]:

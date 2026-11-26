@@ -23116,6 +23116,62 @@ function loadArenasSummary(kgDir) {
   ).length;
   return { arenasCount: arenas.length, openArenasCount };
 }
+function countRosettaBridges(chains) {
+  const seen = /* @__PURE__ */ new Set();
+  for (const c of Array.isArray(chains) ? chains : []) {
+    if (!c || typeof c !== "object") continue;
+    const rel = String(c.relation || "").trim().toLowerCase();
+    if (rel !== "isomorphic_to") continue;
+    const prems = Array.isArray(c.premises) ? c.premises.map((x) => String(x || "").trim()).filter(Boolean) : c.from ? [String(c.from).trim()] : [];
+    const concl = String(c.conclusion || c.to || "").trim();
+    const arch = String(c.archetypeId || c.archetype || "").trim().toLowerCase();
+    if (prems.length === 0 || !concl) {
+      seen.add(`raw:${seen.size}`);
+      continue;
+    }
+    for (const pr of prems) {
+      if (!pr || pr === concl) continue;
+      const [a, b] = pr < concl ? [pr, concl] : [concl, pr];
+      seen.add(`${a}<->${b}:${arch}`);
+    }
+  }
+  return seen.size;
+}
+function loadSyncDeviceId(kgDir) {
+  const state = readJsonSafe(path.join(kgDir, "sync-state.json"), null);
+  const devId = typeof state?.deviceId === "string" ? state.deviceId.trim() : "";
+  return devId || null;
+}
+function findPersistedIsomorphicBridgeJs(propositions, chains, targetNodeId) {
+  const tid = String(targetNodeId || "").trim();
+  if (!tid) return null;
+  const propsById = /* @__PURE__ */ new Map();
+  for (const p2 of Array.isArray(propositions) ? propositions : []) {
+    if (p2 && p2.id) propsById.set(String(p2.id), p2);
+  }
+  for (const c of Array.isArray(chains) ? chains : []) {
+    if (!c || typeof c !== "object") continue;
+    if (String(c.relation || "").trim().toLowerCase() !== "isomorphic_to") continue;
+    const prems = Array.isArray(c.premises) ? c.premises.map((x) => String(x || "").trim()).filter(Boolean) : c.from ? [String(c.from).trim()] : [];
+    const concl = String(c.conclusion || c.to || "").trim();
+    let twinId = null;
+    if (concl === tid && prems.length > 0) twinId = prems[0];
+    else if (prems.includes(tid) && concl) twinId = concl;
+    if (!twinId || twinId === tid) continue;
+    const twin = propsById.get(twinId);
+    if (!twin || String(twin.status || "").toLowerCase() !== "solid") continue;
+    const archName = String(c.archetypeName || c.archetypeId || "Structural Twin").slice(0, 48);
+    const breaksAt = Array.isArray(c.breaksAt) ? c.breaksAt.map((b) => String(b || "").trim().slice(0, 120)).filter(Boolean).slice(0, 1) : [];
+    const knownTitle = String(twin.title || twinId).slice(0, 60);
+    return {
+      knownPropId: twinId,
+      archetypeName: archName,
+      breaksAt,
+      openerPrompt: `You already mastered '${knownTitle}' (${archName}); map its structure to '${tid}' and name where the analogy breaks.`.slice(0, 150)
+    };
+  }
+  return null;
+}
 function buildPolicyFallbackFromProfile(profile, domain2 = null) {
   const cal = profile?.calibration || {};
   const ov = profile?.userOverrides || {};
@@ -23668,6 +23724,8 @@ function loadWorkspaceState(workspaceRoot, section = "all") {
   const { dueForksCount } = loadDueForksSummary(kgDir, today);
   const { arenasCount, openArenasCount } = loadArenasSummary(kgDir);
   const coldStartDays = computeColdStartDays(rawProfile, revlog, mistakes);
+  const rosettaBridgesCount = countRosettaBridges(chains);
+  const syncDeviceId = loadSyncDeviceId(kgDir);
   const stats = {
     today,
     totalPropositions: propositions.length,
@@ -23686,7 +23744,8 @@ function loadWorkspaceState(workspaceRoot, section = "all") {
     arenasCount,
     openArenasCount,
     coldStartDays,
-    pendingPinsCount: pendingPins.length
+    pendingPinsCount: pendingPins.length,
+    rosettaBridgesCount
   };
   const payload = {
     workspaceName: path.basename(workspaceRoot),
@@ -23697,7 +23756,9 @@ function loadWorkspaceState(workspaceRoot, section = "all") {
     pendingPins,
     dueForksCount,
     arenasCount,
-    coldStartDays
+    coldStartDays,
+    rosettaBridgesCount,
+    ...syncDeviceId ? { syncDeviceId } : {}
   };
   if (section === "all" || section === "autopilot") {
     payload.chapterTrackers = chapterTrackers;
@@ -24025,7 +24086,7 @@ function compressDueItemsJs(dueItems, chains) {
   for (const c of chains) {
     const concl = String(c.conclusion || c.to || "").trim();
     const rel = String(c.relation || "requires").trim().toLowerCase();
-    if (!concl || rel === "contrasts_with" || rel === "analogous") continue;
+    if (!concl || rel === "contrasts_with" || rel === "analogous" || rel === "isomorphic_to") continue;
     const prems = Array.isArray(c.premises) ? c.premises.map((x) => String(x || "").trim()).filter(Boolean) : c.from ? [String(c.from).trim()] : [];
     if (!parentsOf.has(concl)) parentsOf.set(concl, /* @__PURE__ */ new Set());
     for (const pr of prems) {
@@ -24188,6 +24249,8 @@ function getFrontier(workspaceRoot, { limit = 10, compress = true } = {}) {
   const { arenasCount, openArenasCount } = loadArenasSummary(kgDir);
   const coldStartDays = computeColdStartDays(rawProfile, revlog, mistakes);
   const pendingPins = loadWhiteboardPendingPins(kgDir);
+  const rosettaBridgesCount = countRosettaBridges(chains);
+  const syncDeviceId = loadSyncDeviceId(kgDir);
   return {
     ok: true,
     today,
@@ -24210,11 +24273,14 @@ function getFrontier(workspaceRoot, { limit = 10, compress = true } = {}) {
     openArenasCount,
     coldStartDays,
     pendingPins,
+    rosettaBridgesCount,
+    ...syncDeviceId ? { syncDeviceId } : {},
     stats: {
       totalPropositions: propositions.length,
       totalChains: chains.length,
       totalMistakes: mistakes.length,
-      totalReviews: revlog.length
+      totalReviews: revlog.length,
+      rosettaBridgesCount
     }
   };
 }
@@ -24402,6 +24468,7 @@ function planNextMove(workspaceRoot, { energy, domain: domain2, event } = {}) {
     skillHint = "teach-chapter";
     whiteboardHint = `Push derivation_step for '${targetNodeId || activeChapter.slug}'.`;
   }
+  const isomorphicBridge = recommendedMode === "teach_frontier" && targetNodeId ? findPersistedIsomorphicBridgeJs(propositions, chains, targetNodeId) : null;
   return {
     ok: true,
     recommendedMode,
@@ -24414,7 +24481,8 @@ function planNextMove(workspaceRoot, { energy, domain: domain2, event } = {}) {
     skillHint,
     whiteboardHint,
     pendingPins,
-    alerts: alerts.slice(0, 3)
+    alerts: alerts.slice(0, 3),
+    ...isomorphicBridge ? { isomorphicBridge } : {}
   };
 }
 function pushWhiteboardStep(workspaceRoot, stepArgs) {
@@ -25474,7 +25542,7 @@ var TOOLS = [
   {
     name: "synt_next_move",
     title: "Syntopik Pedagogical Brainstem (Next Optimal Move)",
-    description: "Return the compact <=180-token Action Envelope fusing FSRS-6/FIRe, Learner Psychology TeachingPolicy, causal root-cause probes, Blunder Forks, and live whiteboard learner pins.",
+    description: "Return the compact <=180-token Action Envelope fusing FSRS-6/FIRe, Learner Psychology TeachingPolicy, causal root-cause probes, Blunder Forks, Rosetta isomorphicBridge openers, and live whiteboard learner pins.",
     inputSchema: NEXT_MOVE_SCHEMA
   },
   {
@@ -25492,7 +25560,7 @@ var TOOLS = [
   {
     name: "synt_get_frontier",
     title: "Get Syntopik Study Frontier & Learner Policy",
-    description: "Ambient headless query: return FIRe-compressed due items, active Autopilot, learnerProfile, Active TeachingPolicy, dueForks, arenasCount, coldStartDays, pendingPins, traps, and Brier calibration.",
+    description: "Ambient headless query: return FIRe-compressed due items, active Autopilot, learnerProfile, Active TeachingPolicy, dueForks, arenasCount, coldStartDays, pendingPins, rosettaBridgesCount, syncDeviceId, traps, and Brier calibration.",
     inputSchema: GET_FRONTIER_SCHEMA
   },
   {
@@ -25920,7 +25988,7 @@ function handleLessonStudio(rawArgs, toolName) {
 }
 function createServer() {
   const server = new Server(
-    { name: "syntopik-studio", version: "3.0.0" },
+    { name: "syntopik-studio", version: "3.1.0" },
     { capabilities: { tools: {}, resources: {} } }
   );
   server.setRequestHandler(ListToolsRequestSchema, async () => ({

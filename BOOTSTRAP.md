@@ -1,4 +1,4 @@
-# Syntopik v3.0 — Universal 10-Second Bootstrap & Multi-Harness Guide (`BOOTSTRAP.md`)
+# Syntopik v3.1 — Universal 10-Second Bootstrap & Multi-Harness Guide (`BOOTSTRAP.md`)
 
 Give this file (or `AGENTS.md`) to **any AI coding agent, IDE assistant, CLI harness, or browser learner** to turn any workspace into a deterministic, adaptive FSRS-6 + FIRe Deep-Mastery Operating System in under 10 seconds across **macOS, Linux, and Windows**.
 
@@ -9,10 +9,10 @@ Give this file (or `AGENTS.md`) to **any AI coding agent, IDE assistant, CLI har
 | User / Harness | Single 10-Second Command | What Works Immediately |
 | :--- | :--- | :--- |
 | **Browser-First / Zero-Clone Learner** | `npx github:HridayKapoor/syntopik serve --open` *(or `syntopik demo --open` for instant zero-PII starter packs)* | Auto-creates `~/.syntopik` vault, opens live 2-way Studio + Mastery Gym (`http://127.0.0.1:4173`), Live AI Chalkboard, PDF/URL drop, FIRe flashcards, SVG occlusion, `:::explore` labs, 1-click CBT grading — zero git clone. |
-| **Claude Code (Any Repo)** | `/plugin marketplace add HridayKapoor/syntopik` → `/plugin install syntopik` | All 17 `/syntopik:*` skills, `syntopik-studio` v3.0 MCP (incl. `synt_next_move` & `synt_whiteboard_step`), and cache-safe `SessionStart` / `PostToolUse` hooks in any repo. |
+| **Claude Code (Any Repo)** | `/plugin marketplace add HridayKapoor/syntopik` → `/plugin install syntopik` | All 17 `/syntopik:*` skills, `syntopik-studio` v3.1 MCP (incl. `synt_next_move` w/ Rosetta bridges & `synt_whiteboard_step`), and cache-safe `SessionStart` / `PostToolUse` hooks in any repo. |
 | **Cursor / Windsurf / Copilot / Cline / Roo / Codex / OpenCode** | `npx skills add HridayKapoor/syntopik` *(+ optional `npx github:HridayKapoor/syntopik attach .`)* | Installs all 17 `agentskills.io` skills + optional thin pointer rule + harness-native MCP config (`.vscode/mcp.json` `"servers"`, `opencode.json` `"mcp"`, `.cursor/mcp.json`, `.codex/config.toml`). Pass `--copy-skills` on Windows if Developer Mode symlinks are off. |
-| **Google Antigravity 2.0 (Any Repo)** | `uvx --from git+https://github.com/HridayKapoor/syntopik syntopik connect antigravity` | Installs global `~/.gemini/config/plugins/syntopik/` bundle (`plugin.json`, 17 skills, rules, hooks, SEP-1865 Studio v3.0 MCP) active across every workspace. |
-| **Gemini CLI (Any Repo)** | `gemini extensions install https://github.com/HridayKapoor/syntopik` | Installs `gemini-extension.json`, `GEMINI.md` (with `@AGENTS.md` on line 1), 17 skills, hooks, and `syntopik-studio` v3.0 MCP server. |
+| **Google Antigravity 2.0 (Any Repo)** | `uvx --from git+https://github.com/HridayKapoor/syntopik syntopik connect antigravity` | Installs global `~/.gemini/config/plugins/syntopik/` bundle (`plugin.json`, 17 skills, rules, hooks, SEP-1865 Studio v3.1 MCP) active across every workspace. |
+| **Gemini CLI (Any Repo)** | `gemini extensions install https://github.com/HridayKapoor/syntopik` | Installs `gemini-extension.json`, `GEMINI.md` (with `@AGENTS.md` on line 1), 17 skills, hooks, and `syntopik-studio` v3.1 MCP server. |
 | **Direct Git Clone / Power User** | `git clone https://github.com/HridayKapoor/syntopik && cd syntopik && syntopik serve --open` | Full local STEM/Manim/Typst stack + `syntopik doctor` + `syntopik bench --check` + offline `file://` fallback. |
 
 ### Silent Idempotent First-Run Bootstrap (`< 2s`, 3-OS Windows-Safe, Bare Python 3.12+ Stdlib)
@@ -27,13 +27,17 @@ Creates missing learner folders & gitignored ledgers (`propositions.jsonl`, `cha
 
 ---
 
-## Step 2 — Unified `syntopik` v3.0 CLI Reference & Workspace Safety
+## Step 2 — Unified `syntopik` v3.1 CLI Reference & Workspace Safety
 
 All CLI verbs run on **bare Python 3.12+ stdlib** (or Node 20+ via `npx`) and automatically resolve bundled scripts whether inside a direct clone, wheel, or attached repository:
 
 | Command | Purpose (Direct-Clone Script Fallback) |
 | :--- | :--- |
-| `syntopik next [--energy low\|normal\|deep] [--domain <S>] [--json]` | **Pedagogical Brainstem**: fuse FSRS-6/FIRe, Learner Psychology, causal root-cause $\Delta H$, Blunder Forks, and whiteboard pins into one `<= 180`-token Action Envelope (`syntopik.brainstem`). |
+| `syntopik next [--energy low\|normal\|deep] [--domain <S>] [--json]` | **Pedagogical Brainstem**: fuse FSRS-6/FIRe, Learner Psychology, causal root-cause $\Delta H$, Blunder Forks, Rosetta `isomorphicBridge`, and whiteboard pins into one `<= 180`-token Action Envelope (`syntopik.brainstem`). |
+| `syntopik rosetta [scan\|bridge\|link\|archetypes] [--prop-id <id>] [--source <a> --target <b> --archetype <arch>] [--min-score 0.35] [--json]` | **Structural Isomorphism Rosetta Engine**: discover cross-domain twins across 10 archetypes, emit bijection openers + `breaksAt` guards, and link `isomorphic_to` chords (`0.25` cross-domain FIRe, `syntopik.isomorphism`). |
+| `syntopik sync-delta [status\|export\|verify\|merge] [--out <p>] [--file <p>] [--since <iso>] [--dry-run] [--json]` | **Offline-First CRDT Delta Sync**: export, SHA-256 verify, and monotonically merge `syntopik-delta-v1` snapshots across devices (`syntopik.sync_delta`). |
+| `syntopik calibrate-policy [--apply] [--min-events 12] [--json]` | **Longitudinal Policy Replay**: 70/30 chronological TimeSeriesSplit replay of `revlog.jsonl` adopting bounded `learner_model` shifts only on OOS gain `>= 0.005` (`benchmarks/syntopik_bench.py --replay`). |
+| `syntopik proof-diff --id <deriv_id> --steps-json <json_or_path> [--no-spawn-fork] [--json]` | **Proof-Graph Handwriting Diff**: align handwritten steps against `derivations.jsonl`, emit zero-leak `R0–R2` nudges, auto-spawn Blunder Forks & $\Delta H$ causal probes (`scripts/derivation_forge.py diff`). |
 | `syntopik profile [status\|calibrate\|policy\|override\|reset] [--json]` | Manage 3-Cadence Non-VARK Adaptive Learner Profile, Kalyuga `TeachingPolicy`, and transparent overrides (`scripts/learner_profile.py`). |
 | `syntopik drop <inputs...> [--slug <slug>] [--title "<T>"] [--json]` | 10-second mixed-source kickoff (PDF, URL, YouTube, repo, notes) enforcing Teacher-First spine order + Probe #1 (`syntopik.brainstem`). |
 | `syntopik demo [--pack <slug\|all>] [--open] [--workspace <dir>]` | Load bundled zero-PII starter pack(s) into a clean sandbox workspace (`~/.syntopik-demo`) with optional browser Studio launch. |

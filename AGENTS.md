@@ -1,4 +1,4 @@
-# Syntopik v3.0 — Universal AI Deep-Mastery Operating System (`AGENTS.md`)
+# Syntopik v3.1 — Universal AI Deep-Mastery Operating System (`AGENTS.md`)
 
 **Syntopik** is a local-first, harness-native AI deep-mastery OS for **any subject** (CS, ML, Systems, Math, Physics, Chemistry, Papers, Courses, Exams) across Antigravity 2.0, Claude Code, Codex/T3 Code, Cursor, Windsurf, Copilot, Gemini CLI, and OpenCode (`BOOTSTRAP.md`).
 
@@ -13,12 +13,12 @@
    - **3 Cadences**: (T1) optional skippable 2-min onboarding calibration (`syntopik profile calibrate`) → (T2) `<90s` per-chapter 2–3 probe placement → (T3) silent turn-by-turn Pelánek Elo, 6-state affect guardrails (`flow`, `productive_confusion`, `overloaded_frustrated`, `bored_underchallenged`, `gaming_rushing`, `fatigued`), Kalyuga scaffolding (`worked_example_parsons`→`faded`→`standard`→`challenge_transfer`), and transparent overrides.
 3. **Pedagogical Brainstem, Auto-Bootstrap & Teacher-First Spine**:
    - If `knowledge-graph/graph-data.js` is absent, silently run `syntopik init` (or `python3 -B scripts/setup_harness.py auto --json`) once (`<2s`, non-destructive).
-   - Consult **`syntopik next` / `synt_next_move`** as the single teacher move selector (`<= 180`-token Action Envelope fusing whiteboard pins, affect, causal $\Delta H$ probes, Blunder Forks, FIRe/SRC reviews, T3/T4 bottlenecks, and frontier topics). Never re-teach `solid` nodes or repeat solved items.
+   - Consult **`syntopik next` / `synt_next_move`** as the single teacher move selector (`<= 180`-token Action Envelope fusing whiteboard pins, affect, causal $\Delta H$ probes, Blunder Forks, FIRe/SRC reviews, T3/T4 bottlenecks, Rosetta bridges, and frontier topics). Never re-teach `solid` nodes or repeat solved items.
    - **Sources dropped/linked** → `syntopik drop` / `syntopik import` locks instructor notes (`p.1→p.N`) as `#1` spine (**Teacher-First Law**). Zero sources → `topic-onboarding` (`<= 3` questions in `1` turn → Scope Charter `<= 8` sources) or `syntopik demo` starter packs.
 4. **Automatic Skills (17) & Plain-English Routing**:
    - Activate `.agents/skills/` automatically; route silently:
-     * **Mastery Gym**: *Blunder Fork* (`fork_replay`), *Counterexample Arena* (`falsify_arena`), *4-Min Blitz* (`decision_blitz`), *Derivation Blackout / Axiom-Cut* (`derivation_forge`), *Viva Defense* (`viva_chamber`), *Explore lab* (`:::explore`).
-     * **Autopilot & Lifecycle**: *5-min review* (`daily_plan --micro 5`), *I fell behind* (`syntopik review --recover --daily-cap 15`), *Exam in 48h* (`syntopik triage --exam-in 48h`), *Pace/.ics* (`syntopik pace --ics`), *Semester Sunset* (`syntopik sunset <slug>`), *Work Mentor debrief* (`syntopik mode mentor` / `syntopik debrief`), *Teach-back* (`teach-chapter`), *Bug hunt* (`practice-drill`).
+     * **Mastery Gym**: *Blunder Fork* (`fork_replay`), *Counterexample Arena* (`falsify_arena`), *4-Min Blitz* (`decision_blitz`), *Derivation Blackout / Axiom-Cut / Proof-Diff* (`derivation_forge` / `syntopik proof-diff`), *Viva Defense* (`viva_chamber`), *Explore lab* (`:::explore`).
+     * **Autopilot & Lifecycle**: *5-min review* (`daily_plan --micro 5`), *I fell behind* (`syntopik review --recover --daily-cap 15`), *Exam in 48h* (`syntopik triage --exam-in 48h`), *Pace/.ics* (`syntopik pace --ics`), *Sunset* (`syntopik sunset <slug>`), *Work Mentor* (`syntopik mode mentor` / `debrief`), *Rosetta* (`syntopik rosetta`), *CRDT sync* (`syntopik sync-delta`), *Policy replay* (`syntopik calibrate-policy`), *Teach-back* (`teach-chapter`), *Bug hunt* (`practice-drill`).
 5. **Deterministic Verification, Zero-Leak Questions & 4-Axis UX**:
    - Verify math/units (`math_verify`, `math_plot`), code/big-O (`code_verify`), chemistry (`chem_physical`, `chem_3d`, `organic_reagents`), diagrams (`physics_draw`, `circuit_draw`), turns (`pedagogy_eval`), and benchmarks (`syntopik bench --check`) before teaching/grading.
    - Graded items: bare matched-length claims, zero option justifications, never `(Recommended)`, explicit **`"I don't know"`**, chance-calibrated `0–100%` confidence ($\le 1/n$ = distrust).

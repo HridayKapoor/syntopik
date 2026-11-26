@@ -1,9 +1,9 @@
 ---
 name: grade-handwriting
 description: >-
-  Grade handwritten derivations, proofs, STEM solutions, or whiteboard
-  pseudocode photos line-by-line via Vision and deterministic verification,
-  localizing the earliest break with R0-R2 nudges.
+  Grade handwritten derivations, proofs, STEM solutions, or whiteboard photos
+  line-by-line via Vision, proof-graph diffing, and deterministic verification,
+  localizing earliest breaks with R0-R2 nudges.
 ---
 
 # Handwritten & Whiteboard Solution Grader — Earliest-Break, Zero-Spoiler Coaching
@@ -32,6 +32,14 @@ Vision models instinctively "auto-fix" slips while reading. **Actively resist ov
 
 ### Stage 2 — Deterministic Step-by-Step Verification (Never Trust Mental Algebra/Tracing!)
 Audit **every transition** `L_{i-1} -> L_i` programmatically:
+- **Structured Proof-Graph Handwriting Diff (`syntopik proof-diff` / `derivation_forge.py diff`)**:
+  - Whenever a canonical Causal Step DAG exists in `knowledge-graph/derivations.jsonl` for the proof being graded, pass the verbatim transcribed steps `[{"line":1,"expr":"..."}, ...]` directly to:
+    ```bash
+    syntopik proof-diff --id <derivation_id> --steps-json '<steps_json_or_path>' --json
+    # Direct-clone equivalent:
+    syntopik run derivation_forge diff --id <derivation_id> --steps-json '<steps_json_or_path>' --json
+    ```
+  - Deterministically aligns each line against the step DAG (exact normalized or AST-safe SymPy/numeric equivalence), classifies `earliestBreakLine` + `errorKind` (`sign_flip`, `missing_factor`, `wrong_substitution`, `skipped_step`, `invalid_algebra`), emits **zero-leak `R0` / `R1` / `R2` nudges** (never revealing the target expression!), **auto-spawns a Blunder FEN Fork** into `forks.jsonl`, logs the root slip in `mistakes.jsonl`, and returns the optimal $\Delta H$ causal ancestor `diagnosticProbe` (pass `--no-spawn-fork` for read-only dry inspection).
 - **Mathematics, Proofs & Physics** (`math_verify.py`):
   - Step equivalence: `syntopik run math_verify check-eq "<L_{i-1}>" "<L_i>"`
   - Calculus, ODEs, limits, series, vectors, matrices, error propagation, units: `eval`, `solve`, `ode`, `limit`, `check-dim`, `units`.
@@ -64,4 +72,4 @@ syntopik run mistake_analytics log \
   --correct-move "<Invariant/check that catches it>" --prop-id "<optional-slug>" --source-ref "<photo>"
 ```
 Update `syntopik run srs_engine review <propId> --rating again|hard` when conceptual, and offer one fresh-surface retest (or Surgical Bug-Hunt if it hits 3 strikes).
-- **Auto-Capture Mid-Derivation Fork (`scripts/fork_replay.py`)**: whenever earliest break $L_{i_{\text{first}}}$ is localized, also capture the pre-blunder prefix (`L1..L_{i-1}`), sealed blunder, and winning move via `syntopik run fork_replay capture` so the learner replays that exact fork days later with mutated symbols/numbers instead of redoing Line 1.
+- **Auto-Capture Mid-Derivation Fork & $\Delta H$ Causal Probe**: if `syntopik proof-diff` ran against `derivations.jsonl`, it already auto-spawned the Blunder FEN Fork (`spawnedFork`) and surfaced any ancestor `diagnosticProbe` (act on that probe if conceptual). For ad-hoc derivations without a stored DAG, capture the pre-blunder prefix (`L1..L_{i-1}`), sealed blunder, and winning move via `syntopik run fork_replay capture` so the learner replays that exact fork days later with mutated symbols/numbers instead of redoing Line 1.

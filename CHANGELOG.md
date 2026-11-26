@@ -4,6 +4,35 @@ All notable changes to **Syntopik** are documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.1.0] - 2026-11-27
+
+Adds all four flagship `v3.1` cognitive & synchronization breakthroughs on pure Python 3.12+ stdlib (`22` `syntopik/` modules, `10` Rosetta archetypes, `26` CLI verbs, zero new model-visible MCP tools, exact `17` skills, `AGENTS.md + GEMINI.md = 7,467 B <= 7,500 B`): Structural Isomorphism Rosetta Engine + `0.25` Cross-Domain FIRe credit, Offline-First CRDT Multi-Device Delta Sync, Longitudinal Learner Telemetry Replay Calibration, and Structured Proof-Graph Handwriting Diff.
+
+### Added
+
+- **Structural Isomorphism Rosetta Engine & Cross-Domain FIRe (`syntopik/isomorphism.py`, `syntopik/data/archetypes.json`, `syntopik/fsrs_core.py`, `syntopik/brainstem.py`, `scripts/graph_intel.py`)**:
+  - Curated **10 cross-domain structural archetypes** (`second_order_oscillator`, `shortest_path_semiring`, `quorum_intersection`, `boltzmann_softmax`, `first_order_relaxation`, `conservation_continuity`, `eigenmode_diagonalization`, `variance_normalization`, `equilibrium_minimization`, `duality_lagrange`) with variable bijections, canonical equations, and explicit `breaksAt` negative-transfer warnings.
+  - Idempotent `isomorphic_to` chord persistence (`link_isomorphism_chord`), `graph_intel.py --rosetta` cluster/warning scan, Brainstem `isomorphicBridge` bijection openers on `teach_frontier` (strictly preserving the `<= 180`-token Action Envelope budget), and `0.25` (capped `<= 0.30`) bidirectional cross-domain FIRe credit in `fsrs_core.py` that never auto-clears `misconception` twins and never triggers SRC prerequisite knockouts.
+- **Offline-First Multi-Device CRDT Delta Sync (`syntopik/sync_delta.py`)**:
+  - Exports, verifies (`contentSha256`, `10 MiB` hard ceiling, strict `^[a-z0-9][a-z0-9_-]{0,63}$` tracker slug validation), and merges portable `syntopik-delta-v1` snapshots across offline devices via mathematically convergent join-semilattice rules: G-Set ledger union (`revlog`, `mistakes`, `viva-sessions`, `forks`, `arenas`, `derivations`), monotonic chapter-tracker progress lattices (`mastered`/`solved` never regressed, milestones ORed), weighted per-device domain Elo merge, and deterministic SHA-256 re-chaining of `evidence-ledger.jsonl`.
+- **Longitudinal Learner Telemetry Replay (`syntopik/sim_eval.py`, `syntopik/learner_model.py`, `benchmarks/syntopik_bench.py`)**:
+  - Strict chronological **70/30 TimeSeriesSplit** replay (`replay_learner_history` / `benchmarks/syntopik_bench.py --replay`) over local `revlog.jsonl` evaluating bounded `learner_model` hyperparameters (`resolve_calibrated_hyperparams`), adopting `calibratedHyperparams` (`--apply`) strictly when out-of-sample composite loss improves by `>= 0.005` (with clean `{ok: true, insufficientData: true, applied: false}` fallback below `12` events).
+- **Structured Proof-Graph Handwriting Diff (`scripts/derivation_forge.py`)**:
+  - `diff_handwritten_steps()` (`derivation_forge.py diff` / `syntopik proof-diff`) aligns Vision-transcribed handwritten derivations line-by-line against `derivations.jsonl` Causal Step DAGs (AST-safe SymPy/numeric equivalence, bounded `<= 40` steps), localizes `earliestBreakLine` + `errorKind` (`sign_flip`, `missing_factor`, `wrong_substitution`, `skipped_step`, `invalid_algebra`), emits zero-leak `R0–R2` nudges, auto-spawns Blunder FEN Forks (`forks.jsonl`), logs root slips (`mistakes.jsonl`), and surfaces the optimal $\Delta H$ causal ancestor `diagnosticProbe`.
+- **4 New First-Class CLI Verbs (`syntopik/cli.py`, `bin/syntopik.mjs`)**:
+  - `syntopik rosetta [scan|bridge|link|archetypes]`, `syntopik sync-delta [export|merge|verify|status]`, `syntopik calibrate-policy [--apply]`, and `syntopik proof-diff --id <id> --steps-json <json_or_path>` (26 unified verbs total).
+- **Live Server, Studio UI & MCP App v3.1 (`syntopik/server.py`, `dashboard.html`, `knowledge-graph/viewer.html`, `mcp-app/mlh-studio/`)**:
+  - Added loopback + CSRF REST endpoints (`/api/rosetta`, `/api/rosetta/link`, `/api/sync/{status,export,merge}`, `/api/profile/replay`, `/api/derivation/diff`, strictly blocked `403` under `--lan` paired-cookie mode) and Rosetta chord / Sync / Replay / Proof-Diff UI controls.
+  - Bumped `syntopik-studio` MCP App to `3.1.0` with zero new model-visible tools (`21` total), enriching `synt_get_frontier` with `rosettaBridgesCount` & `syncDeviceId` and preserving `isomorphicBridge` in `synt_next_move`.
+
+### Changed & Verified
+- **Packaging, Health Doctor & 3-OS CI (`pyproject.toml`, `package.json`, `scripts/study_doctor.py`, `.github/workflows/ci.yml`)**:
+  - Bundled `syntopik/data/archetypes.json` in both Python wheel (`artifacts`) and npm tarball (`files`), verified in 3-OS CI alongside `syntopik --version == 3.1.0` and the expanded **25-target** bare-stdlib `unittest` suite (`TestV31RosettaSyncReplayAndProofDiff`).
+  - Updated `study_doctor.py` to verify all `22` `syntopik/` modules + `archetypes.json` (**`49/49`** full / **`16/16`** `--core-only`, `0 warn, 0 fail`).
+  - Updated `grade-handwriting`, `topic-onboarding`, `knowledge-graph`, and `harness-self-improve` skills (exact `17` skills, `3,313 B <= 3,400 B` YAML descriptions, `AGENTS.md + GEMINI.md = 7,467 B <= 7,500 B`).
+
+---
+
 ## [3.0.0] - 2026-11-26
 
 Flagship **Personal AI Teacher & Cognitive Mastery OS** release adding 3-Cadence Non-VARK Adaptive Learner Psychology, a closed-loop Pedagogical Brainstem, Bayesian Noisy-OR Causal Root-Cause Probing, a SHA-256 Hash-Chained 4-Tier Evidence Ledger, a Playable 6-Station Mastery Gymnasium with Live AI Chalkboard SSE Bus, safe zero-`eval` `:::explore` Slider Labs, Anti-Vibe-Coding Work Mentor, Post-Exam Semester Sunset, Multi-Course Auto-Pacer `.ics`, reproducible `Syntopik-Eval` 60-day cognitive benchmarks (`7/7` CI gates), `40/40` TutorBench, 3 curated zero-PII starter packs, and full 3-OS (`Linux`, `macOS`, `Windows`) CI & OIDC publishing workflows.

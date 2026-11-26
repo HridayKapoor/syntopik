@@ -37,7 +37,11 @@ __all__ = [
     "bkt_update",
     "assess_confidence_signal",
     "compute_calibration",
+    "ISOMORPHIC_FIRE_DEFAULT_WEIGHT",
+    "ISOMORPHIC_FIRE_MAX_WEIGHT",
+    "FireCreditList",
     "fire_ancestor_footprint",
+    "fire_isomorphic_neighbors",
     "apply_fire_credit",
     "compress_due_queue",
     "recover_backlog",
@@ -674,12 +678,46 @@ def compute_calibration(
 # ---------------------------------------------------------------------------
 
 
+ISOMORPHIC_FIRE_DEFAULT_WEIGHT = 0.25
+ISOMORPHIC_FIRE_MAX_WEIGHT = 0.30
+
+
+class FireCreditList(list):
+    """Backwards-compatible `list` of FIRe credit records carrying `refreshed` and `isomorphicRefreshed` counts."""
+
+    def __init__(
+        self,
+        items: Sequence[dict[str, Any]] = (),
+        *,
+        prerequisite_refreshed: int = 0,
+        isomorphic_refreshed: int = 0,
+    ) -> None:
+        super().__init__(items)
+        self.prerequisiteRefreshed: int = int(prerequisite_refreshed)
+        self.isomorphicRefreshed: int = int(isomorphic_refreshed)
+        self.refreshed: int = int(prerequisite_refreshed) + int(isomorphic_refreshed)
+
+    def to_summary(self) -> dict[str, Any]:
+        return {
+            "credits": list(self),
+            "refreshed": self.refreshed,
+            "prerequisiteRefreshed": self.prerequisiteRefreshed,
+            "isomorphicRefreshed": self.isomorphicRefreshed,
+        }
+
+
 def _build_incoming_prereq_map(chains: list[dict[str, Any]]) -> dict[str, list[tuple[str, float]]]:
-    """Map `conclusion -> [(premise, encompassWeight), ...]` keeping max weight per pair."""
+    """Map `conclusion -> [(premise, encompassWeight), ...]` keeping max weight per pair.
+
+    Excludes symmetric `isomorphic_to` chords so they never trigger prerequisite knockouts
+    or multi-hop ancestor amplification; those are handled via gentle cross-domain FIRe.
+    """
     best_edge: dict[tuple[str, str], float] = {}
     for raw in chains:
         norm = normalize_chain(raw)
         if not norm:
+            continue
+        if str(norm["relation"]).strip().lower() == "isomorphic_to":
             continue
         w = float(norm["encompassWeight"])
         if w <= 0.0:
@@ -706,6 +744,8 @@ def _build_outgoing_descendants_map(chains: list[dict[str, Any]]) -> dict[str, s
         norm = normalize_chain(raw)
         if not norm:
             continue
+        if str(norm["relation"]).strip().lower() == "isomorphic_to":
+            continue
         conc = norm["conclusion"]
         nodes.add(conc)
         for prem in norm["premises"]:
@@ -726,6 +766,178 @@ def _build_outgoing_descendants_map(chains: list[dict[str, Any]]) -> dict[str, s
                     q.append(nxt)
         desc_map[u] = visited
     return desc_map
+
+
+def fire_isomorphic_neighbors(
+    node_id: str,
+    chains: list[dict[str, Any]],
+) -> dict[str, dict[str, Any]]:
+    """Collect bidirectional persisted `isomorphic_to` neighbors with weight capped `<= 0.30`."""
+    target = str(node_id or "").strip()
+    if not target:
+        return {}
+    neighbors: dict[str, dict[str, Any]] = {}
+    for raw in chains:
+        if not isinstance(raw, dict):
+            continue
+        if str(raw.get("relation") or "").strip().lower() != "isomorphic_to":
+            continue
+        norm = normalize_chain(raw)
+        if not norm:
+            continue
+        raw_w = raw.get("encompassWeight")
+        if raw_w is None:
+            raw_w = raw.get("encompass_weight")
+        if isinstance(raw_w, (int, float)) and not isinstance(raw_w, bool) and math.isfinite(float(raw_w)):
+            eff_w = min(ISOMORPHIC_FIRE_MAX_WEIGHT, max(0.0, float(raw_w)))
+        else:
+            eff_w = ISOMORPHIC_FIRE_DEFAULT_WEIGHT
+        if eff_w <= 0.0:
+            continue
+
+        conc = norm["conclusion"]
+        prems = norm["premises"]
+        arch_id = str(raw.get("archetypeId") or "").strip() or None
+        other_ids: list[str] = []
+        if target == conc:
+            other_ids = [p for p in prems if p != target]
+        elif target in prems:
+            other_ids = [conc] if conc != target else []
+
+        for oid in other_ids:
+            prev = neighbors.get(oid)
+            if prev is None or eff_w > prev["weight"] + 1e-9:
+                neighbors[oid] = {
+                    "weight": round(eff_w, 4),
+                    "archetypeId": arch_id,
+                }
+    return neighbors
+
+
+def _apply_credit_to_target(
+    target_id: str,
+    anc: dict[str, Any],
+    *,
+    base_weight: float,
+    depth: int,
+    rating_scale: float,
+    max_credit: float,
+    ref_now: datetime,
+    today_str: str,
+    params: tuple[float, ...],
+    desired_retention: float,
+    is_isomorphic: bool = False,
+    archetype_id: str | None = None,
+) -> dict[str, Any] | None:
+    """Apply discounted FIRe stability/due refresh to a single eligible proposition in-place."""
+    if bool(anc.get("archived")) or bool(anc.get("suspended")):
+        return None
+    status = str(anc.get("status") or "planned").strip().lower()
+    # Hard safety invariant: NEVER auto-clear misconception or unlearned planned nodes.
+    if status in ("misconception", "planned"):
+        return None
+
+    fsrs_dict = anc.get("fsrs") if isinstance(anc.get("fsrs"), dict) else None
+    old_next_rev = str(anc.get("nextReview") or "") or None
+
+    if fsrs_dict is not None and isinstance(fsrs_dict.get("stability"), (int, float)):
+        old_s = max(STABILITY_MIN, float(fsrs_dict["stability"]))
+        last_rev_dt = _parse_utc_dt(fsrs_dict.get("last_review"))
+        old_due_dt = _parse_utc_dt(fsrs_dict.get("due"))
+        if last_rev_dt is not None:
+            elapsed_frac = max(0.0, (ref_now - last_rev_dt).total_seconds() / 86400.0)
+            r_u = forgetting_curve(elapsed_frac, old_s, decay=params[20])
+        else:
+            r_u = 0.5
+        if old_due_dt is not None and last_rev_dt is not None:
+            old_ivl = max(1, int(round((old_due_dt - last_rev_dt).total_seconds() / 86400.0)))
+        else:
+            old_ivl = next_interval_days(old_s, desired_retention=desired_retention, decay=params[20])
+        working_card = dict(fsrs_dict)
+    else:
+        # Solid/shaky node created before FSRS tracking: infer conservative baseline stability.
+        last_tested_dt = _parse_utc_dt(anc.get("lastTested"))
+        old_due_dt = _parse_utc_dt(old_next_rev)
+        if last_tested_dt is not None and old_due_dt is not None and old_due_dt > last_tested_dt:
+            old_ivl = max(1, (old_due_dt.date() - last_tested_dt.date()).days)
+            old_s = float(old_ivl)
+        else:
+            old_ivl = 3 if status == "solid" else 1
+            old_s = float(params[2] if status == "solid" else params[1])
+        if last_tested_dt is not None:
+            elapsed_frac = max(0.0, (ref_now - last_tested_dt).total_seconds() / 86400.0)
+            r_u = forgetting_curve(elapsed_frac, old_s, decay=params[20])
+        elif old_due_dt is not None and old_due_dt.date() <= ref_now.date():
+            overdue_days = max(1, (ref_now.date() - old_due_dt.date()).days + old_ivl)
+            r_u = forgetting_curve(float(overdue_days), old_s, decay=params[20])
+        else:
+            r_u = 0.70 if status == "solid" else 0.45
+        working_card = {
+            "card_id": int(time.time() * 1000) + hash(target_id) % 10000,
+            "state": STATE_REVIEW,
+            "step": None,
+            "stability": old_s,
+            "difficulty": _initial_difficulty(params, 3, clamp=True),
+            "due": (old_due_dt or ref_now).isoformat(),
+            "last_review": (last_tested_dt or (ref_now - timedelta(days=max(1, old_ivl)))).isoformat(),
+        }
+
+    # Early-review memory discount: (1 - R_u) prevents spurious inflation on freshly solid cards.
+    credit = min(max_credit, rating_scale * base_weight * max(0.0, 1.0 - r_u))
+    if credit < 0.005:
+        return None
+
+    # Hypothetical full unaided "good" review stability to interpolate toward smoothly.
+    full_card, _ = _stdlib_review_card(
+        working_card,
+        3,
+        ref_now,
+        params,
+        desired_retention=desired_retention,
+        enable_fuzzing=False,
+    )
+    s_full = max(old_s, float(full_card["stability"]))
+    new_s = round(old_s + credit * max(0.0, s_full - old_s), 4)
+    new_ivl = max(old_ivl, next_interval_days(new_s, desired_retention=desired_retention, decay=params[20]))
+
+    old_due_dt_eff = _parse_utc_dt(working_card.get("due")) or ref_now
+    delta_days = max(0, new_ivl - old_ivl)
+    if old_due_dt_eff <= ref_now:
+        # Overdue or due today: smoothly push forward proportionally to earned implicit credit.
+        push_days = max(1, int(round(max(credit * new_ivl, delta_days))))
+        new_due_dt = ref_now + timedelta(days=push_days)
+    else:
+        # Upcoming card: extend existing due date by stability interval gain.
+        extra_days = delta_days if delta_days > 0 else (1 if credit >= 0.25 else 0)
+        new_due_dt = old_due_dt_eff + timedelta(days=extra_days)
+
+    working_card["stability"] = new_s
+    working_card["due"] = new_due_dt.isoformat()
+    anc["fsrs"] = working_card
+    anc["nextReview"] = new_due_dt.date().isoformat()
+    anc["implicitCredit"] = round(float(anc.get("implicitCredit") or 0.0) + credit, 4)
+    anc["lastImplicitReview"] = today_str
+
+    rec: dict[str, Any] = {
+        "propId": target_id,
+        "credit": round(credit, 4),
+        "depth": depth,
+        "kind": "isomorphic" if is_isomorphic else "prerequisite",
+        "isomorphic": bool(is_isomorphic),
+        "retrievability": round(r_u, 4),
+        "oldStability": round(old_s, 3),
+        "newStability": round(new_s, 3),
+        "oldInterval": int(old_ivl),
+        "newInterval": int(new_ivl),
+        "oldNextReview": old_next_rev,
+        "newNextReview": anc["nextReview"],
+    }
+    if is_isomorphic:
+        rec["relation"] = "isomorphic_to"
+        rec["encompassWeight"] = round(base_weight, 4)
+        if archetype_id:
+            rec["archetypeId"] = archetype_id
+    return rec
 
 
 def fire_ancestor_footprint(
@@ -775,19 +987,24 @@ def apply_fire_credit(
     max_depth: int = 3,
     gamma: float = 0.7,
     desired_retention: float = 0.9,
-) -> list[dict[str, Any]]:
-    """Apply True FIRe (Fractional Implicit Repetition) credit to prerequisite ancestors.
+    include_isomorphic: bool = True,
+    return_summary: bool = False,
+) -> FireCreditList | dict[str, Any]:
+    """Apply True FIRe (Fractional Implicit Repetition) credit to prerequisite ancestors
+    and gentle (`<= 0.30`, default `0.25`) cross-domain credit across persisted `isomorphic_to` chords.
 
     - Runs ONLY on unaided `good` or `easy` ratings.
-    - Walks `chains.jsonl` ancestors up to `d <= 3` with `encompassWeight` & depth decay `gamma=0.7`.
+    - Walks `chains.jsonl` prerequisite ancestors up to `d <= 3` with `encompassWeight` & depth decay `gamma=0.7`.
+    - Walks direct bidirectional persisted `isomorphic_to` chords with weight capped `<= 0.30` (default `0.25`).
     - Applies early-review memory discount `(1 - R_u)` so freshly reviewed nodes receive near-zero inflation.
     - NEVER modifies or auto-clears `misconception` (or unlearned `planned`) nodes.
-    - Mutates eligible ancestor propositions in-place (`fsrs.stability`, `fsrs.due`, `nextReview`,
-      `implicitCredit`, `lastImplicitReview`) and returns `fireCredits`.
+    - Returns a backwards-compatible `FireCreditList` (`list` subclass exposing `.refreshed` and
+      `.isomorphicRefreshed`), or a summary dict when `return_summary=True`.
     """
     r_low = str(rating or "").strip().lower()
     if r_low not in ("good", "easy"):
-        return []
+        empty = FireCreditList()
+        return empty.to_summary() if return_summary else empty
 
     rating_scale = 1.0 if r_low == "good" else 1.2
     params = _validate_parameters(parameters)
@@ -796,119 +1013,70 @@ def apply_fire_credit(
     today_str = ref_now.date().isoformat()
 
     footprint = fire_ancestor_footprint(reviewed_prop_id, chains, max_depth=max_depth, gamma=gamma)
-    if not footprint:
-        return []
+    iso_neighbors = fire_isomorphic_neighbors(reviewed_prop_id, chains) if include_isomorphic else {}
+    if not footprint and not iso_neighbors:
+        empty = FireCreditList()
+        return empty.to_summary() if return_summary else empty
 
     props_by_id = {str(p.get("id") or ""): p for p in props if isinstance(p, dict) and p.get("id")}
-    credits_out: list[dict[str, Any]] = []
+    credits_raw: list[dict[str, Any]] = []
+    credited_ids: set[str] = set()
+    prereq_refreshed = 0
+    iso_refreshed = 0
 
     for anc_id, (base_weight, depth) in sorted(footprint.items(), key=lambda kv: (kv[1][1], -kv[1][0], kv[0])):
         anc = props_by_id.get(anc_id)
         if anc is None:
             continue
-
-        status = str(anc.get("status") or "planned").strip().lower()
-        # Hard safety invariant: NEVER auto-clear misconception or unlearned planned nodes.
-        if status in ("misconception", "planned"):
-            continue
-
-        fsrs_dict = anc.get("fsrs") if isinstance(anc.get("fsrs"), dict) else None
-        old_next_rev = str(anc.get("nextReview") or "") or None
-
-        if fsrs_dict is not None and isinstance(fsrs_dict.get("stability"), (int, float)):
-            old_s = max(STABILITY_MIN, float(fsrs_dict["stability"]))
-            last_rev_dt = _parse_utc_dt(fsrs_dict.get("last_review"))
-            old_due_dt = _parse_utc_dt(fsrs_dict.get("due"))
-            if last_rev_dt is not None:
-                elapsed_frac = max(0.0, (ref_now - last_rev_dt).total_seconds() / 86400.0)
-                r_u = forgetting_curve(elapsed_frac, old_s, decay=params[20])
-            else:
-                r_u = 0.5
-            if old_due_dt is not None and last_rev_dt is not None:
-                old_ivl = max(1, int(round((old_due_dt - last_rev_dt).total_seconds() / 86400.0)))
-            else:
-                old_ivl = next_interval_days(old_s, desired_retention=desired_retention, decay=params[20])
-            working_card = dict(fsrs_dict)
-        else:
-            # Solid/shaky node created before FSRS tracking: infer conservative baseline stability.
-            last_tested_dt = _parse_utc_dt(anc.get("lastTested"))
-            old_due_dt = _parse_utc_dt(old_next_rev)
-            if last_tested_dt is not None and old_due_dt is not None and old_due_dt > last_tested_dt:
-                old_ivl = max(1, (old_due_dt.date() - last_tested_dt.date()).days)
-                old_s = float(old_ivl)
-            else:
-                old_ivl = 3 if status == "solid" else 1
-                old_s = float(params[2] if status == "solid" else params[1])
-            if last_tested_dt is not None:
-                elapsed_frac = max(0.0, (ref_now - last_tested_dt).total_seconds() / 86400.0)
-                r_u = forgetting_curve(elapsed_frac, old_s, decay=params[20])
-            elif old_due_dt is not None and old_due_dt.date() <= ref_now.date():
-                overdue_days = max(1, (ref_now.date() - old_due_dt.date()).days + old_ivl)
-                r_u = forgetting_curve(float(overdue_days), old_s, decay=params[20])
-            else:
-                r_u = 0.70 if status == "solid" else 0.45
-            working_card = {
-                "card_id": int(time.time() * 1000) + hash(anc_id) % 10000,
-                "state": STATE_REVIEW,
-                "step": None,
-                "stability": old_s,
-                "difficulty": _initial_difficulty(params, 3, clamp=True),
-                "due": (old_due_dt or ref_now).isoformat(),
-                "last_review": (last_tested_dt or (ref_now - timedelta(days=max(1, old_ivl)))).isoformat(),
-            }
-
-        # Early-review memory discount: (1 - R_u) prevents spurious inflation on freshly solid cards.
-        credit = min(0.85, rating_scale * base_weight * max(0.0, 1.0 - r_u))
-        if credit < 0.005:
-            continue
-
-        # Hypothetical full unaided "good" review stability to interpolate toward smoothly.
-        full_card, _ = _stdlib_review_card(
-            working_card,
-            3,
-            ref_now,
-            params,
+        rec = _apply_credit_to_target(
+            anc_id,
+            anc,
+            base_weight=base_weight,
+            depth=depth,
+            rating_scale=rating_scale,
+            max_credit=0.85,
+            ref_now=ref_now,
+            today_str=today_str,
+            params=params,
             desired_retention=desired_retention,
-            enable_fuzzing=False,
+            is_isomorphic=False,
         )
-        s_full = max(old_s, float(full_card["stability"]))
-        new_s = round(old_s + credit * max(0.0, s_full - old_s), 4)
-        new_ivl = max(old_ivl, next_interval_days(new_s, desired_retention=desired_retention, decay=params[20]))
+        if rec is not None:
+            credits_raw.append(rec)
+            credited_ids.add(anc_id)
+            prereq_refreshed += 1
 
-        old_due_dt_eff = _parse_utc_dt(working_card.get("due")) or ref_now
-        delta_days = max(0, new_ivl - old_ivl)
-        if old_due_dt_eff <= ref_now:
-            # Overdue or due today: smoothly push forward proportionally to earned implicit credit.
-            push_days = max(1, int(round(max(credit * new_ivl, delta_days))))
-            new_due_dt = ref_now + timedelta(days=push_days)
-        else:
-            # Upcoming card: extend existing due date by stability interval gain.
-            extra_days = delta_days if delta_days > 0 else (1 if credit >= 0.25 else 0)
-            new_due_dt = old_due_dt_eff + timedelta(days=extra_days)
-
-        working_card["stability"] = new_s
-        working_card["due"] = new_due_dt.isoformat()
-        anc["fsrs"] = working_card
-        anc["nextReview"] = new_due_dt.date().isoformat()
-        anc["implicitCredit"] = round(float(anc.get("implicitCredit") or 0.0) + credit, 4)
-        anc["lastImplicitReview"] = today_str
-
-        credits_out.append(
-            {
-                "propId": anc_id,
-                "credit": round(credit, 4),
-                "depth": depth,
-                "retrievability": round(r_u, 4),
-                "oldStability": round(old_s, 3),
-                "newStability": round(new_s, 3),
-                "oldInterval": int(old_ivl),
-                "newInterval": int(new_ivl),
-                "oldNextReview": old_next_rev,
-                "newNextReview": anc["nextReview"],
-            }
+    for twin_id, info in sorted(iso_neighbors.items(), key=lambda kv: (-kv[1]["weight"], kv[0])):
+        if twin_id in credited_ids:
+            continue
+        twin = props_by_id.get(twin_id)
+        if twin is None:
+            continue
+        rec = _apply_credit_to_target(
+            twin_id,
+            twin,
+            base_weight=float(info["weight"]),
+            depth=1,
+            rating_scale=rating_scale,
+            max_credit=ISOMORPHIC_FIRE_MAX_WEIGHT,
+            ref_now=ref_now,
+            today_str=today_str,
+            params=params,
+            desired_retention=desired_retention,
+            is_isomorphic=True,
+            archetype_id=info.get("archetypeId"),
         )
+        if rec is not None:
+            credits_raw.append(rec)
+            credited_ids.add(twin_id)
+            iso_refreshed += 1
 
-    return credits_out
+    result = FireCreditList(
+        credits_raw,
+        prerequisite_refreshed=prereq_refreshed,
+        isomorphic_refreshed=iso_refreshed,
+    )
+    return result.to_summary() if return_summary else result
 
 
 # ---------------------------------------------------------------------------

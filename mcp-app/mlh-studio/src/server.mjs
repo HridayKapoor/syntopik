@@ -548,7 +548,7 @@ const TOOLS = [
     name: "synt_next_move",
     title: "Syntopik Pedagogical Brainstem (Next Optimal Move)",
     description:
-      "Return the compact <=180-token Action Envelope fusing FSRS-6/FIRe, Learner Psychology TeachingPolicy, causal root-cause probes, Blunder Forks, and live whiteboard learner pins.",
+      "Return the compact <=180-token Action Envelope fusing FSRS-6/FIRe, Learner Psychology TeachingPolicy, causal root-cause probes, Blunder Forks, Rosetta isomorphicBridge openers, and live whiteboard learner pins.",
     inputSchema: NEXT_MOVE_SCHEMA,
   },
   {
@@ -569,7 +569,7 @@ const TOOLS = [
     name: "synt_get_frontier",
     title: "Get Syntopik Study Frontier & Learner Policy",
     description:
-      "Ambient headless query: return FIRe-compressed due items, active Autopilot, learnerProfile, Active TeachingPolicy, dueForks, arenasCount, coldStartDays, pendingPins, traps, and Brier calibration.",
+      "Ambient headless query: return FIRe-compressed due items, active Autopilot, learnerProfile, Active TeachingPolicy, dueForks, arenasCount, coldStartDays, pendingPins, rosettaBridgesCount, syncDeviceId, traps, and Brier calibration.",
     inputSchema: GET_FRONTIER_SCHEMA,
   },
   {
@@ -1063,7 +1063,7 @@ function handleLessonStudio(rawArgs, toolName) {
 
 function createServer() {
   const server = new Server(
-    { name: "syntopik-studio", version: "3.0.0" },
+    { name: "syntopik-studio", version: "3.1.0" },
     { capabilities: { tools: {}, resources: {} } }
   );
 

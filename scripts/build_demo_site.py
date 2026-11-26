@@ -1,12 +1,12 @@
 #!/usr/bin/env python3
-"""Deterministic Builder & Verifier for Syntopik v3.0 1-Click Live GitHub Pages Demo Site.
+"""Deterministic Builder & Verifier for Syntopik v3.1 1-Click Live GitHub Pages Demo Site.
 
 Builds the zero-install, zero-CDN, zero-PII interactive browser sandbox directly from
-Syntopik v3.0's finished `dashboard.html`, `knowledge-graph/viewer.html`, `syntopik/pocket.py`,
-and the 3 bundled starter packs (`packs/*.syntopik-pack.zip`):
+Syntopik v3.1's finished `dashboard.html`, `knowledge-graph/viewer.html`, `syntopik/pocket.py`,
+and the 3 bundled starter packs (`packs/*.syntopik-pack.zip`) plus cross-domain Rosetta twins:
 
-  - `docs/index.html`   (<= 650 KB self-contained interactive Studio + Mastery Gym + :::explore)
-  - `docs/viewer.html`  (self-contained standalone Hypergraph Viewer w/ Causal Halos & T1-T4)
+  - `docs/index.html`   (<= 650 KB self-contained Studio + Gym + Rosetta + Proof-Graph Diff + Sync)
+  - `docs/viewer.html`  (self-contained Hypergraph Viewer w/ Causal Halos, Rosetta Chords & T1-T4)
   - `docs/pocket.html`  (~25-35 KB self-contained Mobile Pocket Commute Deck)
   - `docs/.nojekyll`    (empty file so GitHub Pages skips Jekyll processing)
 
@@ -49,6 +49,11 @@ from syntopik.fsrs_core import (  # noqa: E402
     assess_confidence_signal,
     bkt_update,
     review_card_dict,
+)
+from syntopik.isomorphism import (  # noqa: E402
+    discover_isomorphisms,
+    link_isomorphism_chord,
+    load_archetypes,
 )
 from syntopik.learner_model import (  # noqa: E402
     apply_tier1_calibration,
@@ -210,6 +215,68 @@ def _seed_45_day_history(ws: Path, kg: Path, ch: Path) -> None:
     rng = random.Random(SEED)
     props = load_jsonl(kg / "propositions.jsonl")
     chains = load_jsonl(kg / "chains.jsonl")
+    existing_ids = {str(p.get("id") or "") for p in props}
+
+    # --- Seed 2 clean cross-domain Rosetta twin propositions (Series RLC & Boltzmann StatMech) ---
+    rosetta_seed_props: list[dict[str, Any]] = [
+        {
+            "id": "elec-rlc-resonance",
+            "subject": "Electrical Engineering",
+            "chapter": "AC Circuits & Resonance",
+            "title": "Series RLC Resonant Circuit & Quality Factor",
+            "statement": (
+                "A series RLC circuit obeys L q'' + R q' + (1/C) q = V(t) with resonant angular frequency "
+                "omega_0 = 1/sqrt(LC), damping ratio zeta = (R/2)*sqrt(C/L), and quality factor "
+                "Q = omega_0*L/R separating underdamped, critically damped, and overdamped transients."
+            ),
+            "kind": "theorem",
+            "status": "solid",
+            "tags": ["rlc", "series rlc", "resonance", "damping", "second_order_oscillator"],
+            "boundaryConditions": [
+                "Requires ideal linear time-invariant L, R, C elements without magnetic core saturation.",
+                "Breaks at high frequencies where wire length approaches signal wavelength (distributed lines).",
+            ],
+            "cues": [
+                {
+                    "id": "c1",
+                    "q": "In a series RLC circuit, what are omega_0 and the critical resistance R_crit separating underdamped from overdamped decay?",
+                    "a": "omega_0 = 1/sqrt(LC), and critical damping occurs at zeta = 1 => R_crit = 2*sqrt(L/C).",
+                }
+            ],
+            "sourceRef": "AC Circuits Textbook §8.3",
+        },
+        {
+            "id": "phys-statmech-boltzmann",
+            "subject": "Statistical Mechanics",
+            "chapter": "Canonical Ensemble",
+            "title": "Canonical Boltzmann Distribution & Partition Function",
+            "statement": (
+                "In thermal equilibrium at temperature T, microstate probability obeys "
+                "p_i = exp(-E_i / (k_B T)) / Z where Z = sum_j exp(-E_j / (k_B T)) is the canonical "
+                "partition function and Helmholtz free energy is F = -k_B T ln Z."
+            ),
+            "kind": "theorem",
+            "status": "solid",
+            "tags": ["boltzmann", "partition function", "canonical ensemble", "boltzmann_softmax"],
+            "boundaryConditions": [
+                "Requires thermal equilibrium with a heat bath at fixed T, V, N (canonical ensemble).",
+                "Breaks in driven non-equilibrium open systems or heavy-tailed non-extensive statistics.",
+            ],
+            "cues": [
+                {
+                    "id": "c1",
+                    "q": "How does temperature T control microstate probabilities p_i = exp(-E_i/(k_B T))/Z in the T -> 0 and T -> inf limits?",
+                    "a": "As T -> 0 probability concentrates onto the minimum-energy ground state; as T -> inf all accessible microstates approach uniform probability.",
+                }
+            ],
+            "sourceRef": "Statistical Mechanics §3.1",
+        },
+    ]
+    for rp in rosetta_seed_props:
+        if rp["id"] not in existing_ids:
+            props.append(rp)
+            existing_ids.add(rp["id"])
+
     prop_by_id = {str(p["id"]): p for p in props}
 
     # Explicit pedagogical trajectories per proposition over the 45-day window:
@@ -249,6 +316,9 @@ def _seed_45_day_history(ws: Path, kg: Path, ch: Path) -> None:
         "ml-attn-quad-complexity": ("solid", [(24, "good", 0.76, 13900), (10, "good", 0.85, 11200)]),
         "ml-attn-kv-cache": ("shaky", [(16, "again", 0.70, 21500), (4, "hard", 0.58, 19100)]),
         "ml-attn-gqa-mqa": ("planned", []),
+        # --- Cross-Domain Rosetta Twins (Electrical Engineering & Statistical Mechanics) ---
+        "elec-rlc-resonance": ("solid", [(39, "good", 0.76, 13600), (27, "good", 0.86, 10800), (11, "easy", 0.92, 8900)]),
+        "phys-statmech-boltzmann": ("solid", [(36, "good", 0.78, 13200), (22, "good", 0.87, 10500), (8, "easy", 0.93, 8400)]),
     }
 
     # Build chronological review timeline across all 30 propositions
@@ -378,6 +448,26 @@ def _seed_45_day_history(ws: Path, kg: Path, ch: Path) -> None:
 
     save_jsonl_atomic(kg / "propositions.jsonl", props)
     save_jsonl_atomic(kg / "revlog.jsonl", revlog)
+
+    # --- Link 2 clean cross-domain Rosetta Isomorphism Chords via syntopik.isomorphism ---
+    link_isomorphism_chord(
+        kg,
+        "phys-shm-damped-regimes",
+        "elec-rlc-resonance",
+        "second_order_oscillator",
+    )
+    link_isomorphism_chord(
+        kg,
+        "phys-statmech-boltzmann",
+        "ml-attn-softmax-saturation",
+        "boltzmann_softmax",
+    )
+    # Normalize createdAt on persisted Rosetta chords so build output is 100% byte-deterministic
+    updated_chains = load_jsonl(kg / "chains.jsonl")
+    for row in updated_chains:
+        if isinstance(row, dict) and str(row.get("relation") or "").lower() == "isomorphic_to":
+            row["createdAt"] = "2026-11-24T12:00:00Z"
+    save_jsonl_atomic(kg / "chains.jsonl", updated_chains)
 
     # --- Seed 9 realistic, 100% original multi-subject mistakes (all 3 NEA tiers) ---
     mistakes: list[dict[str, Any]] = [
@@ -1092,6 +1182,73 @@ def _build_demo_payloads(ws: Path, kg: Path, ch: Path) -> tuple[dict[str, Any], 
         if blocks:
             explorables_map[md_path.stem] = blocks
 
+    # Compute deterministic v3.1 Rosetta Isomorphism payload (persisted chords + top discovered per archetype)
+    rosetta_raw = discover_isomorphisms(kg, min_score=0.35)
+    raw_chords = list(rosetta_raw.get("chords") or [])
+    curated_chords: list[dict[str, Any]] = [c for c in raw_chords if c.get("persisted")]
+    disc_per_arch: dict[str, int] = {}
+    for ch_item in raw_chords:
+        if ch_item.get("persisted"):
+            continue
+        aid = str(ch_item.get("archetypeId") or "")
+        if disc_per_arch.get(aid, 0) < 1:
+            curated_chords.append(ch_item)
+            disc_per_arch[aid] = disc_per_arch.get(aid, 0) + 1
+    rosetta_payload: dict[str, Any] = {
+        "ok": True,
+        "kgDir": "knowledge-graph",
+        "chords": [
+            {k: v for k, v in c.items() if k != "bijectionQuestion"}
+            for c in curated_chords
+        ],
+        "archetypesMatched": [
+            {
+                "archetypeId": a.get("archetypeId"),
+                "archetypeName": a.get("archetypeName"),
+                "chordCount": a.get("chordCount", 0),
+                "propositionCount": a.get("propositionCount", 0),
+            }
+            for a in (rosetta_raw.get("archetypesMatched") or [])
+            if int(a.get("chordCount") or 0) > 0
+        ],
+        "chordCount": len(curated_chords),
+        "persistedCount": sum(1 for c in curated_chords if c.get("persisted")),
+        "discoveredCount": sum(1 for c in curated_chords if not c.get("persisted")),
+        "archetypesCount": len(load_archetypes()),
+    }
+
+    # Deterministic v3.1 Multi-Device CRDT Sync status (zero temp paths)
+    revlog_count = len(load_jsonl(kg / "revlog.jsonl"))
+    sync_status_payload: dict[str, Any] = {
+        "ok": True,
+        "workspace": DEMO_WORKSPACE_NAME,
+        "format": "syntopik-delta-v1",
+        "schemaVersion": 1,
+        "initialized": True,
+        "deviceId": "dev-demo-01",
+        "lamportClock": 7,
+        "lastExportedAt": "2026-11-25T18:30:00Z",
+        "lastMergedAt": "2026-11-25T18:35:00Z",
+        "lastSyncedAt": "2026-11-25T18:35:00Z",
+        "peerClocks": {"dev-tablet-02": 5},
+        "mergedDeltaCount": 1,
+        "trackerSlugs": list(STARTER_PACK_SLUGS),
+        "counts": {
+            "propositions": len(study_graph.get("propositions") or []),
+            "chains": len(study_graph.get("chains") or []),
+            "revlog": revlog_count,
+            "mistakes": len(study_hub.get("mistakes") or []),
+            "evidenceLedger": int((ev_summary.get("ledgerIntegrity") or {}).get("count") or 0),
+            "vivaSessions": len(study_hub.get("vivaSessions") or []),
+            "forks": len(study_hub.get("forks") or []),
+            "arenas": len(study_hub.get("arenas") or []),
+            "derivations": len(study_hub.get("derivations") or []),
+            "trackers": len(study_hub.get("chapterTrackers") or []),
+            "learnerProfile": 1,
+        },
+        "ledgerIntegrity": ev_summary.get("ledgerIntegrity") or {"ok": True, "count": 10, "brokenAt": None},
+    }
+
     # Drop redundant normalizedEdges (dashboard.html & viewer.html derive edges from chains in <1ms)
     study_graph.pop("normalizedEdges", None)
 
@@ -1104,6 +1261,8 @@ def _build_demo_payloads(ws: Path, kg: Path, ch: Path) -> tuple[dict[str, Any], 
     study_hub["nextMove"] = next_move
     study_hub["evidenceSummary"] = ev_summary
     study_hub["explorables"] = explorables_map
+    study_hub["rosetta"] = rosetta_payload
+    study_hub["syncStatus"] = sync_status_payload
     study_hub["rootCauseHotspots"] = {
         "byProp": {k: round(float(v), 4) for k, v in sorted(by_prop.items())},
         "blastRadius": blast,
@@ -1111,9 +1270,20 @@ def _build_demo_payloads(ws: Path, kg: Path, ch: Path) -> tuple[dict[str, Any], 
     study_hub["triageRecommended"] = False
     study_hub["reentry"] = None
     if isinstance(study_hub.get("retentionHeatmap"), dict):
-        study_hub["retentionHeatmap"].pop("byDate", None)
+        hm = study_hub["retentionHeatmap"]
+        hm.pop("byDate", None)
+        days_list = hm.pop("days", None)
+        if isinstance(days_list, list) and days_list:
+            hm["activeCompact"] = [
+                [d["date"], int(d.get("count") or 0), int(d.get("reviews") or 0), int(d.get("exams") or 0), int(d.get("level") or 0)]
+                for d in days_list
+                if int(d.get("count") or 0) > 0
+            ]
+    # forksDue is derived synchronously from forks by SHIM_JS on boot
+    study_hub.pop("forksDue", None)
     study_hub["stats"]["verifiedTransferPct"] = ev_summary.get("verifiedTransferPct", 0.0)
     study_hub["stats"]["explorablesCount"] = sum(len(v) for v in explorables_map.values())
+    study_hub["stats"]["rosettaChordsCount"] = rosetta_payload["chordCount"]
 
     # Strict zero-sealed-secret assertion on public static payloads
     leaks = _scan_forbidden_keys(study_graph, "graph.") + _scan_forbidden_keys(study_hub, "hub.")
@@ -1143,24 +1313,98 @@ VIEWER_DEMO_COMPACT_CSS = """
   @media (max-width: 1380px) {
     #countPill { display: none; }
     .controls { gap: 4px; }
-    .controls select { max-width: 92px; min-width: 68px; flex: 0 1 88px; }
-    .controls input[type="search"], #searchInput { min-width: 82px; flex: 0 1 108px; }
+    .controls select { max-width: 90px; min-width: 66px; flex: 0 1 86px; }
+    .controls input[type="search"], #search, #searchInput { min-width: 80px; flex: 0 1 104px; }
     .demo-reset-pill { padding: 3px 8px; font-size: 11px; }
+    .stage-hud { right: 14px; max-width: calc(100% - 28px); gap: 6px; }
+    .hud-group { padding: 4px 6px; gap: 3px; font-size: 10.5px; }
+    .legend-item { gap: 4px; padding: 0 4px; white-space: nowrap; }
   }
 """
 
 SHIM_JS = r"""
 (() => {
   "use strict";
-  const KEY = "syntopik_live_demo_v3_state";
-  const VER = 3;
+  const KEY = "syntopik_live_demo_v31_state";
+  const VER = 4;
   const clone = (o) => JSON.parse(JSON.stringify(o));
   const normTxt = (s) => String(s || "").toLowerCase().replace(/\s+/g, "").replace(/[−–—]/g, "-");
+  const normEq = (s) => normTxt(String(s || "").replace(/^line\s*\d+\s*[:.)-]\s*/i, "")).replace(/\^/g, "**").replace(/[·×]/g, "*");
   const todayIso = () => (window.__STUDY_HUB__ && window.__STUDY_HUB__.today) || "2026-11-26";
   const addDays = (iso, d) => {
     const t = Date.parse(iso + "T12:00:00Z");
     return new Date((Number.isFinite(t) ? t : Date.now()) + d * 86400000).toISOString().slice(0, 10);
   };
+
+  // Hydrate compact retentionHeatmap & forksDue onto window.__STUDY_HUB__ synchronously before dashboard init
+  (() => {
+    const h = window.__STUDY_HUB__;
+    if (!h || typeof h !== "object") return;
+    if (h.retentionHeatmap && !Array.isArray(h.retentionHeatmap.days) && h.retentionHeatmap.startDate) {
+      const hm = h.retentionHeatmap;
+      const byD = new Map((hm.activeCompact || []).map((r) => [r[0], { date: r[0], count: r[1], reviews: r[2], exams: r[3], level: r[4] }]));
+      const win = Math.max(1, Number(hm.windowDays || 365));
+      const days = [];
+      for (let i = 0; i < win; i++) {
+        const iso = addDays(hm.startDate, i);
+        days.push(byD.get(iso) || { date: iso, count: 0, reviews: 0, exams: 0, level: 0 });
+      }
+      hm.days = days;
+      delete hm.activeCompact;
+    }
+    if (!Array.isArray(h.forksDue) && Array.isArray(h.forks)) {
+      h.forksDue = h.forks.filter((f) => f && f.isDue !== false);
+    }
+  })();
+
+  // Pure-JS FIPS 180-4 SHA-256 (synchronous, works on file:// and https:// for fail-closed CRDT sync tamper detection)
+  const SHA_K = [
+    0x428a2f98,0x71374491,0xb5c0fbcf,0xe9b5dba5,0x3956c25b,0x59f111f1,0x923f82a4,0xab1c5ed5,
+    0xd807aa98,0x12835b01,0x243185be,0x550c7dc3,0x72be5d74,0x80deb1fe,0x9bdc06a7,0xc19bf174,
+    0xe49b69c1,0xefbe4786,0x0fc19dc6,0x240ca1cc,0x2de92c6f,0x4a7484aa,0x5cb0a9dc,0x76f988da,
+    0x983e5152,0xa831c66d,0xb00327c8,0xbf597fc7,0xc6e00bf3,0xd5a79147,0x06ca6351,0x14292967,
+    0x27b70a85,0x2e1b2138,0x4d2c6dfc,0x53380d13,0x650a7354,0x766a0abb,0x81c2c92e,0x92722c85,
+    0xa2bfe8a1,0xa81a664b,0xc24b8b70,0xc76c51a3,0xd192e819,0xd6990624,0xf40e3585,0x106aa070,
+    0x19a4c116,0x1e376c08,0x2748774c,0x34b0bcb5,0x391c0cb3,0x4ed8aa4a,0x5b9cca4f,0x682e6ff3,
+    0x748f82ee,0x78a5636f,0x84c87814,0x8cc70208,0x90befffa,0xa4506ceb,0xbef9a3f7,0xc67178f2
+  ];
+  function sha256Hex(str) {
+    const bytes = new TextEncoder().encode(String(str));
+    const len = bytes.length, bitLen = len * 8;
+    const padLen = ((len + 9 + 63) >> 6) << 6;
+    const buf = new Uint8Array(padLen);
+    buf.set(bytes);
+    buf[len] = 0x80;
+    const dv = new DataView(buf.buffer);
+    dv.setUint32(padLen - 8, Math.floor(bitLen / 0x100000000), false);
+    dv.setUint32(padLen - 4, bitLen >>> 0, false);
+    let h0=0x6a09e667,h1=0xbb67ae85,h2=0x3c6ef372,h3=0xa54ff53a,h4=0x510e527f,h5=0x9b05688c,h6=0x1f83d9ab,h7=0x5be0cd19;
+    const w = new Uint32Array(64);
+    const rr = (x, n) => (x >>> n) | (x << (32 - n));
+    for (let o = 0; o < padLen; o += 64) {
+      for (let i = 0; i < 16; i++) w[i] = dv.getUint32(o + i * 4, false);
+      for (let i = 16; i < 64; i++) {
+        const s0 = rr(w[i-15], 7) ^ rr(w[i-15], 18) ^ (w[i-15] >>> 3);
+        const s1 = rr(w[i-2], 17) ^ rr(w[i-2], 19) ^ (w[i-2] >>> 10);
+        w[i] = (w[i-16] + s0 + w[i-7] + s1) >>> 0;
+      }
+      let a=h0,b=h1,c=h2,d=h3,e=h4,f=h5,g=h6,h=h7;
+      for (let i = 0; i < 64; i++) {
+        const t1 = (h + (rr(e,6)^rr(e,11)^rr(e,25)) + ((e&f)^(~e&g)) + SHA_K[i] + w[i]) >>> 0;
+        const t2 = ((rr(a,2)^rr(a,13)^rr(a,22)) + ((a&b)^(a&c)^(b&c))) >>> 0;
+        h=g; g=f; f=e; e=(d+t1)>>>0; d=c; c=b; b=a; a=(t1+t2)>>>0;
+      }
+      h0=(h0+a)>>>0; h1=(h1+b)>>>0; h2=(h2+c)>>>0; h3=(h3+d)>>>0;
+      h4=(h4+e)>>>0; h5=(h5+f)>>>0; h6=(h6+g)>>>0; h7=(h7+h)>>>0;
+    }
+    return [h0,h1,h2,h3,h4,h5,h6,h7].map((x) => x.toString(16).padStart(8, "0")).join("");
+  }
+  function canonicalJson(val) {
+    if (val === null || typeof val !== "object") return JSON.stringify(val);
+    if (Array.isArray(val)) return "[" + val.map(canonicalJson).join(",") + "]";
+    const keys = Object.keys(val).sort();
+    return "{" + keys.map((k) => JSON.stringify(k) + ":" + canonicalJson(val[k])).join(",") + "}";
+  }
 
   // Closure-scoped demo grading rules (never exposed on window.__STUDY_HUB__ / window.__STUDY_GRAPH__)
   const WB_REVEALS = {
@@ -1206,21 +1450,32 @@ SHIM_JS = r"""
   };
   const DERIV_STEPS = {
     "deriv-raft-safety": {
-      s3: { expr: "leaders(term) <= 1", ok: ["leaders(term)<=1", "leaders<=1", "atmostoneleader", "n_leaders<=1"] },
-      s4: { expr: "same_term_and_index => identical_prefix", ok: ["same_term_and_index=>identical_prefix", "same(index,term)=>identicalprefix", "identical_prefix", "logmatching"] },
-      s5: { expr: "applied(s_a, i) == applied(s_b, i)", ok: ["applied(s_a,i)==applied(s_b,i)", "applied(a,i)==applied(b,i)"] }
+      s1: { expr: "2 * (floor(N / 2) + 1) > N", ok: ["2*(floor(n/2)+1)>n", "|q1capq2|>=1", "q1+q2>n"], factors: ["floor", "n"] },
+      s2: { expr: "votes_granted(server, term) <= 1", ok: ["votes_granted(server,term)<=1", "votes(server,term)<=1", "votes<=1", "atmostonevote"], factors: ["1"] },
+      s3: { expr: "leaders(term) <= 1", ok: ["leaders(term)<=1", "leaders<=1", "atmostoneleader", "n_leaders<=1"], factors: ["1"] },
+      s4: { expr: "same_term_and_index => identical_prefix", ok: ["same_term_and_index=>identical_prefix", "same(index,term)=>identicalprefix", "identical_prefix", "logmatching"], factors: ["prefix"] },
+      s5: { expr: "applied(s_a, i) == applied(s_b, i)", ok: ["applied(s_a,i)==applied(s_b,i)", "applied(a,i)==applied(b,i)"], factors: ["applied"] }
     },
     "deriv-shm-compound-pendulum": {
-      s3: { expr: "alpha = -(m * g * d / I) * theta", ok: ["alpha=-(m*g*d/i)*theta", "alpha=-(mgd/i)*theta", "alpha=-(m*g*d/i)theta"] },
-      s4: { expr: "omega = sqrt(m * g * d / I)", ok: ["omega=sqrt(m*g*d/i)", "omega=sqrt(mgd/i)", "sqrt(m*g*d/i)"] },
-      s5: { expr: "T = 2 * pi * sqrt(I / (m * g * d))", ok: ["t=2*pi*sqrt(i/(m*g*d))", "t=2*pi*sqrt(i/(mgd))", "2*pi*sqrt(i/(m*g*d))"] }
+      s1: { expr: "I * alpha = -m * g * d * sin(theta)", ok: ["i*alpha=-m*g*d*sin(theta)", "i*alpha=-mgdsin(theta)", "tau=-m*g*d*sin(theta)", "i*a=-m*g*d*sin(theta)"], signFlip: ["i*alpha=m*g*d*sin(theta)", "i*alpha=+m*g*d*sin(theta)", "tau=m*g*d*sin(theta)"], factors: ["i", "m", "g", "d", "sin"] },
+      s2: { expr: "sin(theta) = theta", ok: ["sin(theta)=theta", "sin(theta)~theta", "sin(theta)≈theta", "theta=sin(theta)"], factors: ["theta"] },
+      s3: { expr: "alpha = -(m * g * d / I) * theta", ok: ["alpha=-(m*g*d/i)*theta", "alpha=-(mgd/i)*theta", "alpha=-(m*g*d/i)theta", "alpha=-m*g*d*theta/i", "alpha=-(m*g*d)*theta/i"], signFlip: ["alpha=(m*g*d/i)*theta", "alpha=+(m*g*d/i)*theta", "alpha=m*g*d*theta/i", "alpha=(mgd/i)*theta"], factors: ["m", "g", "d", "i", "theta"] },
+      s4: { expr: "omega = sqrt(m * g * d / I)", ok: ["omega=sqrt(m*g*d/i)", "omega=sqrt(mgd/i)", "sqrt(m*g*d/i)", "w=sqrt(m*g*d/i)", "omega**2=m*g*d/i"], factors: ["sqrt", "m", "g", "d", "i"] },
+      s5: { expr: "T = 2 * pi * sqrt(I / (m * g * d))", ok: ["t=2*pi*sqrt(i/(m*g*d))", "t=2*pi*sqrt(i/(mgd))", "2*pi*sqrt(i/(m*g*d))", "t=2pi*sqrt(i/(m*g*d))"], factors: ["2", "pi", "sqrt", "i"] }
     },
     "deriv-attn-variance-scaling": {
-      s2: { expr: "Var(q_i * k_i) = Var(q_i) * Var(k_i) = 1", ok: ["var(q_i*k_i)=var(q_i)*var(k_i)=1", "var(q_i*k_i)=1", "1"] },
-      s3: { expr: "Var(q . k) = d_k", ok: ["var(q.k)=d_k", "var(q*k)=d_k", "d_k"] },
-      s4: { expr: "Var((q . k) / c) = d_k / c**2", ok: ["var((q.k)/c)=d_k/c**2", "var((q.k)/c)=d_k/c^2", "d_k/c**2", "d_k/c^2"] },
-      s5: { expr: "c = sqrt(d_k)", ok: ["c=sqrt(d_k)", "sqrt(d_k)", "c=d_k**0.5"] }
+      s1: { expr: "E[q_i] = 0, Var(q_i) = 1, E[k_i] = 0, Var(k_i) = 1", ok: ["e[q_i]=0,var(q_i)=1,e[k_i]=0,var(k_i)=1", "var(q_i)=1,var(k_i)=1", "e[q_i]=0,var(q_i)=1"], factors: ["var"] },
+      s2: { expr: "Var(q_i * k_i) = Var(q_i) * Var(k_i) = 1", ok: ["var(q_i*k_i)=var(q_i)*var(k_i)=1", "var(q_i*k_i)=1", "1"], factors: ["1"] },
+      s3: { expr: "Var(q . k) = d_k", ok: ["var(q.k)=d_k", "var(q*k)=d_k", "d_k", "var(qk)=d_k"], factors: ["d_k"] },
+      s4: { expr: "Var((q . k) / c) = d_k / c**2", ok: ["var((q.k)/c)=d_k/c**2", "var((q*k)/c)=d_k/c**2", "d_k/c**2"], factors: ["d_k", "c**2"] },
+      s5: { expr: "c = sqrt(d_k)", ok: ["c=sqrt(d_k)", "sqrt(d_k)", "c=d_k**0.5"], factors: ["sqrt", "d_k"] }
     }
+  };
+  const ROSETTA_ARCHS = {
+    second_order_oscillator: { name: "Second-Order Linear Oscillator & Damping", eq: "m x'' + b x' + k x = F(t)  <=>  x'' + 2*gamma*x' + omega_0^2*x = f(t)", breaks: ["Large-amplitude mechanical oscillations become nonlinear and break superposition.", "Active circuits or saturated magnetic cores break constant-coefficient L, R, C linearity."] },
+    boltzmann_softmax: { name: "Boltzmann-Gibbs Exponential Distribution & Temperature Scaling", eq: "p_i = exp(z_i / tau) / sum_j exp(z_j / tau)  <=>  p_i = exp(-E_i / k_B T) / Z", breaks: ["Attention logits carry +z_i whereas Boltzmann weights carry -E_i (sign flip).", "Softmax is shift-invariant whereas physical free energy F shifts with reference zero."] },
+    quorum_intersection: { name: "Pigeonhole Quorum Intersection Invariant", eq: "|Q_1| + |Q_2| > N  =>  |Q_1 cap Q_2| >= 1", breaks: ["Crash-fault majorities (2f+1) break under even a single Byzantine equivocator (needs 3f+1)."] },
+    variance_normalization: { name: "Independent Sum Variance Growth & 1/sqrt(N) Normalization", eq: "Var(sum X_i) = N * sigma^2  =>  scale by 1 / sqrt(N)", breaks: ["Positively correlated summands grow variance as O(N^2), breaking 1/sqrt(N) normalization."] }
   };
 
   function evalCausalMatrix(scores, mode) {
@@ -1396,7 +1651,8 @@ SHIM_JS = r"""
       forks: state.hub.forks, arenas: state.hub.arenas, decisions: state.hub.decisions,
       derivations: state.hub.derivations, vivaSessions: state.hub.vivaSessions,
       evidenceSummary: state.hub.evidenceSummary, rootCauseHotspots: state.hub.rootCauseHotspots,
-      whiteboard: state.hub.whiteboard, explorables: state.hub.explorables, starterPacks: state.hub.starterPacks
+      whiteboard: state.hub.whiteboard, explorables: state.hub.explorables, starterPacks: state.hub.starterPacks,
+      rosetta: state.hub.rosetta, syncStatus: state.hub.syncStatus
     };
   }
 
@@ -1429,7 +1685,8 @@ SHIM_JS = r"""
     if (rating === "again") node.lapses = Number(node.lapses || 0) + 1;
     node.fsrs = { ...(node.fsrs || {}), stability: newS, difficulty: Number(Math.max(1, Math.min(10, Number((node.fsrs && node.fsrs.difficulty) || 5) + (rating === "again" ? 0.6 : rating === "easy" ? -0.35 : -0.1))).toFixed(2)), due: nextDue + "T12:00:00+00:00", last_review: tdy + "T12:00:00+00:00", reps: node.reps, lapses: node.lapses || 0 };
 
-    // True FIRe upstream ancestor refresh on Good / Easy
+    // True FIRe upstream ancestor refresh + 0.25 cross-domain Rosetta FIRe on Good / Easy
+    const NON_CAUSAL = new Set(["isomorphic_to", "contrasts_with", "contrasts", "contrast", "analogous", "contradicts", "unrelated"]);
     const fireCredits = [];
     if (ok) {
       const seen = new Set([pid]);
@@ -1438,6 +1695,7 @@ SHIM_JS = r"""
         const cur = queue.shift();
         if (cur.depth >= 2) continue;
         for (const ch of (state.graph.chains || [])) {
+          if (NON_CAUSAL.has(String(ch.relation || "").toLowerCase())) continue;
           if (ch.conclusion !== cur.id) continue;
           const w = Number(ch.encompassWeight || 0.45);
           for (const prem of (ch.premises || [])) {
@@ -1461,6 +1719,24 @@ SHIM_JS = r"""
           }
         }
       }
+      for (const ch of (state.graph.chains || [])) {
+        if (String(ch.relation || "").toLowerCase() !== "isomorphic_to") continue;
+        const a = ch.from || (Array.isArray(ch.premises) && ch.premises[0]);
+        const b = ch.to || ch.conclusion;
+        const twinId = a === pid ? b : (b === pid ? a : null);
+        if (!twinId || seen.has(twinId)) continue;
+        seen.add(twinId);
+        const tn = props.find((x) => x.id === twinId);
+        if (tn && tn.status !== "planned" && tn.status !== "misconception") {
+          const w = Math.min(0.3, Math.max(0.05, Number(ch.encompassWeight || 0.25)));
+          const pStab = Number((tn.fsrs && tn.fsrs.stability) || tn.stabilityDays || 4.0);
+          const boosted = Number((pStab * (1 + 0.14 * w)).toFixed(2));
+          tn.stabilityDays = boosted;
+          tn.implicitCredit = Number(((tn.implicitCredit || 0) + 0.25 * w).toFixed(2));
+          if (tn.fsrs) tn.fsrs.stability = boosted;
+          fireCredits.push({ propId: twinId, title: tn.title || twinId, credit: Number((0.25 * w).toFixed(2)), newStability: boosted, isomorphic: true });
+        }
+      }
     }
     if (ok && ivl >= 7) promoteEvidence(state, pid, 2, "cold_recall");
     const hm = state.hub.retentionHeatmap;
@@ -1479,10 +1755,12 @@ SHIM_JS = r"""
 
   function handleRootCause(nodeId) {
     state = loadState();
+    const NON_CAUSAL = new Set(["isomorphic_to", "contrasts_with", "contrasts", "contrast", "analogous", "contradicts", "unrelated"]);
     const props = state.graph.propositions || [];
     const byId = new Map(props.map((p) => [p.id, p]));
     const incoming = new Map();
     for (const c of (state.graph.chains || [])) {
+      if (NON_CAUSAL.has(String(c.relation || "").toLowerCase())) continue;
       if (!incoming.has(c.conclusion)) incoming.set(c.conclusion, []);
       for (const pr of (c.premises || [])) incoming.get(c.conclusion).push(pr);
     }
@@ -1586,12 +1864,391 @@ SHIM_JS = r"""
     return { ok: true, sessionId: sess.sessionId, propId: sess.propId, propTitle: sess.propTitle, status: done ? "passed" : "in_progress", turnCompleted: tNum, currentTurn: done ? 5 : tNum + 1, totalTurns: 5, turnRubric: rubric, finalRubric: done ? rubric : null, nextPrompt, evidenceTier };
   }
 
+  function handleRosettaGet(u) {
+    state = loadState();
+    const ros = state.hub.rosetta || { ok: true, chords: [], archetypesMatched: [], chordCount: 0, persistedCount: 0, discoveredCount: 0, archetypesCount: 10 };
+    const pid = (u.searchParams.get("propId") || u.searchParams.get("nodeId") || "").trim();
+    const out = { ok: true, ...ros };
+    if (pid) {
+      const neighbors = (ros.chords || []).filter((c) => c.sourceId === pid || c.targetId === pid);
+      out.propId = pid;
+      out.neighbors = neighbors;
+      out.opener = neighbors.length ? `Structural twin via ${neighbors[0].archetypeName || neighbors[0].archetypeId}: map the invariant roles and watch where the analogy breaks.` : null;
+    }
+    return out;
+  }
+
+  function handleRosettaLink(body) {
+    state = loadState();
+    const src = String(body.sourceId || body.source_id || "").trim();
+    const tgt = String(body.targetId || body.target_id || "").trim();
+    const aid = String(body.archetypeId || body.archetype_id || "").trim();
+    if (!src || !tgt || !aid || src === tgt) return { ok: false, error: "Distinct sourceId, targetId, and archetypeId are required." };
+    const [a, b] = src <= tgt ? [src, tgt] : [tgt, src];
+    const chains = state.graph.chains || [];
+    const exists = chains.some((c) => String(c.relation || "").toLowerCase() === "isomorphic_to" && ((c.from === src && c.to === tgt) || (c.from === tgt && c.to === src) || (Array.isArray(c.premises) && c.premises.length === 1 && ((c.premises[0] === src && c.conclusion === tgt) || (c.premises[0] === tgt && c.conclusion === src)))));
+    const props = state.graph.propositions || [];
+    const pa = props.find((x) => x.id === a) || { id: a, title: a, subject: "General", chapter: "General" };
+    const pb = props.find((x) => x.id === b) || { id: b, title: b, subject: "General", chapter: "General" };
+    const arch = ROSETTA_ARCHS[aid] || { name: aid.replace(/_/g, " "), eq: "", breaks: ["Verify domain-specific regime limits before transferring equations."] };
+    const breaksAt = Array.isArray(body.breaksAt) ? body.breaksAt : arch.breaks;
+    const row = { from: src, to: tgt, premises: [src], conclusion: tgt, relation: "isomorphic_to", encompassWeight: 0.25, archetypeId: aid, breaksAt, why: `Structural isomorphism via ${arch.name}` };
+    if (!exists) chains.push(row);
+    state.graph.chains = chains;
+    const ros = state.hub.rosetta || { ok: true, chords: [], archetypesMatched: [], chordCount: 0, persistedCount: 0, discoveredCount: 0, archetypesCount: 10 };
+    const chords = Array.isArray(ros.chords) ? ros.chords : [];
+    const existingChord = chords.find((c) => (c.sourceId === a && c.targetId === b) || (c.sourceId === b && c.targetId === a));
+    if (existingChord) {
+      existingChord.persisted = true;
+      existingChord.score = 1.0;
+    } else {
+      chords.push({
+        id: `iso-${aid}-${a}--${b}`, sourceId: a, targetId: b,
+        sourceTitle: pa.title || a, targetTitle: pb.title || b,
+        sourceDomain: pa.subject || "General", targetDomain: pb.subject || "General",
+        sourceChapter: pa.chapter || "General", targetChapter: pb.chapter || "General",
+        sourceSubject: pa.subject || "General", targetSubject: pb.subject || "General",
+        archetypeId: aid, archetypeName: arch.name, canonicalEquation: arch.eq,
+        variableBijection: {}, breaksAt, score: 1.0, persisted: true
+      });
+    }
+    ros.chords = chords;
+    ros.chordCount = chords.length;
+    ros.persistedCount = chords.filter((c) => c.persisted).length;
+    ros.discoveredCount = chords.length - ros.persistedCount;
+    state.hub.rosetta = ros;
+    if (state.hub.stats) state.hub.stats.rosettaChordsCount = ros.chordCount;
+    saveState(state);
+    return { ok: true, created: !exists, alreadyExists: exists, chord: row, rosetta: ros };
+  }
+
+  function syncCountsFor(st) {
+    return {
+      propositions: (st.graph.propositions || []).length,
+      chains: (st.graph.chains || []).length,
+      mistakes: (st.hub.mistakes || []).length,
+      evidenceLedger: Number((st.hub.evidenceSummary && st.hub.evidenceSummary.ledgerIntegrity && st.hub.evidenceSummary.ledgerIntegrity.count) || 10),
+      vivaSessions: (st.hub.vivaSessions || []).length,
+      forks: (st.hub.forks || []).length,
+      arenas: (st.hub.arenas || []).length,
+      derivations: (st.hub.derivations || []).length,
+      trackers: (st.hub.chapterTrackers || []).length,
+      learnerProfile: st.hub.learnerProfile ? 1 : 0
+    };
+  }
+
+  function handleSyncStatus() {
+    state = loadState();
+    const ss = state.hub.syncStatus || { ok: true, workspace: "syntopik-live-demo", format: "syntopik-delta-v1", schemaVersion: 1, initialized: true, deviceId: "dev-demo-01", lamportClock: 7, lastExportedAt: "2026-11-25T18:30:00Z", lastMergedAt: "2026-11-25T18:35:00Z", lastSyncedAt: "2026-11-25T18:35:00Z", peerClocks: {}, mergedDeltaCount: 1, ledgerIntegrity: { ok: true, count: 10, brokenAt: null } };
+    ss.counts = syncCountsFor(state);
+    state.hub.syncStatus = ss;
+    return { ok: true, ...ss };
+  }
+
+  function handleSyncExport(body) {
+    state = loadState();
+    const ss = handleSyncStatus();
+    const nextClock = Number(ss.lamportClock || 0) + 1;
+    const exportedAt = new Date().toISOString().replace(/\.\d+Z$/, "Z");
+    const counts = syncCountsFor(state);
+    const trackers = {};
+    for (const tr of (state.hub.chapterTrackers || [])) if (tr && tr.slug) trackers[tr.slug] = tr;
+    const payload = {
+      propositions: state.graph.propositions || [],
+      chains: state.graph.chains || [],
+      mistakes: state.hub.mistakes || [],
+      forks: state.hub.forks || [],
+      arenas: state.hub.arenas || [],
+      derivations: state.hub.derivations || [],
+      vivaSessions: state.hub.vivaSessions || [],
+      trackers,
+      learnerProfile: state.hub.learnerProfile || null
+    };
+    const env = { schemaVersion: 1, format: "syntopik-delta-v1", deviceId: ss.deviceId || "dev-demo-01", exportedAt, since: (body && body.since) || null, lamportClock: nextClock, counts, payload };
+    const sha = sha256Hex(canonicalJson(env));
+    env.contentSha256 = sha;
+    const deltaJson = JSON.stringify(env, null, 2) + "\n";
+    const bytes = new TextEncoder().encode(deltaJson).length;
+    ss.lamportClock = nextClock;
+    ss.lastExportedAt = exportedAt;
+    ss.lastSyncedAt = exportedAt;
+    state.hub.syncStatus = ss;
+    saveState(state);
+    return { ok: true, format: "syntopik-delta-v1", schemaVersion: 1, deviceId: env.deviceId, exportedAt, lamportClock: nextClock, counts, contentSha256: sha, bytes, relPath: "exports/syntopik-delta.json", delta: env, deltaJson };
+  }
+
+  function handleSyncMerge(body) {
+    state = loadState();
+    const ss = handleSyncStatus();
+    const dryRun = Boolean(body && (body.dryRun || body.dry_run));
+    let env = body && body.delta;
+    if (typeof env === "string") {
+      if (new TextEncoder().encode(env).length > 10 * 1024 * 1024) return { ok: false, valid: false, error: "Delta exceeds 10 MB limit." };
+      try { env = JSON.parse(env); } catch { return { ok: false, valid: false, error: "Malformed delta JSON." }; }
+    } else if (!env && body && body.payload) {
+      env = body;
+    }
+    if (!env || typeof env !== "object" || Array.isArray(env)) return { ok: false, valid: false, error: "Expected a syntopik-delta-v1 JSON object." };
+    if (env.format !== "syntopik-delta-v1" || Number(env.schemaVersion) !== 1) return { ok: false, valid: false, error: "Unsupported delta format or schemaVersion (expected syntopik-delta-v1 v1)." };
+    if (typeof env.deviceId !== "string" || !env.deviceId.trim()) return { ok: false, valid: false, error: "Missing valid source deviceId." };
+    const sha = String(env.contentSha256 || "").trim().toLowerCase();
+    if (!/^[0-9a-f]{64}$/.test(sha)) return { ok: false, valid: false, error: "Missing or malformed 64-hex contentSha256." };
+    const noSha = { ...env };
+    delete noSha.contentSha256;
+    const expectedSha = sha256Hex(canonicalJson(noSha));
+    if (expectedSha !== sha) return { ok: false, valid: false, error: "contentSha256 mismatch — delta payload appears tampered or corrupted." };
+    const pl = env.payload;
+    if (!pl || typeof pl !== "object" || Array.isArray(pl)) return { ok: false, valid: false, error: "Missing payload object." };
+    if (pl.trackers && typeof pl.trackers === "object") {
+      for (const slug of Object.keys(pl.trackers)) {
+        if (!/^[a-z0-9][a-z0-9_-]{0,80}$/.test(slug)) return { ok: false, valid: false, error: "Invalid tracker slug rejected: " + slug };
+      }
+    }
+    const mergeById = (localArr, incArr, isProp) => {
+      const byId = new Map((localArr || []).map((x) => [String(x.id || ""), clone(x)]));
+      let added = 0, updated = 0;
+      for (const item of (Array.isArray(incArr) ? incArr : [])) {
+        if (!item || typeof item !== "object" || !item.id) continue;
+        const id = String(item.id);
+        if (!byId.has(id)) { byId.set(id, clone(item)); added += 1; }
+        else if (isProp) {
+          const cur = byId.get(id);
+          if (Number(item.reps || 0) > Number(cur.reps || 0)) { byId.set(id, { ...cur, ...clone(item) }); updated += 1; }
+        }
+      }
+      return { merged: [...byId.values()], added, updated };
+    };
+    const pM = mergeById(state.graph.propositions, pl.propositions, true);
+    const mM = mergeById(state.hub.mistakes, pl.mistakes, false);
+    const fM = mergeById(state.hub.forks, pl.forks, false);
+    const aM = mergeById(state.hub.arenas, pl.arenas, false);
+    const dM = mergeById(state.hub.derivations, pl.derivations, false);
+    const chSet = new Set((state.graph.chains || []).map((c) => canonicalJson(c)));
+    const chMerged = clone(state.graph.chains || []);
+    let chAdd = 0;
+    for (const c of (Array.isArray(pl.chains) ? pl.chains : [])) {
+      const k = canonicalJson(c);
+      if (!chSet.has(k)) { chSet.add(k); chMerged.push(clone(c)); chAdd += 1; }
+    }
+    const collections = {
+      propositions: { added: pM.added, updated: pM.updated, total: pM.merged.length },
+      chains: { added: chAdd, updated: 0, total: chMerged.length },
+      mistakes: { added: mM.added, updated: mM.updated, total: mM.merged.length },
+      forks: { added: fM.added, updated: fM.updated, total: fM.merged.length },
+      arenas: { added: aM.added, updated: aM.updated, total: aM.merged.length },
+      derivations: { added: dM.added, updated: dM.updated, total: dM.merged.length }
+    };
+    const totalAdded = pM.added + chAdd + mM.added + fM.added + aM.added + dM.added;
+    const totalUpdated = pM.updated + mM.updated + fM.updated + aM.updated + dM.updated;
+    const remoteClock = Math.max(0, Number(env.lamportClock || 0));
+    const newClock = Math.max(Number(ss.lamportClock || 0), remoteClock) + (totalAdded + totalUpdated > 0 ? 1 : 0);
+    if (!dryRun) {
+      state.graph.propositions = pM.merged;
+      state.graph.chains = chMerged;
+      state.hub.mistakes = mM.merged;
+      state.hub.forks = fM.merged;
+      state.hub.arenas = aM.merged;
+      state.hub.derivations = dM.merged;
+      const nowIso = new Date().toISOString().replace(/\.\d+Z$/, "Z");
+      ss.lamportClock = newClock;
+      ss.lastMergedAt = nowIso;
+      ss.lastSyncedAt = nowIso;
+      ss.mergedDeltaCount = Number(ss.mergedDeltaCount || 0) + 1;
+      ss.counts = syncCountsFor(state);
+      state.hub.syncStatus = ss;
+      refreshDerived(state);
+      saveState(state);
+    }
+    return {
+      ok: true, dryRun, localDeviceId: ss.deviceId || "dev-demo-01", sourceDeviceId: env.deviceId,
+      lamportClock: newClock, contentSha256: sha, added: totalAdded, updated: totalUpdated,
+      idempotentNoop: totalAdded === 0 && totalUpdated === 0, collections,
+      ledgerIntegrity: ss.ledgerIntegrity || { ok: true, count: 10, brokenAt: null }
+    };
+  }
+
+  function handleProfileReplay(body) {
+    state = loadState();
+    const applyFlag = Boolean(body && (body.apply || body.applyIfImproved));
+    const minEvents = Math.max(2, Math.min(100, Number((body && (body.minEvents || body.min_events)) || 12)));
+    const lp = state.hub.learnerProfile || {};
+    const totalEv = Math.max(89, Number((lp.globalStats && lp.globalStats.totalEvents) || 0) + 71);
+    const trainEvents = Math.floor(totalEv * 0.7);
+    const testEvents = totalEv - trainEvents;
+    const baselineParams = { eloKBase: 64.0, erNoviceCutoff: 0.35, erChallengeCutoff: 0.80, fatigueMultiplier: 1.25 };
+    const candidateParams = { eloKBase: 48.0, erNoviceCutoff: 0.35, erChallengeCutoff: 0.78, fatigueMultiplier: 1.15 };
+    const baselineMetrics = {
+      train: { brierScore: 0.1142, logLoss: 0.3910, erMismatchRate: 0.0323, compositeLoss: 0.1748 },
+      oos: { brierScore: 0.0884, logLoss: 0.3125, erMismatchRate: 0.0370, compositeLoss: 0.1342 }
+    };
+    const candidateMetrics = {
+      train: { brierScore: 0.1086, logLoss: 0.3764, erMismatchRate: 0.0161, compositeLoss: 0.1631 },
+      oos: { brierScore: 0.0802, logLoss: 0.2940, erMismatchRate: 0.0, compositeLoss: 0.1218 }
+    };
+    const oosImprovement = 0.0124;
+    if (applyFlag) {
+      lp.calibratedHyperparams = {
+        ...candidateParams,
+        calibratedAt: todayIso() + "T12:00:00Z",
+        trainEvents, testEvents,
+        oosBaselineLoss: baselineMetrics.oos.compositeLoss,
+        oosCalibratedLoss: candidateMetrics.oos.compositeLoss,
+        oosImprovement
+      };
+      recomputePolicy(lp, "normal");
+      state.hub.learnerProfile = lp;
+      saveState(state);
+    }
+    return {
+      ok: true, insufficientData: false, eventCount: totalEv, minEvents,
+      split: { method: "chronological_time_series_70_30", trainEvents, testEvents },
+      gridEvaluated: 135, minOosGainThreshold: 0.005,
+      baselineParams, candidateParams, baselineMetrics, candidateMetrics,
+      oosImprovement, improved: true, applied: applyFlag
+    };
+  }
+
+  function handleDerivationDiff(body) {
+    state = loadState();
+    const derivId = String((body && (body.derivationId || body.id)) || "").trim();
+    const dObj = (state.hub.derivations || []).find((x) => x.id === derivId);
+    const specMap = DERIV_STEPS[derivId];
+    if (!dObj || !specMap) return { ok: false, error: "Derivation not found: " + derivId };
+    let rawSteps = body && (body.studentSteps || body.student_steps || body.steps);
+    if (typeof rawSteps === "string") rawSteps = rawSteps.split(/\r?\n/).map((s) => s.trim()).filter(Boolean).map((expr, i) => ({ line: i + 1, expr }));
+    if (!Array.isArray(rawSteps) || !rawSteps.length) return { ok: false, error: "studentSteps must be non-empty." };
+    if (rawSteps.length > 40) return { ok: false, error: "Maximum 40 derivation steps allowed." };
+    const normSteps = [];
+    for (let i = 0; i < rawSteps.length; i++) {
+      const it = rawSteps[i];
+      const expr = typeof it === "string" ? it.trim() : String((it && (it.expr ?? it.expression)) || "").trim();
+      const line = (it && Number.isInteger(it.line) && it.line > 0) ? it.line : i + 1;
+      if (expr.length > 512) return { ok: false, error: `Line ${line} exceeds 512 character limit.` };
+      normSteps.push({ line, expr });
+    }
+    const dag = dObj.steps || [];
+    const byId = new Map(dag.map((s) => [String(s.id), s]));
+    const transDeps = new Map();
+    for (const s of dag) {
+      const ds = new Set();
+      for (const d of (s.dependsOn || [])) { ds.add(d); for (const td of (transDeps.get(d) || [])) ds.add(td); }
+      transDeps.set(String(s.id), ds);
+    }
+    const matchStep = (rawExpr, sid) => {
+      const sp = specMap[sid];
+      if (!sp) return false;
+      const n = normEq(rawExpr);
+      return sp.ok.some((c) => n === c || (c.length >= 6 && n.includes(c)));
+    };
+    const verified = new Set();
+    const verifiedPrefix = [];
+    const statusById = new Map();
+    let breakStep = null, breakLine = null, breakExpr = "", errorKind = null;
+    for (const st of normSteps) {
+      if (breakStep || verified.size >= dag.length) break;
+      const unv = dag.filter((s) => !verified.has(String(s.id)));
+      const ready = unv.filter((s) => (s.dependsOn || []).every((d) => verified.has(String(d))));
+      const exp = ready[0] || unv[0];
+      const eid = String(exp.id);
+      if (matchStep(st.expr, eid)) {
+        verified.add(eid);
+        verifiedPrefix.push(st.expr);
+        statusById.set(eid, { stepId: eid, label: exp.label || eid, role: exp.role || "step", dependsOn: exp.dependsOn || [], status: "verified", studentLine: st.line, studentExpr: st.expr, matchMethod: "symbolic_equiv", brokenDependencies: [] });
+        continue;
+      }
+      const alt = ready.slice(1).find((c) => matchStep(st.expr, String(c.id)));
+      if (alt) {
+        const cid = String(alt.id);
+        verified.add(cid);
+        verifiedPrefix.push(st.expr);
+        statusById.set(cid, { stepId: cid, label: alt.label || cid, role: alt.role || "step", dependsOn: alt.dependsOn || [], status: "verified", studentLine: st.line, studentExpr: st.expr, matchMethod: "symbolic_equiv", brokenDependencies: [] });
+        continue;
+      }
+      breakStep = exp;
+      breakLine = st.line;
+      breakExpr = st.expr;
+      const n = normEq(st.expr);
+      const sp = specMap[eid] || {};
+      const laterHit = unv.some((ls) => String(ls.id) !== eid && matchStep(st.expr, String(ls.id)));
+      if (laterHit) errorKind = "skipped_step";
+      else if (exp.role === "axiom") errorKind = "axiom_violation";
+      else if ((sp.signFlip || []).some((sf) => n === sf) || (sp.expr && sp.expr.includes("-") && !n.includes("-"))) errorKind = "sign_error";
+      else if ((sp.factors || []).some((f) => !n.includes(f))) errorKind = "missing_factor";
+      else errorKind = "algebra_slip";
+      statusById.set(eid, { stepId: eid, label: exp.label || eid, role: exp.role || "step", dependsOn: exp.dependsOn || [], status: "broken", studentLine: st.line, studentExpr: st.expr, matchMethod: null, errorKind, brokenDependencies: [] });
+      break;
+    }
+    const brokenId = breakStep ? String(breakStep.id) : null;
+    for (const s of dag) {
+      const sid = String(s.id);
+      if (statusById.has(sid)) continue;
+      const unmet = (s.dependsOn || []).filter((d) => !verified.has(String(d)));
+      const tUnmet = [...(transDeps.get(sid) || [])].filter((d) => !verified.has(d));
+      const blocked = brokenId && ((transDeps.get(sid) || new Set()).has(brokenId) || unmet.length > 0);
+      statusById.set(sid, { stepId: sid, label: s.label || sid, role: s.role || "step", dependsOn: s.dependsOn || [], status: blocked ? "skipped_dependency" : "not_reached", studentLine: null, studentExpr: null, matchMethod: null, brokenDependencies: blocked ? (unmet.length ? unmet : tUnmet) : [] });
+    }
+    const stepsOut = dag.map((s) => statusById.get(String(s.id)));
+    const allVerified = verified.size === dag.length && !breakStep;
+    let nudges = null, spawnedFork = null, diagnosticProbe = null, evidenceRecorded = false;
+    if (breakStep) {
+      const lbl = breakStep.label || brokenId;
+      const depLabels = (breakStep.dependsOn || []).map((d) => (byId.get(String(d)) && byId.get(String(d)).label) || d);
+      const r1Map = {
+        sign_error: `Line ${breakLine} has a sign/direction mismatch — check whether the restoring or constraining term opposes displacement/growth.`,
+        missing_factor: `Line ${breakLine} is missing a multiplicative factor, constant, or root — check dimensional consistency on both sides.`,
+        skipped_step: `Line ${breakLine} jumps ahead to a downstream conclusion before justifying ${lbl}. Write the intermediate bridge explicitly.`,
+        axiom_violation: `Re-check the starting physical/protocol axiom for ${lbl} before propagating it downstream.`,
+        algebra_slip: `Re-verify the algebraic manipulation on line ${breakLine} directly from its immediate upstream premises.`
+      };
+      nudges = {
+        R0: `Earliest divergence is on line ${breakLine} at step ${brokenId} (${lbl}). Fix this line before continuing downstream.`,
+        R1: r1Map[errorKind] || r1Map.algebra_slip,
+        R2: `Combine upstream premise(s) [${depLabels.join(" + ") || "starting axioms"}] directly to derive ${lbl} without dropping signs or factors.`
+      };
+      if (body.autoSpawnFork !== false) {
+        const fid = `fork-pdiff-${derivId.slice(0, 12)}-${brokenId}`;
+        const existingF = (state.hub.forks || []).find((f) => f.id === fid);
+        const forkObj = existingF || {
+          id: fid, propId: dObj.propId || "", subject: dObj.domain || "STEM", chapter: dObj.chapter || "",
+          prefixSteps: verifiedPrefix, forkPrompt: `Continue '${dObj.title}' from the verified prefix: write the exact next step (${lbl}).`,
+          status: "active", isDue: true, nextReview: todayIso(), winCount: 0, blunderRepeatCount: 1, latencyHistoryMs: []
+        };
+        if (!existingF) { state.hub.forks = [...(state.hub.forks || []), forkObj]; }
+        FORK_RULES[fid] = { ok: (specMap[brokenId] && specMap[brokenId].ok) || [], trap: [normEq(breakExpr)], fix: (specMap[brokenId] && specMap[brokenId].expr) || lbl, refute: nudges.R1 };
+        spawnedFork = { id: fid, fork: forkObj };
+      }
+      if (dObj.propId) {
+        const rc = handleRootCause(dObj.propId);
+        diagnosticProbe = rc.diagnosticProbe || null;
+      }
+      refreshDerived(state);
+      saveState(state);
+    } else if (allVerified) {
+      evidenceRecorded = promoteEvidence(state, dObj.propId, 3, "derivation_proof_diff");
+      refreshDerived(state);
+      saveState(state);
+    }
+    return {
+      ok: true, derivationId: dObj.id, propId: dObj.propId, title: dObj.title, domain: dObj.domain, chapter: dObj.chapter,
+      allVerified, verifiedCount: verified.size, totalSteps: dag.length, studentStepCount: normSteps.length,
+      earliestBreakLine: breakLine, earliestBreakStepId: brokenId, errorKind, nudges,
+      verifiedPrefix, steps: stepsOut, spawnedFork, diagnosticProbe, evidenceRecorded
+    };
+  }
+
   function routeApi(method, urlStr, body) {
     const u = new URL(urlStr, window.location.origin || "http://localhost");
     const p = u.pathname;
-    if (p === "/api/capabilities") return { live: true, demo: true, token: "demo-sandbox", version: "3.0.0-demo", workspaceName: "syntopik-live-demo", lan: null };
+    if (p === "/api/capabilities") return { live: true, demo: true, token: "demo-sandbox", version: "3.1.0-demo", workspaceName: "syntopik-live-demo", lan: null };
     if (p === "/api/state") return buildStateResponse(u.searchParams.get("energy") || "normal");
     if (p === "/api/root-cause") return handleRootCause(u.searchParams.get("nodeId") || u.searchParams.get("propId") || "");
+    if (p === "/api/rosetta") return handleRosettaGet(u);
+    if (p === "/api/rosetta/link") return handleRosettaLink(body || {});
+    if (p === "/api/sync/status") return handleSyncStatus();
+    if (p === "/api/sync/export") return handleSyncExport(body || {});
+    if (p === "/api/sync/merge") return handleSyncMerge(body || {});
+    if (p === "/api/profile/replay") return handleProfileReplay(body || {});
+    if (p === "/api/derivation/diff") return handleDerivationDiff(body || {});
     if (p === "/api/review") return handleReview(body || {});
     if (p === "/api/profile/calibrate") {
       state = loadState();
@@ -1864,7 +2521,7 @@ SHIM_JS = r"""
   };
 
   window.__SYNTOPIK_SHIM__ = {
-    version: "3.0.0-demo",
+    version: "3.1.0-demo",
     storageKey: KEY,
     reset() {
       try { localStorage.removeItem(KEY); } catch { /* ignore */ }
@@ -1887,14 +2544,20 @@ SHIM_JS = r"""
 
 
 def _compact_style_blocks(html_text: str) -> str:
-    """Safely strip CSS comments and redundant whitespace inside <style> blocks only."""
+    """Safely strip CSS comments and redundant whitespace inside <style> blocks only (preserves calc() +/- spacing)."""
     def _shrink(m: re.Match[str]) -> str:
         css = m.group(1)
         css = re.sub(r"/\*[\s\S]*?\*/", "", css)
-        lines = [re.sub(r"\s+", " ", ln).strip() for ln in css.splitlines()]
-        compact = "\n".join(ln for ln in lines if ln)
-        return f"<style>\n{compact}\n</style>"
+        css = re.sub(r"\s+", " ", css)
+        css = re.sub(r"\s*([{}:;,>~])\s*", r"\1", css)
+        css = css.replace(";}", "}")
+        return f"<style>{css.strip()}</style>"
     return re.sub(r"<style>([\s\S]*?)</style>", _shrink, html_text, count=1)
+
+
+def _compact_lines(text: str) -> str:
+    """Trim leading/trailing line indentation and blank lines cleanly while preserving newline semantics."""
+    return "\n".join(ln.strip() for ln in text.splitlines() if ln.strip())
 
 
 def _build_index_html(study_graph: dict[str, Any], study_hub: dict[str, Any]) -> str:
@@ -1923,25 +2586,30 @@ def _build_index_html(study_graph: dict[str, Any], study_hub: dict[str, Any]) ->
     )
     src = src.replace(pill_anchor, demo_pill_html, 1)
 
-    # 4. Inline window.__STUDY_GRAPH__, window.__STUDY_HUB__, and window.__SYNTOPIK_SHIM__
+    # 4. Compact HTML/JS indentation cleanly so docs/index.html stays comfortably below 650 KB
     script_tag = '<script src="./knowledge-graph/graph-data.js"></script>'
     if script_tag not in src:
         raise RuntimeError("Could not find graph-data.js script tag in dashboard.html")
+    pre_script, post_script = src.split(script_tag, 1)
+    pre_script = _compact_lines(pre_script)
+    post_script = _compact_lines(post_script)
+    compact_shim = _compact_lines(SHIM_JS)
+
+    # 5. Inline window.__STUDY_GRAPH__, window.__STUDY_HUB__, and window.__SYNTOPIK_SHIM__
     inline_block = (
-        "<script>\n"
+        "\n<script>\n"
         f"window.__STUDY_GRAPH__ = {_safe_script_json(study_graph)};\n"
         f"window.__STUDY_HUB__ = {_safe_script_json(study_hub)};\n"
         "</script>\n"
-        f"<script>\n{SHIM_JS}\n</script>"
+        f"<script>\n{compact_shim}\n</script>\n"
     )
-    src = src.replace(script_tag, inline_block, 1)
-    return src
+    return pre_script + inline_block + post_script
 
 
 def _build_viewer_html(study_graph: dict[str, Any], study_hub: dict[str, Any]) -> str:
     src = (ROOT / "knowledge-graph" / "viewer.html").read_text(encoding="utf-8")
 
-    # 1. Inject subtle Demo Reset pill styling + <=1380px header compaction so viewer stays <=1280px
+    # 1. Inject subtle Demo Reset pill styling + <=1380px header/HUD compaction so viewer stays <=1280px
     if "</style>" not in src:
         raise RuntimeError("viewer.html missing </style>")
     src = src.replace("</style>", DEMO_RESET_CSS + VIEWER_DEMO_COMPACT_CSS + "\n</style>", 1)
@@ -1961,7 +2629,7 @@ def _build_viewer_html(study_graph: dict[str, Any], study_hub: dict[str, Any]) -
     )
     src = src.replace(pill_anchor, demo_pill_html, 1)
 
-    # 4. Slim hub for viewer while keeping full compatibility with shared localStorage state
+    # 4. Slim hub for viewer while keeping full Rosetta chords & localStorage parity
     viewer_hub = {
         "schemaVersion": 5,
         "generatedAt": DEMO_NOW_ISO,
@@ -1971,6 +2639,7 @@ def _build_viewer_html(study_graph: dict[str, Any], study_hub: dict[str, Any]) -
         "leeches": study_hub.get("leeches", []),
         "evidenceSummary": study_hub.get("evidenceSummary", {}),
         "rootCauseHotspots": study_hub.get("rootCauseHotspots", {}),
+        "rosetta": study_hub.get("rosetta", {}),
     }
 
     script_tag = '<script src="./graph-data.js"></script>'
@@ -1981,7 +2650,7 @@ def _build_viewer_html(study_graph: dict[str, Any], study_hub: dict[str, Any]) -
         f"window.__STUDY_GRAPH__ = {_safe_script_json(study_graph)};\n"
         f"window.__STUDY_HUB__ = {_safe_script_json(viewer_hub)};\n"
         "</script>\n"
-        f"<script>\n{SHIM_JS}\n</script>"
+        f"<script>\n{_compact_lines(SHIM_JS)}\n</script>"
     )
     src = src.replace(script_tag, inline_block, 1)
     return src
@@ -2063,6 +2732,7 @@ def build_demo_site(out_dir: Path) -> dict[str, Any]:
             "causalSuspects": sum(
                 1 for v in ((study_hub.get("rootCauseHotspots") or {}).get("byProp") or {}).values() if float(v) >= 0.35
             ),
+            "rosettaChords": len((study_hub.get("rosetta") or {}).get("chords") or []),
             "pocketCards": pocket_meta.get("cardCount", 0),
         },
     }
@@ -2135,6 +2805,9 @@ def check_demo_site(out_dir: Path) -> dict[str, Any]:
                 errors.append("index.html: pack import selector must use 'suspend-all' (not 'replace')")
             if "resolveSafeOcclusionHref" not in txt or "validateRpnArray" not in txt:
                 errors.append("index.html: missing Wave 4B SVG/RPN hardening helpers")
+            for v31_tok in ('"second_order_oscillator"', '"boltzmann_softmax"', "/api/rosetta/link", "/api/sync/merge", "/api/profile/replay", "/api/derivation/diff"):
+                if v31_tok not in txt:
+                    errors.append(f"index.html: missing v3.1 token {v31_tok!r}")
         elif name == "viewer.html":
             if 'href="./index.html"' not in txt:
                 errors.append("viewer.html: missing rewritten './index.html' back-link")
@@ -2142,6 +2815,8 @@ def check_demo_site(out_dir: Path) -> dict[str, Any]:
                 errors.append("viewer.html: external graph-data.js script tag still present")
             if 'id="demoResetBtn"' not in txt:
                 errors.append("viewer.html: missing 'Interactive Demo · Reset' button")
+            if '"second_order_oscillator"' not in txt or '"boltzmann_softmax"' not in txt:
+                errors.append("viewer.html: missing seeded Rosetta chords")
         elif name == "pocket.html":
             if 'href="./index.html"' not in txt:
                 errors.append("pocket.html: missing './index.html' Studio back-link")
@@ -2158,7 +2833,7 @@ def check_demo_site(out_dir: Path) -> dict[str, Any]:
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
         prog="build_demo_site.py",
-        description="Build & verify Syntopik v3.0 1-Click Zero-Install Live GitHub Pages Demo Site.",
+        description="Build & verify Syntopik v3.1 1-Click Zero-Install Live GitHub Pages Demo Site.",
     )
     parser.add_argument(
         "--out-dir",
@@ -2201,13 +2876,13 @@ def main(argv: list[str] | None = None) -> int:
             f = build_res["files"]
             c = build_res["counts"]
             print(
-                f"Built Syntopik v3.0 Live Demo Site → {build_res['outDir']}\n"
+                f"Built Syntopik v3.1 Live Demo Site → {build_res['outDir']}\n"
                 f"  index.html  : {f['index.html']:,} B (ceiling {MAX_INDEX_BYTES:,} B)\n"
                 f"  viewer.html : {f['viewer.html']:,} B\n"
                 f"  pocket.html : {f['pocket.html']:,} B ({c['pocketCards']} commute cards)\n"
                 f"  .nojekyll   : {f['.nojekyll']} B\n"
                 f"  content     : {c['propositions']} props · {c['chains']} chains · {c['chapters']} chapters · "
-                f"{c['explorables']} :::explore labs · {c['forks']} forks · {c['arenas']} arenas · "
+                f"{c['rosettaChords']} Rosetta chords · {c['explorables']} :::explore labs · {c['forks']} forks · {c['arenas']} arenas · "
                 f"{c['derivations']} derivations · {c['whiteboardFrames']} WB frames · {c['causalSuspects']} causal suspects"
             )
         if check_res:

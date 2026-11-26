@@ -38,6 +38,8 @@
     --edge-derives: #7C93C3;
     --edge-generalizes: #4E9F96;
     --edge-contrasts: #D4943A;
+    --edge-rosetta: #6D8FE8;
+    --rosetta-bg: rgba(109, 143, 232, 0.14);
     --bar-track: #252A30;
     --cluster-bg: rgba(30, 34, 39, 0.62);
     --shadow: 0 10px 28px rgba(0, 0, 0, 0.36);
@@ -84,6 +86,8 @@
     --edge-derives: #36538C;
     --edge-generalizes: #2A7B76;
     --edge-contrasts: #A86814;
+    --edge-rosetta: #3B5BC0;
+    --rosetta-bg: rgba(59, 91, 192, 0.11);
     --bar-track: #E5E0D5;
     --cluster-bg: rgba(239, 236, 228, 0.72);
     --shadow: 0 8px 24px rgba(28, 32, 36, 0.07);
@@ -729,6 +733,18 @@
   .edge-path.rel-derives { stroke: var(--edge-derives); }
   .edge-path.rel-generalizes { stroke: var(--edge-generalizes); }
   .edge-path.rel-contrasts_with { stroke: var(--edge-contrasts); stroke-dasharray: 5 4; }
+  .edge-path.rel-isomorphic_to, .rosetta-chord {
+    fill: none;
+    stroke: var(--edge-rosetta);
+    stroke-width: 2;
+    stroke-dasharray: 6 4;
+    opacity: 0.86;
+    cursor: pointer;
+    transition: opacity 0.15s, stroke-width 0.15s;
+  }
+  .rosetta-chord.dimmed { opacity: 0.14; }
+  .rosetta-chord.highlighted { stroke-width: 2.8; opacity: 1; }
+  .rosetta-chord:hover { stroke-width: 2.8; opacity: 1; }
   .edge-path.dimmed { opacity: 0.14; }
   .edge-path.highlighted { stroke-width: 2.5; opacity: 1; }
   .node-group { cursor: pointer; transition: opacity 0.15s; }
@@ -2341,7 +2357,114 @@
   .deriv-step-card.is-guess { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); }
   .deriv-step-card.is-invalidated { border-left: 3.5px solid var(--misconception); background: var(--misconception-bg); }
   .deriv-step-card.is-surviving { border-left: 3.5px solid var(--solid); background: var(--solid-bg); }
+  .deriv-step-card.is-verified { border-left: 3.5px solid var(--solid); background: var(--solid-bg); }
+  .deriv-step-card.is-broken { border-left: 3.5px solid var(--misconception); background: var(--misconception-bg); }
+  .deriv-step-card.is-skipped { border-style: dashed; opacity: 0.72; }
   .deriv-step-card.clickable { cursor: pointer; }
+
+  /* v3.1 Rosetta, Proof-Graph Diff Nudges, Replay & Multi-Device Sync */
+  .pill.rosetta { color: var(--edge-rosetta); background: var(--rosetta-bg); border-color: transparent; }
+  .rosetta-card {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-left: 3px solid var(--edge-rosetta);
+    border-radius: 9px;
+    padding: 10px 12px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    font-size: 12px;
+  }
+  .rosetta-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 11.5px;
+    background: var(--bg-elev);
+    border: 1px solid var(--border);
+    border-radius: 7px;
+    overflow: hidden;
+  }
+  .rosetta-table th, .rosetta-table td {
+    padding: 5px 7px;
+    text-align: left;
+    border-bottom: 1px solid var(--border);
+    vertical-align: top;
+  }
+  .rosetta-table tr:last-child td { border-bottom: none; }
+  .rosetta-table th {
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--muted);
+    background: var(--bg-input);
+  }
+  .rosetta-table td:first-child { color: var(--muted); font-weight: 600; white-space: nowrap; }
+  .rosetta-table td:not(:first-child) { font-family: var(--font-mono); color: var(--text); font-size: 11px; }
+  .rosetta-breaks {
+    padding: 8px 10px;
+    border-radius: 7px;
+    border: 1px solid var(--border);
+    border-left: 3px solid var(--shaky);
+    background: var(--shaky-bg);
+    color: var(--text-2);
+    font-size: 11.5px;
+    line-height: 1.48;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+  .rosetta-breaks strong { color: var(--shaky); font-size: 11px; text-transform: uppercase; letter-spacing: 0.04em; }
+  .rosetta-breaks ul { margin: 2px 0 0; padding-left: 16px; display: flex; flex-direction: column; gap: 3px; }
+  .nudge-accordion { display: flex; flex-direction: column; gap: 6px; }
+  .nudge-accordion details {
+    background: var(--bg-elev);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 8px 11px;
+    font-size: 12.5px;
+    color: var(--text-2);
+  }
+  .nudge-accordion summary {
+    cursor: pointer;
+    font-weight: 650;
+    color: var(--text);
+    font-size: 12px;
+    list-style: none;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 6px;
+  }
+  .nudge-accordion summary::-webkit-details-marker { display: none; }
+  .nudge-accordion details[open] summary { margin-bottom: 6px; color: var(--accent); }
+  .replay-strip {
+    background: var(--bg-elev);
+    border: 1px solid var(--border);
+    border-left: 3px solid var(--teal);
+    border-radius: 9px;
+    padding: 9px 12px;
+    font-size: 12px;
+    color: var(--text-2);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    flex-wrap: wrap;
+  }
+  .sync-panel {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 13px 14px;
+    display: flex;
+    flex-direction: column;
+    gap: 9px;
+  }
+  .sync-counts-grid {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+  }
 
   /* Viva Chamber */
   .viva-ledger {
@@ -2739,6 +2862,7 @@
           <span class="legend-item"><span class="legend-line" style="background:var(--edge-derives)"></span>derives</span>
           <span class="legend-item"><span class="legend-line" style="background:var(--edge-generalizes)"></span>generalizes</span>
           <span class="legend-item"><span class="legend-line" style="border-top:2px dashed var(--edge-contrasts);height:0"></span>contrasts</span>
+          <span class="legend-item"><span class="legend-line" style="border-top:2px dashed var(--edge-rosetta);height:0"></span>rosetta</span>
           <span class="legend-item"><span class="legend-halo"></span>causal suspect</span>
         </div>
       </div>
@@ -2988,6 +3112,20 @@
   </div>
 </div>
 
+<!-- MULTI-DEVICE CRDT DELTA SYNC MODAL -->
+<div class="modal-backdrop" id="syncModal" role="dialog" aria-modal="true" aria-labelledby="syncModalTitle">
+  <div class="v3-modal-shell">
+    <div class="modal-header">
+      <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+        <strong id="syncModalTitle">Multi-Device CRDT Causal Sync</strong>
+        <span class="pill teal">Offline-First · SHA-256 Verified</span>
+      </div>
+      <button id="syncModalCloseBtn" type="button">Close (Esc)</button>
+    </div>
+    <div class="v3-modal-body" id="syncModalBody"></div>
+  </div>
+</div>
+
 <!-- PREVIEW MODAL -->
 <div class="modal-backdrop" id="previewModal" role="dialog" aria-modal="true" aria-labelledby="modalTitle">
   <div class="modal-shell">
@@ -3179,6 +3317,8 @@
     whiteboard: { revision: 0, title: "", frames: [], pins: [], pendingPins: [] },
     explorables: {},
     starterPacks: [],
+    rosetta: { chords: [], archetypesCount: 0 },
+    syncStatus: { deviceId: null, lastSyncedAt: null, lamportClock: 0 },
   };
   let serverExtras = {
     forksDue: 0,
@@ -3186,6 +3326,16 @@
     reentry: null,
     triageRecommended: false,
   };
+  let replayState = { busy: false, lastResult: null };
+  let syncModalState = {
+    busy: false,
+    lastExport: null,
+    lastMerge: null,
+    pasteText: "",
+    dryRun: false,
+    error: "",
+  };
+  let rosettaLinkBusy = false;
   const gymState = {
     station: "whiteboard", // whiteboard | forks | arenas | blitz | derivations | viva
     // Whiteboard
@@ -3210,13 +3360,17 @@
     blitzSelections: { killCue: "", firstMove: "", rejectedDecoy: "", confidencePct: 70 },
     blitzLastGrade: null,
     blitzResults: [],
-    // Derivation Blackout & Axiom-Cut
+    // Derivation Blackout, Axiom-Cut & Proof-Graph Diff
     selectedDerivId: null,
-    derivMode: "blackout", // blackout | cut
+    derivMode: "blackout", // blackout | cut | diff
     derivBlackoutResults: {},
     derivCutAxiomId: null,
     derivCutGuessId: null,
     derivCutResult: null,
+    derivDiffInput: "",
+    derivDiffAutoFork: true,
+    derivDiffBusy: false,
+    derivDiffResult: null,
     // Adversarial Viva Chamber
     activeViva: null,
     vivaSelectedPropId: "",
@@ -3670,7 +3824,7 @@
       const v3Keys = [
         "learnerProfile", "nextMove", "forks", "forksDue", "arenas", "decisions",
         "derivations", "vivaSessions", "evidenceSummary", "rootCauseHotspots",
-        "whiteboard", "explorables", "starterPacks",
+        "whiteboard", "explorables", "starterPacks", "rosetta", "syncStatus",
       ];
       for (const k of v3Keys) {
         if (st && st[k] !== undefined) mergedHub[k] = st[k];
@@ -6587,7 +6741,10 @@
     const transferPct = typeof evSum.verifiedTransferPct === "number" ? evSum.verifiedTransferPct : 0;
 
     const nm = hubData.nextMove && typeof hubData.nextMove === "object" ? hubData.nextMove : null;
-    const eloBarPct = (elo) => Math.max(6, Math.min(100, Math.round(((elo - 1000) / 900) * 100)));
+    const eloBarPct = (elo) => {
+      const n = Number(elo);
+      return Number.isFinite(n) ? Math.max(6, Math.min(100, Math.round(((n - 1000) / 900) * 100))) : 0;
+    };
 
     card.innerHTML = `
       <div class="section-head" style="margin-bottom:6px;">
@@ -6601,9 +6758,57 @@
         </div>
         <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
           <button type="button" class="primary" id="openCalibrationModalBtn">2-Min Calibration</button>
+          <button type="button" id="replayCalibrateBtn" title="Replay chronological revlog history (70/30 OOS split)" ${replayState.busy ? "disabled" : ""}>${replayState.busy ? "Replaying…" : "Replay Calibrate"}</button>
+          <button type="button" id="openSyncModalBtn" title="Export & CRDT-merge tamper-evident sync deltas">Multi-Device Sync</button>
           <button type="button" id="openGymFromProfileBtn">Open Mastery Gym →</button>
         </div>
       </div>
+
+      ${(() => {
+        const rr = replayState.lastResult;
+        const ch = lp.calibratedHyperparams && typeof lp.calibratedHyperparams === "object" ? lp.calibratedHyperparams : null;
+        if (rr) {
+          if (rr.insufficientData) {
+            return `
+              <div class="replay-strip" id="replayResultStrip">
+                <div style="display:flex;align-items:center;gap:7px;flex-wrap:wrap;">
+                  <span class="pill">Replay Calibrate</span>
+                  <span>${esc(rr.reason || `Need at least ${rr.minEvents || 12} confidence-rated reviews (found ${rr.eventCount || 0}).`)}</span>
+                </div>
+              </div>
+            `;
+          }
+          const lift = typeof rr.oosImprovement === "number" && Number.isFinite(rr.oosImprovement) ? rr.oosImprovement : 0;
+          const liftTxt = `${lift >= 0 ? "+" : ""}${lift.toFixed(4)} OOS lift`;
+          const trN = rr.split?.trainEvents ?? 0;
+          const teN = rr.split?.testEvents ?? 0;
+          return `
+            <div class="replay-strip" id="replayResultStrip">
+              <div style="display:flex;align-items:center;gap:7px;flex-wrap:wrap;">
+                <span class="pill ${rr.applied ? "solid" : rr.improved ? "teal" : ""}">${rr.applied ? "Replay Applied ✓" : rr.improved ? "OOS Lift Found" : "Baseline Kept"}</span>
+                <strong>${esc(liftTxt)}</strong>
+                <span>(${trN} train / ${teN} test · OOS loss ${Number(rr.baselineMetrics?.oos?.compositeLoss ?? 0).toFixed(4)} → ${Number(rr.candidateMetrics?.oos?.compositeLoss ?? 0).toFixed(4)})</span>
+              </div>
+              <span style="font-family:var(--font-mono);font-size:11px;color:var(--muted);">K=${esc(String(rr.candidateParams?.eloKBase ?? ""))} · nov=${esc(String(rr.candidateParams?.erNoviceCutoff ?? ""))} · chal=${esc(String(rr.candidateParams?.erChallengeCutoff ?? ""))}</span>
+            </div>
+          `;
+        }
+        if (ch && ch.calibratedAt) {
+          const lift = typeof ch.oosImprovement === "number" && Number.isFinite(ch.oosImprovement) ? ch.oosImprovement : 0;
+          const liftStr = `${lift >= 0 ? "+" : ""}${lift.toFixed(4)}`;
+          return `
+            <div class="replay-strip" id="replayResultStrip">
+              <div style="display:flex;align-items:center;gap:7px;flex-wrap:wrap;">
+                <span class="pill solid">Replay Calibrated ✓</span>
+                <strong>${esc(liftStr)} OOS lift</strong>
+                <span>(${Number(ch.trainEvents || 0)} train / ${Number(ch.testEvents || 0)} test · ${esc(String(ch.calibratedAt).slice(0, 10))})</span>
+              </div>
+              <span style="font-family:var(--font-mono);font-size:11px;color:var(--muted);">K=${esc(String(ch.eloKBase ?? ""))} · nov=${esc(String(ch.erNoviceCutoff ?? ""))} · chal=${esc(String(ch.erChallengeCutoff ?? ""))}</span>
+            </div>
+          `;
+        }
+        return "";
+      })()}
 
       <div class="psych-grid">
         <div class="psych-panel">
@@ -6725,6 +6930,10 @@
 
     const calBtn = document.getElementById("openCalibrationModalBtn");
     if (calBtn) calBtn.addEventListener("click", openCalibrationModal);
+    const replayBtn = document.getElementById("replayCalibrateBtn");
+    if (replayBtn) replayBtn.addEventListener("click", runProfileReplay);
+    const syncBtn = document.getElementById("openSyncModalBtn");
+    if (syncBtn) syncBtn.addEventListener("click", openSyncModal);
     const gymBtn = document.getElementById("openGymFromProfileBtn");
     if (gymBtn) gymBtn.addEventListener("click", () => openGymStation("whiteboard"));
     const nmCal = document.getElementById("nmCalibrateBtn");
@@ -6767,6 +6976,282 @@
     ["ovScaffoldingSel", "ovPfSel", "ovProseSel"].forEach((id) => {
       const el = document.getElementById(id);
       if (el) el.addEventListener("change", pushOverrides);
+    });
+  }
+
+  /* Longitudinal Replay Calibration (POST /api/profile/replay) */
+  async function runProfileReplay() {
+    if (replayState.busy) return;
+    if (!liveCaps.live) {
+      copyText("syntopik profile replay --apply", "Offline mode — copied replay command ✓");
+      return;
+    }
+    replayState.busy = true;
+    renderLearnerProfileCard();
+    try {
+      const res = await apiPost("/api/profile/replay", { apply: true });
+      replayState.lastResult = res;
+      if (res.insufficientData) {
+        showToast(`Replay needs ≥ ${res.minEvents || 12} rated reviews (found ${res.eventCount || 0})`);
+      } else if (res.applied) {
+        const liftVal = Number(res.oosImprovement);
+        const liftFmt = Number.isFinite(liftVal) ? `${liftVal >= 0 ? "+" : ""}${liftVal.toFixed(4)}` : "+0.0000";
+        showToast(`Replay applied ✓ (${liftFmt} OOS lift)`);
+        await refreshLiveState();
+      } else {
+        showToast("Replay complete — baseline parameters kept");
+      }
+    } catch (err) {
+      showToast(`Replay failed: ${err?.message || "error"}`);
+    } finally {
+      replayState.busy = false;
+      renderLearnerProfileCard();
+    }
+  }
+
+  /* Multi-Device CRDT Causal Sync Modal (GET /api/sync/status, POST /api/sync/export, POST /api/sync/merge) */
+  function openSyncModal() {
+    const modal = document.getElementById("syncModal");
+    if (!modal) return;
+    syncModalState.error = "";
+    modal.classList.add("open");
+    renderSyncModalBody();
+    if (liveCaps.live) {
+      apiGet("/api/sync/status")
+        .then((st) => {
+          if (st && st.ok) {
+            hubData.syncStatus = st;
+            if (
+              !syncModalState.busy &&
+              !syncModalState.pasteText &&
+              !syncModalState.lastExport &&
+              !syncModalState.lastMerge &&
+              document.getElementById("syncModal")?.classList.contains("open")
+            ) {
+              renderSyncModalBody();
+            }
+          }
+        })
+        .catch(() => { /* keep cached syncStatus */ });
+    }
+  }
+
+  function closeSyncModal() {
+    document.getElementById("syncModal")?.classList.remove("open");
+  }
+
+  function downloadJsonBlob(filename, objOrText) {
+    const text = typeof objOrText === "string" ? objOrText : (JSON.stringify(objOrText, null, 2) + "\n");
+    const blob = new Blob([text], { type: "application/json;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+  }
+
+  function renderSyncModalBody() {
+    const body = document.getElementById("syncModalBody");
+    if (!body) return;
+    const st = hubData.syncStatus && typeof hubData.syncStatus === "object" ? hubData.syncStatus : {};
+    const exp = syncModalState.lastExport;
+    const mrg = syncModalState.lastMerge;
+    const lastSynced = st.lastSyncedAt || st.lastMergedAt || st.lastExportedAt || null;
+    const ledgerOk = st.ledgerIntegrity ? st.ledgerIntegrity.ok !== false : true;
+
+    body.innerHTML = `
+      <div class="sync-panel">
+        <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;">
+          <strong style="font-size:13px;">Device Sync Identity</strong>
+          <div style="display:flex;gap:6px;flex-wrap:wrap;">
+            <span class="pill ${st.deviceId ? "teal" : ""}">${st.deviceId ? `Device: ${esc(st.deviceId)}` : "Uninitialized"}</span>
+            <span class="pill">Clock: ${Number(st.lamportClock || 0)}</span>
+            <span class="pill ${ledgerOk ? "solid" : "misconception"}">${ledgerOk ? "SHA-256 Ledger Intact" : "Ledger Alert"}</span>
+          </div>
+        </div>
+        <div style="font-size:12px;color:var(--muted);">
+          ${lastSynced ? `Last synced: ${esc(formatDateShort(lastSynced))} (${esc(String(lastSynced).slice(0, 19).replace("T", " "))})` : "No delta exported or merged yet on this device."}
+          ${Number(st.mergedDeltaCount || 0) > 0 ? ` · ${Number(st.mergedDeltaCount)} peer delta${Number(st.mergedDeltaCount) === 1 ? "" : "s"} merged` : ""}
+        </div>
+      </div>
+
+      <div class="sync-panel">
+        <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;">
+          <div>
+            <strong style="font-size:13px;">1. Export Verified Delta Snapshot</strong>
+            <div style="font-size:11.5px;color:var(--muted);">Creates a tamper-evident <code>syntopik-delta-v1</code> JSON bundle (SHA-256 sealed) in <code>exports/</code> and downloads <code>syntopik-delta.json</code>.</div>
+          </div>
+          <button type="button" class="primary" id="syncExportBtn" ${syncModalState.busy ? "disabled" : ""}>${syncModalState.busy ? "Working…" : "Export syntopik-delta.json"}</button>
+        </div>
+        ${exp ? `
+          <div class="gym-feedback ok" id="syncExportSummary">
+            <strong>Exported syntopik-delta.json ✓ (${esc(formatBytes(exp.bytes || 0))})</strong>
+            <span>SHA-256: <code>${esc(String(exp.contentSha256 || "").slice(0, 16))}…</code>${exp.relPath ? ` · Saved: <code>${esc(exp.relPath)}</code>` : ""}</span>
+            ${exp.counts ? `
+              <div class="sync-counts-grid">
+                ${Object.entries(exp.counts).filter(([, v]) => Number(v) > 0).map(([k, v]) => `<span class="pill">${esc(k)}: ${Number(v)}</span>`).join("") || `<span class="pill">Empty snapshot</span>`}
+              </div>
+            ` : ""}
+          </div>
+        ` : ""}
+      </div>
+
+      <div class="sync-panel">
+        <div>
+          <strong style="font-size:13px;">2. Verify &amp; CRDT Merge Incoming Delta</strong>
+          <div style="font-size:11.5px;color:var(--muted);">Upload or paste a <code>syntopik-delta.json</code> file from another device (≤ 10 MB). Fail-closed SHA-256 verification runs before monotonic CRDT join-semilattice merge.</div>
+        </div>
+        <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
+          <input type="file" id="syncFileInput" accept=".json,application/json" style="font-size:12px;" />
+          <label style="display:inline-flex;align-items:center;gap:6px;font-size:12px;color:var(--text-2);cursor:pointer;">
+            <input type="checkbox" id="syncDryRunChk" ${syncModalState.dryRun ? "checked" : ""} />
+            Dry run (preview merge counts only)
+          </label>
+        </div>
+        <textarea class="gym-textarea" id="syncPasteInput" placeholder='Paste syntopik-delta-v1 JSON here or choose a file above…' style="min-height:110px;font-family:var(--font-mono);font-size:11.5px;">${esc(syncModalState.pasteText)}</textarea>
+        <div style="display:flex;justify-content:flex-end;gap:8px;flex-wrap:wrap;">
+          <button type="button" id="syncClearPasteBtn">Clear</button>
+          <button type="button" class="primary" id="syncMergeBtn" ${syncModalState.busy ? "disabled" : ""}>${syncModalState.busy ? "Merging…" : (syncModalState.dryRun ? "Preview CRDT Merge" : "Verify & CRDT Merge")}</button>
+        </div>
+        ${syncModalState.error ? `
+          <div class="gym-feedback warn" id="syncErrorBanner">
+            <strong>Delta Rejected</strong>
+            <span>${esc(syncModalState.error)}</span>
+          </div>
+        ` : ""}
+        ${mrg ? `
+          <div class="gym-feedback ok" id="syncMergeSummary">
+            <strong>${mrg.dryRun ? "CRDT Dry-Run Preview ✓" : "CRDT Merge Converged ✓"} · +${Number(mrg.added || 0)} added · ~${Number(mrg.updated || 0)} updated${mrg.idempotentNoop ? " (Idempotent No-Op)" : ""}</strong>
+            <span>Source: <code>${esc(mrg.sourceDeviceId || "")}</code> · Clock ${Number(mrg.lamportClock || 0)} · Ledger ${mrg.ledgerIntegrity?.ok !== false ? "verified ✓" : "check"}</span>
+            ${mrg.collections ? `
+              <div class="sync-counts-grid">
+                ${Object.entries(mrg.collections).map(([k, info]) => {
+                  const a = Number(info?.added || 0);
+                  const u = Number(info?.updated || 0);
+                  const t = Number(info?.total || 0);
+                  const hi = a > 0 || u > 0 ? "teal" : "";
+                  return `<span class="pill ${hi}">${esc(k)}: +${a}/~${u} (${t})</span>`;
+                }).join("")}
+              </div>
+            ` : ""}
+          </div>
+        ` : ""}
+      </div>
+    `;
+
+    document.getElementById("syncExportBtn")?.addEventListener("click", async () => {
+      if (syncModalState.busy) return;
+      if (!liveCaps.live) {
+        copyText("syntopik sync export", "Offline mode — copied sync export command ✓");
+        return;
+      }
+      syncModalState.busy = true;
+      syncModalState.error = "";
+      renderSyncModalBody();
+      try {
+        const res = await apiPost("/api/sync/export", {});
+        syncModalState.lastExport = res;
+        if (typeof res.deltaJson === "string" && res.deltaJson.trim()) {
+          downloadJsonBlob("syntopik-delta.json", res.deltaJson);
+        } else if (res.delta && typeof res.delta === "object") {
+          downloadJsonBlob("syntopik-delta.json", res.delta);
+        }
+        syncModalState.busy = false;
+        renderSyncModalBody();
+        showToast("Exported syntopik-delta.json ✓");
+        refreshLiveState();
+      } catch (err) {
+        syncModalState.error = err?.message || "Export failed";
+        syncModalState.busy = false;
+        renderSyncModalBody();
+        showToast(`Sync export failed: ${syncModalState.error}`);
+      }
+    });
+
+    document.getElementById("syncFileInput")?.addEventListener("change", (ev) => {
+      const file = ev.target.files?.[0];
+      if (!file) return;
+      if (file.size > 10 * 1024 * 1024) {
+        syncModalState.error = "Selected file exceeds the 10 MB delta limit.";
+        renderSyncModalBody();
+        return;
+      }
+      const reader = new FileReader();
+      reader.onload = () => {
+        syncModalState.pasteText = String(reader.result || "");
+        syncModalState.error = "";
+        renderSyncModalBody();
+      };
+      reader.onerror = () => {
+        syncModalState.error = "Unable to read selected file.";
+        renderSyncModalBody();
+      };
+      reader.readAsText(file);
+    });
+
+    document.getElementById("syncDryRunChk")?.addEventListener("change", (ev) => {
+      syncModalState.dryRun = Boolean(ev.target.checked);
+      renderSyncModalBody();
+    });
+
+    document.getElementById("syncPasteInput")?.addEventListener("input", (ev) => {
+      syncModalState.pasteText = ev.target.value;
+    });
+
+    document.getElementById("syncClearPasteBtn")?.addEventListener("click", () => {
+      syncModalState.pasteText = "";
+      syncModalState.lastMerge = null;
+      syncModalState.error = "";
+      renderSyncModalBody();
+    });
+
+    document.getElementById("syncMergeBtn")?.addEventListener("click", async () => {
+      if (syncModalState.busy) return;
+      const liveVal = document.getElementById("syncPasteInput")?.value;
+      if (typeof liveVal === "string") syncModalState.pasteText = liveVal;
+      const rawText = String(syncModalState.pasteText || "").trim();
+      if (!rawText) {
+        syncModalState.error = "Paste or upload a syntopik-delta-v1 JSON payload first.";
+        renderSyncModalBody();
+        return;
+      }
+      if (!liveCaps.live) {
+        copyText("syntopik sync merge syntopik-delta.json", "Offline mode — copied sync merge command ✓");
+        return;
+      }
+      try {
+        const parsedCheck = JSON.parse(rawText);
+        if (!parsedCheck || typeof parsedCheck !== "object" || Array.isArray(parsedCheck)) {
+          throw new Error("Expected a JSON object");
+        }
+      } catch (err) {
+        syncModalState.error = `Malformed JSON: ${err?.message || "parse error"}`;
+        renderSyncModalBody();
+        return;
+      }
+      syncModalState.busy = true;
+      syncModalState.error = "";
+      syncModalState.lastMerge = null;
+      renderSyncModalBody();
+      try {
+        const res = await apiPost("/api/sync/merge", {
+          delta: rawText,
+          dryRun: syncModalState.dryRun,
+        });
+        syncModalState.lastMerge = res;
+        syncModalState.busy = false;
+        renderSyncModalBody();
+        showToast(res.dryRun ? "CRDT dry-run verified ✓" : `Merged +${res.added || 0} / ~${res.updated || 0} ✓`);
+        if (!res.dryRun) refreshLiveState();
+      } catch (err) {
+        syncModalState.error = err?.message || "CRDT merge rejected";
+        syncModalState.busy = false;
+        renderSyncModalBody();
+        showToast(`Merge rejected: ${syncModalState.error}`);
+      }
     });
   }
 
@@ -9209,12 +9694,149 @@
       gymState.derivCutAxiomId = null;
       gymState.derivCutGuessId = null;
       gymState.derivCutResult = null;
+      gymState.derivDiffResult = null;
     }
     const cur = derivs.find((d) => d.id === gymState.selectedDerivId) || derivs[0];
     const steps = Array.isArray(cur.steps) ? cur.steps : [];
     const cutRes = gymState.derivCutResult;
+    const diffRes = gymState.derivDiffResult;
     const invSet = new Set(Array.isArray(cutRes?.invalidatedSteps) ? cutRes.invalidatedSteps : []);
     const survSet = new Set(Array.isArray(cutRes?.survivingSteps) ? cutRes.survivingSteps : []);
+
+    const renderDiffSection = () => {
+      const dr = diffRes;
+      const nudges = dr && dr.nudges && typeof dr.nudges === "object" ? dr.nudges : null;
+      const spawnedForkId = dr?.spawnedFork?.id || dr?.spawnedFork?.fork?.id || null;
+      const probe = dr?.diagnosticProbe?.bestProbe || (Array.isArray(dr?.diagnosticProbe?.probes) ? dr.diagnosticProbe.probes[0] : null) || null;
+      const aligned = Array.isArray(dr?.steps) ? dr.steps : [];
+      const errLabel = (ek) => String(ek || "").replace(/_/gu, " ");
+      return `
+        <div style="font-size:12px;color:var(--muted);">Enter your derivation step-by-step (1 equation per line, e.g. <code>F = -k*x</code>). Verified against the topologically ordered Causal Step DAG without leaking hidden steps.</div>
+        <div style="display:flex;flex-direction:column;gap:8px;">
+          <textarea class="gym-textarea" id="derivDiffTextarea" placeholder="Line 1: F = -k*x&#10;Line 2: m*a = -k*x&#10;Line 3: a = -(k/m)*x" style="min-height:112px;font-family:var(--font-mono);font-size:12.5px;">${esc(gymState.derivDiffInput)}</textarea>
+          <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;">
+            <label style="display:inline-flex;align-items:center;gap:6px;font-size:12px;color:var(--text-2);cursor:pointer;">
+              <input type="checkbox" id="derivDiffAutoForkChk" ${gymState.derivDiffAutoFork ? "checked" : ""} />
+              Auto-spawn Blunder Fork on break
+            </label>
+            <div style="display:flex;gap:7px;flex-wrap:wrap;">
+              <button type="button" id="derivClearDiffBtn">Clear</button>
+              <button type="button" class="primary" id="derivRunDiffBtn" ${gymState.derivDiffBusy ? "disabled" : ""}>${gymState.derivDiffBusy ? "Diffing…" : "Run Proof-Graph Diff"}</button>
+            </div>
+          </div>
+        </div>
+
+        ${dr ? `
+          <div class="gym-feedback ${dr.allVerified ? "ok" : dr.earliestBreakLine ? "warn" : ""}" id="derivDiffSummary">
+            <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;">
+              <strong>${dr.allVerified
+                ? `All ${Number(dr.verifiedCount || 0)}/${Number(dr.totalSteps || 0)} Derivation Steps Verified ✓`
+                : dr.earliestBreakLine
+                  ? `Earliest Break at Line ${Number(dr.earliestBreakLine)} (Step ${esc(dr.earliestBreakStepId || "")})`
+                  : `Partial Prefix Verified (${Number(dr.verifiedCount || 0)}/${Number(dr.totalSteps || 0)} steps)`}</strong>
+              <div style="display:flex;gap:5px;flex-wrap:wrap;">
+                <span class="pill ${dr.allVerified ? "solid" : "teal"}">${Number(dr.verifiedCount || 0)}/${Number(dr.totalSteps || 0)} verified</span>
+                ${dr.errorKind ? `<span class="pill misconception" id="derivDiffErrorBadge">${esc(errLabel(dr.errorKind))}</span>` : ""}
+                ${dr.evidenceRecorded ? `<span class="pill solid">T3 Evidence ✓</span>` : ""}
+              </div>
+            </div>
+            ${dr.earliestBreakLine ? `<span style="font-size:12px;">Zero-spoiler diagnosis: canonical answer remains sealed — use R0→R2 nudges below to repair line ${Number(dr.earliestBreakLine)}.</span>` : ""}
+          </div>
+
+          ${aligned.length ? `
+            <div class="deriv-steps" id="derivDiffSteps">
+              ${aligned.map((st) => {
+                const stStatus = String(st.status || "not_reached");
+                const cls = stStatus === "verified"
+                  ? "deriv-step-card is-verified"
+                  : stStatus === "broken"
+                    ? "deriv-step-card is-broken"
+                    : "deriv-step-card is-skipped";
+                const deps = Array.isArray(st.dependsOn) ? st.dependsOn : [];
+                const bDeps = Array.isArray(st.brokenDependencies) ? st.brokenDependencies : [];
+                return `
+                  <div class="${cls}" data-diff-step="${esc(st.stepId || "")}">
+                    <div style="display:flex;justify-content:space-between;align-items:center;gap:6px;flex-wrap:wrap;">
+                      <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;">
+                        <code>${esc(st.stepId || "")}</code>
+                        <span class="pill">${esc(st.role || "step")}</span>
+                        <strong>${esc(st.label || st.stepId || "")}</strong>
+                        ${deps.length ? `<span style="font-size:11px;color:var(--muted);">← ${esc(deps.join(", "))}</span>` : ""}
+                      </div>
+                      <div style="display:flex;gap:5px;flex-wrap:wrap;">
+                        ${stStatus === "verified" ? `<span class="pill solid">✓ Line ${Number(st.studentLine || 0)}</span>` : ""}
+                        ${stStatus === "broken" ? `<span class="pill misconception">✗ Break · Line ${Number(st.studentLine || 0)}</span>` : ""}
+                        ${stStatus === "broken" && st.errorKind ? `<span class="pill shaky">${esc(errLabel(st.errorKind))}</span>` : ""}
+                        ${stStatus === "skipped_dependency" ? `<span class="pill">Blocked${bDeps.length ? ` by ${esc(bDeps.join(", "))}` : ""}</span>` : ""}
+                        ${stStatus === "not_reached" ? `<span class="pill">Not reached</span>` : ""}
+                      </div>
+                    </div>
+                    ${st.studentExpr ? `
+                      <div style="font-family:var(--font-mono);font-size:12.5px;padding:5px 9px;border-radius:6px;background:var(--bg-card);border:1px solid var(--border);color:${stStatus === "broken" ? "var(--misconception)" : "var(--text)"};">
+                        ${esc(st.studentExpr)}${st.matchMethod ? ` <span style="font-size:10.5px;color:var(--muted);">(${esc(st.matchMethod)})</span>` : ""}
+                      </div>
+                    ` : ""}
+                  </div>
+                `;
+              }).join("")}
+            </div>
+          ` : ""}
+
+          ${nudges ? `
+            <div style="display:flex;flex-direction:column;gap:6px;" id="derivDiffNudges">
+              <div class="section-heading" style="margin:0;">Zero-Spoiler Socratic Nudges (R0 → R2)</div>
+              <div class="nudge-accordion">
+                ${nudges.R0 ? `
+                  <details open>
+                    <summary><span>R0 · Earliest-Break Localization</span><span class="pill">Open</span></summary>
+                    <div>${esc(nudges.R0)}</div>
+                  </details>
+                ` : ""}
+                ${nudges.R1 ? `
+                  <details>
+                    <summary><span>R1 · Diagnostic Direction Check</span><span class="pill shaky">Expand</span></summary>
+                    <div>${esc(nudges.R1)}</div>
+                  </details>
+                ` : ""}
+                ${nudges.R2 ? `
+                  <details>
+                    <summary><span>R2 · Premise &amp; Dimensional Scaffold</span><span class="pill accent">Expand</span></summary>
+                    <div>${esc(nudges.R2)}</div>
+                  </details>
+                ` : ""}
+              </div>
+            </div>
+          ` : ""}
+
+          ${spawnedForkId ? `
+            <div class="gym-feedback" id="derivSpawnedForkCard" style="border-left:3px solid var(--shaky);">
+              <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;">
+                <div>
+                  <strong>Blunder FEN Fork Spawned</strong>
+                  <div style="font-size:12px;color:var(--text-2);">Checkpoint frozen at your verified prefix (<code>${esc(spawnedForkId)}</code>). Replay cold to build automaticity.</div>
+                </div>
+                <button type="button" class="primary" id="derivJumpSpawnedForkBtn" data-fork-id="${esc(spawnedForkId)}">Replay Blunder Fork →</button>
+              </div>
+            </div>
+          ` : ""}
+
+          ${probe && (probe.propId || probe.id) ? `
+            <div class="gym-feedback" id="derivDiagnosticProbeCard" style="border-left:3px solid var(--teal);">
+              <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;">
+                <div>
+                  <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;">
+                    <strong>Bayesian ΔH Root-Cause Probe</strong>
+                    <span class="pill teal">ΔH ${Number(probe.deltaHBits ?? probe.expectedInfoGainBits ?? 0).toFixed(2)} bits</span>
+                  </div>
+                  <div style="font-size:12px;color:var(--text-2);">Check suspect ancestor <code>${esc(probe.propId || probe.id)}</code>${probe.title ? ` (${esc(probe.title)})` : ""} before retrying.</div>
+                </div>
+                <button type="button" id="derivJumpProbeNodeBtn" data-probe-node="${esc(probe.propId || probe.id)}">Inspect in Graph →</button>
+              </div>
+            </div>
+          ` : ""}
+        ` : ""}
+      `;
+    };
 
     container.innerHTML = `
       <div class="gym-split">
@@ -9235,12 +9857,14 @@
               <h3 style="margin:0;font-size:15.5px;">${esc(cur.title || cur.id)}</h3>
               <span style="font-size:11.5px;color:var(--muted);">${esc(cur.domain || "")}${cur.propId ? ` · ${esc(cur.propId)}` : ""}</span>
             </div>
-            <div style="display:flex;gap:6px;">
-              <button type="button" class="${gymState.derivMode === "blackout" ? "primary" : ""}" data-deriv-mode="blackout">Blackout Reconstruction</button>
-              <button type="button" class="${gymState.derivMode === "cut" ? "primary" : ""}" data-deriv-mode="cut">Axiom-Cut Surgery</button>
+            <div style="display:flex;gap:6px;flex-wrap:wrap;">
+              <button type="button" class="${gymState.derivMode === "blackout" ? "primary" : ""}" data-deriv-mode="blackout">Blackout</button>
+              <button type="button" class="${gymState.derivMode === "cut" ? "primary" : ""}" data-deriv-mode="cut">Axiom-Cut</button>
+              <button type="button" class="${gymState.derivMode === "diff" ? "primary" : ""}" data-deriv-mode="diff">Proof-Graph Diff</button>
             </div>
           </div>
 
+          ${gymState.derivMode === "diff" ? renderDiffSection() : `
           ${gymState.derivMode === "cut" ? `
             <div class="gym-feedback">
               <span><strong>Axiom-Cut Protocol:</strong> 1) Click a step to <strong>Cut</strong> it (${gymState.derivCutAxiomId ? `cut: <code>${esc(gymState.derivCutAxiomId)}</code>` : "none selected"}). 2) Click the downstream step you predict breaks <strong>earliest</strong> (${gymState.derivCutGuessId ? `guess: <code>${esc(gymState.derivCutGuessId)}</code>` : "none selected"}).</span>
@@ -9312,6 +9936,7 @@
             }).join("");
             })()}
           </div>
+          `}
         </div>
       </div>
     `;
@@ -9323,6 +9948,7 @@
         gymState.derivCutAxiomId = null;
         gymState.derivCutGuessId = null;
         gymState.derivCutResult = null;
+        gymState.derivDiffResult = null;
         renderGymStation();
       });
     });
@@ -9335,7 +9961,77 @@
       });
     });
 
-    if (gymState.derivMode === "cut") {
+    if (gymState.derivMode === "diff") {
+      document.getElementById("derivDiffTextarea")?.addEventListener("input", (ev) => {
+        gymState.derivDiffInput = ev.target.value;
+      });
+      document.getElementById("derivDiffAutoForkChk")?.addEventListener("change", (ev) => {
+        gymState.derivDiffAutoFork = Boolean(ev.target.checked);
+      });
+      document.getElementById("derivClearDiffBtn")?.addEventListener("click", () => {
+        gymState.derivDiffInput = "";
+        gymState.derivDiffResult = null;
+        renderGymStation();
+      });
+      document.getElementById("derivRunDiffBtn")?.addEventListener("click", async () => {
+        if (gymState.derivDiffBusy) return;
+        const liveDiffVal = document.getElementById("derivDiffTextarea")?.value;
+        if (typeof liveDiffVal === "string") gymState.derivDiffInput = liveDiffVal;
+        const lines = String(gymState.derivDiffInput || "")
+          .split(/\r?\n/u)
+          .map((s) => s.trim())
+          .filter(Boolean);
+        if (lines.length === 0) {
+          showToast("Enter at least 1 derivation equation line first");
+          return;
+        }
+        if (lines.length > 40) {
+          showToast("Limit is 40 derivation steps per diff");
+          return;
+        }
+        const studentSteps = lines.map((expr, idx) => ({ line: idx + 1, expr }));
+        if (!liveCaps.live) {
+          copyText(
+            `Run proof-graph diff on derivation ${cur.id} with steps: ${JSON.stringify(studentSteps)}`,
+            "Offline mode — copied Proof-Graph Diff prompt ✓"
+          );
+          return;
+        }
+        gymState.derivDiffBusy = true;
+        renderGymStation();
+        try {
+          const res = await apiPost("/api/derivation/diff", {
+            derivationId: cur.id,
+            studentSteps,
+            autoSpawnFork: gymState.derivDiffAutoFork,
+          });
+          gymState.derivDiffResult = res;
+          gymState.derivDiffBusy = false;
+          renderGymStation();
+          showToast(
+            res.allVerified
+              ? `All ${res.verifiedCount}/${res.totalSteps} steps verified ✓`
+              : res.earliestBreakLine
+                ? `Earliest break at line ${res.earliestBreakLine} (${String(res.errorKind || "").replace(/_/gu, " ")})`
+                : `Verified ${res.verifiedCount}/${res.totalSteps} steps`
+          );
+          refreshLiveState();
+        } catch (err) {
+          gymState.derivDiffBusy = false;
+          renderGymStation();
+          showToast(`Proof-Graph Diff failed: ${err?.message || "error"}`);
+        }
+      });
+      document.getElementById("derivJumpSpawnedForkBtn")?.addEventListener("click", (ev) => {
+        const fid = ev.currentTarget.getAttribute("data-fork-id");
+        if (fid) gymState.selectedForkId = fid;
+        openGymStation("forks");
+      });
+      document.getElementById("derivJumpProbeNodeBtn")?.addEventListener("click", (ev) => {
+        const pid = ev.currentTarget.getAttribute("data-probe-node");
+        if (pid) openNodeInGraph(pid);
+      });
+    } else if (gymState.derivMode === "cut") {
       container.querySelectorAll("[data-deriv-step]").forEach((card) => {
         card.addEventListener("click", () => {
           const sid = card.getAttribute("data-deriv-step");
@@ -9664,6 +10360,7 @@
     const inDeg = new Map(nodes.map((n) => [n.id, 0]));
 
     for (const e of edges) {
+      if (String(e.relation || "").toLowerCase() === "isomorphic_to") continue;
       if (!idSet.has(e.from) || !idSet.has(e.to) || e.from === e.to) continue;
       adj.get(e.from).push(e.to);
       parents.get(e.to).push(e.from);
@@ -9855,6 +10552,128 @@
     return { pos, clusters, bounds: computeBounds(pos, clusters) };
   }
 
+  function getRosettaChords() {
+    const byPair = new Map();
+    const propsById = new Map((graphData.propositions || []).map((p) => [String(p.id || ""), p]));
+    const rawChords = Array.isArray(hubData?.rosetta?.chords) ? hubData.rosetta.chords : [];
+    for (const ch of rawChords) {
+      if (!ch || typeof ch !== "object" || !ch.sourceId || !ch.targetId) continue;
+      const a = String(ch.sourceId);
+      const b = String(ch.targetId);
+      const key = a <= b ? `${a}\u0000${b}` : `${b}\u0000${a}`;
+      byPair.set(key, { ...ch, sourceId: a, targetId: b });
+    }
+    for (const c of graphData.chains || []) {
+      if (!c || typeof c !== "object" || String(c.relation || "").toLowerCase() !== "isomorphic_to") continue;
+      const conc = String(c.conclusion || c.to || "").trim();
+      const prems = Array.isArray(c.premises) ? c.premises : (c.from ? [c.from] : []);
+      for (const premRaw of prems) {
+        const prem = String(premRaw || "").trim();
+        if (!prem || !conc || prem === conc) continue;
+        const [a, b] = prem <= conc ? [prem, conc] : [conc, prem];
+        const key = `${a}\u0000${b}`;
+        if (byPair.has(key)) {
+          byPair.get(key).persisted = true;
+          continue;
+        }
+        const pa = propsById.get(a) || {};
+        const pb = propsById.get(b) || {};
+        byPair.set(key, {
+          id: `iso-${c.archetypeId || "custom"}-${a}--${b}`,
+          sourceId: a,
+          targetId: b,
+          sourceTitle: pa.title || a,
+          targetTitle: pb.title || b,
+          sourceDomain: pa.subject || "General",
+          targetDomain: pb.subject || "General",
+          sourceChapter: pa.chapter || "General",
+          targetChapter: pb.chapter || "General",
+          sourceSubject: pa.subject || "General",
+          targetSubject: pb.subject || "General",
+          archetypeId: c.archetypeId || "custom_isomorphism",
+          archetypeName: String(c.archetypeId || "Structural Isomorphism").replace(/_/gu, " "),
+          canonicalEquation: "",
+          variableBijection: {},
+          breaksAt: Array.isArray(c.breaksAt) ? c.breaksAt : [],
+          score: 1.0,
+          persisted: true,
+        });
+      }
+    }
+    return [...byPair.values()];
+  }
+
+  function getRosettaChordsForNode(nodeId) {
+    const id = String(nodeId || "");
+    if (!id) return [];
+    return getRosettaChords()
+      .filter((ch) => ch.sourceId === id || ch.targetId === id)
+      .map((ch) => {
+        const isSrc = ch.sourceId === id;
+        const bijRows = [];
+        for (const [role, expr] of Object.entries(ch.variableBijection || {})) {
+          const s = String(expr || "");
+          if (s.includes("<->")) {
+            const [l, r] = s.split("<->").map((x) => x.trim());
+            bijRows.push({ role, selfSym: isSrc ? l : r, twinSym: isSrc ? r : l });
+          } else if (s.includes("->")) {
+            const [l, r] = s.split("->").map((x) => x.trim());
+            bijRows.push({ role, selfSym: isSrc ? l : r, twinSym: isSrc ? r : l });
+          } else {
+            bijRows.push({ role, selfSym: s, twinSym: s });
+          }
+        }
+        return {
+          ...ch,
+          selfDomain: isSrc ? (ch.sourceDomain || ch.sourceSubject) : (ch.targetDomain || ch.targetSubject),
+          twinId: isSrc ? ch.targetId : ch.sourceId,
+          twinTitle: isSrc ? (ch.targetTitle || ch.targetId) : (ch.sourceTitle || ch.sourceId),
+          twinDomain: isSrc ? (ch.targetDomain || ch.targetSubject) : (ch.sourceDomain || ch.sourceSubject),
+          twinChapter: isSrc ? ch.targetChapter : ch.sourceChapter,
+          twinSubject: isSrc ? ch.targetSubject : ch.sourceSubject,
+          bijectionRows: bijRows,
+        };
+      });
+  }
+
+  function buildRosettaChordPath(a, b) {
+    const dx = b.x - a.x;
+    const dy = b.y - a.y;
+    const dist = Math.hypot(dx, dy) || 1;
+    const mx = (a.x + b.x) / 2;
+    const my = (a.y + b.y) / 2;
+    const offset = Math.max(44, Math.min(130, dist * 0.24));
+    let nx = -dy / dist;
+    let ny = dx / dist;
+    if (ny > 0) { nx = -nx; ny = -ny; }
+    const cx = mx + nx * offset;
+    const cy = my + ny * offset;
+    return `M ${a.x} ${a.y} Q ${cx.toFixed(1)} ${cy.toFixed(1)} ${b.x} ${b.y}`;
+  }
+
+  async function linkRosettaChordLive(sourceId, targetId, archetypeId) {
+    if (!sourceId || !targetId || !archetypeId || rosettaLinkBusy) return;
+    if (!liveCaps.live) {
+      copyText(`Link Rosetta isomorphism chord between ${sourceId} and ${targetId} (${archetypeId}).`, "Offline mode — copied link prompt ✓");
+      return;
+    }
+    rosettaLinkBusy = true;
+    try {
+      const res = await apiPost("/api/rosetta/link", { sourceId, targetId, archetypeId });
+      if (res.rosetta) hubData.rosetta = res.rosetta;
+      showToast(res.created ? "Linked Rosetta chord ✓" : "Rosetta chord already persisted ✓");
+      await refreshLiveState();
+    } catch (err) {
+      showToast(`Link chord failed: ${err?.message || "error"}`);
+    } finally {
+      rosettaLinkBusy = false;
+      if (selectedNodeId) {
+        const node = (graphData.propositions || []).find((p) => p.id === selectedNodeId);
+        if (node) renderGraphInspector(node);
+      }
+    }
+  }
+
   function getFilteredGraph() {
     const subj = document.getElementById("subjectFilter").value;
     const chap = document.getElementById("chapterFilter").value;
@@ -9877,8 +10696,11 @@
     });
 
     const idSet = new Set(nodes.map((n) => n.id));
-    const edges = getGraphEdges().filter((e) => idSet.has(e.from) && idSet.has(e.to));
-    return { nodes, edges };
+    const edges = getGraphEdges().filter(
+      (e) => String(e.relation || "").toLowerCase() !== "isomorphic_to" && idSet.has(e.from) && idSet.has(e.to)
+    );
+    const rosettaChords = getRosettaChords().filter((ch) => idSet.has(ch.sourceId) && idSet.has(ch.targetId));
+    return { nodes, edges, rosettaChords };
   }
 
   function computeLineage(id, edges) {
@@ -9927,8 +10749,8 @@
   }
 
   function renderGraph(shouldFit = true) {
-    const { nodes, edges } = getFilteredGraph();
-    document.getElementById("graphCountPill").textContent = `${nodes.length} nodes · ${edges.length} edges`;
+    const { nodes, edges, rosettaChords } = getFilteredGraph();
+    document.getElementById("graphCountPill").textContent = `${nodes.length} nodes · ${edges.length} edges${rosettaChords.length ? ` · ${rosettaChords.length} rosetta` : ""}`;
     const bkts = nodes.map(getBkt).filter((v) => v !== null);
     const avgBkt = bkts.length ? Math.round((bkts.reduce((a, b) => a + b, 0) / bkts.length) * 100) : null;
     document.getElementById("graphBktPill").textContent = avgBkt !== null ? `Avg BKT ${avgBkt}%` : "Avg BKT —";
@@ -9948,6 +10770,12 @@
     lastBounds = bounds;
     if (selectedNodeId && !pos.has(selectedNodeId)) selectedNodeId = null;
     const lineage = selectedNodeId ? computeLineage(selectedNodeId, edges) : null;
+    if (lineage) {
+      for (const ch of rosettaChords) {
+        if (ch.sourceId === selectedNodeId) lineage.relatedNodes.add(ch.targetId);
+        else if (ch.targetId === selectedNodeId) lineage.relatedNodes.add(ch.sourceId);
+      }
+    }
 
     const clustersG = document.getElementById("clusters");
     const edgesG = document.getElementById("edges");
@@ -9987,6 +10815,31 @@
         t.textContent = `${e.from} —[${rel}]→ ${e.to}: ${e.why}`;
         path.appendChild(t);
       }
+      edgesG.appendChild(path);
+    });
+
+    // Dashed indigo/teal Structural Rosetta isomorphism chords
+    rosettaChords.forEach((ch) => {
+      const a = pos.get(ch.sourceId);
+      const b = pos.get(ch.targetId);
+      if (!a || !b) return;
+      const path = document.createElementNS(SVG_NS, "path");
+      let cls = "rosetta-chord rel-isomorphic_to";
+      if (selectedNodeId) {
+        const touches = ch.sourceId === selectedNodeId || ch.targetId === selectedNodeId;
+        cls += touches ? " highlighted" : " dimmed";
+      }
+      path.setAttribute("class", cls);
+      path.setAttribute("data-rosetta-chord", ch.id || `${ch.sourceId}--${ch.targetId}`);
+      path.setAttribute("d", buildRosettaChordPath(a, b));
+      const t = document.createElementNS(SVG_NS, "title");
+      t.textContent = `Rosetta Twin (${ch.archetypeName || ch.archetypeId}): ${ch.sourceTitle || ch.sourceId} ↔ ${ch.targetTitle || ch.targetId}${ch.persisted ? " [linked]" : ` [${Math.round((ch.score || 0) * 100)}% match]`}`;
+      path.appendChild(t);
+      path.addEventListener("click", (ev) => {
+        ev.stopPropagation();
+        const nextId = selectedNodeId === ch.sourceId ? ch.targetId : ch.sourceId;
+        selectGraphNode(nextId, true);
+      });
       edgesG.appendChild(path);
     });
 
@@ -10134,6 +10987,8 @@
       if (b !== null) bkts.push(b);
     }
     const avgBkt = bkts.length ? Math.round((bkts.reduce((a, b) => a + b, 0) / bkts.length) * 100) : null;
+    const visSet = new Set(visibleNodes.map((n) => n.id));
+    const visRosetta = getRosettaChords().filter((ch) => visSet.has(ch.sourceId) && visSet.has(ch.targetId));
 
     document.getElementById("graphInspector").innerHTML = `
       <div>
@@ -10157,15 +11012,44 @@
           <span class="metric-sub">${dueCount > 0 ? "Review needed" : "All clear"}</span>
         </div>
       </div>
-      <p class="detail-body">Click any concept node to spotlight its upstream prerequisites &amp; downstream unlocks and inspect its <strong>BKT mastery %</strong>, <strong>FSRS stability</strong>, and <strong>next review countdown</strong>.</p>
+      <p class="detail-body">Click any concept node to spotlight its upstream prerequisites, downstream unlocks, and <strong>Structural Rosetta Twins</strong> across domains.</p>
+      ${visRosetta.length ? `
+        <div>
+          <div class="section-heading">Structural Rosetta Twins (${visRosetta.length})</div>
+          <ul class="edge-list">
+            ${visRosetta.slice(0, 6).map((ch) => `
+              <li class="edge-item clickable" data-jump="${esc(ch.sourceId)}" style="border-left:3px solid var(--edge-rosetta);">
+                <div class="edge-item-head">
+                  <span class="edge-item-title">${esc(ch.sourceTitle || ch.sourceId)} ↔ ${esc(ch.targetTitle || ch.targetId)}</span>
+                  <span class="pill rosetta">${ch.persisted ? "Linked" : `${Math.round((ch.score || 0) * 100)}%`}</span>
+                </div>
+                <span class="edge-item-why">${esc(ch.archetypeName || ch.archetypeId)}</span>
+              </li>
+            `).join("")}
+          </ul>
+        </div>
+      ` : ""}
     `;
+    document.querySelectorAll("#graphInspector [data-jump]").forEach((el) => {
+      el.addEventListener("click", () => selectGraphNode(el.getAttribute("data-jump"), true));
+    });
+    document.querySelectorAll("#graphInspector [data-link-rosetta-src]").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        linkRosettaChordLive(
+          btn.getAttribute("data-link-rosetta-src"),
+          btn.getAttribute("data-link-rosetta-tgt"),
+          btn.getAttribute("data-link-rosetta-arch")
+        );
+      });
+    });
   }
 
   function renderGraphInspector(n) {
     const byId = new Map((graphData.propositions || []).map((p) => [p.id, p]));
-    const allEdges = getGraphEdges();
+    const allEdges = getGraphEdges().filter((e) => String(e.relation || "").toLowerCase() !== "isomorphic_to");
     const incoming = allEdges.filter((e) => e.to === n.id);
     const outgoing = allEdges.filter((e) => e.from === n.id);
+    const rosettaTwins = getRosettaChordsForNode(n.id);
     const bkt = getBkt(n);
     const bktPct = bkt !== null ? Math.round(bkt * 100) : null;
     const stab = getStability(n);
@@ -10264,6 +11148,62 @@
           <ul class="bc-list">${boundaryConditions.map((bc) => `<li class="bc-item">${esc(typeof bc === "string" ? bc : (bc.lemma || bc.condition || bc.text || bc.note || ""))}</li>`).join("")}</ul>
         </div>
       ` : ""}
+      ${rosettaTwins.length ? `
+        <div id="graphRosettaSection">
+          <div class="section-heading">Structural Rosetta Twins (${rosettaTwins.length})</div>
+          <div style="display:flex;flex-direction:column;gap:8px;">
+            ${rosettaTwins.map((rt) => {
+              const twinNode = byId.get(rt.twinId);
+              const twinExists = lastPositions.has(rt.twinId);
+              const breaks = Array.isArray(rt.breaksAt) ? rt.breaksAt.filter(Boolean) : [];
+              return `
+                <div class="rosetta-card">
+                  <div style="display:flex;justify-content:space-between;align-items:center;gap:6px;flex-wrap:wrap;">
+                    <span class="pill rosetta">${esc(rt.archetypeName || rt.archetypeId)}</span>
+                    <span class="pill ${rt.persisted ? "solid" : "teal"}">${rt.persisted ? "Linked ✓" : `${Math.round((rt.score || 0) * 100)}% Twin`}</span>
+                  </div>
+                  <div class="edge-item-head">
+                    <span class="edge-item-title ${twinExists ? "clickable" : ""}" ${twinExists ? `data-jump="${esc(rt.twinId)}" style="cursor:pointer;text-decoration:underline;text-underline-offset:2px;"` : ""}>${twinNode ? `<span class="dot" style="background:${statusVar(twinNode.status)};margin-right:6px"></span>` : ""}${esc(rt.twinTitle)}</span>
+                    <span class="pill">${esc(rt.twinSubject || rt.twinDomain || "Twin")}</span>
+                  </div>
+                  ${rt.canonicalEquation ? `<div style="font-family:var(--font-mono);font-size:11px;color:var(--text-2);background:var(--bg-elev);padding:5px 8px;border-radius:6px;border:1px solid var(--border);overflow-x:auto;">${esc(rt.canonicalEquation)}</div>` : ""}
+                  ${rt.bijectionRows.length ? `
+                    <table class="rosetta-table" aria-label="Variable bijection table">
+                      <thead>
+                        <tr>
+                          <th>Role</th>
+                          <th>${esc(truncate(rt.selfDomain || n.subject || "This", 18))}</th>
+                          <th>${esc(truncate(rt.twinDomain || rt.twinSubject || "Twin", 18))}</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        ${rt.bijectionRows.map((row) => `
+                          <tr>
+                            <td>${esc(row.role)}</td>
+                            <td>${esc(row.selfSym)}</td>
+                            <td>${esc(row.twinSym)}</td>
+                          </tr>
+                        `).join("")}
+                      </tbody>
+                    </table>
+                  ` : ""}
+                  ${breaks.length ? `
+                    <div class="rosetta-breaks">
+                      <strong>Where the analogy breaks</strong>
+                      <ul>${breaks.map((b) => `<li>${esc(b)}</li>`).join("")}</ul>
+                    </div>
+                  ` : ""}
+                  ${!rt.persisted ? `
+                    <div style="display:flex;justify-content:flex-end;">
+                      <button type="button" style="padding:4px 9px;font-size:11px;" data-link-rosetta-src="${esc(rt.sourceId)}" data-link-rosetta-tgt="${esc(rt.targetId)}" data-link-rosetta-arch="${esc(rt.archetypeId)}" ${rosettaLinkBusy ? "disabled" : ""}>Link Chord</button>
+                    </div>
+                  ` : ""}
+                </div>
+              `;
+            }).join("")}
+          </div>
+        </div>
+      ` : ""}
       <div style="display:flex;gap:6px;flex-wrap:wrap;">
         <button class="primary" id="reviewGraphNodeBtn" style="flex:1;justify-content:center;">Open Flashcard</button>
         <button id="copyConceptDrillBtn" style="flex:1;justify-content:center;">Copy Drill Prompt</button>
@@ -10313,6 +11253,15 @@
     });
     document.querySelectorAll("#graphInspector [data-jump]").forEach((el) => {
       el.addEventListener("click", () => selectGraphNode(el.getAttribute("data-jump"), true));
+    });
+    document.querySelectorAll("#graphInspector [data-link-rosetta-src]").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        linkRosettaChordLive(
+          btn.getAttribute("data-link-rosetta-src"),
+          btn.getAttribute("data-link-rosetta-tgt"),
+          btn.getAttribute("data-link-rosetta-arch")
+        );
+      });
     });
   }
 
@@ -10603,6 +11552,10 @@
     document.getElementById("starterPackModal")?.addEventListener("click", (e) => {
       if (e.target.id === "starterPackModal") document.getElementById("starterPackModal").classList.remove("open");
     });
+    document.getElementById("syncModalCloseBtn")?.addEventListener("click", closeSyncModal);
+    document.getElementById("syncModal")?.addEventListener("click", (e) => {
+      if (e.target.id === "syncModal") closeSyncModal();
+    });
     document.querySelectorAll("#gymStationNav .gym-tab-btn").forEach((btn) => {
       btn.addEventListener("click", () => {
         gymState.station = btn.getAttribute("data-gym") || "whiteboard";
@@ -10675,6 +11628,8 @@
           document.getElementById("triageModal").classList.remove("open");
         } else if (document.getElementById("starterPackModal")?.classList.contains("open")) {
           document.getElementById("starterPackModal").classList.remove("open");
+        } else if (document.getElementById("syncModal")?.classList.contains("open")) {
+          closeSyncModal();
         } else if (reviewState.open) {
           closeReviewModal();
         } else if (document.getElementById("chapterReaderDrawer").classList.contains("open")) {

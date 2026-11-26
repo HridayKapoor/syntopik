@@ -33,6 +33,8 @@
     --edge-derives: #7C93C3;
     --edge-generalizes: #4E9F96;
     --edge-contrasts: #D4943A;
+    --edge-rosetta: #6D8FE8;
+    --rosetta-bg: rgba(109, 143, 232, 0.14);
     --bar-track: #252A30;
     --cluster-bg: rgba(30, 34, 39, 0.62);
     --shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
@@ -65,6 +67,8 @@
     --edge-derives: #36538C;
     --edge-generalizes: #2A7B76;
     --edge-contrasts: #A86814;
+    --edge-rosetta: #3B5BC0;
+    --rosetta-bg: rgba(59, 91, 192, 0.11);
     --bar-track: #E5E0D5;
     --cluster-bg: rgba(239, 236, 228, 0.72);
     --shadow: 0 6px 20px rgba(28, 32, 36, 0.07);
@@ -283,6 +287,69 @@
   .edge-path.rel-derives { stroke: var(--edge-derives); }
   .edge-path.rel-generalizes { stroke: var(--edge-generalizes); }
   .edge-path.rel-contrasts_with { stroke: var(--edge-contrasts); stroke-dasharray: 5 4; }
+  .edge-path.rel-isomorphic_to, .rosetta-chord {
+    fill: none;
+    stroke: var(--edge-rosetta);
+    stroke-width: 2;
+    stroke-dasharray: 6 4;
+    opacity: 0.86;
+    cursor: pointer;
+    transition: opacity 0.15s, stroke-width 0.15s;
+  }
+  .rosetta-chord.dimmed { opacity: 0.14; }
+  .rosetta-chord.highlighted, .rosetta-chord:hover { stroke-width: 2.8; opacity: 1; }
+  .pill.rosetta { color: var(--edge-rosetta); background: var(--rosetta-bg); border-color: transparent; white-space: normal; max-width: 100%; line-height: 1.3; }
+  .rosetta-card {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-left: 3px solid var(--edge-rosetta);
+    border-radius: 9px;
+    padding: 10px 12px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    font-size: 12px;
+  }
+  .rosetta-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 11.5px;
+    background: var(--bg-elev);
+    border: 1px solid var(--border);
+    border-radius: 7px;
+    overflow: hidden;
+  }
+  .rosetta-table th, .rosetta-table td {
+    padding: 5px 7px;
+    text-align: left;
+    border-bottom: 1px solid var(--border);
+    vertical-align: top;
+  }
+  .rosetta-table tr:last-child td { border-bottom: none; }
+  .rosetta-table th {
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--muted);
+    background: var(--bg-input);
+  }
+  .rosetta-table td:first-child { color: var(--muted); font-weight: 600; white-space: nowrap; }
+  .rosetta-table td:not(:first-child) { font-family: "SF Mono", ui-monospace, Menlo, monospace; color: var(--text); font-size: 11px; }
+  .rosetta-breaks {
+    padding: 8px 10px;
+    border-radius: 7px;
+    border: 1px solid var(--border);
+    border-left: 3px solid var(--shaky);
+    background: var(--shaky-bg);
+    color: var(--text-2);
+    font-size: 11.5px;
+    line-height: 1.48;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+  .rosetta-breaks strong { color: var(--shaky); font-size: 10.5px; text-transform: uppercase; letter-spacing: 0.04em; }
+  .rosetta-breaks ul { margin: 2px 0 0; padding-left: 16px; display: flex; flex-direction: column; gap: 3px; }
   .edge-path.dimmed { opacity: 0.14; }
   .edge-path.highlighted { stroke-width: 2.5; opacity: 1; }
 
@@ -795,6 +862,7 @@
         <span class="legend-item"><span class="legend-line" style="background:var(--edge-derives)"></span>derives</span>
         <span class="legend-item"><span class="legend-line" style="background:var(--edge-generalizes)"></span>generalizes</span>
         <span class="legend-item"><span class="legend-line" style="border-top:2px dashed var(--edge-contrasts);height:0"></span>contrasts</span>
+        <span class="legend-item" id="rosettaLegendItem" title="Cross-domain structural isomorphism chords"><span class="legend-line" style="border-top:2px dashed var(--edge-rosetta);height:0"></span><span id="rosettaLegendLabel">rosetta</span></span>
         <span class="legend-item"><span class="legend-joint">∧</span>joint</span>
         <span class="legend-item"><span class="legend-halo"></span>causal suspect</span>
       </div>
@@ -826,6 +894,8 @@
   let data = { propositions: [], chains: [] };
   let rootCauseHotspots = { byProp: {}, blastRadius: [] };
   let evidenceSummary = { propositions: {}, tierCounts: { T1: 0, T2: 0, T3: 0, T4: 0 }, verifiedTransferPct: 0 };
+  let rosettaData = { chords: [], archetypesCount: 0 };
+  let rosettaLinkBusy = false;
   let liveRootCauseCache = new Map();
   let view = { x: 40, y: 40, k: 1 };
   let layoutMode = "layered"; // "layered" | "clustered"
@@ -838,7 +908,7 @@
   let reviewBusy = false;
   let quickConfidencePct = 70;
 
-  const esc = (s) => String(s ?? "").replace(/[&<>"]/gu, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+  const esc = (s) => String(s ?? "").replace(/[&<>"']/gu, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 
   function safeStorageGet(key) {
     try { return window.localStorage.getItem(key); } catch { return null; }
@@ -948,6 +1018,141 @@
       };
     } else {
       evidenceSummary = { propositions: {}, tierCounts: { T1: 0, T2: 0, T3: 0, T4: 0 }, verifiedTransferPct: 0 };
+    }
+    const ros = (stateObj && stateObj.rosetta) || (hub && hub.rosetta) || null;
+    if (ros && typeof ros === "object") {
+      rosettaData = {
+        chords: Array.isArray(ros.chords) ? ros.chords : [],
+        archetypesCount: Number(ros.archetypesCount || 0),
+      };
+    } else {
+      rosettaData = { chords: [], archetypesCount: 0 };
+    }
+  }
+
+  function getRosettaChords() {
+    const byPair = new Map();
+    const propsById = new Map((data.propositions || []).map((p) => [String(p.id || ""), p]));
+    for (const ch of rosettaData.chords || []) {
+      if (!ch || typeof ch !== "object" || !ch.sourceId || !ch.targetId) continue;
+      const a = String(ch.sourceId);
+      const b = String(ch.targetId);
+      const key = a <= b ? `${a}\u0000${b}` : `${b}\u0000${a}`;
+      byPair.set(key, { ...ch, sourceId: a, targetId: b });
+    }
+    for (const c of data.chains || []) {
+      if (!c || typeof c !== "object" || String(c.relation || "").toLowerCase() !== "isomorphic_to") continue;
+      const conc = String(c.conclusion || c.to || "").trim();
+      const prems = Array.isArray(c.premises) ? c.premises : (c.from ? [c.from] : []);
+      for (const premRaw of prems) {
+        const prem = String(premRaw || "").trim();
+        if (!prem || !conc || prem === conc) continue;
+        const [a, b] = prem <= conc ? [prem, conc] : [conc, prem];
+        const key = `${a}\u0000${b}`;
+        if (byPair.has(key)) {
+          byPair.get(key).persisted = true;
+          continue;
+        }
+        const pa = propsById.get(a) || {};
+        const pb = propsById.get(b) || {};
+        byPair.set(key, {
+          id: `iso-${c.archetypeId || "custom"}-${a}--${b}`,
+          sourceId: a,
+          targetId: b,
+          sourceTitle: pa.title || a,
+          targetTitle: pb.title || b,
+          sourceDomain: pa.subject || "General",
+          targetDomain: pb.subject || "General",
+          sourceChapter: pa.chapter || "General",
+          targetChapter: pb.chapter || "General",
+          sourceSubject: pa.subject || "General",
+          targetSubject: pb.subject || "General",
+          archetypeId: c.archetypeId || "custom_isomorphism",
+          archetypeName: String(c.archetypeId || "Structural Isomorphism").replace(/_/gu, " "),
+          canonicalEquation: "",
+          variableBijection: {},
+          breaksAt: Array.isArray(c.breaksAt) ? c.breaksAt : [],
+          score: 1.0,
+          persisted: true,
+        });
+      }
+    }
+    return [...byPair.values()];
+  }
+
+  function getRosettaChordsForNode(nodeId) {
+    const id = String(nodeId || "");
+    if (!id) return [];
+    return getRosettaChords()
+      .filter((ch) => ch.sourceId === id || ch.targetId === id)
+      .map((ch) => {
+        const isSrc = ch.sourceId === id;
+        const bijRows = [];
+        for (const [role, expr] of Object.entries(ch.variableBijection || {})) {
+          const s = String(expr || "");
+          if (s.includes("<->")) {
+            const [l, r] = s.split("<->").map((x) => x.trim());
+            bijRows.push({ role, selfSym: isSrc ? l : r, twinSym: isSrc ? r : l });
+          } else if (s.includes("->")) {
+            const [l, r] = s.split("->").map((x) => x.trim());
+            bijRows.push({ role, selfSym: isSrc ? l : r, twinSym: isSrc ? r : l });
+          } else {
+            bijRows.push({ role, selfSym: s, twinSym: s });
+          }
+        }
+        return {
+          ...ch,
+          selfDomain: isSrc ? (ch.sourceDomain || ch.sourceSubject) : (ch.targetDomain || ch.targetSubject),
+          twinId: isSrc ? ch.targetId : ch.sourceId,
+          twinTitle: isSrc ? (ch.targetTitle || ch.targetId) : (ch.sourceTitle || ch.sourceId),
+          twinDomain: isSrc ? (ch.targetDomain || ch.targetSubject) : (ch.sourceDomain || ch.sourceSubject),
+          twinChapter: isSrc ? ch.targetChapter : ch.sourceChapter,
+          twinSubject: isSrc ? ch.targetSubject : ch.sourceSubject,
+          bijectionRows: bijRows,
+        };
+      });
+  }
+
+  function buildRosettaChordPath(a, b) {
+    const dx = b.x - a.x;
+    const dy = b.y - a.y;
+    const dist = Math.hypot(dx, dy) || 1;
+    const mx = (a.x + b.x) / 2;
+    const my = (a.y + b.y) / 2;
+    const offset = Math.max(44, Math.min(130, dist * 0.24));
+    let nx = -dy / dist;
+    let ny = dx / dist;
+    if (ny > 0) { nx = -nx; ny = -ny; }
+    const cx = mx + nx * offset;
+    const cy = my + ny * offset;
+    return `M ${a.x} ${a.y} Q ${cx.toFixed(1)} ${cy.toFixed(1)} ${b.x} ${b.y}`;
+  }
+
+  async function linkRosettaChordLive(sourceId, targetId, archetypeId) {
+    if (!sourceId || !targetId || !archetypeId || rosettaLinkBusy) return;
+    if (!liveCaps.live) {
+      copyText(`Link Rosetta isomorphism chord between ${sourceId} and ${targetId} (${archetypeId}).`, "Offline mode — copied link prompt ✓");
+      return;
+    }
+    rosettaLinkBusy = true;
+    const curNode = data.propositions.find((p) => p.id === selectedId);
+    if (curNode) renderInspector(curNode);
+    try {
+      const res = await apiPost("/api/rosetta/link", { sourceId, targetId, archetypeId });
+      if (res.rosetta && Array.isArray(res.rosetta.chords)) {
+        rosettaData = {
+          chords: res.rosetta.chords,
+          archetypesCount: Number(res.rosetta.archetypesCount || rosettaData.archetypesCount || 0),
+        };
+      }
+      showToast(res.created ? "Linked Rosetta chord ✓" : "Rosetta chord already persisted ✓");
+      await refreshFromLiveState(false);
+    } catch (err) {
+      showToast(`Link chord failed: ${err?.message || "error"}`);
+    } finally {
+      rosettaLinkBusy = false;
+      const updated = data.propositions.find((p) => p.id === selectedId);
+      if (updated) renderInspector(updated);
     }
   }
 
@@ -1251,7 +1456,7 @@
       if (premises.length === 0) continue;
 
       const chainKey = `${[...premises].sort().join("+")}>${conclusion}`;
-      const rel = ["requires", "derives", "generalizes", "contrasts_with"].includes(raw.relation)
+      const rel = ["requires", "derives", "generalizes", "contrasts_with", "isomorphic_to"].includes(raw.relation)
         ? raw.relation
         : "requires";
       const why =
@@ -1294,6 +1499,7 @@
     const seenPairs = new Set();
 
     for (const c of chains) {
+      if (String(c.relation || "").toLowerCase() === "isomorphic_to") continue;
       const to = c.conclusion || c.to;
       const prems = Array.isArray(c.premises) ? c.premises : (c.from ? [c.from] : []);
       if (!idSet.has(to)) continue;
@@ -1542,9 +1748,13 @@
 
     const idSet = new Set(nodes.map((n) => n.id));
     const chains = data.chains.filter(
-      (c) => idSet.has(c.conclusion) && c.premises.every((pid) => idSet.has(pid))
+      (c) =>
+        String(c.relation || "").toLowerCase() !== "isomorphic_to" &&
+        idSet.has(c.conclusion) &&
+        c.premises.every((pid) => idSet.has(pid))
     );
-    return { nodes, edges: chains };
+    const rosettaChords = getRosettaChords().filter((ch) => idSet.has(ch.sourceId) && idSet.has(ch.targetId));
+    return { nodes, edges: chains, rosettaChords };
   }
 
   function populateFilters() {
@@ -1678,9 +1888,17 @@
   }
 
   function render(shouldFit = true) {
-    const { nodes, edges } = getFiltered();
+    const { nodes, edges, rosettaChords } = getFiltered();
     const hasJoint = edges.some((c) => c.isJoint);
-    document.getElementById("countPill").textContent = `${nodes.length} nodes · ${edges.length} ${hasJoint ? "chains" : "edges"}`;
+    const countPillEl = document.getElementById("countPill");
+    countPillEl.textContent = `${nodes.length} nodes · ${edges.length} ${hasJoint ? "chains" : "edges"}`;
+    countPillEl.title = rosettaChords.length
+      ? `${nodes.length} concepts, ${edges.length} ${hasJoint ? "reasoning chains" : "edges"}, ${rosettaChords.length} structural Rosetta chords`
+      : `${nodes.length} concepts, ${edges.length} ${hasJoint ? "reasoning chains" : "edges"}`;
+    const rosettaLegendLabel = document.getElementById("rosettaLegendLabel");
+    if (rosettaLegendLabel) {
+      rosettaLegendLabel.textContent = rosettaChords.length ? `rosetta (${rosettaChords.length})` : "rosetta";
+    }
 
     const bkts = nodes.map(getBkt).filter((v) => v !== null);
     const avgBkt = bkts.length ? Math.round((bkts.reduce((a, b) => a + b, 0) / bkts.length) * 100) : null;
@@ -1703,6 +1921,12 @@
 
     if (selectedId && !pos.has(selectedId)) selectedId = null;
     const lineage = selectedId ? computeLineage(selectedId, edges) : null;
+    if (lineage) {
+      for (const ch of rosettaChords) {
+        if (ch.sourceId === selectedId) lineage.relatedNodes.add(ch.targetId);
+        else if (ch.targetId === selectedId) lineage.relatedNodes.add(ch.sourceId);
+      }
+    }
 
     const clustersG = document.getElementById("clusters");
     const edgesG = document.getElementById("edges");
@@ -1829,6 +2053,31 @@
       jGroup.appendChild(sym);
 
       edgesG.appendChild(jGroup);
+    });
+
+    // Dashed indigo/teal Structural Rosetta isomorphism chords
+    rosettaChords.forEach((ch) => {
+      const a = pos.get(ch.sourceId);
+      const b = pos.get(ch.targetId);
+      if (!a || !b) return;
+      const path = document.createElementNS(SVG_NS, "path");
+      let cls = "rosetta-chord rel-isomorphic_to";
+      if (selectedId) {
+        const touches = ch.sourceId === selectedId || ch.targetId === selectedId;
+        cls += touches ? " highlighted" : " dimmed";
+      }
+      path.setAttribute("class", cls);
+      path.setAttribute("data-rosetta-chord", ch.id || `${ch.sourceId}--${ch.targetId}`);
+      path.setAttribute("d", buildRosettaChordPath(a, b));
+      const tip = document.createElementNS(SVG_NS, "title");
+      tip.textContent = `Rosetta Bridge (${ch.archetypeName || ch.archetypeId}): ${ch.sourceTitle || ch.sourceId} ↔ ${ch.targetTitle || ch.targetId}${ch.persisted ? " [linked]" : ` [${Math.round((ch.score || 0) * 100)}% match]`}`;
+      path.appendChild(tip);
+      path.addEventListener("click", (ev) => {
+        ev.stopPropagation();
+        const nextId = selectedId === ch.sourceId ? ch.targetId : ch.sourceId;
+        selectNode(nextId, true);
+      });
+      edgesG.appendChild(path);
     });
 
     for (const n of nodes) {
@@ -2008,6 +2257,8 @@
       if (sc >= 0.35) suspectList.push({ node: n, score: sc, blast: getBlastEntry(n.id) });
     }
     suspectList.sort((a, b) => b.score - a.score);
+    const visSet = new Set(visibleNodes.map((n) => n.id));
+    const visRosetta = getRosettaChords().filter((ch) => visSet.has(ch.sourceId) && visSet.has(ch.targetId));
 
     document.getElementById("inspector").innerHTML = `
       <div>
@@ -2040,7 +2291,23 @@
           <span class="metric-sub">${dueCount > 0 ? "Needs review" : "All caught up"}</span>
         </div>
       </div>
-      <p class="detail-body">Click any node in the graph to inspect its <strong>BKT mastery probability</strong>, <strong>4-tier evidence depth (T1–T4)</strong>, <strong>causal blast radius</strong>, and full prerequisite/unlock dependency chain.</p>
+      <p class="detail-body">Click any node in the graph to inspect its <strong>BKT mastery probability</strong>, <strong>4-tier evidence depth (T1–T4)</strong>, <strong>Structural Rosetta Bridges</strong>, and full prerequisite/unlock dependency chain.</p>
+      ${visRosetta.length ? `
+        <div>
+          <div class="section-heading">Structural Rosetta Bridges (${visRosetta.length})</div>
+          <ul class="edge-list">
+            ${visRosetta.slice(0, 6).map((ch) => `
+              <li class="edge-item clickable" data-jump="${esc(ch.sourceId)}" style="border-left:3px solid var(--edge-rosetta);">
+                <div class="edge-item-head">
+                  <span class="edge-item-title">${esc(ch.sourceTitle || ch.sourceId)} ↔ ${esc(ch.targetTitle || ch.targetId)}</span>
+                  <span class="pill rosetta">${ch.persisted ? "Linked" : `${Math.round((ch.score || 0) * 100)}%`}</span>
+                </div>
+                <span class="edge-item-why">${esc(ch.archetypeName || ch.archetypeId)}</span>
+              </li>
+            `).join("")}
+          </ul>
+        </div>
+      ` : ""}
       ${suspectList.length ? `
         <div>
           <div class="section-heading">Causal Suspect Hotspots (${suspectList.length})</div>
@@ -2084,8 +2351,10 @@
 
   function renderInspector(n) {
     const byId = new Map(data.propositions.map((p) => [p.id, p]));
-    const incoming = data.chains.filter((c) => c.conclusion === n.id);
-    const outgoing = data.chains.filter((c) => c.premises.includes(n.id));
+    const causalChains = data.chains.filter((c) => String(c.relation || "").toLowerCase() !== "isomorphic_to");
+    const incoming = causalChains.filter((c) => c.conclusion === n.id);
+    const outgoing = causalChains.filter((c) => c.premises.includes(n.id));
+    const rosettaTwins = getRosettaChordsForNode(n.id);
     const bkt = getBkt(n);
     const bktPct = bkt !== null ? Math.round(bkt * 100) : null;
     const stab = getStability(n);
@@ -2268,6 +2537,77 @@
         </div>
       ` : ""}
 
+      ${(rosettaTwins.length || (liveCaps.live && data.propositions.length >= 2)) ? `
+        <div id="viewerRosettaSection">
+          <div class="section-heading">Structural Rosetta Bridge (${rosettaTwins.length})</div>
+          ${rosettaTwins.length ? `
+            <div style="display:flex;flex-direction:column;gap:8px;">
+              ${rosettaTwins.map((rt) => {
+                const twinNode = byId.get(rt.twinId);
+                const twinExists = lastPositions.has(rt.twinId);
+                const breaks = Array.isArray(rt.breaksAt) ? rt.breaksAt.filter(Boolean) : [];
+                return `
+                  <div class="rosetta-card">
+                    <div style="display:flex;justify-content:space-between;align-items:center;gap:6px;flex-wrap:wrap;">
+                      <span class="pill rosetta">${esc(rt.archetypeName || rt.archetypeId)}</span>
+                      <span class="pill ${rt.persisted ? "solid" : "accent"}">${rt.persisted ? "Linked ✓" : `${Math.round((rt.score || 0) * 100)}% Twin`}</span>
+                    </div>
+                    <div class="edge-item-head">
+                      <span class="edge-item-title ${twinExists ? "clickable" : ""}" ${twinExists ? `data-jump="${esc(rt.twinId)}" style="cursor:pointer;text-decoration:underline;text-underline-offset:2px;"` : ""}>${twinNode ? `<span class="dot" style="background:${statusVar(twinNode.status)};margin-right:6px"></span>` : ""}${esc(rt.twinTitle)}</span>
+                      <span class="pill">${esc(rt.twinSubject || rt.twinDomain || "Twin")}</span>
+                    </div>
+                    ${rt.canonicalEquation ? `<div style="font-family:'SF Mono',ui-monospace,Menlo,monospace;font-size:11px;color:var(--text-2);background:var(--bg-elev);padding:5px 8px;border-radius:6px;border:1px solid var(--border);overflow-x:auto;">${esc(rt.canonicalEquation)}</div>` : ""}
+                    ${rt.bijectionRows.length ? `
+                      <table class="rosetta-table" aria-label="Variable bijection table">
+                        <thead>
+                          <tr>
+                            <th>Role</th>
+                            <th>${esc(truncate(rt.selfDomain || n.subject || "This", 16))}</th>
+                            <th>${esc(truncate(rt.twinDomain || rt.twinSubject || "Twin", 16))}</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          ${rt.bijectionRows.map((row) => `
+                            <tr>
+                              <td>${esc(row.role)}</td>
+                              <td>${esc(row.selfSym)}</td>
+                              <td>${esc(row.twinSym)}</td>
+                            </tr>
+                          `).join("")}
+                        </tbody>
+                      </table>
+                    ` : ""}
+                    ${breaks.length ? `
+                      <div class="rosetta-breaks">
+                        <strong>Where the analogy breaks</strong>
+                        <ul>${breaks.map((b) => `<li>${esc(b)}</li>`).join("")}</ul>
+                      </div>
+                    ` : ""}
+                    ${!rt.persisted ? `
+                      <div style="display:flex;justify-content:flex-end;">
+                        <button type="button" style="padding:4px 9px;font-size:11px;" data-link-rosetta-src="${esc(rt.sourceId)}" data-link-rosetta-tgt="${esc(rt.targetId)}" data-link-rosetta-arch="${esc(rt.archetypeId)}" ${rosettaLinkBusy ? "disabled" : ""}>Link Chord</button>
+                      </div>
+                    ` : ""}
+                  </div>
+                `;
+              }).join("")}
+            </div>
+          ` : `<div class="edge-item" style="color:var(--muted);font-size:12px;">No automatic cross-domain twins matched yet.</div>`}
+          ${liveCaps.live && data.propositions.length >= 2 ? `
+            <details style="margin-top:8px;background:var(--bg-card);border:1px solid var(--border);border-radius:8px;padding:7px 10px;">
+              <summary style="cursor:pointer;font-size:11.5px;font-weight:600;color:var(--text-2);">+ Link Custom Rosetta Chord</summary>
+              <div style="display:flex;flex-direction:column;gap:6px;margin-top:8px;">
+                <select id="rosettaManualTarget" aria-label="Select twin proposition" style="max-width:100%;">
+                  ${data.propositions.filter((p) => p.id !== n.id).map((p) => `<option value="${esc(p.id)}">${esc(truncate(p.title || p.id, 34))}</option>`).join("")}
+                </select>
+                <input type="text" id="rosettaManualArch" placeholder="Archetype ID (e.g. second_order_oscillator)" value="second_order_oscillator" style="font-size:11.5px;padding:5px 8px;border-radius:6px;border:1px solid var(--border);background:var(--bg-input);color:var(--text);" />
+                <button type="button" id="rosettaManualLinkBtn" style="justify-content:center;" ${rosettaLinkBusy ? "disabled" : ""}>Link Chord</button>
+              </div>
+            </details>
+          ` : ""}
+        </div>
+      ` : ""}
+
       <button id="copyNodePromptBtn" style="justify-content:center;width:100%;">Copy Drill Prompt for This Concept</button>
 
       ${cues.length ? `
@@ -2334,6 +2674,28 @@
         selectNode(el.getAttribute("data-jump"), true);
       });
     });
+    document.querySelectorAll("#inspector [data-link-rosetta-src]").forEach((btn) => {
+      btn.addEventListener("click", (ev) => {
+        ev.stopPropagation();
+        linkRosettaChordLive(
+          btn.getAttribute("data-link-rosetta-src"),
+          btn.getAttribute("data-link-rosetta-tgt"),
+          btn.getAttribute("data-link-rosetta-arch")
+        );
+      });
+    });
+    const manualLinkBtn = document.getElementById("rosettaManualLinkBtn");
+    if (manualLinkBtn) {
+      manualLinkBtn.addEventListener("click", () => {
+        const tgt = document.getElementById("rosettaManualTarget")?.value || "";
+        const arch = String(document.getElementById("rosettaManualArch")?.value || "").trim();
+        if (!tgt || !arch) {
+          showToast("Select a twin concept and archetype ID");
+          return;
+        }
+        linkRosettaChordLive(n.id, tgt, arch);
+      });
+    }
   }
 
   function applyTransform() {

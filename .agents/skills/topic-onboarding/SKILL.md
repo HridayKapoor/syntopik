@@ -1,9 +1,9 @@
 ---
 name: topic-onboarding
 description: >-
-  Onboard any topic, course, YouTube, arXiv, GitHub repo, web doc, or PDF via
-  Teacher-First drop, starter demo packs, optional 2-min non-VARK calibration,
-  90s adaptive placement, and bounded Scope Charters.
+  Onboard any topic, course, YouTube, arXiv, repo, web doc, or PDF via
+  Teacher-First drop, Rosetta structural bridges, starter packs, optional 2-min
+  non-VARK calibration, 90s placement, and Scope Charters.
 ---
 
 # Topic Onboarding — Universal 1-Command Import, Source Triage & Bounded Scout
@@ -28,6 +28,15 @@ Use this skill whenever a learner starts a brand-new topic, course, YouTube lect
    - **Tier 1 (First-time uncalibrated learner only, ALWAYS skippable)**: when `synt_next_move` returns `recommendedMode: "onboarding_calibration"`, offer a calm 1-turn non-VARK check (`entryRamp`: `intuition_first | balanced | formalism_first`, `challengeAppetite`: `guided | balanced | adversarial`, `domainFluency` `0..3`, `sessionMinutes`, `proseDensity`: `terse | standard | rich`) and persist via `syntopik profile calibrate --entry-ramp ... --challenge-appetite ... --json`. Prior weight decays automatically as $w_{\text{prior}}(N) = 6 / (6 + N)$ — NEVER ask VARK learning-style questions!
    - **Tier 2 (`<90s` Per-Chapter Adaptive Placement)**: before teaching a new chapter, run 2–3 max-information Pelánek 1PL/Elo probes (`syntopik run learner_profile place --domain <S> --chapter <slug> --json`, scoring each via `--score`) with automatic KG bypass on already-`solid` prerequisites ($R \ge 0.80$) and 2-probe early stop.
 3. **Max 3 Questions in 1 Turn & Anti-Rabbit-Hole Cap (`<= 8` Curated Sources)**: never run a drawn-out intake interview; lock explicit `inScope` and `outOfScope` fences in `sources/_curated/<slug>/manifest.json` (`maxSources <= 8`), keep onboarding prose `<= 160`w with `1` clear decision, and fire Probe #1 immediately.
+4. **Structural Isomorphism Rosetta Bridges (`syntopik rosetta`) & Secondary-Device CRDT Sync (`syntopik sync-delta`)**:
+   - Before teaching a brand-new chapter, check whether the learner already mastered a cross-domain structural twin across Syntopik's 10 canonical archetypes (`syntopik rosetta scan --json` or `syntopik rosetta bridge --prop-id <id> --json`, also emitted automatically as `isomorphicBridge` by `synt_next_move`):
+     ```bash
+     syntopik rosetta scan --json
+     syntopik rosetta bridge --prop-id <target_prop_id> --json
+     syntopik rosetta link --source <known_id> --target <target_id> --archetype <archetype_id> --json
+     ```
+   - When a mastered twin exists (e.g., Damped SHM ↔ Series RLC `second_order_oscillator`, Softmax ↔ Boltzmann `boltzmann_softmax`), open Probe #1 with a concise **bijection prediction opener** AND surface its explicit **`breaksAt`** negative-transfer guard immediately (persisted `isomorphic_to` chords carry gentle `0.25` cross-domain FIRe credit).
+   - If the learner is onboarding a secondary laptop/desktop with an existing study history, merge their offline CRDT snapshot cleanly via `syntopik sync-delta merge --file <delta.json> --json` before running placement probes.
 
 ---
 

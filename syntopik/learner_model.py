@@ -49,6 +49,9 @@ __all__ = [
     "SCAFFOLDING_MODES",
     "AFFECT_STATES",
     "NEA_CATEGORY_TIER",
+    "DEFAULT_CALIBRATED_HYPERPARAMS",
+    "CALIBRATED_HYPERPARAM_BOUNDS",
+    "resolve_calibrated_hyperparams",
     "load_profile",
     "save_profile",
     "apply_tier1_calibration",
@@ -170,6 +173,35 @@ NEA_CATEGORY_TIER: dict[str, str] = {
     "state_mutation_bug": "process_encoding",
     "time_pressure": "executive_pacing",
 }
+
+# Safe cognitive bounds for optional longitudinal replay-calibrated hyperparameters
+DEFAULT_CALIBRATED_HYPERPARAMS: dict[str, float] = {
+    "eloKBase": 64.0,
+    "erNoviceCutoff": 0.35,
+    "erChallengeCutoff": 0.80,
+    "fatigueMultiplier": 1.25,
+}
+
+CALIBRATED_HYPERPARAM_BOUNDS: dict[str, tuple[float, float]] = {
+    "eloKBase": (32.0, 96.0),
+    "erNoviceCutoff": (0.25, 0.45),
+    "erChallengeCutoff": (0.72, 0.88),
+    "fatigueMultiplier": (1.05, 1.50),
+}
+
+
+def resolve_calibrated_hyperparams(profile: dict[str, Any] | None = None) -> dict[str, float]:
+    """Read optional `profile['calibratedHyperparams']`, strictly clamped to safe cognitive bounds."""
+    raw = profile.get("calibratedHyperparams") if isinstance(profile, dict) else None
+    out: dict[str, float] = {}
+    for key, default_val in DEFAULT_CALIBRATED_HYPERPARAMS.items():
+        lo, hi = CALIBRATED_HYPERPARAM_BOUNDS[key]
+        val = raw.get(key) if isinstance(raw, dict) else None
+        if isinstance(val, (int, float)) and not isinstance(val, bool) and math.isfinite(float(val)):
+            out[key] = round(_clamp(float(val), lo, hi), 4)
+        else:
+            out[key] = default_val
+    return out
 
 
 # ---------------------------------------------------------------------------
@@ -1008,6 +1040,8 @@ def classify_affective_state(
     recent_events: list[dict[str, Any]],
     session_target_min: float = 30.0,
     now: datetime | str | None = None,
+    *,
+    fatigue_multiplier: float = 1.25,
 ) -> dict[str, Any]:
     """Classify 6 sensor-free affective states over the sliding window W=6 of `recentEvents`."""
     if now is not None and _parse_iso_dt(now) is None:
@@ -1058,7 +1092,9 @@ def classify_affective_state(
     # Fatigue degradation check across active session (first 3 vs last 3)
     fatigue_degraded = False
     target_min = max(10.0, float(session_target_min or 30.0))
-    if active_min > 1.25 * target_min and len(session_events) >= 4:
+    fat_lo, fat_hi = CALIBRATED_HYPERPARAM_BOUNDS["fatigueMultiplier"]
+    fat_mult = _clamp(fatigue_multiplier, fat_lo, fat_hi)
+    if active_min > fat_mult * target_min and len(session_events) >= 4:
         first3 = session_events[:3]
         last3 = session_events[-3:]
         f_acc = sum(_event_clean_hit(e) for e in first3) / len(first3)
@@ -1077,7 +1113,7 @@ def classify_affective_state(
         conf = round(_clamp(0.70 + 0.08 * gaming_signals, 0.70, 0.95), 2)
     elif fatigue_degraded:
         state = "fatigued"
-        conf = round(_clamp(0.72 + 0.05 * min(4.0, (active_min / target_min) - 1.25), 0.72, 0.94), 2)
+        conf = round(_clamp(0.72 + 0.05 * min(4.0, (active_min / target_min) - fat_mult), 0.72, 0.94), 2)
     elif error_streak >= 2 and (mean_hints >= 2.5 or mean_lat >= 1.8 or acc < 0.45):
         state = "overloaded_frustrated"
         conf = round(_clamp(0.72 + 0.06 * error_streak, 0.72, 0.95), 2)
@@ -1161,11 +1197,15 @@ def compile_teaching_policy(
     raw_eff = 0.65 * bkt_val + 0.35 * elo_sig + delta_affect
     e_eff = _clamp(raw_eff, 0.0, 1.0)
 
-    if e_eff < 0.35:
+    hyper = resolve_calibrated_hyperparams(profile)
+    novice_cutoff = hyper["erNoviceCutoff"]
+    challenge_cutoff = hyper["erChallengeCutoff"]
+
+    if e_eff < novice_cutoff:
         mode = "worked_example_parsons"
     elif e_eff < 0.62:
         mode = "faded"
-    elif e_eff < 0.80:
+    elif e_eff < challenge_cutoff:
         mode = "standard"
     else:
         mode = "challenge_transfer"
@@ -1497,9 +1537,12 @@ def record_telemetry_event(
             lucky_factor = 0.65 if is_lucky else 1.0
             s_eff = round(hint_factor * lucky_factor, 4)
 
+        hyper = resolve_calibrated_hyperparams(profile)
+        elo_k_base = hyper["eloKBase"]
+
         n_d = int(dom_entry.get("n") or 0)
         theta_d = float(dom_entry.get("elo") or 1450.0)
-        k_d = max(16.0, 64.0 / (1.0 + 0.05 * float(n_d)))
+        k_d = max(16.0, elo_k_base / (1.0 + 0.05 * float(n_d)))
         p_d = _elo_expected(theta_d, b)
         new_theta_d = round(_clamp(theta_d + k_d * (s_eff - p_d), 900.0, 2200.0), 1)
         dom_entry["elo"] = new_theta_d
@@ -1509,7 +1552,7 @@ def record_telemetry_event(
 
         n_global = int(gs.get("totalEvents") or 0)
         theta_g = float(gs.get("elo") or 1450.0)
-        k_g = max(16.0, 64.0 / (1.0 + 0.05 * float(n_global)))
+        k_g = max(16.0, elo_k_base / (1.0 + 0.05 * float(n_global)))
         p_g = _elo_expected(theta_g, b)
         gs["elo"] = round(_clamp(theta_g + k_g * (s_eff - p_g), 900.0, 2200.0), 1)
         gs["totalEvents"] = n_global + 1
@@ -1558,6 +1601,7 @@ def record_telemetry_event(
             recent,
             session_target_min=float(cal.get("sessionTargetMinutes") or 30.0),
             now=ref_dt,
+            fatigue_multiplier=hyper["fatigueMultiplier"],
         )
         profile["affectiveState"] = affect
 

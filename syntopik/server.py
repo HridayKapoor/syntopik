@@ -68,7 +68,14 @@ __all__ = [
 POCKET_COOKIE_NAME = "syntopik_pocket_session"
 POCKET_LAN_PATHS: frozenset[str] = frozenset({"/pocket", "/api/pocket/state", "/api/review/batch"})
 MAX_JSON_BODY_BYTES = 8 * 1024 * 1024  # 8 MiB ceiling for exam payloads / batch sync
+MAX_SYNC_DELTA_BODY_BYTES = 10 * 1024 * 1024  # 10 MiB hard cap for CRDT delta merge
 MAX_UPLOAD_BODY_BYTES = 32 * 1024 * 1024  # 32 MiB ceiling for PDF upload
+MAX_DIFF_STEPS = 40
+MAX_DIFF_EXPR_LEN = 512
+
+
+def _reject_non_finite(token: str) -> Any:
+    raise ValueError(f"Non-finite JSON constant rejected: {token!r}")
 
 mimetypes.add_type("application/javascript", ".mjs")
 mimetypes.add_type("image/svg+xml", ".svg")
@@ -245,6 +252,7 @@ def _compute_workspace_signature(ws: Path, kg_dir: Path, chapters_dir: Path) -> 
         kg_dir / "viva-sessions.jsonl",
         kg_dir / "evidence-ledger.jsonl",
         kg_dir / "whiteboard-session.json",
+        kg_dir / "sync-state.json",
         kg_dir / "mentor-config.json",
         kg_dir / "blitz-sessions.json",
         kg_dir / "review-queue.md",
@@ -463,6 +471,8 @@ def _build_python_fallback_state(ws: Path, kg_dir: Path, chapters_dir: Path) -> 
         "calibration": cal,
         "leeches": leeches,
         "readingQueue": reading_queue,
+        "rosetta": _build_rosetta_payload(kg_dir),
+        "syncStatus": _build_sync_status_payload(ws),
     }
     return graph, hub
 
@@ -910,6 +920,64 @@ def _compile_chapter_explorables(chapters_dir: Path) -> dict[str, list[dict[str,
     return out
 
 
+def _build_rosetta_payload(kg_dir: Path, *, min_score: float = 0.35) -> dict[str, Any]:
+    """Compute structural isomorphism chords & archetype count safely."""
+    try:
+        from syntopik.isomorphism import discover_isomorphisms, load_archetypes
+
+        disc = discover_isomorphisms(kg_dir, min_score=min_score)
+        archetypes = load_archetypes()
+        return {
+            **disc,
+            "archetypesCount": len(archetypes),
+        }
+    except Exception:
+        return {
+            "ok": True,
+            "kgDir": str(kg_dir),
+            "chords": [],
+            "archetypesMatched": [],
+            "chordCount": 0,
+            "persistedCount": 0,
+            "discoveredCount": 0,
+            "archetypesCount": 0,
+        }
+
+
+def _latest_iso_timestamp(*values: Any) -> str | None:
+    cands = [str(v).strip() for v in values if isinstance(v, str) and str(v).strip()]
+    return max(cands) if cands else None
+
+
+def _build_sync_status_payload(workspace: Path) -> dict[str, Any]:
+    """Read multi-device CRDT sync status safely."""
+    try:
+        from syntopik.sync_delta import get_sync_status
+
+        st = get_sync_status(workspace)
+        last_synced = _latest_iso_timestamp(st.get("lastMergedAt"), st.get("lastExportedAt"))
+        return {
+            **st,
+            "lastSyncedAt": last_synced,
+        }
+    except Exception:
+        return {
+            "ok": True,
+            "workspace": str(workspace),
+            "initialized": False,
+            "deviceId": None,
+            "lamportClock": 0,
+            "lastExportedAt": None,
+            "lastMergedAt": None,
+            "lastSyncedAt": None,
+            "peerClocks": {},
+            "mergedDeltaCount": 0,
+            "trackerSlugs": [],
+            "counts": {},
+            "ledgerIntegrity": {"ok": True, "count": 0, "brokenAt": None},
+        }
+
+
 class SyntopikStudioServer(ThreadingHTTPServer):
     """Multi-threaded local Studio HTTP server with CSRF token, SSE notifications & LAN pairing."""
 
@@ -1073,7 +1141,7 @@ class SyntopikRequestHandler(BaseHTTPRequestHandler):
         *,
         extra_headers: dict[str, str] | None = None,
     ) -> None:
-        raw = json.dumps(payload, ensure_ascii=False).encode("utf-8")
+        raw = json.dumps(payload, ensure_ascii=False, allow_nan=False).encode("utf-8")
         self.send_response(int(status))
         self.send_header("Content-Type", "application/json; charset=utf-8")
         self.send_header("Content-Length", str(len(raw)))
@@ -1107,20 +1175,21 @@ class SyntopikRequestHandler(BaseHTTPRequestHandler):
     def _send_error_json(self, status: int, message: str) -> None:
         self._send_json({"ok": False, "error": message}, status=status)
 
-    def _read_json_body(self) -> dict[str, Any] | None:
+    def _read_json_body(self, *, max_bytes: int = MAX_JSON_BODY_BYTES) -> dict[str, Any] | None:
         try:
             length = int(self.headers.get("Content-Length") or "0")
         except ValueError:
             self._send_error_json(HTTPStatus.BAD_REQUEST, "Invalid Content-Length header")
             return None
-        if length < 0 or length > MAX_JSON_BODY_BYTES:
+        if length < 0 or length > max_bytes:
+            self.close_connection = True
             self._send_error_json(HTTPStatus.REQUEST_ENTITY_TOO_LARGE, "Request body exceeds limit")
             return None
         if length == 0:
             return {}
         raw = self.rfile.read(length)
         try:
-            parsed = json.loads(raw.decode("utf-8"))
+            parsed = json.loads(raw.decode("utf-8"), parse_constant=_reject_non_finite)
         except Exception as exc:
             self._send_error_json(HTTPStatus.BAD_REQUEST, f"Malformed JSON body: {exc}")
             return None
@@ -1326,6 +1395,8 @@ class SyntopikRequestHandler(BaseHTTPRequestHandler):
             "/api/derivations": lambda: self._handle_derivations_get(query),
             "/api/viva": lambda: self._handle_viva_get(query),
             "/api/whiteboard": lambda: self._handle_whiteboard_get(),
+            "/api/rosetta": lambda: self._handle_rosetta_get(query),
+            "/api/sync/status": lambda: self._handle_sync_status(),
         }
         get_handler = get_api_routes.get(path)
         if get_handler is not None:
@@ -1375,8 +1446,13 @@ class SyntopikRequestHandler(BaseHTTPRequestHandler):
             "/api/blitz/grade": self._handle_blitz_grade,
             "/api/profile/calibrate": self._handle_profile_calibrate,
             "/api/profile/override": self._handle_profile_override,
+            "/api/profile/replay": self._handle_profile_replay,
             "/api/derivation/check": self._handle_derivation_check,
             "/api/derivation/cut": self._handle_derivation_cut,
+            "/api/derivation/diff": self._handle_derivation_diff,
+            "/api/rosetta/link": self._handle_rosetta_link,
+            "/api/sync/export": self._handle_sync_export,
+            "/api/sync/merge": self._handle_sync_merge,
             "/api/viva/start": self._handle_viva_start,
             "/api/viva/turn": self._handle_viva_turn,
             "/api/whiteboard/push": self._handle_whiteboard_push,
@@ -1732,6 +1808,8 @@ class SyntopikRequestHandler(BaseHTTPRequestHandler):
             reentry = None
 
         triage_recommended = _compute_triage_recommended(self.server.kg_dir, hub)
+        rosetta_data = _build_rosetta_payload(self.server.kg_dir)
+        sync_status = _build_sync_status_payload(self.server.workspace)
 
         # Mirror enriched v2 & v3 fields inside hub as well as top-level for universal consumer compatibility
         hub_out = dict(hub)
@@ -1757,6 +1835,8 @@ class SyntopikRequestHandler(BaseHTTPRequestHandler):
         hub_out["whiteboard"] = whiteboard_public
         hub_out["explorables"] = explorables_map
         hub_out["starterPacks"] = starter_packs
+        hub_out["rosetta"] = rosetta_data
+        hub_out["syncStatus"] = sync_status
 
         self._send_json({
             "ok": True,
@@ -1781,6 +1861,8 @@ class SyntopikRequestHandler(BaseHTTPRequestHandler):
             "whiteboard": whiteboard_public,
             "explorables": explorables_map,
             "starterPacks": starter_packs,
+            "rosetta": rosetta_data,
+            "syncStatus": sync_status,
         })
 
     def _handle_sse(self) -> None:
@@ -2991,6 +3073,252 @@ class SyntopikRequestHandler(BaseHTTPRequestHandler):
             "revision": res["revision"],
             "session": safe_session,
         })
+
+    # ------------------------------------------------------------------
+    # v3.1 GET / POST API handlers (Rosetta, Multi-Device CRDT Sync,
+    # Longitudinal Replay, Proof-Graph Diff — strictly loopback + CSRF)
+    # ------------------------------------------------------------------
+
+    def _handle_rosetta_get(self, query: dict[str, list[str]]) -> None:
+        raw_min = (query.get("minScore") or ["0.35"])[0]
+        try:
+            min_score = max(0.0, min(1.0, float(raw_min)))
+        except ValueError:
+            min_score = 0.35
+
+        from syntopik.isomorphism import (
+            build_bijection_opener,
+            discover_isomorphisms,
+            get_isomorphic_neighbors,
+            load_archetypes,
+        )
+
+        res = discover_isomorphisms(self.server.kg_dir, min_score=min_score)
+        out: dict[str, Any] = {
+            **res,
+            "archetypesCount": len(load_archetypes()),
+        }
+        prop_id = ((query.get("propId") or query.get("nodeId") or [""])[0]).strip()
+        if prop_id:
+            out["propId"] = prop_id
+            out["neighbors"] = get_isomorphic_neighbors(self.server.kg_dir, prop_id, min_score=min_score)
+            out["opener"] = build_bijection_opener(self.server.kg_dir, prop_id, min_score=min_score)
+        self._send_json(out)
+
+    def _handle_rosetta_link(self) -> None:
+        body = self._read_json_body()
+        if body is None:
+            return
+        source_id = str(body.get("sourceId") or body.get("source_id") or "").strip()
+        target_id = str(body.get("targetId") or body.get("target_id") or "").strip()
+        archetype_id = str(body.get("archetypeId") or body.get("archetype_id") or "").strip()
+        if not source_id or not target_id or not archetype_id:
+            raise ValueError("'sourceId', 'targetId', and 'archetypeId' are required.")
+
+        from syntopik.isomorphism import DEFAULT_ISOMORPHIC_WEIGHT, link_isomorphism_chord
+
+        breaks_at = body.get("breaksAt") if "breaksAt" in body else body.get("breaks_at")
+        raw_weight = body.get("encompassWeight", body.get("encompass_weight", DEFAULT_ISOMORPHIC_WEIGHT))
+        try:
+            weight = float(raw_weight)
+        except (TypeError, ValueError):
+            weight = DEFAULT_ISOMORPHIC_WEIGHT
+
+        res = link_isomorphism_chord(
+            self.server.kg_dir,
+            source_id,
+            target_id,
+            archetype_id,
+            breaks_at=breaks_at if isinstance(breaks_at, (list, str)) else None,
+            encompass_weight=weight,
+        )
+        self.server.ensure_synced_graph(force=True)
+        self.server.notify_change("rosetta_link")
+        rosetta = _build_rosetta_payload(self.server.kg_dir)
+        self._send_json({"ok": True, **res, "rosetta": rosetta})
+
+    def _handle_sync_status(self) -> None:
+        self._send_json(_build_sync_status_payload(self.server.workspace))
+
+    def _handle_sync_export(self) -> None:
+        body = self._read_json_body()
+        if body is None:
+            return
+        from syntopik.sync_delta import export_sync_delta
+
+        since_raw = body.get("since")
+        since = str(since_raw).strip() if isinstance(since_raw, str) and since_raw.strip() else None
+        save_to_disk = bool(body.get("saveToDisk", True))
+
+        exports_root = (self.server.workspace / "exports").resolve()
+        out_path: Path | None = None
+        out_raw = body.get("outPath")
+        if out_raw is not None and str(out_raw).strip():
+            jailed = self._resolve_user_path_jailed(str(out_raw), allow_temp=False)
+            if jailed is None or not jailed.is_relative_to(exports_root):
+                raise PermissionError("outPath must stay strictly within exports/")
+            if jailed == exports_root or jailed.is_dir():
+                raise ValueError("outPath must name a .json file inside exports/, not a directory.")
+            if jailed.suffix.lower() != ".json":
+                raise ValueError("outPath must end with a .json suffix inside exports/.")
+            out_path = jailed
+        elif save_to_disk:
+            ts_tag = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+            out_path = (exports_root / f"syntopik-delta-{ts_tag}.json").resolve()
+            if not out_path.is_relative_to(exports_root):
+                raise PermissionError("Export path escaped exports/ jail")
+
+        res = export_sync_delta(
+            self.server.workspace,
+            out_path=out_path,
+            since=since,
+        )
+        extra: dict[str, Any] = {}
+        if res.get("path"):
+            p = Path(str(res["path"])).resolve()
+            if p.is_relative_to(self.server.workspace):
+                extra["relPath"] = p.relative_to(self.server.workspace).as_posix()
+        if isinstance(res.get("delta"), dict):
+            extra["deltaJson"] = json.dumps(res["delta"], indent=2, ensure_ascii=False, allow_nan=False) + "\n"
+        self.server.notify_change("sync_export")
+        self._send_json({"ok": True, **res, **extra})
+
+    def _handle_sync_merge(self) -> None:
+        body = self._read_json_body(max_bytes=MAX_SYNC_DELTA_BODY_BYTES)
+        if body is None:
+            return
+        from syntopik.sync_delta import MAX_DELTA_BYTES, merge_sync_delta
+
+        dry_run = bool(body.get("dryRun", body.get("dry_run", False)))
+        delta_obj: dict[str, Any]
+        if "delta" in body:
+            raw_delta = body.get("delta")
+            if isinstance(raw_delta, str):
+                if len(raw_delta.encode("utf-8")) > MAX_DELTA_BYTES:
+                    self._send_error_json(HTTPStatus.REQUEST_ENTITY_TOO_LARGE, "Delta exceeds 10 MB limit")
+                    return
+                try:
+                    parsed_delta = json.loads(raw_delta, parse_constant=_reject_non_finite)
+                except Exception as exc:
+                    raise ValueError(f"Malformed delta JSON: {exc}") from exc
+                if not isinstance(parsed_delta, dict):
+                    raise ValueError("'delta' JSON must be an object.")
+                delta_obj = parsed_delta
+            elif isinstance(raw_delta, dict):
+                delta_obj = raw_delta
+            else:
+                raise ValueError("'delta' must be a JSON object or JSON string.")
+        elif "payload" in body:
+            delta_obj = body
+        else:
+            raise ValueError("'delta' object is required.")
+
+        raw_bytes = json.dumps(delta_obj, ensure_ascii=False, allow_nan=False).encode("utf-8")
+        if len(raw_bytes) > MAX_DELTA_BYTES:
+            self._send_error_json(HTTPStatus.REQUEST_ENTITY_TOO_LARGE, "Delta exceeds 10 MB limit")
+            return
+
+        res = merge_sync_delta(self.server.workspace, delta_obj, dry_run=dry_run)
+        if not res.get("ok"):
+            errs = res.get("errors") or ["Sync delta verification failed"]
+            self._send_json(
+                {**res, "error": "; ".join(str(e) for e in errs)},
+                status=HTTPStatus.BAD_REQUEST,
+            )
+            return
+
+        if not dry_run:
+            self.server.ensure_synced_graph(force=True)
+            self.server.notify_change("sync_merge")
+        self._send_json(res)
+
+    def _handle_profile_replay(self) -> None:
+        body = self._read_json_body()
+        if body is None:
+            return
+        from syntopik.sim_eval import replay_learner_history
+
+        apply_flag = bool(body.get("apply") if "apply" in body else body.get("applyIfImproved", False))
+        raw_min = body.get("minEvents", body.get("min_events", 12))
+        try:
+            min_events = max(2, min(100, int(raw_min)))
+        except (TypeError, ValueError):
+            min_events = 12
+
+        res = replay_learner_history(
+            self.server.workspace,
+            min_events=min_events,
+            apply_if_improved=apply_flag,
+        )
+        if res.get("applied"):
+            self.server.ensure_synced_graph(force=True)
+            self.server.notify_change("profile_replay")
+        self._send_json(res)
+
+    def _handle_derivation_diff(self) -> None:
+        body = self._read_json_body()
+        if body is None:
+            return
+        deriv_id = str(body.get("derivationId") or body.get("id") or "").strip()
+        if not deriv_id:
+            raise ValueError("'derivationId' is required.")
+
+        raw_steps = body.get("studentSteps") if "studentSteps" in body else body.get("student_steps", body.get("steps"))
+        if isinstance(raw_steps, str):
+            raw_steps = [
+                {"line": idx + 1, "expr": ln.strip()}
+                for idx, ln in enumerate(raw_steps.splitlines())
+                if ln.strip()
+            ]
+        if not isinstance(raw_steps, list) or len(raw_steps) == 0:
+            raise ValueError("'studentSteps' must be a non-empty list of derivation steps.")
+        if len(raw_steps) > MAX_DIFF_STEPS:
+            raise ValueError(f"'studentSteps' exceeds maximum limit of {MAX_DIFF_STEPS} steps.")
+
+        norm_steps: list[dict[str, Any]] = []
+        for idx, item in enumerate(raw_steps, start=1):
+            if isinstance(item, str):
+                expr = item.strip()
+                line_no = idx
+                note = ""
+            elif isinstance(item, dict):
+                raw_line = item.get("line")
+                line_no = int(raw_line) if isinstance(raw_line, int) and not isinstance(raw_line, bool) and raw_line > 0 else idx
+                raw_expr = item.get("expr") if item.get("expr") is not None else item.get("expression")
+                expr = str(raw_expr or "").strip()
+                note = str(item.get("note") or "").strip()
+            else:
+                raise ValueError(f"studentSteps[{idx - 1}] must be an object or equation string.")
+            if len(expr) > MAX_DIFF_EXPR_LEN:
+                raise ValueError(f"Step line {line_no} exceeds {MAX_DIFF_EXPR_LEN} character limit.")
+            if len(note) > MAX_DIFF_EXPR_LEN:
+                note = note[:MAX_DIFF_EXPR_LEN]
+            norm_steps.append({"line": line_no, "expr": expr, "note": note})
+
+        auto_spawn = bool(body.get("autoSpawnFork", body.get("auto_spawn_fork", True)))
+        df = _load_script_module("derivation_forge", self.server.workspace, self.server.package_root)
+        res = df.diff_handwritten_steps(
+            self.server.kg_dir,
+            deriv_id,
+            norm_steps,
+            auto_spawn_fork=auto_spawn,
+            workspace=self.server.workspace,
+        )
+
+        # Defense-in-depth zero-answer-leak guard on spawned fork & step entries
+        if isinstance(res.get("spawnedFork"), dict) and isinstance(res["spawnedFork"].get("fork"), dict):
+            res["spawnedFork"] = {
+                **res["spawnedFork"],
+                "fork": _sanitize_fork(res["spawnedFork"]["fork"]),
+            }
+        for st_entry in res.get("steps") or []:
+            if isinstance(st_entry, dict):
+                st_entry.pop("canonicalExpr", None)
+                st_entry.pop("expectedExpr", None)
+
+        self.server.ensure_synced_graph(force=True)
+        self.server.notify_change("derivation_diff")
+        self._send_json(res)
 
 
 class _SyntopikStudioServerIPv6(SyntopikStudioServer):

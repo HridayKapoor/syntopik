@@ -1,9 +1,9 @@
 {
   "name": "syntopik-studio",
-  "version": "3.0.0",
+  "version": "3.1.0",
   "private": true,
   "type": "module",
-  "description": "SEP-1865 MCP App for Syntopik v3.0: calm inline quiz/check cards, hidden-solution practice cards (standard/parsons/faded/blackout), Pedagogical Brainstem, Live Whiteboard bus, and side-pane Syntopik Studio.",
+  "description": "SEP-1865 MCP App for Syntopik v3.1: calm inline quiz/check cards, hidden-solution practice cards (standard/parsons/faded/blackout), Pedagogical Brainstem w/ Rosetta bridges, Live Whiteboard bus, and side-pane Syntopik Studio.",
   "scripts": {
     "build": "node build.mjs"
   },

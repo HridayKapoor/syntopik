@@ -1,12 +1,13 @@
 #!/usr/bin/env node
 /**
- * Syntopik v3.0 Unified CLI (Zero-Dependency Node ESM Wrapper)
+ * Syntopik v3.1 Unified CLI (Zero-Dependency Node ESM Wrapper)
  *
  * Natively handles:
  *   init, attach, sync, mcp, hook, --help, --version
  * Cleanly delegates to Python (.venv -> python3 -> python):
  *   serve, import, review, triage, pack, doctor, export, connect, run,
- *   next, profile, drop, demo, debrief, mode, sunset, pace, board, bench
+ *   next, profile, drop, demo, debrief, mode, sunset, pace, board, bench,
+ *   rosetta, sync-delta, calibrate-policy, proof-diff
  */
 
 import { spawnSync } from "node:child_process";
@@ -31,9 +32,9 @@ const PACKAGE_ROOT = path.resolve(__dirname, "..");
 const VERSION = (() => {
 	try {
 		const pkg = JSON.parse(readFileSync(path.join(PACKAGE_ROOT, "package.json"), "utf8"));
-		return pkg.version || "3.0.0";
+		return pkg.version || "3.1.0";
 	} catch {
-		return "3.0.0";
+		return "3.1.0";
 	}
 })();
 
@@ -134,6 +135,14 @@ Full Studio & Engine Commands (Python 3.12+ stdlib):
       Inspect or push frames/pins to the live AI-to-Whiteboard SSE bus.
   bench [--days 60] [--seed 42] [--svg] [--check] [--json]
       Run the deterministic 60-day multi-persona Syntopik-Eval cognitive benchmark.
+  rosetta [scan|bridge|link|archetypes] [--prop-id <id>] [--source <id>] [--target <id>] [--archetype <id>] [--json]
+      Discover cross-domain structural isomorphisms, bijection openers, and Rosetta chords.
+  sync-delta [export|merge|verify|status] [--out <path>] [--file <path>] [--since <iso>] [--dry-run] [--json]
+      Export, verify, or monotonically merge CRDT multi-device sync deltas.
+  calibrate-policy [--apply] [--json]
+      Replay longitudinal learner history on a 70/30 chronological split to calibrate hyperparameters.
+  proof-diff --id <derivation_id> --steps-json <json_or_path> [--no-spawn-fork] [--json]
+      Diff handwritten proof steps against a Causal Step DAG with zero-leak R0-R2 nudges.
   pack <export|import|inspect|verify> [...]
       Create, verify, or import zero-PII portable Study Packs (.syntopik-pack.zip).
   export <obsidian|pocket|anki|pack|json|dossier> [--out|--vault <path>] [--pocket] [...]
@@ -937,6 +946,7 @@ function main() {
 		return runAttachNative(rest);
 	}
 
+	// Explicitly delegate v3.0/v3.1 Python engine verbs (including rosetta, sync-delta, calibrate-policy, proof-diff)
 	return delegateToPython(argv);
 }
 

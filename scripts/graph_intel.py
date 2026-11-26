@@ -514,6 +514,7 @@ def build_graph(
         )
 
     normalized_chains: list[dict[str, Any]] = []
+    isomorphic_chains: list[dict[str, Any]] = []
     seen_keys: set[str] = set()
     for raw in chains:
         norm = normalize_chain(raw)
@@ -542,6 +543,10 @@ def build_graph(
                     missingProp=True,
                 )
 
+        if str(norm["relation"]).strip().lower() == "isomorphic_to":
+            isomorphic_chains.append(norm)
+            continue
+
         he_meta = {
             "chainKey": norm["chainKey"],
             "premises": list(norm["premises"]),
@@ -569,6 +574,7 @@ def build_graph(
                 )
 
     G.graph["hyperedges"] = normalized_chains
+    G.graph["isomorphicChains"] = isomorphic_chains
     G.graph["hyperedgeCount"] = sum(1 for c in normalized_chains if c["isJoint"])
     G.graph["uniqueChains"] = len(normalized_chains)
     return G, normalized_chains
@@ -1492,6 +1498,149 @@ def compute_sunset_plan(
     }
 
 
+def find_rosetta_bridges(
+    kg_dir: Path | str | None = None,
+    *,
+    min_score: float = 0.35,
+) -> dict[str, Any]:
+    """Report cross-domain structural isomorphism clusters, negative-transfer `breaksAt`
+    warnings, and concrete transfer opportunities from mastered twins to unmastered targets."""
+    from syntopik.isomorphism import (
+        build_bijection_opener,
+        discover_isomorphisms,
+        load_archetypes,
+    )
+
+    resolved_kg_input: Path | str | None = kg_dir
+    if _is_graph_obj(kg_dir):
+        resolved_kg_input = kg_dir.graph.get("kgDir")
+    resolved_kg, props_file, _chains_file = resolve_kg_paths(resolved_kg_input)
+
+    archetypes = load_archetypes()
+    arch_by_id = {str(a["id"]): a for a in archetypes}
+    props = load_jsonl(props_file)
+    props_by_id = {str(p.get("id") or ""): p for p in props if isinstance(p, dict) and p.get("id")}
+
+    disc = discover_isomorphisms(resolved_kg, min_score=min_score)
+    chords = list(disc.get("chords") or [])
+    matched_archs = list(disc.get("archetypesMatched") or [])
+
+    chords_by_arch: dict[str, list[dict[str, Any]]] = {}
+    for ch in chords:
+        chords_by_arch.setdefault(str(ch["archetypeId"]), []).append(ch)
+
+    clusters: list[dict[str, Any]] = []
+    warnings: list[dict[str, Any]] = []
+    seen_warning_archs: set[str] = set()
+
+    for m_arch in matched_archs:
+        aid = str(m_arch["archetypeId"])
+        arch_meta = arch_by_id.get(aid) or {}
+        c_chords = chords_by_arch.get(aid, [])
+        pids = list(m_arch.get("propositionIds") or [])
+        cluster_props: list[dict[str, Any]] = []
+        chapters_set: set[str] = set()
+        for pid in pids:
+            p = props_by_id.get(pid) or {}
+            chap = str(p.get("chapter") or "General")
+            chapters_set.add(chap)
+            cluster_props.append(
+                {
+                    "id": pid,
+                    "title": str(p.get("title") or pid),
+                    "subject": str(p.get("subject") or "General"),
+                    "chapter": chap,
+                    "status": str(p.get("status") or "planned").lower(),
+                    "bktMastery": p.get("bktMastery"),
+                }
+            )
+        breaks = list(m_arch.get("breaksAt") or arch_meta.get("breaksAt") or [])
+        if c_chords and not breaks:
+            breaks = list(c_chords[0].get("breaksAt") or [])
+
+        clusters.append(
+            {
+                "archetypeId": aid,
+                "archetypeName": str(m_arch.get("archetypeName") or aid),
+                "canonicalEquation": str(m_arch.get("canonicalEquation") or arch_meta.get("canonicalEquation") or ""),
+                "invariantStructure": str(arch_meta.get("invariantStructure") or ""),
+                "domains": list(m_arch.get("domainsCovered") or []),
+                "chapters": sorted(chapters_set),
+                "propositionCount": len(cluster_props),
+                "chordCount": len(c_chords),
+                "propositions": cluster_props,
+                "chords": c_chords,
+                "breaksAt": breaks,
+                "bijectionQuestion": str(arch_meta.get("bijectionQuestion") or ""),
+            }
+        )
+
+        if breaks and aid not in seen_warning_archs and (c_chords or len(cluster_props) >= 1):
+            seen_warning_archs.add(aid)
+            warnings.append(
+                {
+                    "archetypeId": aid,
+                    "archetypeName": str(m_arch.get("archetypeName") or aid),
+                    "breaksAt": breaks,
+                }
+            )
+
+    # Transfer opportunities: unmastered (planned/shaky/misconception) targets that have a mastered twin
+    transfer_opportunities: list[dict[str, Any]] = []
+    for p in props:
+        pid = str(p.get("id") or "").strip()
+        if not pid or bool(p.get("archived")):
+            continue
+        status = str(p.get("status") or "planned").strip().lower()
+        bkt = p.get("bktMastery")
+        already_mastered = status == "solid" or (isinstance(bkt, (int, float)) and float(bkt) >= 0.70 and status != "misconception")
+        if already_mastered:
+            continue
+        opener = build_bijection_opener(resolved_kg, pid, min_score=min_score)
+        if opener is not None:
+            transfer_opportunities.append(
+                {
+                    "targetPropId": pid,
+                    "targetTitle": str(p.get("title") or pid),
+                    "targetChapter": str(p.get("chapter") or "General"),
+                    "targetStatus": status,
+                    "knownPropId": opener["knownPropId"],
+                    "knownTitle": opener["knownTitle"],
+                    "knownChapter": opener["knownChapter"],
+                    "archetypeId": opener["archetypeId"],
+                    "archetypeName": opener["archetypeName"],
+                    "variableBijection": opener["variableBijection"],
+                    "breaksAt": opener["breaksAt"],
+                    "openerPrompt": opener["openerPrompt"],
+                }
+            )
+
+    transfer_opportunities.sort(key=lambda t: (t["archetypeId"], t["targetPropId"]))
+
+    cross_clusters = [c for c in clusters if c["chordCount"] > 0]
+    summary = (
+        f"Rosetta found {len(chords)} cross-domain chord(s) across {len(cross_clusters)} active cluster(s), "
+        f"{len(warnings)} negative-transfer warning group(s), and {len(transfer_opportunities)} transfer opportunity(ies)."
+        if chords or transfer_opportunities
+        else f"No cross-domain isomorphism chords yet ({len(clusters)} single-domain archetype match(es) detected)."
+    )
+
+    return {
+        "ok": True,
+        "kgDir": str(resolved_kg),
+        "archetypeCount": len(archetypes),
+        "chordCount": len(chords),
+        "persistedChordCount": int(disc.get("persistedCount") or 0),
+        "discoveredChordCount": int(disc.get("discoveredCount") or 0),
+        "clusterCount": len(clusters),
+        "clusters": clusters,
+        "chords": chords,
+        "negativeTransferWarnings": warnings,
+        "transferOpportunities": transfer_opportunities,
+        "summary": summary,
+    }
+
+
 # ---------------------------------------------------------------------------
 # CLI reporting & entrypoint
 # ---------------------------------------------------------------------------
@@ -1603,12 +1752,40 @@ def _render_human_report(payload: dict[str, Any]) -> str:
                 )
         lines.append("")
 
+    if "rosetta" in payload:
+        ros = payload["rosetta"]
+        lines.append(f"## Rosetta Cross-Domain Isomorphism Bridges ({ros['chordCount']} chord(s))")
+        lines.append(f"  {ros['summary']}")
+        for cl in ros.get("clusters") or []:
+            if cl["chordCount"] == 0:
+                continue
+            lines.append(
+                f"  - [{cl['archetypeId']}] {cl['archetypeName']} · {cl['canonicalEquation']}"
+            )
+            lines.append(f"    Domains: {', '.join(cl['domains'])}")
+            for ch in cl["chords"][:6]:
+                tag = "persisted" if ch["persisted"] else "discovered"
+                lines.append(
+                    f"      * ({tag}, score={ch['score']}) {ch['sourceId']} [{ch['sourceChapter']}] "
+                    f"<-> {ch['targetId']} [{ch['targetChapter']}]"
+                )
+            for warn in (cl.get("breaksAt") or [])[:2]:
+                lines.append(f"    ! Where analogy breaks: {warn}")
+        opps = ros.get("transferOpportunities") or []
+        if opps:
+            lines.append(f"  Transfer Opportunities ({len(opps)}):")
+            for opp in opps[:8]:
+                lines.append(
+                    f"    - {opp['knownPropId']} (solid) -> {opp['targetPropId']} ({opp['targetStatus']}): {opp['openerPrompt']}"
+                )
+        lines.append("")
+
     return "\n".join(lines).rstrip()
 
 
 def main(argv: list[str] | None = None) -> None:
     parser = argparse.ArgumentParser(
-        description="Syntopik Knowledge Graph Intelligence: bottlenecks, memorized islands, cycle-safe study paths, synthesis combos, lookalike confusables, and semester sunset plans."
+        description="Syntopik Knowledge Graph Intelligence: bottlenecks, memorized islands, cycle-safe study paths, synthesis combos, lookalike confusables, Rosetta isomorphism bridges, and semester sunset plans."
     )
     parser.add_argument("--kg-dir", help="Override knowledge-graph directory (or SYNT_KG_DIR / MLH_KG_DIR)")
     parser.add_argument("--bottlenecks", action="store_true", help="Rank shaky/misconception/low-BKT foundation bottlenecks")
@@ -1616,8 +1793,9 @@ def main(argv: list[str] | None = None) -> None:
     parser.add_argument("--path-to", dest="path_to", metavar="TARGET_ID", help="Compute cycle-safe topological prerequisite sequence to TARGET_ID")
     parser.add_argument("--combos", action="store_true", help="Generate integrative multi-concept synthesis pairs from solid nodes")
     parser.add_argument("--confusables", action="store_true", help="Detect high-similarity lookalike pairs with divergent governing premises")
+    parser.add_argument("--rosetta", action="store_true", help="Discover cross-domain structural isomorphism clusters, breaksAt warnings, and transfer opportunities")
     parser.add_argument("--sunset", metavar="SLUG", help="Compute Semester Sunset plan (~20%% core axioms @ R=80%%, ~80%% archived leaves) for chapter SLUG")
-    parser.add_argument("--all", action="store_true", help="Run bottlenecks, islands, combos, and confusables together")
+    parser.add_argument("--all", action="store_true", help="Run bottlenecks, islands, combos, confusables, and rosetta together")
     parser.add_argument("--top", type=int, default=None, help="Max results (default: 10 for bottlenecks, 8 for combos/confusables)")
     parser.add_argument("--bkt-threshold", type=float, default=0.65, help="Low-BKT threshold for bottleneck detection (default: 0.65)")
     parser.add_argument("--json", action="store_true", help="Emit structured JSON output")
@@ -1627,9 +1805,10 @@ def main(argv: list[str] | None = None) -> None:
     run_i = args.islands or args.all
     run_c = args.combos or args.all
     run_cf = args.confusables or args.all
+    run_r = args.rosetta or args.all
     run_p = bool(args.path_to)
     run_ss = bool(args.sunset)
-    if not (run_b or run_i or run_c or run_cf or run_p or run_ss):
+    if not (run_b or run_i or run_c or run_cf or run_r or run_p or run_ss):
         run_b = run_i = run_c = run_cf = True
 
     kg_dir, _props_file, _chains_file = resolve_kg_paths(args.kg_dir)
@@ -1667,6 +1846,9 @@ def main(argv: list[str] | None = None) -> None:
         top_cf = args.top if args.top is not None else 8
         payload["confusables"] = find_confusables(G, kg_dir=kg_dir, top=top_cf)
 
+    if run_r:
+        payload["rosetta"] = find_rosetta_bridges(kg_dir)
+
     if run_ss:
         payload["sunset"] = compute_sunset_plan(kg_dir, args.sunset)
 
@@ -1675,7 +1857,7 @@ def main(argv: list[str] | None = None) -> None:
     else:
         print(_render_human_report(payload))
 
-    if run_p and not payload["pathTo"]["found"] and not (run_b or run_i or run_c or run_cf or run_ss):
+    if run_p and not payload["pathTo"]["found"] and not (run_b or run_i or run_c or run_cf or run_r or run_ss):
         sys.exit(1)
 
 

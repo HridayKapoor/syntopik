@@ -1,9 +1,9 @@
 ---
 name: harness-self-improve
 description: >-
-  Run Syntopik's closed-loop self-audit, SHA-256 backup, deterministic
-  regression tests, 60-day multi-persona cognitive benchmark checks, and 40-case
-  TutorBench pedagogical linting on "audit yourself".
+  Run Syntopik's closed-loop self-audit, SHA-256 backup, regression tests,
+  60-day cognitive benchmarks, longitudinal policy replay calibration, and
+  40-case TutorBench pedagogical linting on "audit yourself".
 ---
 
 # Syntopik Self-Improvement — Closed-Loop Audit, Backup & Upgrade Protocol
@@ -19,11 +19,11 @@ Use this skill to inspect **Syntopik** health across all harnesses, mine real le
 Every self-improvement pass MUST preserve **all** Section 1 invariants in `SELF_IMPROVEMENT_BLUEPRINT.md`:
 1. **Multi-Harness Official Execution**: native primitives across Antigravity 2.0 (`GEMINI.md`, `.agents/`), Claude Code (`CLAUDE.md` starting with `@AGENTS.md`, `.claude/`, `.claude-plugin/`, `.mcp.json`), Gemini CLI (`gemini-extension.json`), OpenAI Codex / T3 Code (`AGENTS.md`, `.codex/`), and universal agents (`BOOTSTRAP.md`, `syntopik` CLI). Zero unofficial CLI proxies or token scraping.
 2. **GitHub-Clean Learner Privacy & Zero Personal Paths**:
-   - Learner data (`knowledge-graph/{propositions,chains,revlog,mistakes,reading-queue,exam-attempts,forks,arenas,decisions,derivations,viva-sessions}.jsonl`, `learner-profile.json`, `whiteboard-session.json`, `study-config.json`, `fsrs-params.json`, `review-queue.md`, `graph-data.js`, `chapters/*.md`, `chapters/*-tracker.json`, `exams/*.html`, `sources/*`) stays **gitignored** and untouched on disk; fresh clones auto-bootstrap via `setup_harness.py`.
+   - Learner data (`knowledge-graph/{propositions,chains,revlog,mistakes,reading-queue,exam-attempts,forks,arenas,decisions,derivations,evidence-ledger,viva-sessions}.jsonl`, `learner-profile.json`, `whiteboard-session.json`, `sync-state.json`, `study-config.json`, `fsrs-params.json`, `review-queue.md`, `graph-data.js`, `chapters/*.md`, `chapters/*-tracker.json`, `exams/*.html`, `sources/*`) stays **gitignored** and untouched on disk; fresh clones auto-bootstrap via `setup_harness.py`.
    - **Zero `/Users/<name>` or hardcoded Homebrew paths** (`! git grep "/Users/"`); resolve binaries portably via `shutil.which(...)`.
-3. **Zero Heavy Local AI / ML Weights**: never install PyTorch, FAISS, LightRAG, local VLMs, or Docker stacks; preserve bare Python 3.12+ stdlib core loop (`syntopik/` + FSRS-6/graph/learner-psychology fallbacks), SciPy L-BFGS-B optimizer, `pint==0.26.2` + `molmass`, `chempy` (`--no-deps`), Pillow PNG captions, and portable TinyTeX lookup.
+3. **Zero Heavy Local AI / ML Weights**: never install PyTorch, FAISS, LightRAG, local VLMs, or Docker stacks; preserve bare Python 3.12+ stdlib core loop (`syntopik/` — 22 modules + FSRS-6/graph/learner-psychology/Rosetta/CRDT sync), SciPy L-BFGS-B optimizer, `pint==0.26.2` + `molmass`, `chempy` (`--no-deps`), Pillow PNG captions, and portable TinyTeX lookup.
 4. **Always-On Context Budgets (Zero Skill Explosion)**:
-   - `GEMINI.md` + `AGENTS.md`: **zero YAML frontmatter**, `< 24 KB` each, v3.0 target **`<= 7,500 B`** (`<= 9,500 B` hard ceiling); both `CLAUDE.md` and `GEMINI.md` start with `@AGENTS.md` on line 1.
+   - `GEMINI.md` + `AGENTS.md`: **zero YAML frontmatter**, `< 24 KB` each, v3.1 target **`<= 7,500 B`** (`<= 9,500 B` hard ceiling); both `CLAUDE.md` and `GEMINI.md` start with `@AGENTS.md` on line 1.
    - `CLAUDE.md`: starts with `@AGENTS.md` on line 1, `< 45` lines, zero frontmatter.
    - Exact **17** `.agents/skills/<name>/SKILL.md` skills: `name == folder`, crisp `<= 215` char `description` (total `<= 3,400 B`), **zero `<` or `>` angle brackets** and **zero `.py`/`.mjs` filenames** inside `description`.
 5. **Sandboxed CLI & Pedagogical Invariants**: every mutating CLI honors `SYNT_WORKSPACE` / `--kg-dir` / `--chapters-dir` / `--no-sync` (`MLH_*` fallbacks) and emits pure JSON on `--json`; tutor turns obey `scripts/pedagogy_eval.py` (`<= 160`w prose, zero sycophancy, zero VARK myths, zero option leaks, `1` demand/turn, Pause Law).
@@ -42,8 +42,13 @@ git status --short
 ```
 *(Before major structural upgrades when live study data exists on disk, take an external safety snapshot via `.venv/bin/python -B scripts/backup_harness.py snapshot`.)*
 
-### Step 2 — Evidence & Friction Audit
-Inspect `SELF_IMPROVEMENT_BLUEPRINT.md`, `knowledge-graph/harness-log.jsonl`, `mistakes.jsonl`, `propositions.jsonl`, `revlog.jsonl` (Brier calibration & leeches), `learner-profile.json`, and `exam-attempts.jsonl`. Optionally lint recent tutor transcripts via `scripts/pedagogy_eval.py lint <transcript.md> --json`.
+### Step 2 — Evidence Audit & Longitudinal Policy Replay Calibration
+Inspect `SELF_IMPROVEMENT_BLUEPRINT.md`, `knowledge-graph/harness-log.jsonl`, `mistakes.jsonl`, `propositions.jsonl`, `revlog.jsonl` (Brier calibration & leeches), `learner-profile.json`, and `exam-attempts.jsonl`. Optionally lint recent tutor transcripts via `scripts/pedagogy_eval.py lint <transcript.md> --json`, and replay local chronological history on a strict **70/30 TimeSeriesSplit** to check whether bounded `learner_model` hyperparameters improve out-of-sample composite loss (`>= 0.005` gate):
+```bash
+syntopik calibrate-policy --json                                            # Preview OOS replay gain
+syntopik calibrate-policy --apply --json                                    # Adopt bounded calibratedHyperparams only on OOS gain >= 0.005
+python3 -B benchmarks/syntopik_bench.py --replay --workspace <dir> --json   # Direct script replay (--apply to persist)
+```
 
 ### Step 3 — Select Bounded Scope (`1–3` Cohesive Items)
 Write explicit disjoint file ownership and interface contracts before editing.

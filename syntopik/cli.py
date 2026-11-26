@@ -1,8 +1,9 @@
-"""Unified pure-stdlib CLI for Syntopik v3.0 (`syntopik`).
+"""Unified pure-stdlib CLI for Syntopik v3.1 (`syntopik`).
 
 Verbs:
   init | attach | connect | serve | import | review | triage | pack | doctor | export | sync | run
   next | profile | drop | demo | debrief | mode | sunset | pace | board | bench
+  rosetta | sync-delta | calibrate-policy | proof-diff
 """
 
 from __future__ import annotations
@@ -74,7 +75,7 @@ def _lazy_import(module_name: str) -> Any:
     try:
         return importlib.import_module(module_name)
     except ImportError as exc:
-        raise SystemExit(f"Required Syntopik v3.0 module '{module_name}' is not available: {exc}") from exc
+        raise SystemExit(f"Required Syntopik module '{module_name}' is not available: {exc}") from exc
 
 
 def _find_python_for_workspace(workspace: Path, pkg_root: Path) -> str:
@@ -1799,6 +1800,224 @@ def _cmd_bench(args: argparse.Namespace) -> int:
     return int(proc.returncode)
 
 
+# ---------------------------------------------------------------------------
+# v3.1 First-Class Verbs (lazy imports for Rosetta, Sync-Delta, Replay, Diff)
+# ---------------------------------------------------------------------------
+
+
+def _cmd_rosetta(args: argparse.Namespace) -> int:
+    ws = resolve_workspace(getattr(args, "workspace", None))
+    kg_dir = resolve_kg_dir(ws)
+    iso = _lazy_import("syntopik.isomorphism")
+    action = str(args.action or "scan").strip().lower()
+
+    if action == "archetypes":
+        archetypes = list(iso.load_archetypes() or [])
+        payload = {
+            "ok": True,
+            "action": "archetypes",
+            "count": len(archetypes),
+            "archetypes": archetypes,
+        }
+        lines = [
+            f"Syntopik Rosetta Structural Archetypes ({len(archetypes)}):",
+            *[f"  - {a.get('id')}: {a.get('name', a.get('id'))}" for a in archetypes[:20]],
+        ]
+        _emit(payload, bool(args.json), lines)
+        return 0
+
+    if action == "scan":
+        sig = inspect.signature(iso.discover_isomorphisms)
+        kwargs: dict[str, Any] = {}
+        if getattr(args, "min_score", None) is not None and "min_score" in sig.parameters:
+            kwargs["min_score"] = float(args.min_score)
+        res = iso.discover_isomorphisms(kg_dir, **kwargs)
+        chords = list((res or {}).get("chords") or [])
+        payload = {"ok": True, "action": "scan", "workspace": str(ws), **(res if isinstance(res, dict) else {"result": res})}
+        lines = [
+            f"Rosetta Isomorphism Scan ({ws}) — {len(chords)} cross-domain chord(s)",
+            *[
+                f"  - [{c.get('archetypeId')}] {c.get('sourceId')} <-> {c.get('targetId')} (score={c.get('score')})"
+                for c in chords[:15]
+            ],
+        ]
+        if not chords:
+            lines.append("  No cross-domain structural twins matched yet.")
+        _emit(payload, bool(args.json), lines)
+        return 0
+
+    if action == "bridge":
+        prop_id = str(args.prop_id or "").strip()
+        if not prop_id:
+            raise SystemExit("Provide --prop-id <id> for 'syntopik rosetta bridge'.")
+        bridge = iso.build_bijection_opener(kg_dir, prop_id)
+        payload = {
+            "ok": True,
+            "action": "bridge",
+            "workspace": str(ws),
+            "propId": prop_id,
+            "found": bridge is not None,
+            "bridge": bridge,
+        }
+        if isinstance(bridge, dict):
+            lines = [
+                f"Rosetta Bijection Bridge for {prop_id}:",
+                f"  Known twin : {bridge.get('knownPropId')} ({bridge.get('knownTitle') or ''})",
+                f"  Archetype  : {bridge.get('archetypeName') or ''}",
+                f"  Opener     : {bridge.get('openerPrompt') or ''}",
+            ]
+        else:
+            lines = [f"No mastered structural twin bridge found for {prop_id}."]
+        _emit(payload, bool(args.json), lines)
+        return 0
+
+    if action == "link":
+        source_id = str(args.source or "").strip()
+        target_id = str(args.target or "").strip()
+        archetype_id = str(args.archetype or "").strip()
+        if not (source_id and target_id and archetype_id):
+            raise SystemExit("Provide --source <id> --target <id> --archetype <id> for 'syntopik rosetta link'.")
+        sig = inspect.signature(iso.link_isomorphism_chord)
+        kwargs = {}
+        if getattr(args, "breaks_at", None) and "breaks_at" in sig.parameters:
+            kwargs["breaks_at"] = list(args.breaks_at)
+        res = iso.link_isomorphism_chord(kg_dir, source_id, target_id, archetype_id, **kwargs)
+        sync_hub(workspace=ws, quiet=True)
+        payload = {"ok": True, "action": "link", "workspace": str(ws), **(res if isinstance(res, dict) else {"result": res})}
+        _emit(payload, bool(args.json), [f"Linked Rosetta chord [{archetype_id}]: {source_id} <-> {target_id}"])
+        return 0
+
+    raise SystemExit(f"Unknown rosetta action: {action}")
+
+
+def _cmd_sync_delta(args: argparse.Namespace) -> int:
+    ws = resolve_workspace(getattr(args, "workspace", None))
+    sd = _lazy_import("syntopik.sync_delta")
+    action = str(args.action or "status").strip().lower()
+
+    if action == "status":
+        res = sd.get_sync_status(ws)
+        payload = {"ok": True, "action": "status", "workspace": str(ws), **(res if isinstance(res, dict) else {"status": res})}
+        lines = [
+            f"Sync-Delta Status ({ws}):",
+            f"  Device ID : {payload.get('deviceId') or 'uninitialized'}",
+            f"  Last Sync : {payload.get('lastSyncAt') or 'never'}",
+        ]
+        _emit(payload, bool(args.json), lines)
+        return 0
+
+    if action == "export":
+        res = sd.export_sync_delta(ws, out_path=args.out, since=args.since)
+        payload = {"ok": bool(res.get("ok", True)), "action": "export", "workspace": str(ws), **(res if isinstance(res, dict) else {})}
+        lines = [
+            f"Exported CRDT sync delta ({ws})",
+            f"  Output : {payload.get('outPath') or payload.get('path') or '(in-memory)'}",
+        ]
+        _emit(payload, bool(args.json), lines)
+        return 0 if payload.get("ok", True) else 1
+
+    if action == "verify":
+        target_file = args.file or args.out
+        if not target_file:
+            raise SystemExit("Provide --file <delta_path> for 'syntopik sync-delta verify'.")
+        res = sd.verify_sync_delta(target_file)
+        ok = bool(res.get("ok", False)) if isinstance(res, dict) else False
+        payload = {"ok": ok, "action": "verify", **(res if isinstance(res, dict) else {})}
+        _emit(payload, bool(args.json), [f"Sync delta verify ({target_file}): {'VALID' if ok else 'INVALID'}"])
+        return 0 if ok else 1
+
+    if action == "merge":
+        target_file = args.file or args.out
+        if not target_file:
+            raise SystemExit("Provide --file <delta_path> for 'syntopik sync-delta merge'.")
+        res = sd.merge_sync_delta(ws, target_file, dry_run=bool(args.dry_run))
+        ok = bool(res.get("ok", True)) if isinstance(res, dict) else False
+        if ok and not args.dry_run:
+            sync_hub(workspace=ws, quiet=True)
+        payload = {"ok": ok, "action": "merge", "workspace": str(ws), "dryRun": bool(args.dry_run), **(res if isinstance(res, dict) else {})}
+        lines = [
+            f"Sync delta merge ({target_file}) — {'DRY-RUN' if args.dry_run else ('OK' if ok else 'FAILED')}",
+            f"  Added: {payload.get('added', 0)} · Updated: {payload.get('updated', 0)}",
+        ]
+        _emit(payload, bool(args.json), lines)
+        return 0 if ok else 1
+
+    raise SystemExit(f"Unknown sync-delta action: {action}")
+
+
+def _cmd_calibrate_policy(args: argparse.Namespace) -> int:
+    ws = resolve_workspace(getattr(args, "workspace", None))
+    se = _lazy_import("syntopik.sim_eval")
+    if not hasattr(se, "replay_learner_history"):
+        raise SystemExit("syntopik.sim_eval does not expose replay_learner_history().")
+    sig = inspect.signature(se.replay_learner_history)
+    kwargs: dict[str, Any] = {"apply_if_improved": bool(args.apply)}
+    if getattr(args, "min_events", None) is not None and "min_events" in sig.parameters:
+        kwargs["min_events"] = int(args.min_events)
+    res = se.replay_learner_history(ws, **kwargs)
+    ok = bool(res.get("ok", True)) if isinstance(res, dict) else False
+    payload = {"ok": ok, "workspace": str(ws), **(res if isinstance(res, dict) else {})}
+    if payload.get("insufficientData"):
+        lines = [
+            f"Policy Calibration ({ws}): insufficient confidence-rated reviews "
+            f"({payload.get('eventCount', 0)}/{payload.get('minEvents', 12)}).",
+        ]
+    else:
+        lines = [
+            f"Policy Calibration ({ws}): applied={bool(payload.get('applied'))}",
+            f"  OOS improvement : {payload.get('improvement', payload.get('oosImprovement', 0))}",
+        ]
+    _emit(payload, bool(args.json), lines)
+    return 0 if ok else 1
+
+
+def _cmd_proof_diff(args: argparse.Namespace) -> int:
+    ws = resolve_workspace(getattr(args, "workspace", None))
+    kg_dir = Path(args.kg_dir).expanduser().resolve() if getattr(args, "kg_dir", None) else resolve_kg_dir(ws)
+    df = _ensure_script_import("derivation_forge", ws)
+    try:
+        student_steps = df._load_json_arg(args.steps_json)
+        res = df.diff_handwritten_steps(
+            kg_dir,
+            args.id,
+            student_steps,
+            auto_spawn_fork=not bool(args.no_spawn_fork),
+            workspace=ws,
+        )
+    except Exception as exc:  # noqa: BLE001
+        err_payload = {"ok": False, "command": "proof-diff", "derivationId": args.id, "error": str(exc)}
+        if args.json:
+            print(json.dumps(err_payload, indent=2, ensure_ascii=False))
+        else:
+            print(f"ERROR: {exc}", file=sys.stderr)
+        return 1
+
+    if res.get("spawnedFork") and not args.no_spawn_fork:
+        sync_hub(workspace=ws, quiet=True)
+
+    lines: list[str]
+    if res.get("allVerified"):
+        lines = [f"[VERIFIED] {res['derivationId']}: {res['verifiedCount']}/{res['totalSteps']} steps verified."]
+    elif res.get("earliestBreakLine") is not None:
+        lines = [
+            f"[BREAK line {res['earliestBreakLine']}] {res['derivationId']}::{res['earliestBreakStepId']} "
+            f"({res['errorKind']}) · {res['verifiedCount']}/{res['totalSteps']} verified",
+        ]
+        nudges = res.get("nudges") or {}
+        for lvl in ("R0", "R1", "R2"):
+            if nudges.get(lvl):
+                lines.append(f"  {lvl}: {nudges[lvl]}")
+        if isinstance(res.get("spawnedFork"), dict) and res["spawnedFork"].get("id"):
+            lines.append(f"  Fork: {res['spawnedFork']['id']}")
+        probe = (res.get("diagnosticProbe") or {}).get("bestProbe")
+        if isinstance(probe, dict) and probe.get("propId"):
+            lines.append(f"  Diagnostic Probe: {probe['propId']} (deltaH={probe.get('deltaHBits', 0)} bits)")
+    else:
+        lines = [f"[INCOMPLETE] {res['derivationId']}: {res['verifiedCount']}/{res['totalSteps']} steps verified."]
+    _emit(res, bool(args.json), lines)
+    return 0 if res.get("ok") else 1
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="syntopik",
@@ -2015,6 +2234,46 @@ def build_parser() -> argparse.ArgumentParser:
     p_bench.add_argument("--workspace", default=None, help="Syntopik workspace directory")
     p_bench.add_argument("--json", action="store_true", help="Emit JSON output")
     p_bench.set_defaults(func=_cmd_bench)
+
+    # --- v3.1 First-Class Verbs ---
+
+    p_ros = sub.add_parser("rosetta", help="Structural Isomorphism Rosetta Engine (scan, bridge, link, archetypes)")
+    p_ros.add_argument("action", nargs="?", choices=["scan", "bridge", "link", "archetypes"], default="scan")
+    p_ros.add_argument("--prop-id", dest="prop_id", default=None, help="Target proposition ID (for bridge)")
+    p_ros.add_argument("--source", default=None, help="Source proposition ID (for link)")
+    p_ros.add_argument("--target", default=None, help="Target proposition ID (for link)")
+    p_ros.add_argument("--archetype", default=None, help="Archetype ID (for link)")
+    p_ros.add_argument("--breaks-at", dest="breaks_at", action="append", default=[], help="Optional negative-transfer boundary note (repeatable)")
+    p_ros.add_argument("--min-score", dest="min_score", type=float, default=None, help="Minimum archetype match score (for scan)")
+    p_ros.add_argument("--workspace", default=None, help="Syntopik workspace directory")
+    p_ros.add_argument("--json", action="store_true", help="Emit JSON output")
+    p_ros.set_defaults(func=_cmd_rosetta)
+
+    p_sd = sub.add_parser("sync-delta", help="CRDT Multi-Device Sync Deltas (export, merge, verify, status)")
+    p_sd.add_argument("action", nargs="?", choices=["export", "merge", "verify", "status"], default="status")
+    p_sd.add_argument("--out", default=None, help="Output delta file path (for export)")
+    p_sd.add_argument("--file", default=None, help="Input delta file path (for verify/merge)")
+    p_sd.add_argument("--since", default=None, help="Optional ISO-8601 cutoff timestamp (for export)")
+    p_sd.add_argument("--dry-run", dest="dry_run", action="store_true", help="Preview merge without mutating workspace files")
+    p_sd.add_argument("--workspace", default=None, help="Syntopik workspace directory")
+    p_sd.add_argument("--json", action="store_true", help="Emit JSON output")
+    p_sd.set_defaults(func=_cmd_sync_delta)
+
+    p_cal = sub.add_parser("calibrate-policy", help="Replay longitudinal learner history (70/30 OOS split) to calibrate hyperparameters")
+    p_cal.add_argument("--apply", action="store_true", help="Persist calibratedHyperparams if OOS composite loss improves")
+    p_cal.add_argument("--min-events", dest="min_events", type=int, default=None, help="Minimum confidence-rated reviews required")
+    p_cal.add_argument("--workspace", default=None, help="Syntopik workspace directory")
+    p_cal.add_argument("--json", action="store_true", help="Emit JSON output")
+    p_cal.set_defaults(func=_cmd_calibrate_policy)
+
+    p_pdiff = sub.add_parser("proof-diff", help="Structured Proof-Graph Handwriting Diff against a Causal Step DAG")
+    p_pdiff.add_argument("--id", required=True, help="Derivation ID in derivations.jsonl")
+    p_pdiff.add_argument("--steps-json", dest="steps_json", required=True, help="JSON array, file path, or @path of student steps")
+    p_pdiff.add_argument("--no-spawn-fork", dest="no_spawn_fork", action="store_true", help="Do not auto-spawn Blunder FEN fork or log mistake on break")
+    p_pdiff.add_argument("--workspace", default=None, help="Syntopik workspace directory")
+    p_pdiff.add_argument("--kg-dir", dest="kg_dir", default=None, help="Explicit knowledge-graph directory override")
+    p_pdiff.add_argument("--json", action="store_true", help="Emit JSON output")
+    p_pdiff.set_defaults(func=_cmd_proof_diff)
 
     return parser
 

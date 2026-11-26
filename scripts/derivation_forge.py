@@ -10,6 +10,12 @@ Stores structured step-dependency DAGs in `knowledge-graph/derivations.jsonl` an
   3. `cut`: Axiom-Cut Surgery — BFS over `dependsOn` to compute `earliestBreak`,
      `invalidatedSteps`, and `survivingSteps`, grade learner localization, and
      record T4 epistemic evidence on pass.
+  4. `diff`: Structured Proof-Graph Handwriting Diff — aligns handwritten
+     student steps sequentially against the topologically ordered Causal Step
+     DAG, classifies earliest break (`sign_flip`, `missing_factor`,
+     `dropped_term`, `wrong_axiom`, `algebraic_jump`), emits zero-leak R0-R2
+     Socratic nudges, auto-spawns a Blunder FEN Fork, and runs Bayesian
+     root-cause `select_diagnostic_probe`.
 
 Pure Python 3.12+ standard library (optional lazy SymPy fallback).
 """
@@ -17,7 +23,11 @@ Pure Python 3.12+ standard library (optional lazy SymPy fallback).
 from __future__ import annotations
 
 import argparse
+import ast
+import hashlib
+import heapq
 import json
+import random
 import sys
 import uuid
 from collections import deque
@@ -28,10 +38,18 @@ ROOT = Path(__file__).resolve().parent.parent
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from syntopik.forks import _math_equivalent, _normalize_text_move  # noqa: E402
+from syntopik.forks import (  # noqa: E402
+    _extract_math_symbols,
+    _has_high_symbolic_expansion_risk,
+    _math_equivalent,
+    _normalize_text_move,
+    _preprocess_math_text,
+    _safe_eval_math_ast,
+    validate_math_expr_ast,
+)
 from syntopik.paths import resolve_kg_dir, resolve_workspace  # noqa: E402
-from syntopik.schemas import now_iso, slugify  # noqa: E402
-from syntopik.storage import load_jsonl, save_jsonl_atomic, workspace_lock  # noqa: E402
+from syntopik.schemas import now_iso, slugify, today_iso  # noqa: E402
+from syntopik.storage import append_jsonl_locked, load_jsonl, save_jsonl_atomic, workspace_lock  # noqa: E402
 
 __all__ = [
     "DERIVATIONS_FILENAME",
@@ -44,12 +62,23 @@ __all__ = [
     "get_blackout_challenge",
     "check_blackout_step",
     "grade_axiom_cut",
+    "diff_handwritten_steps",
     "main",
 ]
 
 DERIVATIONS_FILENAME = "derivations.jsonl"
 VALID_STEP_ROLES: frozenset[str] = frozenset({"axiom", "step", "theorem"})
 _MAX_ANSWER_LEN = 1024
+_MAX_DIFF_STEPS = 40
+_MAX_DIFF_EXPR_LEN = 512
+
+_ERROR_KIND_TO_MISTAKE_CATEGORY: dict[str, str] = {
+    "sign_flip": "sign_error",
+    "missing_factor": "algebra_slip",
+    "dropped_term": "algebra_slip",
+    "wrong_axiom": "concept_gap",
+    "algebraic_jump": "algebra_slip",
+}
 
 
 def resolve_derivations_path(
@@ -189,6 +218,7 @@ def _record_telemetry_safe(
     kind: str,
     correct: bool,
     difficulty: int = 1580,
+    mistake_category: str | None = None,
 ) -> None:
     try:
         from syntopik.learner_model import record_telemetry_event
@@ -203,7 +233,7 @@ def _record_telemetry_safe(
             confidence=None,
             duration_ms=None,
             hints_used=0,
-            mistake_category=None if correct else "concept_gap",
+            mistake_category=None if correct else (mistake_category or "concept_gap"),
             pf_outcome=None,
             skipped=False,
         )
@@ -573,6 +603,715 @@ def grade_axiom_cut(
 
 
 # ---------------------------------------------------------------------------
+# Structured Proof-Graph Handwriting Diff (v3.1)
+# ---------------------------------------------------------------------------
+
+
+def _resolve_kg_and_ws(
+    kg_dir: Path | str | None = None,
+    workspace: Path | str | None = None,
+) -> tuple[Path, Path]:
+    if kg_dir is not None and str(kg_dir).strip():
+        p = Path(kg_dir).expanduser().resolve()
+        if (
+            (p / "knowledge-graph").is_dir()
+            and not (p / DERIVATIONS_FILENAME).is_file()
+            and p.name != "knowledge-graph"
+        ):
+            kdir = (p / "knowledge-graph").resolve()
+            ws = p
+        else:
+            kdir = p
+            ws = Path(workspace).expanduser().resolve() if workspace is not None else kdir.parent
+        return kdir, ws
+    kdir = resolve_kg_dir(workspace=workspace, explicit=None)
+    ws = resolve_workspace(workspace) if workspace is not None else kdir.parent
+    return kdir, ws
+
+
+def _topological_steps(steps: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Order DAG steps topologically: axioms -> intermediate steps -> theorems."""
+    role_rank = {"axiom": 0, "step": 1, "theorem": 2}
+    step_by_id = {str(s["id"]): s for s in steps}
+    orig_idx = {str(s["id"]): i for i, s in enumerate(steps)}
+    children: dict[str, list[str]] = {sid: [] for sid in step_by_id}
+    in_deg: dict[str, int] = {sid: 0 for sid in step_by_id}
+
+    for s in steps:
+        sid = str(s["id"])
+        for dep in s.get("dependsOn") or []:
+            d = str(dep)
+            if d in step_by_id:
+                children[d].append(sid)
+                in_deg[sid] += 1
+
+    heap: list[tuple[int, int, str]] = [
+        (role_rank.get(str(step_by_id[sid].get("role") or "step"), 1), orig_idx[sid], sid)
+        for sid, deg in in_deg.items()
+        if deg == 0
+    ]
+    heapq.heapify(heap)
+    ordered: list[dict[str, Any]] = []
+    while heap:
+        _, _, u = heapq.heappop(heap)
+        ordered.append(step_by_id[u])
+        for v in children[u]:
+            in_deg[v] -= 1
+            if in_deg[v] == 0:
+                heapq.heappush(
+                    heap,
+                    (role_rank.get(str(step_by_id[v].get("role") or "step"), 1), orig_idx[v], v),
+                )
+
+    if len(ordered) != len(steps):
+        seen = {str(s["id"]) for s in ordered}
+        ordered.extend(s for s in steps if str(s["id"]) not in seen)
+    return ordered
+
+
+def _split_equation(raw: str) -> tuple[str, str] | None:
+    cleaned = str(raw or "").strip().strip("$").strip()
+    if "==" in cleaned:
+        lhs, rhs = cleaned.split("==", 1)
+        return lhs.strip(), rhs.strip()
+    if "=" in cleaned and not any(op in cleaned for op in ("<=", ">=", "!=")):
+        lhs, rhs = cleaned.split("=", 1)
+        return lhs.strip(), rhs.strip()
+    return None
+
+
+def _step_expr_match(student_expr: str, canonical_expr: str) -> tuple[bool, str | None]:
+    if not student_expr or not canonical_expr:
+        return False, None
+    if _normalize_text_move(student_expr) == _normalize_text_move(canonical_expr):
+        return True, "exact_normalized"
+    if (
+        len(student_expr) <= _MAX_DIFF_EXPR_LEN
+        and len(canonical_expr) <= _MAX_DIFF_EXPR_LEN
+        and _math_equivalent(student_expr, canonical_expr)
+    ):
+        return True, "math_equivalence"
+    return False, None
+
+
+def _split_additive_terms(node: ast.AST, sign: int = 1) -> list[tuple[int, str]]:
+    if isinstance(node, ast.Expression):
+        return _split_additive_terms(node.body, sign)
+    if isinstance(node, ast.UnaryOp):
+        if isinstance(node.op, ast.UAdd):
+            return _split_additive_terms(node.operand, sign)
+        if isinstance(node.op, ast.USub):
+            return _split_additive_terms(node.operand, -sign)
+    if isinstance(node, ast.BinOp):
+        if isinstance(node.op, ast.Add):
+            return _split_additive_terms(node.left, sign) + _split_additive_terms(node.right, sign)
+        if isinstance(node.op, ast.Sub):
+            return _split_additive_terms(node.left, sign) + _split_additive_terms(node.right, -sign)
+    if isinstance(node, ast.Constant) and isinstance(node.value, (int, float)) and node.value == 0:
+        return []
+    return [(sign, ast.unparse(node))]
+
+
+def _comparison_pair(student_expr: str, expected_expr: str) -> tuple[str, str]:
+    eq_s = _split_equation(student_expr)
+    eq_e = _split_equation(expected_expr)
+    if eq_s and eq_e:
+        ls, rs = eq_s
+        le, re_ = eq_e
+        if _math_equivalent(ls, le):
+            return rs, re_
+        if _math_equivalent(rs, re_):
+            return ls, le
+        return f"({ls})-({rs})", f"({le})-({re_})"
+    if eq_s and not eq_e:
+        return eq_s[1], expected_expr
+    if eq_e and not eq_s:
+        return student_expr, eq_e[1]
+    return student_expr, expected_expr
+
+
+def _has_additive_term_sign_flip(comp_s: str, comp_e: str) -> bool:
+    prep_s = _preprocess_math_text(comp_s)
+    prep_e = _preprocess_math_text(comp_e)
+    if not prep_s or not prep_e:
+        return False
+    try:
+        parsed_s = validate_math_expr_ast(prep_s)
+        parsed_e = validate_math_expr_ast(prep_e)
+    except ValueError:
+        return False
+
+    s_terms = _split_additive_terms(parsed_s)
+    e_terms = _split_additive_terms(parsed_e)
+    if len(s_terms) < 2 or len(s_terms) != len(e_terms):
+        return False
+
+    used: set[int] = set()
+    flipped = 0
+    for s_sign, s_tex in s_terms:
+        matched_idx: int | None = None
+        for idx, (e_sign, e_tex) in enumerate(e_terms):
+            if idx in used:
+                continue
+            if _math_equivalent(s_tex, e_tex):
+                matched_idx = idx
+                if s_sign != e_sign:
+                    flipped += 1
+                break
+        if matched_idx is None:
+            return False
+        used.add(matched_idx)
+    return flipped > 0
+
+
+def _is_sign_flip(student_expr: str, expected_expr: str) -> bool:
+    eq_s = _split_equation(student_expr)
+    eq_e = _split_equation(expected_expr)
+    if eq_s and eq_e:
+        ls, rs = eq_s
+        le, re_ = eq_e
+        if _math_equivalent(ls, le) and _math_equivalent(rs, f"-({re_})"):
+            return True
+        if _math_equivalent(ls, f"-({le})") and _math_equivalent(rs, re_):
+            return True
+        if _math_equivalent(ls, re_) and _math_equivalent(rs, f"-({le})"):
+            return True
+        if _math_equivalent(ls, f"-({re_})") and _math_equivalent(rs, le):
+            return True
+        comp_s, comp_e = _comparison_pair(student_expr, expected_expr)
+        return _has_additive_term_sign_flip(comp_s, comp_e)
+
+    comp_s, comp_e = _comparison_pair(student_expr, expected_expr)
+    if _math_equivalent(comp_s, f"-({comp_e})"):
+        return True
+    return _has_additive_term_sign_flip(comp_s, comp_e)
+
+
+def _is_missing_factor(student_expr: str, expected_expr: str) -> bool:
+    comp_s, comp_e = _comparison_pair(student_expr, expected_expr)
+    prep_s = _preprocess_math_text(comp_s)
+    prep_e = _preprocess_math_text(comp_e)
+    if not prep_s or not prep_e:
+        return False
+    try:
+        validate_math_expr_ast(prep_s)
+        validate_math_expr_ast(prep_e)
+    except ValueError:
+        return False
+
+    syms_s = _extract_math_symbols(prep_s)
+    syms_e = _extract_math_symbols(prep_e)
+    all_syms = sorted(syms_s | syms_e)
+
+    # 1. Constant numeric ratio check via deterministic AST-safe probing
+    rng = random.Random(20261127)
+    ratios: list[float] = []
+    for _ in range(12):
+        env = {name: rng.uniform(1.17, 4.83) for name in all_syms}
+        try:
+            vs = _safe_eval_math_ast(prep_s, env)
+            ve = _safe_eval_math_ast(prep_e, env)
+        except Exception:
+            continue
+        if abs(ve) <= 1e-9:
+            continue
+        ratios.append(vs / ve)
+    if len(ratios) >= 5:
+        r0 = ratios[0]
+        if abs(r0) > 1e-9 and abs(r0 - 1.0) > 1e-5 and abs(r0 + 1.0) > 1e-5:
+            if all(abs(r - r0) <= 1e-4 * max(1.0, abs(r0)) for r in ratios[1:]):
+                return True
+
+    # 2. Single missing or extra symbolic factor (e.g., dropped mass m or omega factor)
+    missing_syms = sorted(syms_e - syms_s)
+    extra_syms = sorted(syms_s - syms_e)
+    if len(missing_syms) == 1 and not extra_syms:
+        sym = missing_syms[0]
+        for cand in (
+            f"({comp_s})*({sym})",
+            f"({comp_s})/({sym})",
+            f"({comp_s})*({sym})**2",
+            f"({comp_s})/({sym})**2",
+            f"-({comp_s})*({sym})",
+            f"-({comp_s})/({sym})",
+        ):
+            if _math_equivalent(cand, comp_e):
+                return True
+    if len(extra_syms) == 1 and not missing_syms:
+        sym = extra_syms[0]
+        for cand in (
+            f"({comp_s})/({sym})",
+            f"({comp_s})*({sym})",
+            f"-({comp_s})/({sym})",
+            f"-({comp_s})*({sym})",
+        ):
+            if _math_equivalent(cand, comp_e):
+                return True
+    return False
+
+
+def _is_dropped_term(student_expr: str, expected_expr: str) -> bool:
+    comp_s, comp_e = _comparison_pair(student_expr, expected_expr)
+    prep_s = _preprocess_math_text(comp_s)
+    prep_e = _preprocess_math_text(comp_e)
+    if not prep_s or not prep_e:
+        return False
+    try:
+        parsed_s = validate_math_expr_ast(prep_s)
+        parsed_e = validate_math_expr_ast(prep_e)
+    except ValueError:
+        return False
+
+    s_terms = _split_additive_terms(parsed_s)
+    e_terms = _split_additive_terms(parsed_e)
+    if len(e_terms) < 2 or not (1 <= len(s_terms) < len(e_terms)):
+        return False
+
+    used: set[int] = set()
+    for s_sign, s_tex in s_terms:
+        matched_idx: int | None = None
+        for idx, (e_sign, e_tex) in enumerate(e_terms):
+            if idx in used:
+                continue
+            if s_sign == e_sign and _math_equivalent(s_tex, e_tex):
+                matched_idx = idx
+                break
+        if matched_idx is None:
+            return False
+        used.add(matched_idx)
+    return True
+
+
+def _classify_step_error(
+    student_expr: str,
+    expected_expr: str,
+    *,
+    step_role: str,
+    later_steps: list[dict[str, Any]],
+) -> str:
+    """Deterministically classify earliest divergence into one of 5 errorKind classes."""
+    # Check if student jumped straight to a downstream step while skipping the expected step
+    for later in later_steps:
+        later_expr = str(later.get("expr") or "")
+        if later_expr and _step_expr_match(student_expr, later_expr)[0]:
+            return "algebraic_jump"
+
+    if _is_sign_flip(student_expr, expected_expr):
+        return "sign_flip"
+    if _is_missing_factor(student_expr, expected_expr):
+        return "missing_factor"
+    if _is_dropped_term(student_expr, expected_expr):
+        return "dropped_term"
+    if str(step_role or "").strip().lower() == "axiom":
+        return "wrong_axiom"
+    return "algebraic_jump"
+
+
+def _safe_step_label(step: dict[str, Any], canonical_expr: str) -> str:
+    """Return a leak-free human label for a step (never exposes canonical `expr`)."""
+    sid = str(step.get("id") or "step").strip()
+    raw_label = str(step.get("label") or sid).strip()
+    norm_lbl = _normalize_text_move(raw_label)
+    norm_expr = _normalize_text_move(canonical_expr)
+    eq = _split_equation(canonical_expr)
+    rhs_norm = _normalize_text_move(eq[1]) if eq else ""
+    if norm_expr and norm_expr in norm_lbl:
+        return f"step {sid}"
+    if rhs_norm and len(rhs_norm) >= 3 and rhs_norm in norm_lbl:
+        return f"step {sid}"
+    return raw_label
+
+
+def _contains_expr_leak(text: str, canonical_expr: str) -> bool:
+    norm_txt = _normalize_text_move(text)
+    norm_expr = _normalize_text_move(canonical_expr)
+    if norm_expr and norm_expr in norm_txt:
+        return True
+    eq = _split_equation(canonical_expr)
+    if eq:
+        rhs_norm = _normalize_text_move(eq[1])
+        if rhs_norm and len(rhs_norm) >= 3 and rhs_norm in norm_txt:
+            return True
+    return False
+
+
+def _build_socratic_nudges(
+    *,
+    break_line: int,
+    step: dict[str, Any],
+    error_kind: str,
+    dep_labels: list[str],
+    canonical_expr: str,
+) -> dict[str, str]:
+    """Generate calibrated R0/R1/R2 Socratic nudges with guaranteed ZERO canonical expr leak."""
+    safe_label = _safe_step_label(step, canonical_expr)
+    sid = str(step.get("id") or "this step")
+
+    r0 = (
+        f"Check line {break_line} ({safe_label}): your derivation diverges here. "
+        "Re-verify this transition against the immediately preceding verified line."
+    )
+
+    r1_by_kind = {
+        "sign_flip": (
+            f"Sign & direction check on line {break_line} ({safe_label}): test your relation at a positive "
+            "displacement/input—does the resulting direction oppose or reinforce the state?"
+        ),
+        "missing_factor": (
+            f"Scaling & dimensional check on line {break_line} ({safe_label}): compare numerical coefficients "
+            "and multiplying parameters on both sides—did a constant or scaling factor drop out?"
+        ),
+        "dropped_term": (
+            f"Completeness check on line {break_line} ({safe_label}): account for every additive contribution "
+            "carried forward from the verified prefix—did a term disappear?"
+        ),
+        "wrong_axiom": (
+            f"Premise check on line {break_line} ({safe_label}): re-examine the governing physical or mathematical "
+            "axiom required here before manipulating symbols."
+        ),
+        "algebraic_jump": (
+            f"Transition check on line {break_line} ({safe_label}): write the explicit intermediate step linking "
+            "the verified prefix to this claim without skipping an unestablished dependency."
+        ),
+    }
+    r1 = r1_by_kind.get(error_kind, r1_by_kind["algebraic_jump"])
+
+    dep_clause = (
+        f"Combine the verified premise(s) ({', '.join(dep_labels)}) directly"
+        if dep_labels
+        else "Start directly from the governing definition and declared sign convention"
+    )
+    r2_focus_by_kind = {
+        "sign_flip": "and check whether a negative/restoring sign is required to keep the system physically consistent.",
+        "missing_factor": "and check dimensions plus a limiting case (e.g., doubling a parameter) to restore the missing factor.",
+        "dropped_term": "and verify that every term from both sides of the conservation or balance relation survives.",
+        "wrong_axiom": "and state the exact valid law for this regime before substituting into downstream steps.",
+        "algebraic_jump": "and isolate the single missing intermediate relation before jumping to the conclusion.",
+    }
+    r2 = f"Line {break_line} scaffold ({safe_label}): {dep_clause}, {r2_focus_by_kind.get(error_kind, r2_focus_by_kind['algebraic_jump'])}"
+
+    # Defense-in-depth zero-leak safeguard
+    nudges = {"R0": r0, "R1": r1, "R2": r2}
+    for level, msg in list(nudges.items()):
+        if _contains_expr_leak(msg, canonical_expr):
+            nudges[level] = (
+                f"Line {break_line} (step {sid}, {level}): re-check your {error_kind.replace('_', ' ')} "
+                "using the verified prefix and a dimensional/sign sanity check."
+            )
+    return nudges
+
+
+def diff_handwritten_steps(
+    kg_dir: Path | str | None,
+    derivation_id: str,
+    student_steps: list[dict[str, Any]],
+    *,
+    auto_spawn_fork: bool = True,
+    workspace: Path | str | None = None,
+) -> dict[str, Any]:
+    """Structured Proof-Graph Handwriting Diff against a Causal Step DAG in `derivations.jsonl`.
+
+    Aligns `student_steps` sequentially against topologically ordered derivation steps
+    (axioms -> intermediate steps -> theorem), localizes the earliest break, classifies
+    `errorKind`, builds zero-leak R0/R1/R2 Socratic nudges, and optionally auto-spawns
+    a Blunder FEN Fork + structured mistake + root-cause diagnostic probe.
+    """
+    if not isinstance(student_steps, list):
+        raise ValueError("student_steps must be a list of step objects.")
+    if len(student_steps) > _MAX_DIFF_STEPS:
+        raise ValueError(f"student_steps exceeds maximum limit of {_MAX_DIFF_STEPS} steps.")
+
+    norm_student: list[dict[str, Any]] = []
+    for idx, raw in enumerate(student_steps, start=1):
+        if not isinstance(raw, dict):
+            raise ValueError(f"student_steps[{idx - 1}] must be a JSON object.")
+        raw_line = raw.get("line")
+        if isinstance(raw_line, int) and not isinstance(raw_line, bool) and raw_line > 0:
+            line_no = raw_line
+        else:
+            line_no = idx
+        expr = str(raw.get("expr") if raw.get("expr") is not None else raw.get("expression") or "").strip()
+        if len(expr) > _MAX_DIFF_EXPR_LEN:
+            raise ValueError(f"Student step line {line_no} exceeds {_MAX_DIFF_EXPR_LEN} character limit.")
+        norm_student.append(
+            {
+                "line": line_no,
+                "expr": expr,
+                "note": str(raw.get("note") or "").strip(),
+            }
+        )
+
+    kdir, ws = _resolve_kg_and_ws(kg_dir=kg_dir, workspace=workspace)
+    deriv = _find_derivation(derivation_id, kg_dir=kdir)
+    dag_steps = _topological_steps(list(deriv.get("steps") or []))
+    step_by_id = {str(s["id"]): s for s in dag_steps}
+
+    # Precompute transitive dependencies in topological order
+    trans_deps: dict[str, set[str]] = {}
+    for s in dag_steps:
+        sid = str(s["id"])
+        deps_set: set[str] = set()
+        for d in s.get("dependsOn") or []:
+            ds = str(d)
+            if ds in step_by_id:
+                deps_set.add(ds)
+                deps_set.update(trans_deps.get(ds, set()))
+        trans_deps[sid] = deps_set
+
+    verified_ids: set[str] = set()
+    verified_prefix: list[dict[str, Any]] = []
+    status_by_id: dict[str, dict[str, Any]] = {}
+
+    earliest_break_step: dict[str, Any] | None = None
+    earliest_break_line: int | None = None
+    broken_student_expr: str = ""
+    error_kind: str | None = None
+
+    for st in norm_student:
+        if earliest_break_step is not None or len(verified_ids) >= len(dag_steps):
+            break
+
+        unverified = [s for s in dag_steps if str(s["id"]) not in verified_ids]
+        ready = [
+            s
+            for s in unverified
+            if all(str(d) in verified_ids for d in (s.get("dependsOn") or []))
+        ]
+        expected = ready[0] if ready else unverified[0]
+        expected_id = str(expected["id"])
+
+        matched, method = _step_expr_match(st["expr"], str(expected.get("expr") or ""))
+        if matched:
+            verified_ids.add(expected_id)
+            verified_prefix.append(expected)
+            status_by_id[expected_id] = {
+                "stepId": expected_id,
+                "label": _safe_step_label(expected, str(expected.get("expr") or "")),
+                "role": expected.get("role", "step"),
+                "dependsOn": list(expected.get("dependsOn") or []),
+                "status": "verified",
+                "studentLine": st["line"],
+                "studentExpr": st["expr"],
+                "matchMethod": method,
+                "brokenDependencies": [],
+            }
+            continue
+
+        # Allow swapping independent ready axioms/branches when all prerequisites are already verified
+        alt_matched: tuple[dict[str, Any], str | None] | None = None
+        for cand in ready[1:]:
+            ok_alt, m_alt = _step_expr_match(st["expr"], str(cand.get("expr") or ""))
+            if ok_alt:
+                alt_matched = (cand, m_alt)
+                break
+        if alt_matched is not None:
+            cand_step, m_alt = alt_matched
+            cid = str(cand_step["id"])
+            verified_ids.add(cid)
+            verified_prefix.append(cand_step)
+            status_by_id[cid] = {
+                "stepId": cid,
+                "label": _safe_step_label(cand_step, str(cand_step.get("expr") or "")),
+                "role": cand_step.get("role", "step"),
+                "dependsOn": list(cand_step.get("dependsOn") or []),
+                "status": "verified",
+                "studentLine": st["line"],
+                "studentExpr": st["expr"],
+                "matchMethod": m_alt,
+                "brokenDependencies": [],
+            }
+            continue
+
+        # Earliest divergence localized
+        earliest_break_step = expected
+        earliest_break_line = st["line"]
+        broken_student_expr = st["expr"]
+        later_steps = [s for s in unverified if str(s["id"]) != expected_id]
+        error_kind = _classify_step_error(
+            broken_student_expr,
+            str(expected.get("expr") or ""),
+            step_role=str(expected.get("role") or "step"),
+            later_steps=later_steps,
+        )
+        status_by_id[expected_id] = {
+            "stepId": expected_id,
+            "label": _safe_step_label(expected, str(expected.get("expr") or "")),
+            "role": expected.get("role", "step"),
+            "dependsOn": list(expected.get("dependsOn") or []),
+            "status": "broken",
+            "studentLine": st["line"],
+            "studentExpr": st["expr"],
+            "matchMethod": None,
+            "errorKind": error_kind,
+            "brokenDependencies": [],
+        }
+        break
+
+    # Populate remaining steps as `skipped_dependency` or `not_reached`
+    broken_id = str(earliest_break_step["id"]) if earliest_break_step is not None else None
+    for s in dag_steps:
+        sid = str(s["id"])
+        if sid in status_by_id:
+            continue
+        direct_unmet = [str(d) for d in (s.get("dependsOn") or []) if str(d) not in verified_ids]
+        trans_unmet = [d for d in sorted(trans_deps.get(sid, set())) if d not in verified_ids]
+        if broken_id is not None and (broken_id in trans_deps.get(sid, set()) or direct_unmet or trans_unmet):
+            st_name = "skipped_dependency"
+            b_deps = direct_unmet if direct_unmet else trans_unmet
+        else:
+            st_name = "not_reached"
+            b_deps = []
+        status_by_id[sid] = {
+            "stepId": sid,
+            "label": _safe_step_label(s, str(s.get("expr") or "")),
+            "role": s.get("role", "step"),
+            "dependsOn": list(s.get("dependsOn") or []),
+            "status": st_name,
+            "studentLine": None,
+            "studentExpr": None,
+            "matchMethod": None,
+            "brokenDependencies": b_deps,
+        }
+
+    aligned_steps = [status_by_id[str(s["id"])] for s in dag_steps]
+    all_verified = len(verified_ids) == len(dag_steps) and earliest_break_step is None
+    verified_prefix_exprs = [str(s.get("expr") or "") for s in verified_prefix if str(s.get("expr") or "").strip()]
+
+    nudges: dict[str, str] | None = None
+    mistake_category: str | None = None
+    spawned_fork: dict[str, Any] | None = None
+    logged_mistake_id: str | None = None
+    diagnostic_probe: dict[str, Any] | None = None
+    evidence_recorded = False
+
+    if earliest_break_step is not None and earliest_break_line is not None and error_kind is not None:
+        expected_expr = str(earliest_break_step.get("expr") or "")
+        safe_break_label = _safe_step_label(earliest_break_step, expected_expr)
+        dep_labels = [
+            _safe_step_label(step_by_id[str(d)], str(step_by_id[str(d)].get("expr") or ""))
+            for d in (earliest_break_step.get("dependsOn") or [])
+            if str(d) in step_by_id
+        ]
+        nudges = _build_socratic_nudges(
+            break_line=earliest_break_line,
+            step=earliest_break_step,
+            error_kind=error_kind,
+            dep_labels=dep_labels,
+            canonical_expr=expected_expr,
+        )
+        mistake_category = _ERROR_KIND_TO_MISTAKE_CATEGORY.get(error_kind, "algebra_slip")
+
+        _record_telemetry_safe(
+            kdir,
+            domain=str(deriv.get("domain") or "General"),
+            prop_id=deriv.get("propId"),
+            kind="derivation_diff",
+            correct=False,
+            difficulty=1580,
+            mistake_category=mistake_category,
+        )
+
+        if auto_spawn_fork:
+            # 1. Log structured mistake record (non-fatal)
+            try:
+                mid = f"m-{uuid.uuid4().hex[:8]}"
+                mistake_rec = {
+                    "id": mid,
+                    "date": today_iso(),
+                    "subject": str(deriv.get("domain") or "General"),
+                    "chapter": str(deriv.get("chapter") or "General"),
+                    "propId": str(deriv.get("propId") or ""),
+                    "category": mistake_category,
+                    "triggerCue": f"{deriv['title']} — line {earliest_break_line} ({safe_break_label}) [{error_kind}]",
+                    "wrongMove": broken_student_expr or "(blank)",
+                    "correctMove": nudges["R1"],
+                    "sourceRef": f"derivation:{deriv['id']}#{broken_id}",
+                }
+                append_jsonl_locked(kdir / "mistakes.jsonl", mistake_rec)
+                logged_mistake_id = mid
+            except Exception:
+                logged_mistake_id = None
+
+            # 2. Auto-spawn/update Blunder FEN Fork frozen right at the verified prefix (non-fatal)
+            try:
+                from syntopik.forks import capture_fork
+
+                seed_key = f"{deriv['id']}|{broken_id}|{error_kind}"
+                fid = f"fork-pdiff-{hashlib.sha256(seed_key.encode('utf-8')).hexdigest()[:8]}"
+                spawned_fork = capture_fork(
+                    prop_id=str(deriv.get("propId") or ""),
+                    prefix_steps=verified_prefix_exprs,
+                    fork_prompt=(
+                        f"Continue '{deriv['title']}' from the verified prefix: "
+                        f"write the exact next step ({safe_break_label})."
+                    ),
+                    sealed_blunder=broken_student_expr or "(blank)",
+                    sealed_winning_move=expected_expr,
+                    refutation_msg=nudges["R1"],
+                    mistake_id=logged_mistake_id,
+                    subject=str(deriv.get("domain") or "General"),
+                    chapter=str(deriv.get("chapter") or "General"),
+                    verify_spec={"engine": "math"},
+                    fork_id=fid,
+                    kg_dir=kdir,
+                )
+            except Exception:
+                spawned_fork = None
+
+        # 3. Root-cause Bayesian diagnostic probe on suspect ancestors (non-fatal, read-only)
+        prop_id = str(deriv.get("propId") or "").strip()
+        if prop_id:
+            try:
+                from syntopik.root_cause import select_diagnostic_probe
+
+                probe_res = select_diagnostic_probe(kdir, prop_id)
+                if isinstance(probe_res, dict) and probe_res.get("ok"):
+                    diagnostic_probe = probe_res
+            except Exception:
+                diagnostic_probe = None
+    elif all_verified:
+        _record_telemetry_safe(
+            kdir,
+            domain=str(deriv.get("domain") or "General"),
+            prop_id=deriv.get("propId"),
+            kind="derivation_diff",
+            correct=True,
+            difficulty=1580,
+        )
+        evidence_recorded = _record_evidence_safe(
+            ws,
+            deriv.get("propId"),
+            3,
+            "derivation_proof_diff",
+            {"derivationId": deriv["id"], "verifiedSteps": len(verified_ids)},
+        )
+
+    return {
+        "ok": True,
+        "derivationId": deriv["id"],
+        "propId": deriv.get("propId"),
+        "title": deriv.get("title"),
+        "domain": deriv.get("domain"),
+        "chapter": deriv.get("chapter"),
+        "allVerified": all_verified,
+        "verifiedCount": len(verified_ids),
+        "totalSteps": len(dag_steps),
+        "studentStepCount": len(norm_student),
+        "earliestBreakLine": earliest_break_line,
+        "earliestBreakStepId": broken_id,
+        "errorKind": error_kind,
+        "mistakeCategory": mistake_category,
+        "nudges": nudges,
+        "verifiedPrefix": verified_prefix_exprs,
+        "steps": aligned_steps,
+        "spawnedFork": spawned_fork,
+        "loggedMistakeId": logged_mistake_id,
+        "diagnosticProbe": diagnostic_probe,
+        "evidenceRecorded": evidence_recorded,
+    }
+
+
+# ---------------------------------------------------------------------------
 # CLI
 # ---------------------------------------------------------------------------
 
@@ -629,6 +1368,11 @@ def _build_parser() -> argparse.ArgumentParser:
     p_cut.add_argument("--axiom", required=True, help="Axiom/step ID to invalidate.")
     p_cut.add_argument("--guess-step", default=None, help="Learner's guess for the earliest broken step.")
 
+    p_diff = sub.add_parser("diff", parents=[common], help="Diff handwritten derivation steps against the Causal Step DAG.")
+    p_diff.add_argument("--id", required=True, help="Derivation ID.")
+    p_diff.add_argument("--steps-json", dest="steps_json", required=True, help="JSON array, file path, or @path of student steps.")
+    p_diff.add_argument("--no-spawn-fork", dest="no_spawn_fork", action="store_true", help="Do not auto-spawn a Blunder FEN fork or log mistake on break.")
+
     return parser
 
 
@@ -682,6 +1426,15 @@ def main(argv: list[str] | None = None) -> int:
                 kg_dir=kg_dir,
                 workspace=ws,
             )
+        elif args.command == "diff":
+            student_steps = _load_json_arg(args.steps_json)
+            res = diff_handwritten_steps(
+                kg_dir,
+                args.id,
+                student_steps,
+                auto_spawn_fork=not bool(args.no_spawn_fork),
+                workspace=ws,
+            )
         else:
             parser.error(f"Unknown command: {args.command}")
             return 2
@@ -709,6 +1462,25 @@ def main(argv: list[str] | None = None) -> int:
             print(f"[{verdict}] {res['derivationId']}::{res['stepId']} ({res['method']})")
         elif args.command == "cut":
             print(res["explanation"])
+        elif args.command == "diff":
+            if res.get("allVerified"):
+                print(f"[VERIFIED] {res['derivationId']}: {res['verifiedCount']}/{res['totalSteps']} steps verified.")
+            elif res.get("earliestBreakLine") is not None:
+                print(
+                    f"[BREAK line {res['earliestBreakLine']}] {res['derivationId']}::{res['earliestBreakStepId']} "
+                    f"({res['errorKind']}) · {res['verifiedCount']}/{res['totalSteps']} verified"
+                )
+                nudges = res.get("nudges") or {}
+                for lvl in ("R0", "R1", "R2"):
+                    if nudges.get(lvl):
+                        print(f"  {lvl}: {nudges[lvl]}")
+                if isinstance(res.get("spawnedFork"), dict) and res["spawnedFork"].get("id"):
+                    print(f"  Fork: {res['spawnedFork']['id']}")
+                probe = (res.get("diagnosticProbe") or {}).get("bestProbe")
+                if isinstance(probe, dict) and probe.get("propId"):
+                    print(f"  Diagnostic Probe: {probe['propId']} (deltaH={probe.get('deltaHBits', 0)} bits)")
+            else:
+                print(f"[INCOMPLETE] {res['derivationId']}: {res['verifiedCount']}/{res['totalSteps']} steps verified.")
     return 0 if res.get("ok") else 1
 
 

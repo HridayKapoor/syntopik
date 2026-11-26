@@ -39,6 +39,10 @@ DEPTH_DECAY = 0.85
 PROBE_SLIP = 0.10
 PROBE_GUESS = 0.12
 
+_NON_CAUSAL_RELATIONS: frozenset[str] = frozenset(
+    {"isomorphic_to", "contrasts_with", "contrasts", "contrast", "analogous", "contradicts", "unrelated"}
+)
+
 
 def _resolve_kg_dir(kg_dir: Path | str) -> Path:
     p = Path(kg_dir).expanduser().resolve()
@@ -67,6 +71,8 @@ def _build_graph_maps(
     for raw in chains:
         nc = normalize_chain(raw)
         if not nc:
+            continue
+        if str(nc.get("relation") or "").strip().lower() in _NON_CAUSAL_RELATIONS:
             continue
         w = float(nc["encompassWeight"])
         if w <= 0.0:

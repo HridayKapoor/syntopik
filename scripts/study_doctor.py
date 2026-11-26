@@ -104,6 +104,11 @@ V3_SYNTOPIK_MODULES: list[str] = [
     "sim_eval.py",
 ]
 
+V31_SYNTOPIK_MODULES: list[str] = [
+    "isomorphism.py",
+    "sync_delta.py",
+]
+
 EXPECTED_SKILLS: list[str] = [
     "chapter-autopilot",
     "exam-simulator",
@@ -568,32 +573,43 @@ def check_syntopik_package(ws: Path, pkg_root: Path | None = None) -> dict[str, 
     missing = [m for m in EXPECTED_SYNTOPIK_MODULES if not (pkg_dir / m).is_file()]
     present_v3 = [m for m in V3_SYNTOPIK_MODULES if (pkg_dir / m).is_file()]
     missing_v3 = [m for m in V3_SYNTOPIK_MODULES if m not in present_v3]
+    present_v31 = [m for m in V31_SYNTOPIK_MODULES if (pkg_dir / m).is_file()]
+    missing_v31 = [m for m in V31_SYNTOPIK_MODULES if m not in present_v31]
+    expected_total = len(EXPECTED_SYNTOPIK_MODULES) + len(V3_SYNTOPIK_MODULES) + len(V31_SYNTOPIK_MODULES)
     if missing:
         return {
             "name": "Core Package (syntopik/)",
             "category": "workspace",
             "status": "fail",
             "required": True,
-            "count": len(EXPECTED_SYNTOPIK_MODULES) - len(missing) + len(present_v3),
-            "expectedCount": len(EXPECTED_SYNTOPIK_MODULES) + len(V3_SYNTOPIK_MODULES),
+            "count": len(EXPECTED_SYNTOPIK_MODULES) - len(missing) + len(present_v3) + len(present_v31),
+            "expectedCount": expected_total,
             "v3Present": len(present_v3),
             "v3Missing": missing_v3,
+            "v31Present": len(present_v31),
+            "v31Missing": missing_v31,
             "detail": f"missing: {', '.join(missing)}",
         }
-    total_present = len(EXPECTED_SYNTOPIK_MODULES) + len(present_v3)
-    if not missing_v3:
-        detail = f"all {total_present} pure-stdlib modules present (12 core + {len(present_v3)} v3.0)"
+    total_present = len(EXPECTED_SYNTOPIK_MODULES) + len(present_v3) + len(present_v31)
+    if not missing_v3 and not missing_v31:
+        detail = f"all {total_present} pure-stdlib modules present (12 core + {len(present_v3)} v3.0 + {len(present_v31)} v3.1)"
     else:
-        detail = f"{len(EXPECTED_SYNTOPIK_MODULES)}/{len(EXPECTED_SYNTOPIK_MODULES)} core + {len(present_v3)}/{len(V3_SYNTOPIK_MODULES)} v3.0 pure-stdlib modules present"
+        detail = (
+            f"{len(EXPECTED_SYNTOPIK_MODULES)}/{len(EXPECTED_SYNTOPIK_MODULES)} core + "
+            f"{len(present_v3)}/{len(V3_SYNTOPIK_MODULES)} v3.0 + "
+            f"{len(present_v31)}/{len(V31_SYNTOPIK_MODULES)} v3.1 pure-stdlib modules present"
+        )
     return {
         "name": "Core Package (syntopik/)",
         "category": "workspace",
         "status": "ok",
         "required": True,
         "count": total_present,
-        "expectedCount": len(EXPECTED_SYNTOPIK_MODULES) + len(V3_SYNTOPIK_MODULES),
+        "expectedCount": expected_total,
         "v3Present": len(present_v3),
         "v3Missing": missing_v3,
+        "v31Present": len(present_v31),
+        "v31Missing": missing_v31,
         "detail": detail,
     }
 
@@ -812,6 +828,88 @@ def check_reagents_db(ws: Path, pkg_root: Path | None = None) -> dict[str, Any]:
     }
 
 
+def check_archetypes_db(ws: Path, pkg_root: Path | None = None) -> dict[str, Any]:
+    pr = pkg_root or ROOT
+    candidates: list[Path] = [
+        ws / "syntopik" / "data" / "archetypes.json",
+        pr / "syntopik" / "data" / "archetypes.json",
+    ]
+    if pr.name == "_bundle" and pr.parent.name == "syntopik":
+        candidates.append(pr.parent / "data" / "archetypes.json")
+    try:
+        spec = importlib.util.find_spec("syntopik")
+        if spec and spec.origin:
+            candidates.append(Path(spec.origin).resolve().parent / "data" / "archetypes.json")
+    except Exception:
+        pass
+
+    db_path = _first_existing_file(*candidates)
+    if db_path is None:
+        iso_present = _first_existing_file(
+            ws / "syntopik" / "isomorphism.py",
+            pr / "syntopik" / "isomorphism.py",
+            *(
+                [pr.parent / "isomorphism.py"]
+                if pr.name == "_bundle" and pr.parent.name == "syntopik"
+                else []
+            ),
+        ) is not None
+        if iso_present:
+            return {
+                "name": "Rosetta Archetypes (archetypes.json)",
+                "category": "workspace",
+                "status": "fail",
+                "required": True,
+                "detail": "syntopik/data/archetypes.json missing",
+            }
+        return {
+            "name": "Rosetta Archetypes (archetypes.json)",
+            "category": "workspace",
+            "status": "ok",
+            "required": False,
+            "detail": "v3.1 Rosetta archetypes pending (isomorphism.py not yet present)",
+        }
+
+    try:
+        data = json.loads(db_path.read_text(encoding="utf-8"))
+    except Exception as exc:
+        return {
+            "name": "Rosetta Archetypes (archetypes.json)",
+            "category": "workspace",
+            "status": "fail",
+            "required": True,
+            "detail": f"invalid JSON: {exc}",
+        }
+
+    archetypes = data if isinstance(data, list) else (data.get("archetypes") if isinstance(data, dict) else None)
+    if not isinstance(archetypes, list) or len(archetypes) < 10:
+        count = len(archetypes) if isinstance(archetypes, list) else 0
+        return {
+            "name": "Rosetta Archetypes (archetypes.json)",
+            "category": "workspace",
+            "status": "fail",
+            "required": True,
+            "detail": f"expected >= 10 archetypes, found {count}",
+        }
+    missing_id = sum(1 for a in archetypes if not isinstance(a, dict) or not a.get("id"))
+    if missing_id:
+        return {
+            "name": "Rosetta Archetypes (archetypes.json)",
+            "category": "workspace",
+            "status": "fail",
+            "required": True,
+            "detail": f"{missing_id} archetype entries missing id",
+        }
+    return {
+        "name": "Rosetta Archetypes (archetypes.json)",
+        "category": "workspace",
+        "status": "ok",
+        "required": True,
+        "count": len(archetypes),
+        "detail": f"archetypes.json valid ({len(archetypes)} structural archetypes)",
+    }
+
+
 def check_knowledge_hub(ws: Path, kg_dir: Path, pkg_root: Path | None = None) -> dict[str, Any]:
     pr = pkg_root or ROOT
     required_files = [
@@ -953,6 +1051,7 @@ def run_doctor(workspace: str | Path | None = None, *, core_only: bool = False) 
             check_skills(ws, pkg_root),
             check_knowledge_hub(ws, kg_dir, pkg_root),
             check_reagents_db(ws, pkg_root),
+            check_archetypes_db(ws, pkg_root),
             check_rule_budget(ws, is_repo=is_repo),
             check_context_footprint(ws),
             check_regression_suite(ws, is_repo=is_repo),
@@ -1010,6 +1109,7 @@ def run_doctor(workspace: str | Path | None = None, *, core_only: bool = False) 
             check_skills(ws, pkg_root),
             check_knowledge_hub(ws, kg_dir, pkg_root),
             check_reagents_db(ws, pkg_root),
+            check_archetypes_db(ws, pkg_root),
             check_rule_budget(ws, is_repo=is_repo),
             check_context_footprint(ws),
             check_regression_suite(ws, is_repo=is_repo),

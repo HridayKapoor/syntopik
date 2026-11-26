@@ -1674,6 +1674,7 @@ function computeEvidenceSummary(
 	};
 	const adj = new Map();
 	for (const e of chainSummary.normalizedEdges) {
+		if (String(e.relation || "").toLowerCase() === "isomorphic_to") continue;
 		if (!adj.has(e.from)) adj.set(e.from, new Set());
 		adj.get(e.from).add(e.to);
 	}
@@ -1860,6 +1861,7 @@ function computeRootCauseHotspots(propositions, chainSummary, mistakes) {
 	const outgoing = new Map();
 	const incoming = new Map();
 	for (const e of chainSummary.normalizedEdges) {
+		if (String(e.relation || "").toLowerCase() === "isomorphic_to") continue;
 		if (!outgoing.has(e.from)) outgoing.set(e.from, new Set());
 		outgoing.get(e.from).add(e.to);
 		if (!incoming.has(e.to)) incoming.set(e.to, new Set());
@@ -2615,6 +2617,367 @@ function scanStarterPacks() {
 	return out;
 }
 
+function loadArchetypesNode() {
+	const candidates = [
+		path.join(root, "syntopik", "data", "archetypes.json"),
+		path.join(repoRoot, "syntopik", "data", "archetypes.json"),
+		path.resolve(repoRoot, "..", "data", "archetypes.json"),
+		path.join(repoRoot, "syntopik", "_bundle", "data", "archetypes.json"),
+	];
+	for (const cand of candidates) {
+		try {
+			if (!existsSync(cand)) continue;
+			const raw = JSON.parse(readFileSync(cand, "utf8"));
+			const arr = Array.isArray(raw) ? raw : (Array.isArray(raw?.archetypes) ? raw.archetypes : []);
+			return arr.filter((a) => a && typeof a === "object" && a.id);
+		} catch {
+			// Skip unreadable candidate
+		}
+	}
+	return [];
+}
+
+function normSpaceLower(text) {
+	return String(text || "").trim().toLowerCase().replace(/\s+/gu, " ");
+}
+
+function escapeRegExp(s) {
+	return s.replace(/[.*+?^${}()|[\]\\]/gu, "\\$&");
+}
+
+function keywordMatchesRosetta(kw, rawBlob, wordBlob) {
+	const k = String(kw || "").trim().toLowerCase();
+	if (!k) return false;
+	const hasSymbol = /[^a-z0-9\s-]/u.test(k);
+	if (hasSymbol) {
+		if (rawBlob.includes(k)) return true;
+		const ck = k.replace(/\s+/gu, "");
+		const cb = rawBlob.replace(/\s+/gu, "");
+		return ck.length >= 4 && cb.includes(ck);
+	}
+	const parts = k.split(/[\s-]+/u).filter(Boolean).map(escapeRegExp);
+	if (parts.length === 0) return false;
+	const re = new RegExp(`(?<![a-z0-9])${parts.join("[\\s\\-_]+")}(?![a-z0-9])`, "u");
+	return re.test(wordBlob);
+}
+
+function keywordWeightRosetta(kw) {
+	const k = String(kw || "").trim().toLowerCase();
+	const hasSymbol = /[^a-z0-9\s-]/u.test(k);
+	const isPhrase = k.includes(" ") || k.includes("-");
+	if (hasSymbol || isPhrase || k.length >= 9) return 1.45;
+	if (k.length >= 5) return 1.15;
+	return 0.95;
+}
+
+function domainContextAlignRosetta(prop, slot) {
+	const subjChap = normSpaceLower(`${prop?.subject || ""} ${prop?.chapter || ""}`);
+	const slotMeta = normSpaceLower(`${slot?.domain || ""} ${slot?.title || ""}`);
+	if (!subjChap || !slotMeta) return 0;
+	const stop = new Set(["and", "the", "for", "with", "from", "general", "system", "systems", "theory", "linear"]);
+	const pToks = new Set((subjChap.match(/[a-z]{3,}/gu) || []).filter((t) => !stop.has(t)));
+	const sToks = (slotMeta.match(/[a-z]{3,}/gu) || []).filter((t) => !stop.has(t));
+	for (const t of sToks) {
+		if (pToks.has(t)) return 0.08;
+	}
+	return 0;
+}
+
+function matchPropositionArchetypesNode(prop, archetypes, minScore = 0.35) {
+	if (!prop || typeof prop !== "object") return [];
+	const tags = (Array.isArray(prop.tags) ? prop.tags : [])
+		.filter((t) => typeof t === "string" && t.trim())
+		.map((t) => t.trim().toLowerCase());
+	const tagSet = new Set(tags);
+	const aliases = (Array.isArray(prop.aliases) ? prop.aliases : [])
+		.filter((a) => typeof a === "string" && a.trim())
+		.map((a) => a.trim());
+	const cueParts = [];
+	for (const c of Array.isArray(prop.cues) ? prop.cues : []) {
+		if (c && typeof c === "object") {
+			if (c.q) cueParts.push(String(c.q));
+			if (c.a) cueParts.push(String(c.a));
+		}
+	}
+	const headlineRaw = normSpaceLower([prop.title || "", aliases.join(" "), tags.join(" ")].join(" "));
+	const headlineWord = headlineRaw.replace(/[_/]+/gu, " ");
+	const fullRaw = normSpaceLower([
+		prop.title || "",
+		prop.statement || "",
+		aliases.join(" "),
+		tags.join(" "),
+		prop.notes || "",
+		cueParts.join(" "),
+	].join(" "));
+	const fullWord = fullRaw.replace(/[_/]+/gu, " ");
+	if (!fullRaw) return [];
+
+	const matches = [];
+	for (const arch of archetypes) {
+		const archId = String(arch.id || "").trim();
+		if (!archId) continue;
+		const explicitTag = tagSet.has(archId.toLowerCase());
+		let bestSlot = null;
+		let bestScore = 0;
+
+		for (const slot of Array.isArray(arch.domains) ? arch.domains : []) {
+			if (!slot || typeof slot !== "object") continue;
+			const kws = (Array.isArray(slot.keywords) ? slot.keywords : []).map((k) => String(k || "")).filter(Boolean);
+			let matchedCount = 0;
+			let weightedHits = 0;
+			let headlineHits = 0;
+			for (const kw of kws) {
+				if (keywordMatchesRosetta(kw, fullRaw, fullWord)) {
+					matchedCount += 1;
+					weightedHits += keywordWeightRosetta(kw);
+					if (keywordMatchesRosetta(kw, headlineRaw, headlineWord)) headlineHits += 1;
+				}
+			}
+			if (matchedCount === 0 && !explicitTag) continue;
+			const base = weightedHits > 0 ? 1 - Math.exp(-0.42 * weightedHits) : 0;
+			const headBoost = Math.min(0.22, 0.11 * headlineHits);
+			const ctxBoost = domainContextAlignRosetta(prop, slot);
+			let score = Math.min(0.99, base + headBoost + ctxBoost);
+			if (!explicitTag && matchedCount === 1 && weightedHits < 1.35 && headlineHits === 0) {
+				score = Math.min(score, 0.32);
+			}
+			if (explicitTag) score = Math.min(0.99, Math.max(score, 0.88 + ctxBoost));
+			if (score > bestScore) {
+				bestScore = score;
+				bestSlot = slot;
+			}
+		}
+		if (!bestSlot && explicitTag && Array.isArray(arch.domains) && arch.domains.length > 0) {
+			bestSlot = arch.domains[0];
+			bestScore = 0.88;
+		}
+		if (bestSlot && bestScore >= minScore) {
+			matches.push({
+				archetypeId: archId,
+				archetypeName: String(arch.name || archId),
+				canonicalEquation: String(arch.canonicalEquation || ""),
+				domainSlot: String(bestSlot.domain || "General"),
+				variableMap: bestSlot.variableMap && typeof bestSlot.variableMap === "object" ? { ...bestSlot.variableMap } : {},
+				breaksAt: Array.isArray(arch.breaksAt) ? arch.breaksAt.map(String) : [],
+				bijectionQuestion: String(arch.bijectionQuestion || ""),
+				score: Number(bestScore.toFixed(4)),
+			});
+		}
+	}
+	matches.sort((a, b) => b.score - a.score || a.archetypeId.localeCompare(b.archetypeId));
+	return matches;
+}
+
+function buildBijectionNode(srcMap, tgtMap) {
+	const out = {};
+	for (const [role, srcSym] of Object.entries(srcMap || {})) {
+		if (tgtMap && Object.prototype.hasOwnProperty.call(tgtMap, role)) {
+			out[role] = `${srcSym} <-> ${tgtMap[role]}`;
+		}
+	}
+	return out;
+}
+
+function isCrossScopeNode(pa, pb, domA, domB) {
+	const da = normSpaceLower(domA);
+	const db = normSpaceLower(domB);
+	if (da && db && da !== db) return true;
+	const sa = normSpaceLower(pa?.subject);
+	const sb = normSpaceLower(pb?.subject);
+	if (sa && sb && sa !== sb) return true;
+	const ca = normSpaceLower(pa?.chapter);
+	const cb = normSpaceLower(pb?.chapter);
+	if (ca && cb && ca !== cb) return true;
+	return false;
+}
+
+function bestSlotForPropNode(prop, arch) {
+	const domains = Array.isArray(arch?.domains) ? arch.domains.filter((d) => d && typeof d === "object") : [];
+	if (domains.length === 0) return null;
+	if (!prop) return domains[0];
+	const ms = matchPropositionArchetypesNode(prop, [arch], 0);
+	if (ms.length > 0) {
+		const hit = domains.find((d) => String(d.domain || "") === ms[0].domainSlot);
+		if (hit) return hit;
+	}
+	let best = domains[0];
+	let bestAl = -1;
+	for (const d of domains) {
+		const al = domainContextAlignRosetta(prop, d);
+		if (al > bestAl) {
+			bestAl = al;
+			best = d;
+		}
+	}
+	return best;
+}
+
+function computeRosettaHubData(propositions, rawChains) {
+	const archetypes = loadArchetypesNode();
+	const archById = new Map(archetypes.map((a) => [String(a.id), a]));
+	const propsById = new Map();
+	const activeProps = [];
+	for (const p of propositions) {
+		const pid = String(p?.id || "").trim();
+		if (!pid) continue;
+		propsById.set(pid, p);
+		if (!p.archived) activeProps.push(p);
+	}
+
+	const persistedMap = new Map();
+	for (const raw of rawChains) {
+		if (!raw || typeof raw !== "object") continue;
+		if (String(raw.relation || "").trim().toLowerCase() !== "isomorphic_to") continue;
+		const conc = String(raw.conclusion || raw.to || "").trim();
+		const prems = Array.isArray(raw.premises)
+			? raw.premises.map((x) => String(x || "").trim()).filter((x) => x && x !== conc)
+			: (raw.from && String(raw.from).trim() !== conc ? [String(raw.from).trim()] : []);
+		if (!conc || prems.length === 0) continue;
+		for (const prem of prems) {
+			const [a, b] = prem <= conc ? [prem, conc] : [conc, prem];
+			const pairKey = `${a}\u0000${b}`;
+			const breaks = Array.isArray(raw.breaksAt) ? raw.breaksAt.map((x) => String(x || "").trim()).filter(Boolean) : [];
+			persistedMap.set(pairKey, {
+				sourceId: a,
+				targetId: b,
+				archetypeId: String(raw.archetypeId || "").trim(),
+				breaksAt: breaks,
+				why: String(raw.why || raw.note || "").trim(),
+			});
+		}
+	}
+
+	const byArch = new Map();
+	for (const p of activeProps) {
+		const ms = matchPropositionArchetypesNode(p, archetypes, 0.35);
+		for (const m of ms) {
+			if (!byArch.has(m.archetypeId)) byArch.set(m.archetypeId, []);
+			byArch.get(m.archetypeId).push({ prop: p, match: m });
+		}
+	}
+
+	const chordsByPair = new Map();
+	for (const [archId, entries] of [...byArch.entries()].sort((a, b) => a[0].localeCompare(b[0]))) {
+		const arch = archById.get(archId);
+		entries.sort((x, y) => String(x.prop.id).localeCompare(String(y.prop.id)));
+		for (let i = 0; i < entries.length; i += 1) {
+			for (let j = i + 1; j < entries.length; j += 1) {
+				const { prop: pa, match: ma } = entries[i];
+				const { prop: pb, match: mb } = entries[j];
+				if (!isCrossScopeNode(pa, pb, ma.domainSlot, mb.domainSlot)) continue;
+				const [srcP, srcM, tgtP, tgtM] = String(pa.id) <= String(pb.id) ? [pa, ma, pb, mb] : [pb, mb, pa, ma];
+				const pairKey = `${srcP.id}\u0000${tgtP.id}`;
+				const pers = persistedMap.get(pairKey);
+				const isPers = Boolean(pers && (!pers.archetypeId || pers.archetypeId === archId));
+				const crossBonus = normSpaceLower(srcM.domainSlot) !== normSpaceLower(tgtM.domainSlot) ? 0.08 : 0;
+				const pairScore = Number(Math.min(0.99, Math.sqrt(srcM.score * tgtM.score) + crossBonus).toFixed(4));
+				const chord = {
+					id: `iso-${archId}-${srcP.id}--${tgtP.id}`,
+					sourceId: String(srcP.id),
+					targetId: String(tgtP.id),
+					sourceTitle: String(srcP.title || srcP.id),
+					targetTitle: String(tgtP.title || tgtP.id),
+					sourceDomain: srcM.domainSlot,
+					targetDomain: tgtM.domainSlot,
+					sourceChapter: String(srcP.chapter || "General"),
+					targetChapter: String(tgtP.chapter || "General"),
+					sourceSubject: String(srcP.subject || "General"),
+					targetSubject: String(tgtP.subject || "General"),
+					archetypeId: archId,
+					archetypeName: String(arch?.name || archId),
+					canonicalEquation: String(arch?.canonicalEquation || ""),
+					variableBijection: buildBijectionNode(srcM.variableMap, tgtM.variableMap),
+					breaksAt: isPers && pers?.breaksAt?.length ? pers.breaksAt : (Array.isArray(arch?.breaksAt) ? arch.breaksAt : []),
+					bijectionQuestion: String(arch?.bijectionQuestion || ""),
+					score: pairScore,
+					persisted: isPers,
+				};
+				const prev = chordsByPair.get(pairKey);
+				if (
+					!prev ||
+					(chord.persisted && !prev.persisted) ||
+					(chord.persisted === prev.persisted && chord.score > prev.score)
+				) {
+					chordsByPair.set(pairKey, chord);
+				}
+			}
+		}
+	}
+
+	for (const [pairKey, pers] of persistedMap.entries()) {
+		if (chordsByPair.has(pairKey)) {
+			const ex = chordsByPair.get(pairKey);
+			ex.persisted = true;
+			if (pers.breaksAt.length > 0) ex.breaksAt = pers.breaksAt;
+			continue;
+		}
+		const srcP = propsById.get(pers.sourceId) || { id: pers.sourceId, title: pers.sourceId, subject: "General", chapter: "General" };
+		const tgtP = propsById.get(pers.targetId) || { id: pers.targetId, title: pers.targetId, subject: "General", chapter: "General" };
+		const aid = pers.archetypeId || "custom_isomorphism";
+		const arch = archById.get(aid) || null;
+		const slotA = bestSlotForPropNode(srcP, arch) || {};
+		const slotB = bestSlotForPropNode(tgtP, arch) || {};
+		chordsByPair.set(pairKey, {
+			id: `iso-${aid}-${pers.sourceId}--${pers.targetId}`,
+			sourceId: pers.sourceId,
+			targetId: pers.targetId,
+			sourceTitle: String(srcP.title || pers.sourceId),
+			targetTitle: String(tgtP.title || pers.targetId),
+			sourceDomain: String(slotA.domain || srcP.subject || "General"),
+			targetDomain: String(slotB.domain || tgtP.subject || "General"),
+			sourceChapter: String(srcP.chapter || "General"),
+			targetChapter: String(tgtP.chapter || "General"),
+			sourceSubject: String(srcP.subject || "General"),
+			targetSubject: String(tgtP.subject || "General"),
+			archetypeId: aid,
+			archetypeName: arch ? String(arch.name || aid) : aid.replace(/_/gu, " "),
+			canonicalEquation: arch ? String(arch.canonicalEquation || "") : "",
+			variableBijection: buildBijectionNode(slotA.variableMap || {}, slotB.variableMap || {}),
+			breaksAt: pers.breaksAt.length ? pers.breaksAt : (Array.isArray(arch?.breaksAt) ? arch.breaksAt : []),
+			bijectionQuestion: arch ? String(arch.bijectionQuestion || "") : "",
+			score: 1.0,
+			persisted: true,
+		});
+	}
+
+	const chords = [...chordsByPair.values()].sort(
+		(a, b) =>
+			(a.persisted === b.persisted ? 0 : a.persisted ? -1 : 1) ||
+			b.score - a.score ||
+			a.archetypeId.localeCompare(b.archetypeId) ||
+			a.sourceId.localeCompare(b.sourceId),
+	);
+
+	return {
+		ok: true,
+		chords,
+		archetypesCount: archetypes.length,
+		chordCount: chords.length,
+		persistedCount: chords.filter((c) => c.persisted).length,
+		discoveredCount: chords.filter((c) => !c.persisted).length,
+	};
+}
+
+function readSyncStatusNode(kgDirPath) {
+	const raw = readJsonObject(path.join(kgDirPath, "sync-state.json"));
+	const lastExportedAt = typeof raw?.lastExportedAt === "string" && raw.lastExportedAt.trim() ? raw.lastExportedAt.trim() : null;
+	const lastMergedAt = typeof raw?.lastMergedAt === "string" && raw.lastMergedAt.trim() ? raw.lastMergedAt.trim() : null;
+	const lastSyncedAt =
+		lastExportedAt && lastMergedAt
+			? (lastExportedAt >= lastMergedAt ? lastExportedAt : lastMergedAt)
+			: (lastMergedAt || lastExportedAt || null);
+	return {
+		ok: true,
+		initialized: Boolean(raw && typeof raw.deviceId === "string" && raw.deviceId.trim()),
+		deviceId: typeof raw?.deviceId === "string" && raw.deviceId.trim() ? raw.deviceId.trim() : null,
+		lamportClock: Number(raw?.lamportClock || 0),
+		lastExportedAt,
+		lastMergedAt,
+		lastSyncedAt,
+		mergedDeltaCount: Array.isArray(raw?.mergedDeltaHashes) ? raw.mergedDeltaHashes.length : 0,
+	};
+}
+
 function computeOfflineNextMove(learnerProfile, whiteboard, forksDue, dueItems, activeTracker, evidenceSummary) {
 	const pol = learnerProfile?.compiledPolicy || defaultLearnerProfile().compiledPolicy;
 	const pendingPins = whiteboard?.pendingPins || [];
@@ -2729,6 +3092,8 @@ const rootCauseHotspots = computeRootCauseHotspots(propositions, chainSummary, m
 const whiteboard = sanitizeWhiteboard(rawWhiteboard);
 const explorables = scanExplorables(chapters);
 const starterPacks = scanStarterPacks();
+const rosetta = computeRosettaHubData(propositions, rawChains);
+const syncStatus = readSyncStatusNode(kgDir);
 const nextMove = computeOfflineNextMove(
 	learnerProfile,
 	whiteboard,
@@ -2751,6 +3116,7 @@ stats.vivaSessionsCount = vivaSessions.length;
 stats.explorablesCount = Object.values(explorables).reduce((acc, arr) => acc + arr.length, 0);
 stats.starterPacksCount = starterPacks.length;
 stats.verifiedTransferPct = evidenceSummary.verifiedTransferPct;
+stats.rosettaChordsCount = rosetta.chordCount;
 
 const studyGraph = {
 	propositions,
@@ -2798,6 +3164,8 @@ const studyHub = {
 	whiteboard,
 	explorables,
 	starterPacks,
+	rosetta,
+	syncStatus,
 };
 
 const bundle = [

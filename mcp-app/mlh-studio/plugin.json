@@ -1,8 +1,8 @@
 {
   "name": "syntopik-studio",
   "displayName": "Syntopik Studio",
-  "description": "Calm inline quiz cards, hidden-solution practice cards (standard/parsons/faded/blackout), Pedagogical Brainstem, Live Whiteboard bus, and live side-pane Study Studio for Syntopik v3.0.",
-  "version": "3.0.0",
+  "description": "Calm inline quiz cards, hidden-solution practice cards (standard/parsons/faded/blackout), Pedagogical Brainstem w/ Rosetta bridges, Live Whiteboard bus, and live side-pane Study Studio for Syntopik v3.1.",
+  "version": "3.1.0",
   "logo": "assets/logo.svg",
   "suggestedPrompts": [
     "Open Syntopik Studio and review my due FSRS-6 flashcards",

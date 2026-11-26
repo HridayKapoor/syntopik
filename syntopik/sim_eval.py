@@ -13,6 +13,7 @@ from dataclasses import dataclass
 from datetime import date as date_cls, datetime, timedelta, timezone
 import html
 import math
+from pathlib import Path
 import random
 import statistics
 from typing import Any
@@ -39,6 +40,7 @@ __all__ = [
     "format_markdown_table",
     "render_ablation_svg",
     "render_calibration_svg",
+    "replay_learner_history",
 ]
 
 # ---------------------------------------------------------------------------
@@ -1941,3 +1943,470 @@ def render_calibration_svg(results: dict[str, Any]) -> str:
     )
     out.append("</svg>")
     return "\n".join(out) + "\n"
+
+
+# ---------------------------------------------------------------------------
+# Longitudinal Learner Telemetry Policy Replay (Chronological 70/30 Split)
+# ---------------------------------------------------------------------------
+
+_REPLAY_MIN_OOS_GAIN = 0.005
+_REPLAY_GRID_ELO_K: tuple[float, ...] = (36.0, 48.0, 64.0, 80.0, 96.0)
+_REPLAY_GRID_NOVICE: tuple[float, ...] = (0.28, 0.35, 0.42)
+_REPLAY_GRID_CHALLENGE: tuple[float, ...] = (0.74, 0.80, 0.86)
+_REPLAY_GRID_FATIGUE: tuple[float, ...] = (1.10, 1.25, 1.45)
+
+
+def _replay_parse_ts(value: Any) -> datetime | None:
+    if isinstance(value, datetime):
+        return value.astimezone(timezone.utc) if value.tzinfo else value.replace(tzinfo=timezone.utc)
+    if not isinstance(value, str) or not value.strip():
+        return None
+    raw = value.strip()
+    if raw.endswith("Z"):
+        raw = raw[:-1] + "+00:00"
+    try:
+        dt = datetime.fromisoformat(raw)
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=timezone.utc)
+        return dt.astimezone(timezone.utc)
+    except ValueError:
+        try:
+            d = date_cls.fromisoformat(raw[:10])
+            return datetime(d.year, d.month, d.day, 12, 0, 0, tzinfo=timezone.utc)
+        except ValueError:
+            return None
+
+
+def _replay_resolve_kg(workspace: Path | str | None) -> tuple[Path, Path]:
+    from syntopik.paths import resolve_kg_dir, resolve_workspace
+
+    if workspace is not None and str(workspace).strip():
+        p = Path(workspace).expanduser().resolve()
+        if p.name == "knowledge-graph" and not (p / "knowledge-graph").is_dir():
+            return p.parent, p
+        if (p / "knowledge-graph").is_dir():
+            return p, (p / "knowledge-graph").resolve()
+        if (p / "revlog.jsonl").is_file() or (p / "learner-profile.json").is_file():
+            return p.parent, p
+        return p, (p / "knowledge-graph").resolve()
+    ws = resolve_workspace()
+    return ws, resolve_kg_dir(ws)
+
+
+_REPLAY_MAX_UTC_DT = datetime(9999, 12, 31, 23, 59, 59, tzinfo=timezone.utc)
+
+
+def _safe_replay_float(val: Any, default: float, *, lo: float, hi: float) -> float:
+    if isinstance(val, bool) or val is None:
+        return default
+    try:
+        fv = float(val)
+    except (TypeError, ValueError):
+        return default
+    if not math.isfinite(fv):
+        return default
+    return _clamp(fv, lo, hi)
+
+
+def _extract_replay_events(
+    revlog_rows: list[dict[str, Any]],
+    props_by_id: dict[str, dict[str, Any]],
+) -> list[dict[str, Any]]:
+    """Extract and strictly chronologically order confidence-rated review events."""
+    events: list[tuple[tuple[int, datetime, int], dict[str, Any]]] = []
+    for idx, row in enumerate(revlog_rows):
+        if not isinstance(row, dict):
+            continue
+        raw_conf = row.get("learnerConfidence")
+        if raw_conf is None:
+            raw_conf = row.get("confidence")
+        if not isinstance(raw_conf, (int, float)) or isinstance(raw_conf, bool) or not math.isfinite(float(raw_conf)):
+            continue
+        conf = float(raw_conf)
+        if 1.0 < conf <= 100.0:
+            conf = conf / 100.0
+        conf = _clamp(conf, 0.0, 1.0)
+
+        if isinstance(row.get("correct"), bool):
+            correct = bool(row["correct"])
+        else:
+            rating = row.get("rating")
+            rating_int = row.get("ratingInt")
+            if isinstance(rating_int, int) and not isinstance(rating_int, bool):
+                correct = rating_int >= 3
+            elif isinstance(rating, int) and not isinstance(rating, bool):
+                correct = rating >= 3
+            else:
+                correct = str(rating or "").strip().lower() in ("good", "easy")
+
+        pid = str(row.get("propId") or row.get("id") or "").strip()
+        prop = props_by_id.get(pid) or {}
+        domain = str(row.get("domain") or prop.get("subject") or "General").strip() or "General"
+
+        # Determine item difficulty on Elo scale (900..2200)
+        raw_diff = row.get("difficulty")
+        diff_elo = 1500.0
+        if isinstance(raw_diff, (int, float)) and not isinstance(raw_diff, bool) and math.isfinite(float(raw_diff)):
+            df = float(raw_diff)
+            diff_elo = _clamp(df, 900.0, 2200.0) if df >= 100.0 else _clamp(1200.0 + df * 60.0, 900.0, 2200.0)
+        elif isinstance(prop.get("fsrs"), dict):
+            fd = prop["fsrs"].get("difficulty")
+            if isinstance(fd, (int, float)) and not isinstance(fd, bool) and math.isfinite(float(fd)):
+                diff_elo = _clamp(1200.0 + float(fd) * 60.0, 900.0, 2200.0)
+
+        hints = row.get("hintsUsed")
+        hints_int = 0
+        if isinstance(hints, (int, float)) and not isinstance(hints, bool):
+            fh = float(hints)
+            if math.isfinite(fh):
+                hints_int = max(0, min(5, int(fh)))
+        elif isinstance(hints, str) and hints.strip():
+            try:
+                fh = float(hints.strip())
+                if math.isfinite(fh):
+                    hints_int = max(0, min(5, int(fh)))
+            except (TypeError, ValueError):
+                hints_int = 0
+
+        raw_dur = row.get("durationMs")
+        dur_ms: float | None = None
+        if isinstance(raw_dur, (int, float)) and not isinstance(raw_dur, bool) and math.isfinite(float(raw_dur)) and float(raw_dur) > 0:
+            dur_ms = min(float(raw_dur), 86_400_000.0)
+
+        ts_raw = row.get("ts") or row.get("timestamp") or row.get("reviewedAt") or row.get("date")
+        dt = _replay_parse_ts(ts_raw)
+        # Sort directly by UTC datetime (avoids Windows OSError on pre-1970 dt.timestamp())
+        sort_key = (0, dt, idx) if dt is not None else (1, _REPLAY_MAX_UTC_DT, idx)
+
+        events.append(
+            (
+                sort_key,
+                {
+                    "propId": pid or f"item-{idx}",
+                    "domain": domain,
+                    "ts": dt,
+                    "tsIso": dt.replace(microsecond=0).isoformat().replace("+00:00", "Z") if dt else None,
+                    "correct": correct,
+                    "confidence": conf,
+                    "difficulty": diff_elo,
+                    "hintsUsed": hints_int,
+                    "durationMs": dur_ms,
+                },
+            )
+        )
+
+    events.sort(key=lambda pair: pair[0])
+    return [ev for _k, ev in events]
+
+
+def _evaluate_replay_params(
+    events: list[dict[str, Any]],
+    split_idx: int,
+    *,
+    elo_k_base: float,
+    er_novice_cutoff: float,
+    er_challenge_cutoff: float,
+    fatigue_multiplier: float,
+    session_target_min: float = 30.0,
+    baseline_latency_ms: float = 22000.0,
+) -> tuple[dict[str, float], dict[str, float]]:
+    """Run strictly causal step-by-step replay and return `(train_metrics, test_metrics)`."""
+    dom_elo: dict[str, float] = {}
+    dom_n: dict[str, int] = {}
+    prop_bkt: dict[str, float] = {}
+
+    session_start_dt: datetime | None = None
+    last_dt: datetime | None = None
+    session_records: list[tuple[float, float]] = []  # (clean_hit, latency_ratio)
+    recent_window: list[tuple[bool, float, int]] = []  # (correct, latency_ratio, hints)
+
+    def _new_acc() -> dict[str, list[float]]:
+        return {"brier": [], "logloss": [], "er": []}
+
+    train_acc = _new_acc()
+    test_acc = _new_acc()
+    target_min = _safe_replay_float(session_target_min, 30.0, lo=10.0, hi=240.0)
+    learner_scale = _clamp(_safe_replay_float(baseline_latency_ms, 22000.0, lo=2000.0, hi=300000.0) / 22000.0, 0.60, 1.80)
+
+    for idx, ev in enumerate(events):
+        dom = ev["domain"]
+        pid = ev["propId"]
+        diff = float(ev["difficulty"])
+        y = 1.0 if ev["correct"] else 0.0
+        conf = float(ev["confidence"])
+        hints = int(ev["hintsUsed"])
+        dt: datetime | None = ev["ts"]
+        dur_ms: float | None = ev["durationMs"]
+
+        # 1. Causal session / affect estimation BEFORE seeing current outcome
+        if dt is not None:
+            if last_dt is None or (dt - last_dt).total_seconds() > 20.0 * 60.0 or (dt - last_dt).total_seconds() < -60.0:
+                session_start_dt = dt
+                session_records = []
+            active_min = max(0.0, (dt - (session_start_dt or dt)).total_seconds() / 60.0)
+        else:
+            active_min = len(session_records) * 1.5
+
+        fatigued = False
+        if active_min > fatigue_multiplier * target_min and len(session_records) >= 4:
+            first3 = session_records[:3]
+            last3 = session_records[-3:]
+            f_acc = sum(h for h, _l in first3) / len(first3)
+            l_acc = sum(h for h, _l in last3) / len(last3)
+            f_lat = sum(l for _h, l in first3) / len(first3)
+            l_lat = sum(l for _h, l in last3) / len(last3)
+            if (f_acc - l_acc) >= 0.25 or (f_lat > 0.0 and l_lat >= 1.5 * f_lat):
+                fatigued = True
+
+        affect_state = "flow"
+        if fatigued:
+            affect_state = "fatigued"
+        elif len(recent_window) >= 2:
+            w6 = recent_window[-6:]
+            w_acc = sum(1.0 for c, _l, h in w6 if c and h <= 2) / len(w6)
+            w_lat = sum(l for _c, l, _h in w6) / len(w6)
+            w_hints = sum(h for _c, _l, h in w6) / len(w6)
+            err_streak = 0
+            for c, _l, _h in reversed(w6):
+                if not c:
+                    err_streak += 1
+                else:
+                    break
+            if err_streak >= 2 and (w_hints >= 2.5 or w_lat >= 1.8 or w_acc < 0.45):
+                affect_state = "overloaded_frustrated"
+            elif len(w6) >= 4 and w_acc >= 0.94 and w_hints <= 0.3 and w_lat <= 0.65:
+                affect_state = "bored_underchallenged"
+
+        # 2. Causal Elo prediction BEFORE observing outcome `y`
+        theta = dom_elo.get(dom, 1450.0)
+        n_d = dom_n.get(dom, 0)
+        exp_arg = _clamp((diff - theta) / 400.0, -15.0, 15.0)
+        p_elo = 1.0 / (1.0 + (10.0 ** exp_arg))
+        p_pred = _clamp(p_elo - (0.08 if fatigued else 0.0), 0.02, 0.98)
+
+        brier = (p_pred - y) ** 2
+        logloss = -(y * math.log(p_pred) + (1.0 - y) * math.log(1.0 - p_pred))
+
+        # 3. Causal Kalyuga Expertise-Reversal alignment BEFORE observing outcome
+        elo_sig = _sigmoid((theta - 1450.0) / 180.0)
+        bkt_val = prop_bkt.get(pid, elo_sig)
+        delta_aff = (
+            -0.18
+            if affect_state == "overloaded_frustrated"
+            else (-0.12 if affect_state == "fatigued" else (0.12 if affect_state == "bored_underchallenged" else 0.0))
+        )
+        e_eff = _clamp(0.65 * bkt_val + 0.35 * elo_sig + delta_aff, 0.0, 1.0)
+        if e_eff < er_novice_cutoff:
+            mode = "worked_example_parsons"
+        elif e_eff < 0.62:
+            mode = "faded"
+        elif e_eff < er_challenge_cutoff:
+            mode = "standard"
+        else:
+            mode = "challenge_transfer"
+
+        # Evaluate alignment against observed outcome `(y, hints, conf)`
+        clean_confident_hit = (y == 1.0) and hints == 0 and conf >= 0.70
+        struggle = (y == 0.0) or hints >= 2
+        if mode == "worked_example_parsons" and clean_confident_hit:
+            er_err = 1.0  # Redundant worked example for proficient learner (Expertise Reversal)
+        elif mode == "challenge_transfer" and struggle:
+            er_err = 1.0  # Challenge transfer when learner collapsed or needed heavy hints
+        elif mode == "standard" and ((y == 0.0 and conf < 0.50) or hints >= 2):
+            er_err = 0.5  # Under-scaffolded struggling novice
+        elif mode == "faded" and clean_confident_hit and e_eff >= 0.55 and conf >= 0.85:
+            er_err = 0.25  # Mild over-scaffolding
+        else:
+            er_err = 0.0
+
+        bucket = train_acc if idx < split_idx else test_acc
+        bucket["brier"].append(brier)
+        bucket["logloss"].append(logloss)
+        bucket["er"].append(er_err)
+
+        # 4. Causal state updates AFTER scoring current event
+        is_lucky = (y == 1.0) and conf <= 0.35
+        s_eff = 0.0 if y == 0.0 else max(0.0, 1.0 - 0.14 * float(hints)) * (0.65 if is_lucky else 1.0)
+        k_d = max(16.0, float(elo_k_base) / (1.0 + 0.05 * float(n_d)))
+        dom_elo[dom] = _clamp(theta + k_d * (s_eff - p_elo), 900.0, 2200.0)
+        dom_n[dom] = n_d + 1
+
+        prev_bkt = prop_bkt.get(pid, 0.35)
+        prop_bkt[pid] = bkt_update(prev_bkt, bool(ev["correct"]), p_transit=0.20, learner_confidence=conf)
+
+        diff_scale = _clamp(1.0 + 0.15 * ((diff - 1500.0) / 300.0), 0.60, 1.60)
+        expected_ms = 12000.0 * diff_scale * learner_scale
+        lat_ratio = _clamp(dur_ms / expected_ms, 0.15, 5.0) if dur_ms is not None else 1.0
+        clean_hit = 1.0 if (ev["correct"] and hints <= 2) else 0.0
+        session_records.append((clean_hit, lat_ratio))
+        recent_window.append((bool(ev["correct"]), lat_ratio, hints))
+        if len(recent_window) > 20:
+            recent_window = recent_window[-20:]
+        if dt is not None:
+            last_dt = dt
+
+    def _summarize(acc: dict[str, list[float]]) -> dict[str, float]:
+        brier_m = statistics.fmean(acc["brier"]) if acc["brier"] else 0.0
+        ll_m = statistics.fmean(acc["logloss"]) if acc["logloss"] else 0.0
+        er_m = statistics.fmean(acc["er"]) if acc["er"] else 0.0
+        composite = 0.45 * brier_m + 0.30 * ll_m + 0.25 * er_m
+        return {
+            "brierScore": round(brier_m, 5),
+            "logLoss": round(ll_m, 5),
+            "erMismatchRate": round(er_m, 5),
+            "compositeLoss": round(composite, 5),
+        }
+
+    return _summarize(train_acc), _summarize(test_acc)
+
+
+def replay_learner_history(
+    workspace: Path | str | None = None,
+    *,
+    min_events: int = 12,
+    apply_if_improved: bool = False,
+) -> dict[str, Any]:
+    """Replay local chronological `revlog.jsonl` via 70/30 TimeSeriesSplit to calibrate `learner_model`."""
+    from syntopik.learner_model import (
+        CALIBRATED_HYPERPARAM_BOUNDS,
+        DEFAULT_CALIBRATED_HYPERPARAMS,
+        PROFILE_FILENAME,
+        compile_teaching_policy,
+        load_profile,
+        save_profile,
+    )
+    from syntopik.schemas import now_iso
+    from syntopik.storage import load_jsonl, workspace_lock
+
+    ws, kg_dir = _replay_resolve_kg(workspace)
+    revlog_rows = load_jsonl(kg_dir / "revlog.jsonl")
+    prop_rows = load_jsonl(kg_dir / "propositions.jsonl")
+    props_by_id = {
+        str(p.get("id") or "").strip(): p for p in prop_rows if isinstance(p, dict) and str(p.get("id") or "").strip()
+    }
+    profile = load_profile(kg_dir)
+
+    events = _extract_replay_events(revlog_rows, props_by_id)
+    min_req = max(2, int(min_events))
+    if len(events) < min_req:
+        return {
+            "ok": True,
+            "workspace": str(ws),
+            "insufficientData": True,
+            "eventCount": len(events),
+            "minEvents": min_req,
+            "applied": False,
+            "reason": f"Need at least {min_req} confidence-rated reviews for chronological replay (found {len(events)}).",
+        }
+
+    # Strict chronological 70/30 TimeSeriesSplit (earliest 70% train, latest 30% OOS test)
+    split_idx = max(1, min(len(events) - 1, int(len(events) * 0.70)))
+    cal = profile.get("calibration") if isinstance(profile.get("calibration"), dict) else {}
+    session_target_min = _safe_replay_float(cal.get("sessionTargetMinutes"), 30.0, lo=10.0, hi=240.0)
+    baseline_latency_ms = _safe_replay_float(cal.get("baselineLatencyMs"), 22000.0, lo=2000.0, hi=300000.0)
+
+    baseline_params = dict(DEFAULT_CALIBRATED_HYPERPARAMS)
+    base_train, base_oos = _evaluate_replay_params(
+        events,
+        split_idx,
+        elo_k_base=baseline_params["eloKBase"],
+        er_novice_cutoff=baseline_params["erNoviceCutoff"],
+        er_challenge_cutoff=baseline_params["erChallengeCutoff"],
+        fatigue_multiplier=baseline_params["fatigueMultiplier"],
+        session_target_min=session_target_min,
+        baseline_latency_ms=baseline_latency_ms,
+    )
+
+    # Select candidate strictly on earliest 70% train split (zero test-set leakage!)
+    best_candidate: dict[str, float] = dict(baseline_params)
+    best_train = dict(base_train)
+    best_oos = dict(base_oos)
+    best_train_rank: tuple[float, float] = (base_train["compositeLoss"], 0.0)
+    grid_evaluated = 0
+
+    for k_base in _REPLAY_GRID_ELO_K:
+        for nov_cut in _REPLAY_GRID_NOVICE:
+            for chal_cut in _REPLAY_GRID_CHALLENGE:
+                for fat_mult in _REPLAY_GRID_FATIGUE:
+                    grid_evaluated += 1
+                    tr_m, te_m = _evaluate_replay_params(
+                        events,
+                        split_idx,
+                        elo_k_base=k_base,
+                        er_novice_cutoff=nov_cut,
+                        er_challenge_cutoff=chal_cut,
+                        fatigue_multiplier=fat_mult,
+                        session_target_min=session_target_min,
+                        baseline_latency_ms=baseline_latency_ms,
+                    )
+                    # Deterministic tie-breaker prefers smaller shift from baseline
+                    l2_shift = (
+                        ((k_base - baseline_params["eloKBase"]) / 32.0) ** 2
+                        + ((nov_cut - baseline_params["erNoviceCutoff"]) / 0.10) ** 2
+                        + ((chal_cut - baseline_params["erChallengeCutoff"]) / 0.08) ** 2
+                        + ((fat_mult - baseline_params["fatigueMultiplier"]) / 0.20) ** 2
+                    )
+                    rank = (tr_m["compositeLoss"], round(l2_shift, 6))
+                    if rank < best_train_rank:
+                        best_train_rank = rank
+                        best_candidate = {
+                            "eloKBase": k_base,
+                            "erNoviceCutoff": nov_cut,
+                            "erChallengeCutoff": chal_cut,
+                            "fatigueMultiplier": fat_mult,
+                        }
+                        best_train = tr_m
+                        best_oos = te_m
+
+    # Strictly clamp chosen parameters inside safe cognitive bounds
+    clamped_candidate: dict[str, float] = {}
+    for key, val in best_candidate.items():
+        lo, hi = CALIBRATED_HYPERPARAM_BOUNDS[key]
+        clamped_candidate[key] = round(_clamp(float(val), lo, hi), 4)
+
+    oos_improvement = round(base_oos["compositeLoss"] - best_oos["compositeLoss"], 5)
+    improved = oos_improvement >= _REPLAY_MIN_OOS_GAIN
+    applied = False
+
+    if apply_if_improved and improved:
+        prof_path = kg_dir / PROFILE_FILENAME
+        with workspace_lock(prof_path):
+            fresh_profile = load_profile(kg_dir)
+            fresh_profile["calibratedHyperparams"] = {
+                **clamped_candidate,
+                "calibratedAt": now_iso(),
+                "trainEvents": split_idx,
+                "testEvents": len(events) - split_idx,
+                "oosBaselineLoss": base_oos["compositeLoss"],
+                "oosCalibratedLoss": best_oos["compositeLoss"],
+                "oosImprovement": oos_improvement,
+            }
+            fresh_profile["compiledPolicy"] = compile_teaching_policy(fresh_profile)
+            save_profile(kg_dir, fresh_profile)
+        applied = True
+
+    return {
+        "ok": True,
+        "workspace": str(ws),
+        "insufficientData": False,
+        "eventCount": len(events),
+        "minEvents": min_req,
+        "split": {
+            "method": "chronological_time_series_70_30",
+            "trainEvents": split_idx,
+            "testEvents": len(events) - split_idx,
+            "trainStart": events[0]["tsIso"],
+            "trainEnd": events[split_idx - 1]["tsIso"],
+            "testStart": events[split_idx]["tsIso"],
+            "testEnd": events[-1]["tsIso"],
+        },
+        "gridEvaluated": grid_evaluated,
+        "minOosGainThreshold": _REPLAY_MIN_OOS_GAIN,
+        "baselineParams": baseline_params,
+        "candidateParams": clamped_candidate,
+        "baselineMetrics": {"train": base_train, "oos": base_oos},
+        "candidateMetrics": {"train": best_train, "oos": best_oos},
+        "oosImprovement": oos_improvement,
+        "improved": improved,
+        "applied": applied,
+    }

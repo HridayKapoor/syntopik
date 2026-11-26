@@ -15,6 +15,7 @@ executes the optimal pedagogical move with zero Turn-0 rule bloat.
 
 from __future__ import annotations
 
+import json
 import re
 from datetime import datetime, timezone
 from pathlib import Path
@@ -24,6 +25,7 @@ from syntopik.evidence import compute_evidence_summary
 from syntopik.forks import list_due_forks
 from syntopik.fsrs_core import card_retrievability, compress_due_queue, load_fsrs_parameters
 from syntopik.ingest import detect_source_type, ingest_auto
+from syntopik.isomorphism import build_bijection_opener
 from syntopik.learner_model import compile_teaching_policy, load_profile
 from syntopik.paths import resolve_chapters_dir, resolve_kg_dir, resolve_workspace
 from syntopik.root_cause import find_blast_radius, select_diagnostic_probe
@@ -94,7 +96,10 @@ def _clip(text: str, max_chars: int) -> str:
     s = re.sub(r"\s+", " ", str(text or "").strip())
     if len(s) <= max_chars:
         return s
-    return s[: max(4, max_chars - 3)].rstrip() + "..."
+    cut = s[: max(4, max_chars - 3)].rstrip()
+    if " " in cut and len(cut) > 16:
+        cut = cut.rsplit(" ", 1)[0].rstrip(" ,;:-")
+    return cut + "..."
 
 
 def _compute_days_absent(
@@ -272,6 +277,110 @@ def _compact_policy(policy: dict[str, Any]) -> dict[str, Any]:
         "affectState": policy.get("affectState") or "flow",
         "affectIntervention": policy.get("affectIntervention") or "none",
     }
+
+
+def _envelope_token_count(envelope: dict[str, Any]) -> int:
+    return len(re.findall(r"\S+", json.dumps(envelope, ensure_ascii=False)))
+
+
+def _enforce_envelope_budget(envelope: dict[str, Any], max_tokens: int = 180) -> dict[str, Any]:
+    """Guarantee the emitted Action Envelope stays strictly `<= max_tokens`."""
+    budget = max(48, int(max_tokens))
+    if _envelope_token_count(envelope) <= budget:
+        return envelope
+
+    bridge = envelope.get("isomorphicBridge")
+    if isinstance(bridge, dict):
+        bridge["openerPrompt"] = _clip(str(bridge.get("openerPrompt") or ""), 84)
+        if isinstance(bridge.get("breaksAt"), list) and bridge["breaksAt"]:
+            bridge["breaksAt"] = [_clip(str(bridge["breaksAt"][0]), 54)]
+        bridge["archetypeName"] = _clip(str(bridge.get("archetypeName") or ""), 36)
+    if _envelope_token_count(envelope) <= budget:
+        return envelope
+
+    envelope["rationale"] = _clip(str(envelope.get("rationale") or ""), 84)
+    envelope["whiteboardHint"] = _clip(str(envelope.get("whiteboardHint") or ""), 64)
+    if isinstance(envelope.get("policyConstraints"), list):
+        envelope["policyConstraints"] = [_clip(str(c), 40) for c in envelope["policyConstraints"][:2]]
+    if _envelope_token_count(envelope) <= budget:
+        return envelope
+
+    if isinstance(bridge, dict):
+        bridge["openerPrompt"] = _clip(str(bridge.get("openerPrompt") or ""), 60)
+        if isinstance(bridge.get("breaksAt"), list) and bridge["breaksAt"]:
+            bridge["breaksAt"] = [_clip(str(bridge["breaksAt"][0]), 38)]
+    if isinstance(envelope.get("alerts"), list):
+        envelope["alerts"] = [_clip(str(a), 36) for a in envelope["alerts"][:2]]
+    if isinstance(envelope.get("pendingPins"), list):
+        envelope["pendingPins"] = [
+            {**p, "note": _clip(str(p.get("note") or ""), 44)} if isinstance(p, dict) else p
+            for p in envelope["pendingPins"][:2]
+        ]
+    if _envelope_token_count(envelope) <= budget:
+        return envelope
+
+    # Hard-trim loop: progressively trim optional/verbose fields until strictly <= budget
+    if isinstance(envelope.get("alerts"), list):
+        while envelope["alerts"] and _envelope_token_count(envelope) > budget:
+            envelope["alerts"].pop()
+    if _envelope_token_count(envelope) <= budget:
+        return envelope
+
+    if isinstance(envelope.get("pendingPins"), list):
+        for p in envelope["pendingPins"]:
+            if isinstance(p, dict):
+                p["note"] = _clip(str(p.get("note") or ""), 20)
+        while envelope["pendingPins"] and _envelope_token_count(envelope) > budget:
+            envelope["pendingPins"].pop()
+    if _envelope_token_count(envelope) <= budget:
+        return envelope
+
+    if isinstance(envelope.get("policyConstraints"), list):
+        envelope["policyConstraints"] = [_clip(str(c), 28) for c in envelope["policyConstraints"][:1]]
+        while envelope["policyConstraints"] and _envelope_token_count(envelope) > budget:
+            envelope["policyConstraints"].pop()
+    if _envelope_token_count(envelope) <= budget:
+        return envelope
+
+    if isinstance(envelope.get("isomorphicBridge"), dict):
+        br = envelope["isomorphicBridge"]
+        if isinstance(br.get("breaksAt"), list) and br["breaksAt"]:
+            br["breaksAt"] = []
+        if _envelope_token_count(envelope) > budget:
+            br["openerPrompt"] = _clip(str(br.get("openerPrompt") or ""), 32)
+            br["archetypeName"] = _clip(str(br.get("archetypeName") or ""), 20)
+        if _envelope_token_count(envelope) > budget:
+            br["openerPrompt"] = ""
+        if _envelope_token_count(envelope) > budget:
+            envelope.pop("isomorphicBridge", None)
+    if _envelope_token_count(envelope) <= budget:
+        return envelope
+
+    for field, limits in (
+        ("whiteboardHint", (36, 16, 0)),
+        ("rationale", (56, 28, 12, 0)),
+        ("exactCmd", (48, 24, 0)),
+    ):
+        for lim in limits:
+            if _envelope_token_count(envelope) <= budget:
+                return envelope
+            val = str(envelope.get(field) or "")
+            envelope[field] = "" if lim == 0 else _clip(val, lim)
+
+    for _ in range(16):
+        if _envelope_token_count(envelope) <= budget:
+            return envelope
+        trimmed = False
+        for field in ("rationale", "whiteboardHint", "exactCmd", "targetNodeId", "chapterSlug"):
+            val = envelope.get(field)
+            if isinstance(val, str) and len(val) > 8:
+                envelope[field] = val[: max(4, len(val) // 2)]
+                trimmed = True
+                if _envelope_token_count(envelope) <= budget:
+                    return envelope
+        if not trimmed:
+            break
+    return envelope
 
 
 # ---------------------------------------------------------------------------
@@ -467,7 +576,7 @@ def plan_next_move(
             skill_hint = "topic-onboarding" if target_id is None else "teach-chapter"
             wb_hint = "Ready for new topic scope or derivation frame."
 
-    return {
+    envelope: dict[str, Any] = {
         "ok": True,
         "recommendedMode": mode,
         "targetNodeId": target_id,
@@ -481,6 +590,23 @@ def plan_next_move(
         "pendingPins": pending_pins,
         "alerts": alerts,
     }
+
+    if mode == "teach_frontier" and target_id:
+        try:
+            opener = build_bijection_opener(kg_dir, target_id)
+        except Exception:
+            opener = None
+        if isinstance(opener, dict):
+            raw_breaks = opener.get("breaksAt") or []
+            compact_breaks = [_clip(str(b), 120) for b in raw_breaks[:1] if str(b).strip()]
+            envelope["isomorphicBridge"] = {
+                "knownPropId": str(opener["knownPropId"]),
+                "archetypeName": _clip(str(opener["archetypeName"]), 48),
+                "breaksAt": compact_breaks,
+                "openerPrompt": _clip(str(opener["openerPrompt"]), 150),
+            }
+
+    return _enforce_envelope_budget(envelope, max_tokens=180)
 
 
 # ---------------------------------------------------------------------------

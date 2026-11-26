@@ -1,0 +1,921 @@
+[
+  {
+    "id": "second_order_oscillator",
+    "name": "Second-Order Linear Oscillator & Damping",
+    "canonicalEquation": "m x'' + b x' + k x = F(t)  <=>  x'' + 2*gamma*x' + omega_0^2*x = f(t)",
+    "invariantStructure": "Two energy-storage elements exchanging generalized kinetic and potential energy across an inertia-stiffness pair, with linear dissipation setting underdamped, critically damped, or overdamped regimes via damping ratio zeta = gamma / omega_0.",
+    "domains": [
+      {
+        "domain": "Physics / Mechanics",
+        "title": "Damped & Driven Simple Harmonic Motion (SHM)",
+        "keywords": [
+          "simple harmonic",
+          "shm",
+          "damped",
+          "underdamped",
+          "overdamped",
+          "critically damped",
+          "restoring force",
+          "spring",
+          "pendulum",
+          "resonance",
+          "oscillator",
+          "omega0",
+          "omega_0",
+          "d^2x/dt^2",
+          "x'' + 2*gamma",
+          "viscous damping",
+          "phasor"
+        ],
+        "variableMap": {
+          "state": "x (displacement)",
+          "inertia": "m (mass)",
+          "damping": "b (viscous drag)",
+          "stiffness": "k (spring constant)",
+          "naturalFreq": "sqrt(k / m)"
+        }
+      },
+      {
+        "domain": "Electrical Engineering / Circuits",
+        "title": "Series RLC Resonant Circuit",
+        "keywords": [
+          "rlc",
+          "series rlc",
+          "inductor",
+          "capacitor",
+          "inductance",
+          "capacitance",
+          "impedance",
+          "resonant frequency",
+          "quality factor",
+          "q-factor",
+          "l di/dt",
+          "d^2q/dt^2",
+          "1/sqrt(lc)",
+          "lc oscillation"
+        ],
+        "variableMap": {
+          "state": "q (charge)",
+          "inertia": "L (inductance)",
+          "damping": "R (resistance)",
+          "stiffness": "1 / C (inverse capacitance)",
+          "naturalFreq": "1 / sqrt(L C)"
+        }
+      },
+      {
+        "domain": "Control Theory / Robotics",
+        "title": "PID Closed-Loop Tracking Error Dynamics",
+        "keywords": [
+          "pid",
+          "pid control",
+          "proportional gain",
+          "derivative gain",
+          "integral gain",
+          "overshoot",
+          "settling time",
+          "damping ratio",
+          "closed-loop",
+          "tracking error",
+          "poles",
+          "control loop"
+        ],
+        "variableMap": {
+          "state": "e(t) (tracking error)",
+          "inertia": "J (plant inertia)",
+          "damping": "K_d (derivative gain)",
+          "stiffness": "K_p (proportional gain)",
+          "naturalFreq": "sqrt(K_p / J)"
+        }
+      },
+      {
+        "domain": "Machine Learning / Optimization",
+        "title": "Heavy-Ball Momentum SGD Dynamics",
+        "keywords": [
+          "heavy-ball",
+          "heavy ball",
+          "momentum sgd",
+          "polyak momentum",
+          "nesterov",
+          "momentum factor",
+          "velocity update",
+          "oscillation in ravine",
+          "ill-conditioned hessian",
+          "sgd with momentum"
+        ],
+        "variableMap": {
+          "state": "theta (parameter vector)",
+          "inertia": "beta (momentum coefficient)",
+          "damping": "1 - beta (velocity friction)",
+          "stiffness": "eta * H (step size x curvature)",
+          "naturalFreq": "sqrt(eta * lambda_H)"
+        }
+      }
+    ],
+    "breaksAt": [
+      "Large-amplitude mechanical oscillations (e.g. finite-angle pendulums) become nonlinear and break linear superposition and amplitude-independent period.",
+      "Active circuits or saturated magnetic cores introduce nonlinear inductance/gain that violates constant-coefficient L, R, C linearity.",
+      "Heavy-ball Momentum SGD uses discrete finite steps (causing instability when eta * lambda_max > 2(1 + beta)), stochastic mini-batch noise, and non-quadratic changing curvature."
+    ],
+    "bijectionQuestion": "Map inertia, linear damping, and restoring stiffness from your mastered domain to this system—then identify one regime where the linear oscillator analogy breaks."
+  },
+  {
+    "id": "shortest_path_semiring",
+    "name": "Shortest-Path Tropical Semiring Relaxation",
+    "canonicalEquation": "d(v) = bigoplus_{u -> v} (d(u) bigotimes w(u, v))  [e.g. min_u (d(u) + w(u,v))]",
+    "invariantStructure": "Dynamic programming over a closed semiring (S, oplus, otimes) obeying optimal substructure and distributivity, where path weights combine via otimes and alternatives aggregate via idempotent oplus.",
+    "domains": [
+      {
+        "domain": "Algorithms / Shortest Paths",
+        "title": "Dijkstra Non-Negative Shortest Path",
+        "keywords": [
+          "dijkstra",
+          "shortest path",
+          "edge relaxation",
+          "priority queue",
+          "min-heap",
+          "non-negative weights",
+          "greedy relaxation",
+          "dist[v]"
+        ],
+        "variableMap": {
+          "combineOp": "+ (edge weight addition)",
+          "aggregateOp": "min (minimum cost)",
+          "stateValue": "dist[v] (shortest distance)",
+          "relaxationOrder": "min-heap greedy pop"
+        }
+      },
+      {
+        "domain": "Probabilistic Models / HMMs",
+        "title": "Viterbi Most-Likely State Sequence Decoding",
+        "keywords": [
+          "viterbi",
+          "viterbi decoding",
+          "hmm",
+          "hidden markov",
+          "trellis",
+          "log-probability",
+          "emission probability",
+          "transition probability",
+          "most likely path",
+          "max-product"
+        ],
+        "variableMap": {
+          "combineOp": "* prob (or + log prob)",
+          "aggregateOp": "max (maximum likelihood)",
+          "stateValue": "delta_t(s) (best path prob)",
+          "relaxationOrder": "time-step trellis sweep"
+        }
+      },
+      {
+        "domain": "Algorithms / Dynamic Programming",
+        "title": "DAG Dynamic Programming & Longest/Shortest Path",
+        "keywords": [
+          "dag dp",
+          "dynamic programming",
+          "topological order",
+          "optimal substructure",
+          "memoization",
+          "recurrence",
+          "directed acyclic",
+          "topological sort"
+        ],
+        "variableMap": {
+          "combineOp": "transition cost compose",
+          "aggregateOp": "min / max over predecessors",
+          "stateValue": "dp[v] (subproblem optimum)",
+          "relaxationOrder": "topological order of DAG"
+        }
+      },
+      {
+        "domain": "Algorithms / Negative-Weight Graphs",
+        "title": "Bellman-Ford Iterative Relaxation",
+        "keywords": [
+          "bellman-ford",
+          "bellman ford",
+          "negative edge",
+          "negative cycle",
+          "v-1 iterations",
+          "all-edge relaxation",
+          "shortest path with negative"
+        ],
+        "variableMap": {
+          "combineOp": "+ (signed edge weight)",
+          "aggregateOp": "min (minimum path cost)",
+          "stateValue": "d^(k)[v] (at most k hops)",
+          "relaxationOrder": "V-1 full edge passes"
+        }
+      }
+    ],
+    "breaksAt": [
+      "Dijkstra's greedy freeze invariant fails immediately in the presence of negative edge weights because popped vertices can later be shortened.",
+      "Negative-weight cycles break Bellman-Ford and tropical semiring closure since no finite minimum path exists.",
+      "DAG topological DP fails on cyclic graphs; Viterbi requires Markov conditional independence (history beyond state s cannot alter transition costs)."
+    ],
+    "bijectionQuestion": "Which two semiring operators (combine and aggregate) replace (+, min) here, and what graph or edge-weight condition breaks the relaxation order?"
+  },
+  {
+    "id": "quorum_intersection",
+    "name": "Pigeonhole Quorum Intersection Invariant",
+    "canonicalEquation": "|Q_1| + |Q_2| > N  =>  |Q_1 cap Q_2| >= 1   (BFT: |Q_1 cap Q_2| >= f + 1)",
+    "invariantStructure": "Pigeonhole intersection of replica subsets guarantees every new decision observes at least one honest witness from every prior committed decision, preventing split-brain divergence.",
+    "domains": [
+      {
+        "domain": "Distributed Systems / Raft",
+        "title": "Raft Majority Quorum & Election Safety",
+        "keywords": [
+          "quorum",
+          "majority quorum",
+          "quorum intersection",
+          "floor(n/2)",
+          "split-brain",
+          "split brain",
+          "election safety",
+          "network partition",
+          "raft quorum",
+          "crash fault majority",
+          "paxos quorum"
+        ],
+        "variableMap": {
+          "totalNodes": "N (cluster servers)",
+          "faultBudget": "f < N / 2 (crash faults)",
+          "quorumSize": "floor(N / 2) + 1",
+          "overlapGuarantee": ">= 1 server in common"
+        }
+      },
+      {
+        "domain": "Distributed Systems / BFT",
+        "title": "Byzantine Fault-Tolerant Quorum (3f + 1)",
+        "keywords": [
+          "byzantine",
+          "bft",
+          "pbft",
+          "3f+1",
+          "3f + 1",
+          "2f+1",
+          "2f + 1",
+          "equivocation",
+          "malicious replica",
+          "byzantine quorum",
+          "tendermint",
+          "hotstuff"
+        ],
+        "variableMap": {
+          "totalNodes": "N >= 3f + 1",
+          "faultBudget": "f < N / 3 (arbitrary/malicious)",
+          "quorumSize": "2f + 1 (Byzantine quorum)",
+          "overlapGuarantee": ">= f + 1 nodes (>= 1 honest)"
+        }
+      },
+      {
+        "domain": "Distributed Storage / Dynamo",
+        "title": "Read/Write Asymmetric Storage Quorums (R + W > N)",
+        "keywords": [
+          "r+w>n",
+          "r + w > n",
+          "read quorum",
+          "write quorum",
+          "dynamo",
+          "sloppy quorum",
+          "read repair",
+          "version vector",
+          "cassandra",
+          "strict quorum",
+          "w + w > n"
+        ],
+        "variableMap": {
+          "totalNodes": "N (replication factor)",
+          "faultBudget": "N - max(R, W) unavailable nodes",
+          "quorumSize": "R + W > N (and W > N/2 for writes)",
+          "overlapGuarantee": ">= 1 replica holding latest version"
+        }
+      }
+    ],
+    "breaksAt": [
+      "Crash-fault majority quorums (2f+1) completely fail under even a single Byzantine equivocating node in the intersection; BFT requires >= f+1 overlap (3f+1 total).",
+      "Dynamo R+W>N alone does NOT guarantee linearizability under concurrent writes or sloppy quorums/hinted handoff without read-repair or consensus ordering.",
+      "Dynamic cluster membership changes can create two disjoint majorities unless joint consensus or single-server reconfiguration is enforced."
+    ],
+    "bijectionQuestion": "How big must each quorum be so every pair overlaps in at least one honest witness, and which fault model breaks a simple N/2 + 1 majority?"
+  },
+  {
+    "id": "boltzmann_softmax",
+    "name": "Boltzmann-Gibbs Exponential Distribution & Temperature Scaling",
+    "canonicalEquation": "p_i = exp(z_i / tau) / sum_j exp(z_j / tau)   <=>   p_i = exp(-E_i / k_B T) / Z",
+    "invariantStructure": "Maximum-entropy probability distribution under linear score/energy expectation constraints; temperature tau controls sharpness from uniform (tau -> inf) to argmax/ground-state (tau -> 0), with log-sum-exp acting as free energy.",
+    "domains": [
+      {
+        "domain": "Machine Learning / Transformers",
+        "title": "Attention Softmax Temperature & Saturation",
+        "keywords": [
+          "softmax",
+          "logit",
+          "logits",
+          "softmax saturation",
+          "vanishing jacobian",
+          "temperature scaling",
+          "causal mask",
+          "exp(-inf)",
+          "pre-softmax",
+          "attention weights",
+          "softmax(q"
+        ],
+        "variableMap": {
+          "scoreOrEnergy": "z_i / tau (scaled attention logit)",
+          "temperature": "tau or sqrt(d_k)",
+          "normalizer": "sum_j exp(z_j / tau)",
+          "distribution": "alpha_i (attention weights)",
+          "freeEnergyDual": "log-sum-exp(z)"
+        }
+      },
+      {
+        "domain": "Physics / Statistical Mechanics",
+        "title": "Canonical Boltzmann Distribution & Partition Function",
+        "keywords": [
+          "boltzmann",
+          "partition function",
+          "canonical ensemble",
+          "microstate",
+          "helmholtz free energy",
+          "k_b t",
+          "beta = 1/(k_b t)",
+          "gibbs distribution",
+          "thermal equilibrium",
+          "statistical mechanics"
+        ],
+        "variableMap": {
+          "scoreOrEnergy": "-E_i / (k_B T) (negative thermal energy)",
+          "temperature": "k_B T (thermal energy scale)",
+          "normalizer": "Z = sum_j exp(-E_j / k_B T)",
+          "distribution": "p_i (microstate probability)",
+          "freeEnergyDual": "F = -k_B T ln Z"
+        }
+      },
+      {
+        "domain": "Machine Learning / Classification",
+        "title": "Cross-Entropy Logits & Log-Sum-Exp Loss",
+        "keywords": [
+          "cross-entropy",
+          "cross entropy",
+          "log-sum-exp",
+          "logsumexp",
+          "multiclass softmax",
+          "kl divergence",
+          "negative log-likelihood",
+          "categorical distribution",
+          "label smoothing",
+          "calibration temperature"
+        ],
+        "variableMap": {
+          "scoreOrEnergy": "z_i (class logit)",
+          "temperature": "T (calibration temperature)",
+          "normalizer": "sum_c exp(z_c / T)",
+          "distribution": "p_hat_i (class posterior)",
+          "freeEnergyDual": "L_CE = log-sum-exp(z) - z_y"
+        }
+      }
+    ],
+    "breaksAt": [
+      "Attention logits carry a plus sign (+z_i) whereas Boltzmann weights carry a minus sign (-E_i), so higher logits map to lower physical energy.",
+      "Softmax is strictly shift-invariant (z_i -> z_i + c leaves probabilities unchanged), whereas physical free energy F shifts by the reference zero of energy.",
+      "In non-equilibrium open systems or heavy-tailed Tsallis statistics, physical states do not follow exponential Boltzmann weights; in float16 ML, unshifted exp(z_i) overflows without max-subtraction."
+    ],
+    "bijectionQuestion": "Map logit, temperature, and partition function Z across the two domains—and watch the sign flip: what happens in both systems as temperature approaches zero?"
+  },
+  {
+    "id": "first_order_relaxation",
+    "name": "First-Order Proportional Decay & Relaxation Time Constant",
+    "canonicalEquation": "dy/dt = -y / tau   =>   y(t) = y_0 * exp(-t / tau),   t_{1/2} = tau * ln(2)",
+    "invariantStructure": "Rate of change is strictly proportional to current remaining quantity, creating a memoryless exponential relaxation with constant characteristic time tau and constant half-life.",
+    "domains": [
+      {
+        "domain": "Electrical Engineering / Transients",
+        "title": "RC / RL Circuit Exponential Charging & Discharge",
+        "keywords": [
+          "rc circuit",
+          "rl circuit",
+          "rc discharge",
+          "time constant",
+          "tau = rc",
+          "l/r",
+          "capacitor discharge",
+          "transient response",
+          "exponential decay"
+        ],
+        "variableMap": {
+          "quantity": "Q(t) or I(t)",
+          "timeConstant": "tau = R C (or L / R)",
+          "halfLife": "tau * ln(2)",
+          "rateLaw": "dQ/dt = -Q / (R C)"
+        }
+      },
+      {
+        "domain": "Chemistry / Kinetics",
+        "title": "First-Order Chemical Reaction Kinetics",
+        "keywords": [
+          "first-order",
+          "first order",
+          "rate constant",
+          "chemical kinetics",
+          "half-life",
+          "ln(2)/k",
+          "integrated rate law",
+          "d[a]/dt",
+          "arrhenius",
+          "unimolecular"
+        ],
+        "variableMap": {
+          "quantity": "[A](t) (reactant concentration)",
+          "timeConstant": "1 / k (mean reaction time)",
+          "halfLife": "ln(2) / k",
+          "rateLaw": "d[A]/dt = -k [A]"
+        }
+      },
+      {
+        "domain": "Physics / Nuclear",
+        "title": "Radioactive Nuclear Decay Law",
+        "keywords": [
+          "radioactive",
+          "radioactive decay",
+          "decay constant",
+          "half-life",
+          "nuclear decay",
+          "activity",
+          "becquerel",
+          "dn/dt = -lambda",
+          "mean lifetime",
+          "isotope"
+        ],
+        "variableMap": {
+          "quantity": "N(t) (undecayed nuclei)",
+          "timeConstant": "1 / lambda (mean lifetime)",
+          "halfLife": "ln(2) / lambda",
+          "rateLaw": "dN/dt = -lambda N"
+        }
+      },
+      {
+        "domain": "Cognitive Science / Spaced Repetition",
+        "title": "FSRS Memory Stability & Forgetting Curve",
+        "keywords": [
+          "fsrs",
+          "forgetting curve",
+          "retrievability",
+          "memory stability",
+          "spaced repetition",
+          "ebbinghaus",
+          "retention decay",
+          "r(t, s)",
+          "stability s"
+        ],
+        "variableMap": {
+          "quantity": "R(t) (retrievability)",
+          "timeConstant": "S (memory stability in days)",
+          "halfLife": "t where R(t) = 0.5",
+          "rateLaw": "R decays scaled by elapsed t / S"
+        }
+      }
+    ],
+    "breaksAt": [
+      "FSRS-6 uses a heavy-tailed power-law forgetting curve (1 + factor*t/S)^(-w20), NOT a memoryless exponential—older memories decay slower than pure exponential relaxation.",
+      "Zero-order and second-order chemical reactions have concentration-dependent half-lives and violate constant-tau proportional decay.",
+      "Nonlinear circuit elements (diodes, varactors) and small-N radioactive samples (discrete Poisson jumps) deviate from smooth deterministic exponential decay."
+    ],
+    "bijectionQuestion": "What plays the role of the relaxation time constant tau here, and where does the memoryless constant-half-life assumption break?"
+  },
+  {
+    "id": "conservation_continuity",
+    "name": "Local Conservation & Flux Continuity Equation",
+    "canonicalEquation": "d(rho)/dt + div(J) = 0   (steady state: sum Flux_in = sum Flux_out)",
+    "invariantStructure": "Any local change in a conserved density inside a control volume equals net inward flux across its boundary—nothing is created or destroyed at interior junctions.",
+    "domains": [
+      {
+        "domain": "Electrical Engineering / Circuits",
+        "title": "Kirchhoff Current Law (KCL) & Charge Conservation",
+        "keywords": [
+          "kirchhoff",
+          "kcl",
+          "kirchhoff current",
+          "charge conservation",
+          "node current",
+          "sum i_in",
+          "junction rule",
+          "current continuity"
+        ],
+        "variableMap": {
+          "conservedQuantity": "electric charge q",
+          "flux": "electric current I",
+          "accumulation": "dq_node/dt = 0 (lumped node)",
+          "balanceLaw": "sum I_in = sum I_out"
+        }
+      },
+      {
+        "domain": "Physics / Fluid Mechanics",
+        "title": "Fluid Mass Continuity Equation",
+        "keywords": [
+          "fluid continuity",
+          "continuity equation",
+          "incompressible",
+          "a1 v1 = a2 v2",
+          "mass flux",
+          "divergence",
+          "control volume",
+          "navier-stokes",
+          "bernoulli"
+        ],
+        "variableMap": {
+          "conservedQuantity": "fluid mass density rho",
+          "flux": "mass flux rho * v",
+          "accumulation": "d(rho)/dt",
+          "balanceLaw": "d(rho)/dt + div(rho v) = 0"
+        }
+      },
+      {
+        "domain": "Physics & ML / Stochastic Processes",
+        "title": "Probability Conservation & Fokker-Planck Equation",
+        "keywords": [
+          "fokker-planck",
+          "fokker planck",
+          "probability flow",
+          "probability current",
+          "diffusion equation",
+          "kolmogorov forward",
+          "score-based",
+          "flow matching",
+          "normalizing flow"
+        ],
+        "variableMap": {
+          "conservedQuantity": "probability density p(x, t)",
+          "flux": "probability current J(x, t)",
+          "accumulation": "dp/dt",
+          "balanceLaw": "dp/dt + div(J) = 0"
+        }
+      },
+      {
+        "domain": "Algorithms / Network Flows",
+        "title": "Network Flow Conservation & Max-Flow Min-Cut",
+        "keywords": [
+          "network flow",
+          "flow conservation",
+          "max-flow",
+          "min-cut",
+          "ford-fulkerson",
+          "edmonds-karp",
+          "dinic",
+          "residual graph",
+          "circulation"
+        ],
+        "variableMap": {
+          "conservedQuantity": "commodity flow f",
+          "flux": "directed edge flow f(u, v)",
+          "accumulation": "excess(v) = 0 (for v != s, t)",
+          "balanceLaw": "sum f_in(v) = sum f_out(v)"
+        }
+      }
+    ],
+    "breaksAt": [
+      "KCL fails at high frequencies where parasitic displacement current (epsilon_0 dE/dt) accumulates charge on conductors instead of zero-capacitance lumped nodes.",
+      "Fluid continuity A1 v1 = A2 v2 breaks for compressible gases when density rho varies with pressure/temperature.",
+      "Network flow conservation holds only at interior vertices (excluding source s and sink t) and adds hard edge-capacity bounds absent from linear fluid/KCL junctions."
+    ],
+    "bijectionQuestion": "Identify the conserved quantity and its boundary flux here—then name one source, sink, or accumulation effect that breaks steady-state balance."
+  },
+  {
+    "id": "eigenmode_diagonalization",
+    "name": "Spectral Decomposition & Decoupled Eigenmodes",
+    "canonicalEquation": "A v_k = lambda_k v_k   =>   coupled system decouples along eigenbasis {v_k}",
+    "invariantStructure": "Transforming a coupled linear operator into its invariant eigenvector basis eliminates cross-terms, reducing multi-dimensional evolution or variance to independent 1-D scalar modes governed by eigenvalues lambda_k.",
+    "domains": [
+      {
+        "domain": "Physics / Classical Mechanics",
+        "title": "Normal Modes of Coupled Oscillators & Springs",
+        "keywords": [
+          "normal mode",
+          "normal modes",
+          "coupled springs",
+          "coupled oscillator",
+          "dynamical matrix",
+          "secular determinant",
+          "eigenfrequency",
+          "in-phase mode",
+          "out-of-phase mode"
+        ],
+        "variableMap": {
+          "operator": "M^{-1} K (dynamical matrix)",
+          "invariantBasis": "normal coordinates q_k",
+          "spectrum": "omega_k^2 (squared mode freqs)",
+          "decoupledDynamics": "q_k'' + omega_k^2 q_k = 0"
+        }
+      },
+      {
+        "domain": "Machine Learning / Linear Algebra",
+        "title": "PCA Covariance Eigenvectors & SVD",
+        "keywords": [
+          "pca",
+          "principal component",
+          "covariance matrix",
+          "eigenvector",
+          "eigenvalue",
+          "svd",
+          "singular value",
+          "explained variance",
+          "spectral theorem",
+          "orthogonal basis"
+        ],
+        "variableMap": {
+          "operator": "Sigma (covariance matrix)",
+          "invariantBasis": "principal components u_k",
+          "spectrum": "lambda_k (variance along u_k)",
+          "decoupledDynamics": "Cov(u_i^T X, u_j^T X) = lambda_i delta_ij"
+        }
+      },
+      {
+        "domain": "Probability / Markov Chains",
+        "title": "Markov Chain Stationary Distribution & Spectral Gap",
+        "keywords": [
+          "markov",
+          "markov chain",
+          "stationary distribution",
+          "transition matrix",
+          "perron-frobenius",
+          "spectral gap",
+          "mixing time",
+          "pagerank",
+          "ergodic"
+        ],
+        "variableMap": {
+          "operator": "P^T (transition matrix)",
+          "invariantBasis": "stationary distribution pi",
+          "spectrum": "lambda_1 = 1, |lambda_2| < 1",
+          "decoupledDynamics": "pi P = pi; error ~ |lambda_2|^t"
+        }
+      },
+      {
+        "domain": "Mathematics / Dynamical Systems",
+        "title": "Linear ODE System Stability & Phase Portraits",
+        "keywords": [
+          "linear ode",
+          "phase portrait",
+          "jacobian eigenvalue",
+          "diagonalization",
+          "matrix exponential",
+          "saddle point",
+          "stable node",
+          "lyapunov",
+          "x' = a x"
+        ],
+        "variableMap": {
+          "operator": "A (linear state/Jacobian matrix)",
+          "invariantBasis": "eigenvectors v_k",
+          "spectrum": "Re(lambda_k) (growth/decay rate)",
+          "decoupledDynamics": "x(t) = sum c_k exp(lambda_k t) v_k"
+        }
+      }
+    ],
+    "breaksAt": [
+      "Non-normal or defective (non-diagonalizable) matrices lack a full eigenbasis and require Jordan blocks, causing transient amplification even when all Re(lambda_k) < 0.",
+      "Symmetric operators (coupled springs, PCA covariance) guarantee real orthogonal eigenvectors, whereas general Markov/ODE matrices can have complex or non-orthogonal eigenvectors.",
+      "Periodic or reducible Markov chains break unique stationary convergence (multiple eigenvalues with |lambda| = 1)."
+    ],
+    "bijectionQuestion": "What linear operator is being diagonalized, what do its eigenvectors and eigenvalues represent physically or statistically, and when does diagonalization fail?"
+  },
+  {
+    "id": "variance_normalization",
+    "name": "Independent Sum Variance Growth & 1/sqrt(N) Normalization",
+    "canonicalEquation": "Var(sum_{i=1}^N X_i) = N * sigma^2   =>   scale by 1 / sqrt(N) to keep Var = O(1)",
+    "invariantStructure": "Summing N zero-mean uncorrelated terms multiplies variance linearly by N (standard deviation by sqrt(N)), so dividing by sqrt(N) is the unique scale preserving unit variance and preventing saturation or blow-up.",
+    "domains": [
+      {
+        "domain": "Machine Learning / Transformers",
+        "title": "Scaled Dot-Product Attention (1/sqrt(d_k))",
+        "keywords": [
+          "1/sqrt(d_k)",
+          "sqrt(d_k)",
+          "dot-product variance",
+          "dot product variance",
+          "scaled dot-product",
+          "var(q",
+          "unit pre-softmax variance",
+          "variance growth",
+          "pre-softmax variance"
+        ],
+        "variableMap": {
+          "summedTerms": "q . k = sum_{i=1}^{d_k} q_i k_i",
+          "fanInCount": "d_k (head dimension)",
+          "rawStdGrowth": "sqrt(d_k)",
+          "normalizingFactor": "1 / sqrt(d_k)"
+        }
+      },
+      {
+        "domain": "Deep Learning / Initialization",
+        "title": "Xavier / Glorot & He Kaiming Weight Initialization",
+        "keywords": [
+          "xavier",
+          "glorot",
+          "kaiming",
+          "he initialization",
+          "weight initialization",
+          "fan-in",
+          "fan_in",
+          "vanishing gradient",
+          "exploding gradient",
+          "activation variance"
+        ],
+        "variableMap": {
+          "summedTerms": "a = sum_{j=1}^{n_in} w_j x_j",
+          "fanInCount": "n_in (layer fan-in)",
+          "rawStdGrowth": "sqrt(n_in) * sigma_w",
+          "normalizingFactor": "sigma_w = 1 / sqrt(n_in) (or sqrt(2/n_in))"
+        }
+      },
+      {
+        "domain": "Probability & Statistics / CLT",
+        "title": "Central Limit Theorem & Standard Error (sigma / sqrt(n))",
+        "keywords": [
+          "central limit",
+          "clt",
+          "standard error",
+          "sigma/sqrt(n)",
+          "sample mean",
+          "iid",
+          "sum of independent",
+          "variance scales linearly",
+          "random walk",
+          "sqrt(n)"
+        ],
+        "variableMap": {
+          "summedTerms": "S_n = sum_{i=1}^n X_i",
+          "fanInCount": "n (sample size)",
+          "rawStdGrowth": "sigma * sqrt(n)",
+          "normalizingFactor": "1 / sqrt(n)"
+        }
+      }
+    ],
+    "breaksAt": [
+      "If summands are positively correlated (Cov(X_i, X_j) > 0), variance grows as O(N^2) rather than O(N), so 1/sqrt(N) under-normalizes (e.g. aligned Q/K features or deep residual branches).",
+      "ReLU zeroes half the distribution, halving variance per layer—so Xavier 1/sqrt(n_in) shrinks activations exponentially and must be adjusted to He sqrt(2/n_in).",
+      "Heavy-tailed distributions with infinite variance (e.g. Cauchy) violate the Central Limit Theorem and never stabilize under 1/sqrt(n) scaling."
+    ],
+    "bijectionQuestion": "What N uncorrelated terms are being summed here so variance grows by N, and what happens when independence or zero-mean assumptions break?"
+  },
+  {
+    "id": "equilibrium_minimization",
+    "name": "Variational Equilibrium & Second-Order Curvature Stability",
+    "canonicalEquation": "grad Phi(x*) = 0  (equilibrium)   AND   Hessian(Phi)(x*) > 0  (local stability)",
+    "invariantStructure": "Spontaneous dynamics move down the gradient of a scalar potential; equilibrium occurs where first derivative vanishes, and stability against perturbations requires strictly positive second-derivative curvature.",
+    "domains": [
+      {
+        "domain": "Physics / Mechanics",
+        "title": "Potential Energy Minimum & Restoring Curvature",
+        "keywords": [
+          "potential energy",
+          "potential minimum",
+          "stable equilibrium",
+          "du/dx",
+          "u'(x0) = 0",
+          "u''(x0)",
+          "d^2u/dx^2",
+          "pe curvature",
+          "restoring curvature",
+          "equilibrium linearization",
+          "conservative force"
+        ],
+        "variableMap": {
+          "objective": "U(x) (potential energy)",
+          "stationarityCondition": "dU/dx = -F = 0",
+          "stabilityCurvature": "k_eff = d^2U/dx^2 > 0",
+          "drivingForce": "F = -grad U"
+        }
+      },
+      {
+        "domain": "Chemistry / Thermodynamics",
+        "title": "Gibbs Free Energy Minimization & Chemical Equilibrium",
+        "keywords": [
+          "gibbs",
+          "gibbs free energy",
+          "delta g = 0",
+          "dg = 0",
+          "chemical equilibrium",
+          "spontaneous",
+          "chemical potential",
+          "reaction quotient",
+          "le chatelier",
+          "thermodynamic stability"
+        ],
+        "variableMap": {
+          "objective": "G(T, P, xi) (Gibbs free energy)",
+          "stationarityCondition": "dG / d(xi) = Delta_r G = 0",
+          "stabilityCurvature": "d^2G / d(xi)^2 > 0",
+          "drivingForce": "affinity A = -Delta_r G"
+        }
+      },
+      {
+        "domain": "Machine Learning / Optimization",
+        "title": "Convex Loss Minimization & Positive-Semidefinite Hessian",
+        "keywords": [
+          "convex loss",
+          "gradient descent",
+          "grad l = 0",
+          "stationary point",
+          "hessian",
+          "convex optimization",
+          "local minimum",
+          "global minimum",
+          "saddle point",
+          "loss landscape"
+        ],
+        "variableMap": {
+          "objective": "L(theta) (loss function)",
+          "stationarityCondition": "grad L(theta*) = 0",
+          "stabilityCurvature": "Hessian H(theta*) >= 0 (PSD)",
+          "drivingForce": "update direction -grad L"
+        }
+      }
+    ],
+    "breaksAt": [
+      "First-order stationarity alone cannot distinguish a stable minimum from an unstable maximum or saddle point—second-order curvature (or higher derivatives when curvature is zero) is mandatory.",
+      "Gibbs free energy minimization only governs constant-T, constant-P closed systems; isolated systems maximize entropy S instead, and kinetic barriers can trap metastable states.",
+      "Non-convex neural loss landscapes and non-conservative forces (curl F != 0) have no global scalar minimum guarantee; discrete gradient descent can overshoot even at a strict minimum."
+    ],
+    "bijectionQuestion": "Identify the scalar potential, its zero-gradient equilibrium condition, and the positive curvature condition—then name one case where zero gradient is NOT a stable minimum."
+  },
+  {
+    "id": "duality_lagrange",
+    "name": "Constrained Optimization Duality & Conjugate Multipliers",
+    "canonicalEquation": "L(x, lambda) = f(x) + lambda^T g(x)   =>   grad_x f = -lambda^T grad_x g",
+    "invariantStructure": "Converting hard constraints or state variables into conjugate dual prices/forces (multipliers or Legendre slopes) turns constrained primal optima into unconstrained saddle points whose dual variables quantify exact marginal sensitivity.",
+    "domains": [
+      {
+        "domain": "Physics & Math / Constrained Mechanics",
+        "title": "Lagrange Multipliers & Holonomic Constraint Forces",
+        "keywords": [
+          "lagrange multiplier",
+          "lagrange multipliers",
+          "lagrangian",
+          "holonomic constraint",
+          "constraint force",
+          "virtual work",
+          "d'alembert",
+          "euler-lagrange",
+          "constrained mechanics",
+          "grad f = lambda grad g"
+        ],
+        "variableMap": {
+          "primalProblem": "extremize action/U s.t. g(q) = 0",
+          "dualVariable": "lambda (generalized constraint force)",
+          "saddleFunction": "L(q, lambda) = f(q) - lambda g(q)",
+          "optimalityCondition": "grad f = lambda * grad g"
+        }
+      },
+      {
+        "domain": "Machine Learning / Convex Optimization",
+        "title": "SVM Dual Problem & KKT Complementary Slackness",
+        "keywords": [
+          "svm",
+          "support vector",
+          "kkt",
+          "karush-kuhn-tucker",
+          "complementary slackness",
+          "lagrangian dual",
+          "strong duality",
+          "slater condition",
+          "dual problem",
+          "kernel trick",
+          "primal-dual"
+        ],
+        "variableMap": {
+          "primalProblem": "min (1/2)||w||^2 s.t. y_i(w^T x_i + b) >= 1",
+          "dualVariable": "alpha_i >= 0 (support-vector weights)",
+          "saddleFunction": "L(w, b, alpha) = (1/2)||w||^2 - sum alpha_i margin_i",
+          "optimalityCondition": "KKT: alpha_i * (y_i(w^T x_i + b) - 1) = 0"
+        }
+      },
+      {
+        "domain": "Physics / Thermodynamics",
+        "title": "Legendre Transform & Thermodynamic Potentials",
+        "keywords": [
+          "legendre",
+          "legendre transform",
+          "convex conjugate",
+          "fenchel",
+          "enthalpy",
+          "helmholtz",
+          "gibbs potential",
+          "conjugate variable",
+          "hamiltonian",
+          "maxwell relation"
+        ],
+        "variableMap": {
+          "primalProblem": "internal energy U(S, V) over extensive vars",
+          "dualVariable": "T = dU/dS, -P = dU/dV (intensive slopes)",
+          "saddleFunction": "F = U - T S,  G = U - T S + P V",
+          "optimalityCondition": "f*(p) = sup_x (p x - f(x))"
+        }
+      }
+    ],
+    "breaksAt": [
+      "Non-convex primal problems can suffer a nonzero duality gap (weak duality only) unless constraint qualification such as Slater's condition holds.",
+      "Equality Lagrange multipliers can have either sign, whereas inequality constraints (SVM/KKT) strictly require dual feasibility alpha_i >= 0 and complementary slackness.",
+      "Legendre transforms lose information across non-convex phase-transition regions (where the double transform returns only the convex hull, requiring Maxwell construction)."
+    ],
+    "bijectionQuestion": "What plays the role of the dual multiplier or conjugate slope here, what sensitivity does it measure, and what non-convexity breaks strong duality?"
+  }
+]
