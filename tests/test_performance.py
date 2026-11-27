@@ -15,8 +15,8 @@ import subprocess
 import sys
 import tempfile
 import time
-from datetime import datetime, timedelta, timezone
 import unittest
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 sys.dont_write_bytecode = True
@@ -117,6 +117,76 @@ class TestRosettaKeywordMatching(unittest.TestCase):
     def test_match_handles_empty_and_invalid_props(self) -> None:
         self.assertEqual(match_proposition_archetypes({}), [])
         self.assertEqual(match_proposition_archetypes("not a dict"), [])  # type: ignore[arg-type]
+
+
+class TestConfusablePairs(unittest.TestCase):
+    """`find_confusables` prunes and caches its O(n^2) pair scan; results must match the full scan."""
+
+    def setUp(self) -> None:
+        self._tmp = tempfile.TemporaryDirectory(prefix="synt-confusables-")
+        kg = Path(self._tmp.name) / "knowledge-graph"
+        kg.mkdir()
+        rng = random.Random(5)
+        words = "entropy energy heat work quorum leader log term vote spring force mass charge field wave limit".split()
+        tags = ["proof", "limit", "conservation", "symmetry"]
+        with (kg / "propositions.jsonl").open("w", encoding="utf-8") as f:
+            for i in range(160):
+                f.write(json.dumps({
+                    "id": f"p{i}",
+                    "title": f"{rng.choice(words)} {rng.choice(words)}",
+                    "statement": " ".join(rng.sample(words, rng.randint(2, 7))),
+                    "chapter": f"ch{i % 6}",
+                    "status": rng.choice(["solid", "shaky", "planned"]),
+                    "tags": rng.sample(tags, rng.randint(0, 2)),
+                }) + "\n")
+        with (kg / "chains.jsonl").open("w", encoding="utf-8") as f:
+            for i in range(1, 160):
+                for j in rng.sample(range(i), min(2, i)):
+                    f.write(json.dumps({"from": f"p{j}", "to": f"p{i}", "relation": "implies"}) + "\n")
+            for _ in range(8):
+                a, b = rng.sample(range(160), 2)
+                f.write(json.dumps({"from": f"p{a}", "to": f"p{b}", "relation": "contrasts_with"}) + "\n")
+        with (kg / "mistakes.jsonl").open("w", encoding="utf-8") as f:
+            for _ in range(10):
+                a, b = rng.sample(range(160), 2)
+                f.write(json.dumps({"propId": f"p{a}", "confusedWith": f"p{b}"}) + "\n")
+        self.kg = kg
+
+    def tearDown(self) -> None:
+        self._tmp.cleanup()
+
+    def test_pruned_top_k_equals_full_ranking(self) -> None:
+        gi = _graph_intel()
+        G = gi._ensure_graph(self.kg)
+        for min_sim in (0.0, 0.3, 0.6):
+            # A top large enough never fills the buffer, so nothing is pruned: the full ranking.
+            full = gi.find_confusables(G, kg_dir=self.kg, top=10**6, min_similarity=min_sim)
+            self.assertGreater(len(full), 300)
+            for k in (1, 3, 8, 40, 300):
+                with self.subTest(min_sim=min_sim, k=k):
+                    self.assertEqual(gi.find_confusables(G, kg_dir=self.kg, top=k, min_similarity=min_sim), full[:k])
+
+    def test_cache_reflects_display_only_changes(self) -> None:
+        gi = _graph_intel()
+        first = gi.find_confusables(gi._ensure_graph(self.kg), kg_dir=self.kg, top=5)
+        rows = [json.loads(line) for line in (self.kg / "propositions.jsonl").read_text(encoding="utf-8").splitlines()]
+        target = first[0]["nodeA"]["id"]
+        for r in rows:
+            if r["id"] == target:
+                r["status"] = "misconception"
+        (self.kg / "propositions.jsonl").write_text("".join(json.dumps(r) + "\n" for r in rows), encoding="utf-8")
+        again = gi.find_confusables(gi._ensure_graph(self.kg), kg_dir=self.kg, top=5)
+        self.assertEqual(again[0]["nodeA"]["status"], "misconception")
+        self.assertEqual([p["confusableScore"] for p in again], [p["confusableScore"] for p in first])
+
+
+def _graph_intel():
+    scripts = str(ROOT / "scripts")
+    if scripts not in sys.path:
+        sys.path.insert(0, scripts)
+    import graph_intel  # noqa: PLC0415
+
+    return graph_intel
 
 
 # End-to-end budget: a learner workspace the size the plan measured (3,000 concepts,

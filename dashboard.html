@@ -19,7 +19,7 @@
     --text-2: #A8B0BC;
     --muted: #959CA7;
     --dot-grid: #22272E;
-    --solid: #53A27A;
+    --solid: #5EAD85;
     --solid-bg: rgba(78, 159, 118, 0.14);
     --sage: #72A38D;
     --sage-bg: rgba(77, 139, 111, 0.15);
@@ -2811,6 +2811,8 @@
 
     <div class="surface-card autopilot-card" id="activeAutopilotCard"></div>
 
+    <div class="surface-card" id="weeklyReportCard" aria-live="polite"></div>
+
     <div class="surface-card" id="retentionIntelCard">
       <div class="section-head">
         <div>
@@ -3994,7 +3996,7 @@
         "learnerProfile", "nextMove", "forks", "forksDue", "arenas", "decisions",
         "derivations", "vivaSessions", "evidenceSummary", "rootCauseHotspots",
         "whiteboard", "explorables", "starterPacks", "rosetta", "syncStatus",
-        "readinessSummary", "interleaveStats", "compatSummary",
+        "readinessSummary", "interleaveStats", "compatSummary", "progressReport",
       ];
       for (const k of v3Keys) {
         if (st && st[k] !== undefined) mergedHub[k] = st[k];
@@ -6368,6 +6370,76 @@
     ["audioBriefBuilt", "Audio Brief"],
   ];
 
+  // Weekly progress report: same numbers as `syntopik report` (served by /api/state when live).
+  // Calm by design: compares this week with last week, no streaks and no red alarms.
+  function renderWeeklyReport() {
+    const card = document.getElementById("weeklyReportCard");
+    if (!card) return;
+    const rep = hubData.progressReport;
+    if (!rep || rep.ok === false || !rep.current) {
+      card.innerHTML = `
+        <div class="section-head" style="margin-bottom:6px;">
+          <div>
+            <h2>This Week</h2>
+            <p>Reviews, study time and retention compared with last week.</p>
+          </div>
+        </div>
+        <p style="margin:0;font-size:13px;color:var(--muted);">
+          ${liveCaps.live ? "No report yet: it appears after your first reviews." : "Shown when the Studio is running (syntopik serve). You can also run syntopik report."}
+        </p>
+        ${liveCaps.live ? "" : `<div style="margin-top:8px;"><button type="button" class="btn-link" id="weeklyReportCopyBtn">Copy “syntopik report”</button></div>`}
+      `;
+      card.querySelector("#weeklyReportCopyBtn")?.addEventListener("click", () => copyText("syntopik report", 'Copied "syntopik report" ✓'));
+      return;
+    }
+    const cur = rep.current || {};
+    const prev = rep.previous || {};
+    const pct = (v) => (typeof v === "number" ? `${Math.round(v * 100)}%` : "—");
+    const num = (v, unit = "") => (typeof v === "number" ? `${Math.round(v * 10) / 10}${unit}` : "—");
+    const minutes = (v) => {
+      if (typeof v !== "number") return "—";
+      const m = Math.round(v);
+      return m >= 60 ? `${Math.floor(m / 60)} h ${m % 60} min` : `${m} min`;
+    };
+    const change = (a, b, fmt) => {
+      if (typeof a !== "number" || typeof b !== "number") return "";
+      if (a === b) return "same as last week";
+      return `last week ${fmt(b)}`;
+    };
+    const tiles = [
+      { label: "Reviews", value: num(cur.reviews), sub: change(cur.reviews, prev.reviews, (v) => num(v)) },
+      { label: "Active days", value: `${num(cur.activeDays)} / ${num(rep.windowDays)}`, sub: change(cur.activeDays, prev.activeDays, (v) => num(v)) },
+      { label: "Study time", value: minutes(cur.studyMinutes), sub: change(cur.studyMinutes, prev.studyMinutes, minutes) },
+      { label: "Remembered when due", value: pct(cur.trueRetention), sub: change(cur.trueRetention, prev.trueRetention, pct) },
+    ];
+    const due = rep.due || {};
+    const mastery = rep.mastery || {};
+    const focus = rep.focus || null;
+    const struggling = Array.isArray(rep.struggling) ? rep.struggling.slice(0, 3) : [];
+    card.innerHTML = `
+      <div class="section-head" style="margin-bottom:8px;">
+        <div>
+          <h2>This Week</h2>
+          <p>Last ${esc(rep.windowDays)} days compared with the ${esc(rep.windowDays)} before.</p>
+        </div>
+        <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+          ${typeof mastery.solidPct === "number" ? `<span class="pill solid">${esc(pct(mastery.solidPct))} solid</span>` : ""}
+          <span class="pill">${esc(num(due.now))} due now · ${esc(num(due.next7Days))} next 7 days</span>
+        </div>
+      </div>
+      <div class="kpi-grid">
+        ${tiles.map((t) => `
+          <div class="kpi-card">
+            <div class="kpi-label">${esc(t.label)}</div>
+            <div class="kpi-big">${esc(t.value)}</div>
+            <div class="kpi-meta">${esc(t.sub || " ")}</div>
+          </div>`).join("")}
+      </div>
+      ${focus ? `<p style="margin:10px 0 0;font-size:13px;"><strong>Suggested focus:</strong> ${esc(focus.title)} <span style="color:var(--muted);">(${esc(focus.reason)})</span></p>` : ""}
+      ${struggling.length ? `<p style="margin:6px 0 0;font-size:12.5px;color:var(--muted);">Slipped most this week: ${struggling.map((x) => esc(x.title)).join(", ")}</p>` : ""}
+    `;
+  }
+
   function renderActiveAutopilot() {
     const card = document.getElementById("activeAutopilotCard");
     if (!card) return;
@@ -8345,6 +8417,7 @@
     });
 
     renderActiveAutopilot();
+    renderWeeklyReport();
     renderRetentionAndCalibration();
     renderLearnerProfileCard();
     renderMistakeAnalytics();

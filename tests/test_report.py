@@ -3,10 +3,12 @@
 
 from __future__ import annotations
 
+import http.client
 import json
 import subprocess
 import sys
 import tempfile
+import threading
 import unittest
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -140,6 +142,39 @@ class TestProgressReport(unittest.TestCase):
         self.assertTrue(md.is_file())
         self.assertIn("# Syntopik progress", md.read_text(encoding="utf-8"))
 
+
+    def test_studio_serves_report_in_state_and_api(self) -> None:
+        from syntopik import server as srv_mod
+
+        srv = srv_mod.create_server(workspace=self.ws, host="127.0.0.1", port=0, lan=False)
+        t_srv = threading.Thread(target=srv.serve_forever, kwargs={"poll_interval": 0.05}, daemon=True)
+        t_srv.start()
+
+        def get(path: str) -> tuple[int, dict]:
+            conn = http.client.HTTPConnection("127.0.0.1", srv.bound_port, timeout=15.0)
+            try:
+                conn.request("GET", path)
+                resp = conn.getresponse()
+                return resp.status, json.loads(resp.read().decode("utf-8"))
+            finally:
+                conn.close()
+
+        try:
+            code, state = get("/api/state")
+            self.assertEqual(code, 200)
+            rep = state["progressReport"]
+            self.assertEqual(rep["kind"], "progress_report")
+            self.assertEqual(rep["windowDays"], 7)
+            self.assertEqual(state["hub"]["progressReport"]["kind"], "progress_report")
+            code, month = get("/api/report?days=30")
+            self.assertEqual(code, 200)
+            self.assertEqual(month["windowDays"], 30)
+            for bad in ("0", "366", "abc"):
+                code, err = get(f"/api/report?days={bad}")
+                self.assertEqual(code, 400, err)
+        finally:
+            srv.shutdown()
+            srv.server_close()
 
 if __name__ == "__main__":
     unittest.main()

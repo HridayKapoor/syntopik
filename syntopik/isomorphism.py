@@ -174,11 +174,66 @@ def match_proposition_archetypes(
     """
     if not isinstance(prop, dict):
         return []
-    lib = archetypes if archetypes is not None else load_archetypes()
+    if archetypes is None:
+        if _ARCHETYPES_CACHE is None:
+            load_archetypes()
+        # Read-only use of the shared library: scoring copies whatever it returns.
+        lib = _ARCHETYPES_CACHE or []
+    else:
+        lib = archetypes
     headline_raw, headline_word, full_raw, full_word, tag_set = _prop_text_parts(prop)
     if not full_raw:
         return []
 
+    # The Studio rescans every proposition on each refresh. With the bundled library the
+    # result depends only on the text, tags, subject and chapter, so memoize on those.
+    memo_key: tuple[Any, ...] | None = None
+    if archetypes is None:
+        memo_key = (
+            float(min_score),
+            full_raw,
+            full_word,
+            headline_raw,
+            headline_word,
+            frozenset(tag_set),
+            str(prop.get("subject", "")),
+            str(prop.get("chapter", "")),
+        )
+        hit = _MATCH_MEMO.get(memo_key)
+        if hit is not None:
+            return [_copy_match(m) for m in hit]
+
+    matches = _score_archetypes(prop, lib, headline_raw, headline_word, full_raw, full_word, tag_set, min_score)
+    if memo_key is not None:
+        if len(_MATCH_MEMO) >= _MATCH_MEMO_MAX:
+            _MATCH_MEMO.clear()
+        _MATCH_MEMO[memo_key] = [_copy_match(m) for m in matches]
+    return matches
+
+
+_MATCH_MEMO: dict[tuple[Any, ...], list[dict[str, Any]]] = {}
+_MATCH_MEMO_MAX = 50_000
+
+
+def _copy_match(m: dict[str, Any]) -> dict[str, Any]:
+    return {
+        **m,
+        "variableMap": dict(m.get("variableMap") or {}),
+        "breaksAt": list(m.get("breaksAt") or []),
+        "matchedKeywords": list(m.get("matchedKeywords") or []),
+    }
+
+
+def _score_archetypes(
+    prop: dict[str, Any],
+    lib: list[dict[str, Any]],
+    headline_raw: str,
+    headline_word: str,
+    full_raw: str,
+    full_word: str,
+    tag_set: set[str],
+    min_score: float,
+) -> list[dict[str, Any]]:
     matches: list[dict[str, Any]] = []
     for arch in lib:
         arch_id = str(arch.get("id") or "").strip()
@@ -374,7 +429,7 @@ def discover_isomorphisms(
     # Match every active proposition against all archetypes
     by_archetype: dict[str, list[tuple[dict[str, Any], dict[str, Any]]]] = {}
     for p in active_props:
-        matches = match_proposition_archetypes(p, archetypes, min_score=min_score)
+        matches = match_proposition_archetypes(p, None, min_score=min_score)  # bundled library, memoized
         for m in matches:
             by_archetype.setdefault(m["archetypeId"], []).append((p, m))
 

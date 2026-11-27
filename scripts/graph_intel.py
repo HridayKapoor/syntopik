@@ -26,6 +26,7 @@ PageRank fallback when `networkx` is not installed).
 from __future__ import annotations
 
 import argparse
+import hashlib
 import heapq
 import json
 import math
@@ -1127,6 +1128,10 @@ def _char_trigrams(terms: set[str]) -> set[str]:
     return grams
 
 
+_CONFUSABLE_CACHE: dict[str, list[tuple[Any, ...]]] = {}
+_CONFUSABLE_CACHE_MAX = 8
+
+
 def find_confusables(
     graph_or_dir: Any,
     *,
@@ -1207,106 +1212,198 @@ def find_confusables(
         return []
 
     idf = {t: math.log(1.0 + (n_docs - df + 0.5) / (df + 0.5)) for t, df in doc_freq.items()}
-    pairs_out: list[dict[str, Any]] = []
+    top_n = max(0, int(top))
+    if top_n == 0:
+        return []
+    # Per-node IDF mass, computed once instead of once per pair (the pair loop is O(n^2)).
+    for info in nodes_info:
+        info["termWeight"] = sum(idf.get(t, 1.0) for t in info["terms"])
+        info["trigramCount"] = len(info["trigrams"])
 
-    for i in range(n_docs):
-        a = nodes_info[i]
-        for j in range(i + 1, n_docs):
-            b = nodes_info[j]
-            first, second = (a, b) if a["id"] <= b["id"] else (b, a)
-            pair_key = (first["id"], second["id"])
+    explicit_ids: set[str] = set()
+    for pk in list(confused_hits) + list(explicit_contrast_pairs):
+        explicit_ids.update(pk)
 
-            # Weighted IDF Dice on stemmed terms + char-trigram Dice.
-            shared_terms = a["terms"] & b["terms"]
-            union_terms = a["terms"] | b["terms"]
-            if shared_terms and union_terms:
-                shared_w = sum(idf.get(t, 1.0) for t in shared_terms)
-                denom_w = sum(idf.get(t, 1.0) for t in a["terms"]) + sum(idf.get(t, 1.0) for t in b["terms"])
-                term_dice = (2.0 * shared_w / denom_w) if denom_w > 0 else 0.0
-            else:
-                term_dice = 0.0
+    def _best_pairs() -> list[tuple[Any, ...]]:
+        """Exact top-`top_n` pairs by (-score, -mistakeHits, idA, idB).
 
-            tri_union = len(a["trigrams"]) + len(b["trigrams"])
-            tri_dice = (2.0 * len(a["trigrams"] & b["trigrams"]) / tri_union) if tri_union > 0 else 0.0
-            lex_sim = 0.70 * term_dice + 0.30 * tri_dice
+        Rows are cheap tuples; dicts are built only for the winners. Once `top_n` rows are
+        held, a pair whose rounded score is below the current cut-off cannot enter, so it is
+        dropped before any further work.
+        """
+        kept: list[tuple[Any, ...]] = []
+        cutoff = -math.inf  # rounded score a new pair must reach to be considered
+        for i in range(n_docs):
+            a = nodes_info[i]
+            a_id = a["id"]
+            a_terms = a["terms"]
+            a_tri = a["trigrams"]
+            a_themes = a["themes"]
+            a_weight = a["termWeight"]
+            a_tri_n = a["trigramCount"]
+            a_explicit = a_id in explicit_ids
+            for j in range(i + 1, n_docs):
+                b = nodes_info[j]
 
-            shared_themes = sorted(a["themes"] & b["themes"])
-            theme_union = a["themes"] | b["themes"]
-            theme_sim = (len(shared_themes) / len(theme_union)) if theme_union else 0.0
+                b_id = b["id"]
+                maybe_explicit = a_explicit and b_id in explicit_ids
+                first, second = (a, b) if a_id <= b_id else (b, a)
 
-            surface_sim = max(lex_sim, 0.70 * lex_sim + 0.30 * theme_sim)
+                shared_theme_set = a_themes & b["themes"]
+                theme_union = a_themes | b["themes"]
+                theme_sim = (len(shared_theme_set) / len(theme_union)) if theme_union else 0.0
 
-            # Premise divergence via symmetric difference of governing premises in chains.jsonl.
-            p_a = first["premises"]
-            p_b = second["premises"]
-            p_union = p_a | p_b
-            if p_union:
-                premise_div = len(p_a ^ p_b) / len(p_union)
-            else:
-                premise_div = 0.45 if (first["chapter"].lower() != second["chapter"].lower() or shared_themes) else 0.0
+                # Premise divergence via symmetric difference of governing premises in chains.jsonl.
+                p_a = first["premises"]
+                p_b = second["premises"]
+                p_union = p_a | p_b
+                if p_union:
+                    premise_div = len(p_a ^ p_b) / len(p_union)
+                else:
+                    premise_div = 0.45 if (first["chapter"].lower() != second["chapter"].lower() or shared_theme_set) else 0.0
 
-            mistake_hits = confused_hits.get(pair_key, 0)
-            is_explicit_contrast = pair_key in explicit_contrast_pairs
+                if not maybe_explicit:
+                    if premise_div <= 0.0:
+                        continue
+                    if cutoff > -math.inf:
+                        # Cheap upper bound on the score from set sizes alone (Dice <= 2*min/sum).
+                        b_weight = b["termWeight"]
+                        b_tri_n = b["trigramCount"]
+                        term_ub = (2.0 * min(a_weight, b_weight) / (a_weight + b_weight)) if (a_weight + b_weight) > 0 else 0.0
+                        tri_ub = (2.0 * min(a_tri_n, b_tri_n) / (a_tri_n + b_tri_n)) if (a_tri_n + b_tri_n) > 0 else 0.0
+                        lex_ub = 0.70 * min(1.0, term_ub) + 0.30 * tri_ub
+                        surface_ub = max(lex_ub, 0.70 * lex_ub + 0.30 * theme_sim)
+                        if 0.48 * surface_ub + 0.37 * premise_div + 0.15 * theme_sim + 1e-9 < cutoff - 0.0005:
+                            continue
 
-            # Require either explicit confusion/contrast OR high surface lookalike + divergent premises.
-            if not (mistake_hits > 0 or is_explicit_contrast):
-                if surface_sim < min_similarity:
+                # Weighted IDF Dice on stemmed terms + char-trigram Dice.
+                shared_terms = a_terms & b["terms"]
+                if shared_terms:
+                    shared_w = sum(idf.get(t, 1.0) for t in shared_terms)
+                    denom_w = a_weight + b["termWeight"]
+                    term_dice = (2.0 * shared_w / denom_w) if denom_w > 0 else 0.0
+                else:
+                    term_dice = 0.0
+
+                tri_union = a_tri_n + b["trigramCount"]
+                tri_dice = (2.0 * len(a_tri & b["trigrams"]) / tri_union) if tri_union > 0 else 0.0
+                lex_sim = 0.70 * term_dice + 0.30 * tri_dice
+                surface_sim = max(lex_sim, 0.70 * lex_sim + 0.30 * theme_sim)
+
+                if not maybe_explicit and surface_sim < min_similarity:
                     continue
-                if premise_div <= 0.0:
+
+                if maybe_explicit:
+                    pair_key = (first["id"], second["id"])
+                    mistake_hits = confused_hits.get(pair_key, 0)
+                    is_explicit_contrast = pair_key in explicit_contrast_pairs
+                else:
+                    mistake_hits = 0
+                    is_explicit_contrast = False
+
+                # Require either explicit confusion/contrast OR high surface lookalike + divergent premises.
+                if not (mistake_hits > 0 or is_explicit_contrast):
+                    if premise_div <= 0.0:
+                        continue
+
+                score = round(
+                    0.48 * surface_sim
+                    + 0.37 * premise_div
+                    + 0.15 * theme_sim
+                    + (0.35 * min(3, mistake_hits))
+                    + (0.30 if is_explicit_contrast else 0.0),
+                    3,
+                )
+                if score < cutoff:
                     continue
+                kept.append(
+                    (
+                        -score,
+                        -mistake_hits,
+                        first["id"],
+                        second["id"],
+                        shared_terms,
+                        shared_theme_set,
+                        lex_sim,
+                        surface_sim,
+                        premise_div,
+                        is_explicit_contrast,
+                    )
+                )
+                if len(kept) >= 4 * top_n + 256:
+                    kept.sort(key=lambda row: row[:4])
+                    del kept[top_n:]
+                    cutoff = -kept[-1][0]
+        kept.sort(key=lambda row: row[:4])
+        return kept[:top_n]
 
-            score = (
-                0.48 * surface_sim
-                + 0.37 * premise_div
-                + 0.15 * theme_sim
-                + (0.35 * min(3, mistake_hits))
-                + (0.30 if is_explicit_contrast else 0.0)
-            )
-            distinct_a = sorted(p_a - p_b)
-            distinct_b = sorted(p_b - p_a)
-
-            pairs_out.append(
-                {
-                    "nodeA": {
-                        "id": first["id"],
-                        "title": first["title"],
-                        "subject": first["subject"],
-                        "chapter": first["chapter"],
-                        "status": first["status"],
-                    },
-                    "nodeB": {
-                        "id": second["id"],
-                        "title": second["title"],
-                        "subject": second["subject"],
-                        "chapter": second["chapter"],
-                        "status": second["status"],
-                    },
-                    "lexicalSimilarity": round(lex_sim, 3),
-                    "surfaceSimilarity": round(surface_sim, 3),
-                    "premiseDivergence": round(premise_div, 3),
-                    "sharedThemes": shared_themes,
-                    "sharedTerms": sorted(shared_terms)[:8],
-                    "distinctPremisesA": distinct_a,
-                    "distinctPremisesB": distinct_b,
-                    "confusedMistakeHits": mistake_hits,
-                    "explicitContrast": is_explicit_contrast,
-                    "confusableScore": round(score, 3),
-                    "contrastPrompt": (
-                        f"Interleaved [A, B, A'] discrimination: contrast '{first['title']}' ({first['id']}) "
-                        f"against '{second['title']}' ({second['id']}) — name the validity premise that separates them."
-                    ),
-                }
-            )
-
-    pairs_out.sort(
-        key=lambda item: (
-            -item["confusableScore"],
-            -item["confusedMistakeHits"],
-            item["nodeA"]["id"],
-            item["nodeB"]["id"],
+    # The pair scan is O(n^2), so remember its result for unchanged inputs. The key covers
+    # everything a score depends on (terms, themes, chapter, premises, confusions, contrasts);
+    # titles and statuses are only displayed and are re-read from the current graph below.
+    fp = hashlib.blake2b(digest_size=16)
+    fp.update(repr((top_n, float(min_similarity))).encode("utf-8"))
+    for info in sorted(nodes_info, key=lambda x: str(x["id"])):
+        fp.update(
+            repr(
+                (
+                    str(info["id"]),
+                    sorted(info["terms"]),
+                    sorted(info["themes"]),
+                    info["chapter"],
+                    sorted(info["premises"]),
+                )
+            ).encode("utf-8")
         )
-    )
-    return pairs_out[: max(0, int(top))]
+    fp.update(repr(sorted(confused_hits.items())).encode("utf-8"))
+    fp.update(repr(sorted(explicit_contrast_pairs)).encode("utf-8"))
+    cache_key = fp.hexdigest()
+    cached = _CONFUSABLE_CACHE.get(cache_key)
+    if cached is None:
+        cached = _best_pairs()
+        if len(_CONFUSABLE_CACHE) >= _CONFUSABLE_CACHE_MAX:
+            _CONFUSABLE_CACHE.pop(next(iter(_CONFUSABLE_CACHE)))
+        _CONFUSABLE_CACHE[cache_key] = cached
+
+    info_by_id = {info["id"]: info for info in nodes_info}
+    pairs_out: list[dict[str, Any]] = []
+    for neg_score, neg_hits, id_a, id_b, shared_terms, shared_theme_set, lex_sim, surface_sim, premise_div, is_explicit_contrast in cached:
+        first = info_by_id[id_a]
+        second = info_by_id[id_b]
+        p_a = first["premises"]
+        p_b = second["premises"]
+        pairs_out.append(
+            {
+                "nodeA": {
+                    "id": first["id"],
+                    "title": first["title"],
+                    "subject": first["subject"],
+                    "chapter": first["chapter"],
+                    "status": first["status"],
+                },
+                "nodeB": {
+                    "id": second["id"],
+                    "title": second["title"],
+                    "subject": second["subject"],
+                    "chapter": second["chapter"],
+                    "status": second["status"],
+                },
+                "lexicalSimilarity": round(lex_sim, 3),
+                "surfaceSimilarity": round(surface_sim, 3),
+                "premiseDivergence": round(premise_div, 3),
+                "sharedThemes": sorted(shared_theme_set),
+                "sharedTerms": sorted(shared_terms)[:8],
+                "distinctPremisesA": sorted(p_a - p_b),
+                "distinctPremisesB": sorted(p_b - p_a),
+                "confusedMistakeHits": -neg_hits,
+                "explicitContrast": is_explicit_contrast,
+                "confusableScore": -neg_score,
+                "contrastPrompt": (
+                    f"Interleaved [A, B, A'] discrimination: contrast '{first['title']}' ({first['id']}) "
+                    f"against '{second['title']}' ({second['id']}) — name the validity premise that separates them."
+                ),
+            }
+        )
+    return pairs_out
 
 
 def compute_sunset_plan(

@@ -193,8 +193,13 @@ def localize_fault(
     failed_node_id: str,
     *,
     max_depth: int = 4,
+    preloaded: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Compute non-destructive posterior `suspectRootScore` over upstream ancestors of `failed_node_id`.
+
+    `preloaded` lets a caller that localizes many leaves share one load: it may hold
+    `propositions.jsonl` / `chains.jsonl` rows and `incomingMap` (from `_build_graph_maps`),
+    all read-only.
 
     Uses conjunctive factorization:
         P(pass C | P_1..P_k) = (1 - s_C) * prod_i P(P_i)^{w_i}
@@ -202,8 +207,9 @@ def localize_fault(
     """
     kdir = _resolve_kg_dir(kg_dir)
     target = str(failed_node_id or "").strip()
-    props = load_jsonl(kdir / "propositions.jsonl")
-    chains = load_jsonl(kdir / "chains.jsonl")
+    pre = preloaded or {}
+    props = pre["propositions.jsonl"] if "propositions.jsonl" in pre else load_jsonl(kdir / "propositions.jsonl")
+    chains = pre["chains.jsonl"] if "chains.jsonl" in pre else load_jsonl(kdir / "chains.jsonl")
     props_by_id = {str(p.get("id") or ""): p for p in props if isinstance(p, dict) and p.get("id")}
 
     if not target or target not in props_by_id:
@@ -218,7 +224,7 @@ def localize_fault(
 
     fsrs_params = load_fsrs_parameters(kdir)
     now_dt = datetime.now(timezone.utc)
-    incoming, _outgoing = _build_graph_maps(chains)
+    incoming = pre["incomingMap"] if "incomingMap" in pre else _build_graph_maps(chains)[0]
     anc_meta = _collect_ancestors(target, incoming, max_depth=max_depth)
 
     leaf_prop = props_by_id[target]
