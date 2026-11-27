@@ -62,7 +62,7 @@ All **28 CLI verbs** run on **bare Python 3.12+ stdlib** (or Node 20+ via `npx`)
 | `syntopik drop <inputs...> [--slug <slug>] [--title "<T>"] [--json]` | 10-second mixed-source kickoff (PDF, `.apkg`, `.ipynb`, CSV, Notion `.zip`, URL, YouTube, repo) enforcing Teacher-First spine order + Probe #1 (`syntopik.brainstem`). |
 | `syntopik demo [--pack <slug\|all>] [--open] [--workspace <dir>]` | Load bundled zero-PII starter pack(s) into a clean sandbox workspace (`~/.syntopik-demo`) with optional browser Studio launch. |
 | `syntopik debrief [--ref HEAD~1..HEAD \| --diff-file <p>] [--dry-run]` | **Work Mentor Debrief**: crystallize git diff bugs/invariants into Blunder Forks, Arenas, and Knowledge Graph propositions (`syntopik.work_mentor`). |
-| `syntopik mode [mentor\|study] [--off] [--json]` | Toggle Anti-Vibe-Coding Work Mentor mode vs Study mode in `study-config.json`. |
+| `syntopik mode [mentor\|study] [--off] [--json]` | Show (no argument) or toggle Anti-Vibe-Coding Work Mentor mode vs Study mode in `knowledge-graph/mentor-config.json`. |
 | `syntopik sunset <slug> [--apply] [--json]` | **Semester Sunset**: snapshot chapter pack, keep core axioms at $R=0.80$, and archive low-leverage leaf nodes (`scripts/graph_intel.py`). |
 | `syntopik pace [--rebalance] [--ics <file.ics>] [--json]` | Multi-course buffer-protected Auto-Pacer with RFC-5545 `.ics` calendar export (`scripts/daily_plan.py --pace`). |
 | `syntopik board [status\|push\|pin\|clear] [--kind ...] [--json]` | Inspect or push frames/pins to `whiteboard-session.json` (Live AI-to-Whiteboard SSE bus, `syntopik.whiteboard`). |

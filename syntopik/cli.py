@@ -1448,7 +1448,15 @@ def _cmd_debrief(args: argparse.Namespace) -> int:
     kwargs: dict[str, Any] = {"ref": args.ref, "diff_text": diff_text}
     if "dry_run" in sig.parameters:
         kwargs["dry_run"] = bool(args.dry_run)
-    res = wm.debrief_git_diff(ws, **kwargs)
+    try:
+        res = wm.debrief_git_diff(ws, **kwargs)
+    except (RuntimeError, ValueError, OSError) as exc:
+        msg = str(exc).splitlines()[0] if str(exc) else exc.__class__.__name__
+        _emit({"ok": False, "error": msg}, bool(args.json), [
+            f"Work Mentor Debrief could not read the diff: {msg}",
+            "  Run it inside a git project with at least two commits, or pass --diff-file <path>.",
+        ])
+        return 1
     if not args.dry_run:
         sync_hub(workspace=ws, quiet=True)
 
@@ -1463,6 +1471,17 @@ def _cmd_debrief(args: argparse.Namespace) -> int:
 def _cmd_mode(args: argparse.Namespace) -> int:
     ws = resolve_workspace(getattr(args, "workspace", None))
     wm = _lazy_import("syntopik.work_mentor")
+    if args.mode is None and not bool(args.off):
+        # Bare `syntopik mode` only reports; it never flips the setting.
+        cfg = load_json(resolve_kg_dir(ws) / wm.MENTOR_CONFIG_FILENAME, default={})
+        on = bool(cfg.get("mentorMode")) if isinstance(cfg, dict) else False
+        label = "mentor (active)" if on else "study (mentor off)"
+        res = {"ok": True, "mentorMode": on, "mode": "mentor" if on else "study", "changed": False}
+        _emit(res, bool(args.json), [
+            f"Syntopik mode: {label} ({ws})",
+            "  Switch with `syntopik mode mentor` or `syntopik mode study`.",
+        ])
+        return 0
     mode_arg = str(args.mode or "mentor").strip().lower()
     enabled = (mode_arg == "mentor") and (not bool(args.off))
     res = wm.set_mentor_mode(ws, enabled=enabled)
@@ -2329,7 +2348,7 @@ def build_parser() -> argparse.ArgumentParser:
     p_deb.set_defaults(func=_cmd_debrief)
 
     p_mode = sub.add_parser("mode", help="Toggle Anti-Vibe-Coding Work Mentor mode vs Study mode")
-    p_mode.add_argument("mode", nargs="?", choices=["mentor", "study"], default="mentor", help="Mode to activate")
+    p_mode.add_argument("mode", nargs="?", choices=["mentor", "study"], default=None, help="Mode to activate (omit to show the current mode)")
     p_mode.add_argument("--off", action="store_true", help="Disable mentor mode")
     p_mode.add_argument("--workspace", default=None, help="Syntopik workspace directory")
     p_mode.add_argument("--json", action="store_true", help="Emit JSON output")

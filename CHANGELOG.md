@@ -25,6 +25,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - **CI on current GitHub Actions**: `actions/checkout@v5`, `actions/setup-node@v5` and `actions/setup-python@v6` (Node 24 runtime), clearing the Node 20 deprecation warning on every job.
 
 ### Fixed
+- `syntopik mode` with no argument now shows the current mode instead of silently switching Mentor mode on.
+- `syntopik debrief` outside a git project now prints a short explanation instead of git's full usage text.
 - **`code_verify complexity` no longer calls a linear solution O(N log N) on noisy timings**: when the measurements cannot decisively separate the two classes, the simpler O(N) is kept with low confidence.
 
 ## [3.2.0] - 2026-11-27
