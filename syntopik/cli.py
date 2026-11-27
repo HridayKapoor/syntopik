@@ -349,6 +349,28 @@ def _emit(payload: dict[str, Any], as_json: bool, lines: list[str]) -> None:
             print(ln)
 
 
+EMPTY_VAULT_HINT = (
+    "  Your knowledge graph is empty, so there is nothing to work with yet.\n"
+    "  Add your notes with `syntopik drop <file-or-url>`, or explore sample courses with `syntopik demo`."
+)
+
+
+def _vault_is_empty(kg_dir: Path) -> bool:
+    """True when `propositions.jsonl` is missing or has no non-blank lines."""
+    path = Path(kg_dir) / "propositions.jsonl"
+    try:
+        with path.open("r", encoding="utf-8", errors="replace") as fh:
+            return not any(line.strip() for line in fh)
+    except OSError:
+        return True
+
+
+def _with_empty_hint(lines: list[str], kg_dir: Path) -> list[str]:
+    if _vault_is_empty(kg_dir):
+        return [*lines, *EMPTY_VAULT_HINT.split("\n")]
+    return lines
+
+
 # ---------------------------------------------------------------------------
 # Subcommand handlers
 # ---------------------------------------------------------------------------
@@ -870,6 +892,7 @@ def _cmd_review(args: argparse.Namespace) -> int:
         lines.append(f"  - {it.get('id')} [{it.get('status')}{retr}]: {it.get('title') or it.get('id')}")
     if not items:
         lines.append("  Nothing due right now.")
+        lines = _with_empty_hint(lines, kg_dir)
     for ln in lines:
         print(ln)
     return 0
@@ -916,7 +939,7 @@ def _cmd_triage(args: argparse.Namespace) -> int:
         f"  Protect (20%) : {len((plan.get('buckets') or {}).get('protect_20pct', []))} node(s)",
         f"  Explicitly Cut: {len((plan.get('buckets') or {}).get('explicitly_cut', []))} node(s)",
     ]
-    _emit(payload, bool(args.json), lines)
+    _emit(payload, bool(args.json), _with_empty_hint(lines, kg_dir))
     return 0
 
 
@@ -1933,7 +1956,7 @@ def _cmd_report(args: argparse.Namespace) -> int:
     lines = rp.render_report_lines(rep)
     if md_path:
         lines.append(f"  Markdown       : {rep['markdownPath']}")
-    _emit({"workspace": str(ws), **rep}, bool(args.json), lines)
+    _emit({"workspace": str(ws), **rep}, bool(args.json), _with_empty_hint(lines, kg_dir))
     return 0
 
 
@@ -1990,7 +2013,7 @@ def _cmd_readiness(args: argparse.Namespace) -> int:
         if isinstance(lv, dict):
             title = lv.get("title") or lv.get("label") or lv.get("chapter") or lv.get("propId") or str(lv)
             lines.append(f"  Lever #{idx}        : {title}")
-    _emit(payload, bool(args.json), lines)
+    _emit(payload, bool(args.json), _with_empty_hint(lines, kg_dir))
     return 0 if payload.get("ok", True) else 1
 
 
@@ -2028,10 +2051,10 @@ def _cmd_interleave(args: argparse.Namespace) -> int:
         payload = {"ok": bool((res or {}).get("ok", True)), "action": "build", "workspace": str(ws), **(res if isinstance(res, dict) else {"result": res})}
         items = list(payload.get("items") or [])
         lines = [
-            f"Blind-Chapter Interleave Set ({payload.get('sessionId', 'session')}) — {len(items)} item(s) [mode={payload.get('mode', args.mode)}]",
+            f"Blind-Chapter Interleave Set ({payload.get('sessionId') or 'not started'}) — {len(items)} item(s) [mode={payload.get('mode', args.mode)}]",
             *[f"  - {it.get('itemId') or it.get('id')}: {str(it.get('prompt') or '')[:96]}" for it in items[:10]],
         ]
-        _emit(payload, bool(args.json), lines)
+        _emit(payload, bool(args.json), lines if items else _with_empty_hint(lines, kg_dir))
         return 0 if payload.get("ok", True) else 1
 
     if action == "check":
