@@ -40,6 +40,7 @@ __all__ = [
     "ISOMORPHIC_FIRE_DEFAULT_WEIGHT",
     "ISOMORPHIC_FIRE_MAX_WEIGHT",
     "FireCreditList",
+    "build_incoming_prereq_map",
     "fire_ancestor_footprint",
     "fire_isomorphic_neighbors",
     "apply_fire_credit",
@@ -736,6 +737,9 @@ def _build_incoming_prereq_map(chains: list[dict[str, Any]]) -> dict[str, list[t
     return incoming
 
 
+build_incoming_prereq_map = _build_incoming_prereq_map
+
+
 def _build_outgoing_descendants_map(chains: list[dict[str, Any]]) -> dict[str, set[str]]:
     """Compute transitive downstream descendant sets per node via pure-stdlib BFS."""
     adj: dict[str, set[str]] = {}
@@ -946,13 +950,19 @@ def fire_ancestor_footprint(
     *,
     max_depth: int = 3,
     gamma: float = 0.7,
+    incoming: dict[str, list[tuple[str, float]]] | None = None,
 ) -> dict[str, tuple[float, int]]:
     """Return `{ancestor_id: (max_decayed_weight, min_depth)}` for prerequisites up to `max_depth`.
 
     At depth `d >= 1`, path weight = `(prod edge weights) * (gamma ** (d - 1))`.
     Cycles are safely prevented via per-path visited sets.
+
+    Callers that evaluate many nodes against the same `chains` should build the
+    prerequisite map once via `build_incoming_prereq_map(chains)` and pass it as
+    `incoming`; rebuilding it per node is O(nodes x chains).
     """
-    incoming = _build_incoming_prereq_map(chains)
+    if incoming is None:
+        incoming = _build_incoming_prereq_map(chains)
     best: dict[str, tuple[float, int]] = {}
     depth_cap = max(1, int(max_depth))
 
@@ -1110,7 +1120,6 @@ def compress_due_queue(
 
     item_by_id = {str(it["id"]): dict(it) for it in due_items if it.get("id")}
     due_ids = list(item_by_id.keys())
-    due_set = set(due_ids)
     order_index = {pid: idx for idx, pid in enumerate(due_ids)}
 
     # Misconception nodes are never knocked out implicitly and never trusted to knock out others.
@@ -1120,11 +1129,12 @@ def compress_due_queue(
 
     # Precompute each candidate's knock-out set among coverable due prerequisites.
     covers_map: dict[str, dict[str, float]] = {}
+    incoming = _build_incoming_prereq_map(chains)
     for pid in due_ids:
         if str(item_by_id[pid].get("status") or "").lower() == "misconception":
             covers_map[pid] = {}
             continue
-        fp = fire_ancestor_footprint(pid, chains, max_depth=max_depth, gamma=gamma)
+        fp = fire_ancestor_footprint(pid, chains, max_depth=max_depth, gamma=gamma, incoming=incoming)
         hits = {
             anc: round(w, 4)
             for anc, (w, _d) in fp.items()

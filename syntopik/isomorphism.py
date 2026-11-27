@@ -11,6 +11,7 @@ encounters a new concept whose structural twin is already mastered.
 from __future__ import annotations
 
 import copy
+import functools
 import json
 import math
 import re
@@ -70,34 +71,52 @@ def _norm_space(text: str) -> str:
     return re.sub(r"\s+", " ", str(text or "").strip().lower())
 
 
+_SYMBOL_RE = re.compile(r"[^a-z0-9\s\-]")
+_WS_RE = re.compile(r"\s+")
+_KW_SPLIT_RE = re.compile(r"[\s\-]+")
+
+
+@functools.lru_cache(maxsize=4096)
+def _keyword_spec(k: str) -> tuple[bool, str, re.Pattern[str] | None]:
+    """Classify a normalized keyword once: (has_symbol, compact form, word-boundary regex)."""
+    if _SYMBOL_RE.search(k):
+        return True, _WS_RE.sub("", k), None
+    pat = _KW_REGEX_CACHE.get(k)
+    if pat is None:
+        parts = [re.escape(p) for p in _KW_SPLIT_RE.split(k) if p]
+        if not parts:
+            return False, "", None
+        expr = r"(?<![a-z0-9])" + r"[\s\-_]+".join(parts) + r"(?![a-z0-9])"
+        pat = re.compile(expr)
+        _KW_REGEX_CACHE[k] = pat
+    return False, "", pat
+
+
+@functools.lru_cache(maxsize=256)
+def _compact_blob(raw_blob: str) -> str:
+    return _WS_RE.sub("", raw_blob)
+
+
 def _keyword_matches(kw: str, raw_blob: str, word_blob: str) -> bool:
     """Match a keyword deterministically using word boundaries for alphanumeric terms
     and literal substring matching for equation/symbolic tokens."""
     k = str(kw or "").strip().lower()
     if not k:
         return False
-    has_symbol = bool(re.search(r"[^a-z0-9\s\-]", k))
+    has_symbol, compact_k, pat = _keyword_spec(k)
     if has_symbol:
         if k in raw_blob:
             return True
-        compact_k = re.sub(r"\s+", "", k)
-        compact_blob = re.sub(r"\s+", "", raw_blob)
-        return len(compact_k) >= 4 and compact_k in compact_blob
-
-    pat = _KW_REGEX_CACHE.get(k)
+        return len(compact_k) >= 4 and compact_k in _compact_blob(raw_blob)
     if pat is None:
-        parts = [re.escape(p) for p in re.split(r"[\s\-]+", k) if p]
-        if not parts:
-            return False
-        expr = r"(?<![a-z0-9])" + r"[\s\-_]+".join(parts) + r"(?![a-z0-9])"
-        pat = re.compile(expr)
-        _KW_REGEX_CACHE[k] = pat
+        return False
     return bool(pat.search(word_blob))
 
 
+@functools.lru_cache(maxsize=4096)
 def _keyword_weight(kw: str) -> float:
     k = str(kw or "").strip().lower()
-    has_symbol = bool(re.search(r"[^a-z0-9\s\-]", k))
+    has_symbol = bool(_SYMBOL_RE.search(k))
     is_phrase = (" " in k) or ("-" in k)
     if has_symbol or is_phrase or len(k) >= 9:
         return 1.45
@@ -121,11 +140,8 @@ def _domain_context_alignment(prop: dict[str, Any], slot: dict[str, Any]) -> flo
 
 
 def _prop_text_parts(prop: dict[str, Any]) -> tuple[str, str, str, str, set[str]]:
-    pid = str(prop.get("id") or "")
     title = str(prop.get("title") or "")
     stmt = str(prop.get("statement") or "")
-    subject = str(prop.get("subject") or "")
-    chapter = str(prop.get("chapter") or "")
     notes = str(prop.get("notes") or "")
     raw_tags = prop.get("tags") or []
     tags = [str(t).strip().lower() for t in raw_tags if isinstance(t, str) and t.strip()]
