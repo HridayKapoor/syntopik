@@ -877,9 +877,13 @@ def _scan_starter_packs(ws: Path, pkg: Path) -> list[dict[str, Any]]:
 
 def _compute_root_cause_hotspots(kg_dir: Path) -> dict[str, Any]:
     """Compute `{byProp, blastRadius}` using Bayesian Noisy-OR fault localization."""
-    from syntopik.root_cause import find_blast_radius, localize_fault
+    from syntopik.root_cause import _build_graph_maps, find_blast_radius, localize_fault
 
-    blast = find_blast_radius(kg_dir, limit=12)
+    props = load_jsonl(kg_dir / "propositions.jsonl")
+    chains = load_jsonl(kg_dir / "chains.jsonl")
+    mistakes = load_jsonl(kg_dir / "mistakes.jsonl")
+    shared = {"propositions.jsonl": props, "chains.jsonl": chains, "mistakes.jsonl": mistakes}
+    blast = find_blast_radius(kg_dir, limit=12, preloaded=shared)
     by_prop: dict[str, float] = {}
 
     for item in blast:
@@ -892,8 +896,6 @@ def _compute_root_cause_hotspots(kg_dir: Path) -> dict[str, Any]:
         est = min(0.96, round(sev_base + 0.08 * weak_n + 0.05 * miss_n, 4))
         by_prop[pid] = max(by_prop.get(pid, 0.0), est)
 
-    props = load_jsonl(kg_dir / "propositions.jsonl")
-    mistakes = load_jsonl(kg_dir / "mistakes.jsonl")
     failed_leaves: list[str] = []
     seen_leaves: set[str] = set()
     for p in props:
@@ -909,9 +911,12 @@ def _compute_root_cause_hotspots(kg_dir: Path) -> dict[str, Any]:
             seen_leaves.add(pid)
             failed_leaves.append(pid)
 
+    shared_loc = {"propositions.jsonl": props, "chains.jsonl": chains}
+    if failed_leaves and chains:
+        shared_loc["incomingMap"] = _build_graph_maps(chains)[0]
     for leaf_id in failed_leaves[:25]:
         try:
-            loc = localize_fault(kg_dir, leaf_id, max_depth=4)
+            loc = localize_fault(kg_dir, leaf_id, max_depth=4, preloaded=shared_loc)
             if loc.get("ok"):
                 for s in loc.get("suspects") or []:
                     spid = str(s.get("propId") or "")
@@ -1181,6 +1186,16 @@ def _build_readiness_summary(
             "executionConfidence": "untested",
             "uncertaintyReasons": [],
         }
+
+
+def _build_progress_report_payload(kg_dir: Path, days: int = 7) -> dict[str, Any]:
+    """Weekly progress report (same numbers as `syntopik report`), never raising."""
+    try:
+        from syntopik.report import build_progress_report
+
+        return build_progress_report(kg_dir, days=days)
+    except Exception:
+        return {"ok": False, "kind": "progress_report", "windowDays": days}
 
 
 def _build_interleave_stats_payload(workspace: Path, kg_dir: Path) -> dict[str, Any]:
@@ -1847,6 +1862,7 @@ class SyntopikRequestHandler(BaseHTTPRequestHandler):
             "/api/sync/status": lambda: self._handle_sync_status(),
             "/api/readiness": lambda: self._handle_readiness_get(query),
             "/api/interleave": lambda: self._handle_interleave_get(),
+            "/api/report": lambda: self._handle_report_get(query),
         }
         get_handler = get_api_routes.get(path)
         if get_handler is not None:
@@ -2289,6 +2305,7 @@ class SyntopikRequestHandler(BaseHTTPRequestHandler):
             self.server.chapters_dir,
         )
         interleave_stats = _build_interleave_stats_payload(self.server.workspace, self.server.kg_dir)
+        progress_report = _build_progress_report_payload(self.server.kg_dir)
         compat_summary = _build_compat_summary(
             self.server.workspace,
             self.server.mcp_http_endpoint,
@@ -2324,6 +2341,7 @@ class SyntopikRequestHandler(BaseHTTPRequestHandler):
         hub_out["readinessSummary"] = readiness_summary
         hub_out["interleaveStats"] = interleave_stats
         hub_out["compatSummary"] = compat_summary
+        hub_out["progressReport"] = progress_report
 
         self._send_json({
             "ok": True,
@@ -2353,6 +2371,7 @@ class SyntopikRequestHandler(BaseHTTPRequestHandler):
             "readinessSummary": readiness_summary,
             "interleaveStats": interleave_stats,
             "compatSummary": compat_summary,
+            "progressReport": progress_report,
         })
 
     def _handle_sse(self) -> None:
@@ -3966,6 +3985,18 @@ class SyntopikRequestHandler(BaseHTTPRequestHandler):
     # ------------------------------------------------------------------
     # v3.2 GET / POST API handlers (Exam Readiness & Blind Interleave)
     # ------------------------------------------------------------------
+
+    def _handle_report_get(self, query: dict[str, list[str]]) -> None:
+        from syntopik.report import build_progress_report
+
+        raw_days = ((query.get("days") or ["7"])[0]).strip() or "7"
+        try:
+            days = int(raw_days)
+        except ValueError as exc:
+            raise ValueError("'days' must be a whole number between 1 and 365.") from exc
+        if not 1 <= days <= 365:
+            raise ValueError("'days' must be a whole number between 1 and 365.")
+        self._send_json(build_progress_report(self.server.kg_dir, days=days))
 
     def _handle_readiness_get(self, query: dict[str, list[str]]) -> None:
         from syntopik.readiness import build_premortem_shield, compute_readiness
