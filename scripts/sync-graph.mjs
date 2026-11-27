@@ -2645,20 +2645,42 @@ function escapeRegExp(s) {
 	return s.replace(/[.*+?^${}()|[\]\\]/gu, "\\$&");
 }
 
+// Keyword specs are pure functions of the keyword, so compile each one once per run
+// instead of once per (proposition x keyword) pair.
+const ROSETTA_KW_SPEC_CACHE = new Map();
+let rosettaCompactBlobKey = null;
+let rosettaCompactBlobVal = "";
+
+function rosettaKeywordSpec(k) {
+	let spec = ROSETTA_KW_SPEC_CACHE.get(k);
+	if (spec) return spec;
+	if (/[^a-z0-9\s-]/u.test(k)) {
+		spec = { hasSymbol: true, compact: k.replace(/\s+/gu, ""), re: null };
+	} else {
+		const parts = k.split(/[\s-]+/u).filter(Boolean).map(escapeRegExp);
+		spec = {
+			hasSymbol: false,
+			compact: "",
+			re: parts.length ? new RegExp(`(?<![a-z0-9])${parts.join("[\\s\\-_]+")}(?![a-z0-9])`, "u") : null,
+		};
+	}
+	ROSETTA_KW_SPEC_CACHE.set(k, spec);
+	return spec;
+}
+
 function keywordMatchesRosetta(kw, rawBlob, wordBlob) {
 	const k = String(kw || "").trim().toLowerCase();
 	if (!k) return false;
-	const hasSymbol = /[^a-z0-9\s-]/u.test(k);
-	if (hasSymbol) {
+	const spec = rosettaKeywordSpec(k);
+	if (spec.hasSymbol) {
 		if (rawBlob.includes(k)) return true;
-		const ck = k.replace(/\s+/gu, "");
-		const cb = rawBlob.replace(/\s+/gu, "");
-		return ck.length >= 4 && cb.includes(ck);
+		if (rosettaCompactBlobKey !== rawBlob) {
+			rosettaCompactBlobKey = rawBlob;
+			rosettaCompactBlobVal = rawBlob.replace(/\s+/gu, "");
+		}
+		return spec.compact.length >= 4 && rosettaCompactBlobVal.includes(spec.compact);
 	}
-	const parts = k.split(/[\s-]+/u).filter(Boolean).map(escapeRegExp);
-	if (parts.length === 0) return false;
-	const re = new RegExp(`(?<![a-z0-9])${parts.join("[\\s\\-_]+")}(?![a-z0-9])`, "u");
-	return re.test(wordBlob);
+	return spec.re ? spec.re.test(wordBlob) : false;
 }
 
 function keywordWeightRosetta(kw) {
@@ -3786,7 +3808,22 @@ const bundle = [
 ].join("\n");
 
 mkdirSync(path.dirname(outFile), { recursive: true });
-writeFileSync(outFile, bundle, "utf8");
+// Skip the write when nothing but the timestamp changed so file watchers (Studio SSE, editors,
+// cloud-sync clients) are not woken by every PostToolUse hook run.
+let previousBundle = null;
+try {
+	previousBundle = existsSync(outFile) ? readFileSync(outFile, "utf8") : null;
+} catch {
+	previousBundle = null;
+}
+const stripGeneratedAt = (text) => text.replace(/"generatedAt": "[^"]*"/u, '"generatedAt": ""');
+if (
+	rawArgv.includes("--force") ||
+	previousBundle === null ||
+	stripGeneratedAt(previousBundle) !== stripGeneratedAt(bundle)
+) {
+	writeFileSync(outFile, bundle, "utf8");
+}
 
 const args = new Set(rawArgv);
 if (args.has("--json")) {
