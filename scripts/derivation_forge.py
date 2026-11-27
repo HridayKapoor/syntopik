@@ -40,7 +40,6 @@ if str(ROOT) not in sys.path:
 
 from syntopik.forks import (  # noqa: E402
     _extract_math_symbols,
-    _has_high_symbolic_expansion_risk,
     _math_equivalent,
     _normalize_text_move,
     _preprocess_math_text,

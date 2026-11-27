@@ -24,7 +24,7 @@ from collections.abc import Mapping
 from pathlib import Path
 from typing import Any
 
-from syntopik.storage import load_json, save_json_atomic, write_text_atomic
+from syntopik.storage import save_json_atomic, write_text_atomic
 
 __all__ = [
     "ALL_HARNESSES",

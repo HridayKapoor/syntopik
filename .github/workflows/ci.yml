@@ -70,6 +70,9 @@ jobs:
           print(f"Doctor OK: {report['summary']['ok']}/{report['summary']['total']} ok, rule budget {bc['bytes']}/9500 B")
           PY
 
+      - name: Version consistency across manifests
+        run: python -B scripts/check_version.py
+
       - name: Python & Node syntax / warning gate
         run: |
           python -B -W error::SyntaxWarning - <<'PY'
@@ -323,54 +326,10 @@ jobs:
               print(f"npm pack E2E OK ({tarballs[0].name}, {len(names)} files): {ver_proc.stdout.strip()}, attach OK")
           PY
 
-      - name: Pure-stdlib & Node sandboxed unittest suite
-        env:
-          PYTHONPATH: tests
+      - name: Pure-stdlib & Node sandboxed unittest suite (full discovery)
         run: |
-          python -B - <<'PY'
-          import sys, unittest
-          import test_harness
-
-          targets = [
-              "test_harness.TestSyntaxAndCLI.test_all_python_scripts_compile_without_syntax_warnings",
-              "test_harness.TestSyntaxAndCLI.test_all_node_scripts_syntax_check",
-              "test_harness.TestHooksSkillsBudget",
-              "test_harness.TestExamRunner",
-              "test_harness.TestMcpAppStudio",
-              "test_harness.TestP3BackupAndHubSync",
-              "test_harness.TestSelfImproveAndDoctor.test_p0_and_p1_skills_exist_with_valid_frontmatter",
-              "test_harness.TestEdunitiPyqBank",
-              "test_harness.TestSetupHarnessFreshClone",
-              "test_harness.TestCodeVerifyEngine",
-              "test_harness.TestResearchScout",
-              "test_harness.TestUniversalAutopilot",
-              "test_harness.TestTriProtocolHooksAndMcp",
-              "test_harness.TestGitHubHygieneAndPortability",
-              "test_harness.TestFireCalibrationAndStdlibCore",
-              "test_harness.TestUniversalIngestObsidianAndPedagogy",
-              "test_harness.TestMoonshotEnginesAndPocketPacks",
-              "test_harness.TestLocalStudioServerLive",
-              "test_harness.TestPackagingAttachAndAmbientMcp",
-              "test_harness.TestV2ContextDietAndHygiene",
-              "test_harness.TestLearnerPsychologyAndBrainstem",
-              "test_harness.TestV3PedagogyAndWorkMentor",
-              "test_harness.TestV3ServerHooksMcpAndWindowsPortability",
-              "test_harness.TestSyntopikEvalAndStarterPacks",
-              "test_harness.TestV31RosettaSyncReplayAndProofDiff",
-              "test_harness.TestV32UniversalCompatImportersAndExamReadiness",
-          ]
-
-          loader = unittest.TestLoader()
-          suite = unittest.TestSuite()
-          for target in targets:
-              suite.addTests(loader.loadTestsFromName(target))
-
-          runner = unittest.TextTestRunner(verbosity=2)
-          result = runner.run(suite)
-          if not result.wasSuccessful():
-              sys.exit(1)
-          print(f"Bare-stdlib unittest suite OK: {result.testsRun} test(s) passed")
-          PY
+          # Every test class runs; tests needing optional STEM/PDF/Anki extras skip cleanly.
+          python -B -m unittest discover -s tests -t tests -v
 
       - name: Public release hygiene & config gate
         run: |
@@ -474,3 +433,87 @@ jobs:
 
           print(f"Hygiene gate OK: {len(tracked)} tracked files, rules={combined}/9500 B, configs Windows-safe & valid.")
           PY
+
+  lint:
+    name: Ruff correctness lint
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Ruff (pyflakes + syntax, config in pyproject.toml)
+        run: |
+          python -m pip install --quiet "ruff>=0.6"
+          ruff check --output-format github .
+
+  stem-extras:
+    name: Full suite with STEM / PDF / Anki extras (ubuntu)
+    runs-on: ubuntu-latest
+    env:
+      PYTHONUTF8: "1"
+      PYTHONDONTWRITEBYTECODE: "1"
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: pyproject.toml
+
+      - name: Set up Node.js 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Install system tools (ffmpeg, espeak-ng)
+        run: |
+          sudo apt-get update -q
+          sudo apt-get install -y -q ffmpeg espeak-ng
+
+      - name: Install optional extras
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install ".[fsrs,pdf,stem]" networkx srt
+
+      - name: Bootstrap workspace
+        run: python -B scripts/setup_harness.py auto --json
+
+      - name: Full unittest suite (optional engines included)
+        run: python -B -m unittest discover -s tests -t tests -v
+
+  mcp-dist-drift:
+    name: MCP Studio dist/ matches src/
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: mcp-app/mlh-studio/package-lock.json
+
+      - name: Rebuild bundles from source
+        working-directory: mcp-app/mlh-studio
+        run: |
+          npm ci --no-audit --no-fund
+          npm run build
+
+      - name: Fail if committed dist/ is stale
+        run: |
+          if ! git diff --quiet -- mcp-app/mlh-studio/dist; then
+            echo "::error::mcp-app/mlh-studio/dist is out of date. Run 'npm run build' in mcp-app/mlh-studio and commit the result."
+            git diff --stat -- mcp-app/mlh-studio/dist
+            exit 1
+          fi
+          echo "dist/ is reproducible from src/"

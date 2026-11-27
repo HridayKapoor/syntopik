@@ -1,0 +1,25 @@
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    groups:
+      actions:
+        patterns: ["*"]
+
+  - package-ecosystem: npm
+    directory: /mcp-app/mlh-studio
+    schedule:
+      interval: weekly
+    groups:
+      mcp-studio:
+        patterns: ["*"]
+    # Bundled into dist/: rebuild with `npm run build` on every bump (CI's
+    # mcp-dist-drift job fails until the rebuilt dist/ is committed).
+
+  - package-ecosystem: pip
+    directory: /
+    schedule:
+      interval: monthly
+    open-pull-requests-limit: 5

@@ -27,13 +27,10 @@ from __future__ import annotations
 
 import argparse
 from collections import Counter
-from datetime import datetime, timezone
 import json
 import os
 from pathlib import Path
 import re
-import shutil
-import subprocess
 import sys
 from typing import Any
 
@@ -44,24 +41,17 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 from syntopik.paths import (  # noqa: E402
-    find_node as _find_node_bin,
     resolve_chapters_dir as _resolve_chapters_dir_core,
     resolve_kg_dir as _resolve_kg_dir_core,
     resolve_package_root,
     sync_hub,
 )
 from syntopik.schemas import (  # noqa: E402
-    JEE_CORE_SUBJECTS,
-    JEE_SOURCE_KINDS,
-    LEVEL_ALIASES,
     LEVEL_RANK,
-    MISTAKE_CATEGORY_ALIASES,
-    SUBJECT_ALIASES,
     TARGET_DEPTH_ALIASES,
     VALID_GOAL_PROFILES,
     VALID_LEVELS,
     VALID_MISTAKE_CATEGORIES,
-    VALID_SUBJECTS,
     VALID_TARGET_DEPTHS,
     _has_jee_source_or_title_cues,
     is_jee_profile,

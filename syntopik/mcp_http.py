@@ -36,6 +36,7 @@ import sys
 from typing import Any, Callable
 import unicodedata
 
+from syntopik import __version__
 from syntopik.fsrs_core import (
     card_retrievability,
     compress_due_queue,
@@ -1376,7 +1377,7 @@ def handle_mcp_http_request(
     workspace: Path | str | None,
     payload: dict[str, Any] | list[Any] | bytes | bytearray | str,
     *,
-    version: str = "3.2.0",
+    version: str = __version__,
     on_change: Callable[[str], None] | None = None,
     on_whiteboard_frame: Callable[[dict[str, Any]], None] | None = None,
 ) -> tuple[int, dict[str, Any] | list[dict[str, Any]] | None]:

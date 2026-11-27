@@ -39,7 +39,7 @@ import matplotlib.gridspec as gridspec  # noqa: E402
 import matplotlib.pyplot as plt  # noqa: E402
 import numpy as np  # noqa: E402
 import sympy as sp  # noqa: E402
-from matplotlib.patches import Arc, Circle, FancyArrowPatch, Polygon  # noqa: E402
+from matplotlib.patches import Arc, Circle  # noqa: E402
 from mpl_toolkits.mplot3d.art3d import Poly3DCollection  # noqa: E402
 from scipy import integrate as sp_integrate  # noqa: E402
 from scipy import optimize as sp_optimize  # noqa: E402

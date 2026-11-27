@@ -23,6 +23,7 @@ from syntopik.fsrs_core import (
     assess_confidence_signal,
     bkt_update,
     compute_calibration,
+    build_incoming_prereq_map,
     fire_ancestor_footprint,
     forgetting_curve,
     next_interval_days,
@@ -317,8 +318,9 @@ def build_synthetic_hypergraph() -> dict[str, Any]:
             outgoing[prem].append(conc)
 
     # Precompute FIRe footprints & descendant blast radius once for deterministic O(1) lookup
+    prereq_map = build_incoming_prereq_map(chains)
     footprints: dict[str, dict[str, tuple[float, int]]] = {
-        nid: fire_ancestor_footprint(nid, chains, max_depth=3, gamma=0.72)
+        nid: fire_ancestor_footprint(nid, chains, max_depth=3, gamma=0.72, incoming=prereq_map)
         for nid in node_ids
     }
     descendants: dict[str, set[str]] = {}
