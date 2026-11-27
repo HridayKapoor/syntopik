@@ -14,6 +14,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Changed
 - **Faster on large vaults**: on a 20,000-concept workspace, `syntopik next` went from 3.1 s to 1.0 s, `review` from 2.1 s to 0.8 s and `interleave` from 4.9 s to 1.2 s (lazy-greedy due-queue compression, shared ledger loading in the brainstem, cached phrase patterns).
+- **Speed budget in CI**: every CI run now builds a 3,000-concept workspace (about 6,000 links, 30,000 reviews) and fails if `next`, `review` or `readiness` takes longer than 6 s, on Linux, macOS and Windows.
 - **Accessibility**: all colour tokens in the dashboard, viewer, exam template and MCP Studio now meet WCAG AA contrast in light and dark themes; added a skip link, landmarks, a consistent heading order, visible focus rings and arrow-key navigation for tabs. axe-core reports zero violations.
 - **Tests split by area**: the single large regression file is now 11 focused `tests/test_*.py` modules sharing `tests/_helpers.py`; `syntopik doctor` checks the new layout.
 - **Clearer code-runner limits**: compile timeouts are per language (C/C++ 15 s, Rust 45 s) and a timeout now says so plainly instead of reporting a vague failure.

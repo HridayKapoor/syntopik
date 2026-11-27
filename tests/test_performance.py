@@ -1,16 +1,21 @@
 #!/usr/bin/env python3
 """Scale regression tests for the hot paths behind `syntopik next` / `review`.
 
-Pure stdlib. Builds a synthetic graph in memory (no workspace writes) and checks
-that FIRe due-queue compression stays near-linear and that the cached
-prerequisite map gives exactly the same footprints as the uncached path.
+Pure stdlib. Builds synthetic graphs and checks that FIRe due-queue compression
+stays near-linear, that the cached prerequisite map gives exactly the same
+footprints as the uncached path, and that `next`, `review` and `readiness` stay
+within a time budget on a 3,000-concept workspace.
 """
 
 from __future__ import annotations
 
+import json
 import random
+import subprocess
 import sys
+import tempfile
 import time
+from datetime import datetime, timedelta, timezone
 import unittest
 from pathlib import Path
 
@@ -112,6 +117,92 @@ class TestRosettaKeywordMatching(unittest.TestCase):
     def test_match_handles_empty_and_invalid_props(self) -> None:
         self.assertEqual(match_proposition_archetypes({}), [])
         self.assertEqual(match_proposition_archetypes("not a dict"), [])  # type: ignore[arg-type]
+
+
+# End-to-end budget: a learner workspace the size the plan measured (3,000 concepts,
+# ~6,000 links, 30,000 reviews). Before the brainstem fix `next` took 9.6 s here;
+# it now takes well under 1 s. The budget leaves room for slow CI runners while still
+# catching a return of that kind of quadratic slowdown.
+LARGE_VAULT_PROPS = 3000
+LARGE_VAULT_BUDGET_SEC = 6.0
+
+
+def _write_large_vault(ws: Path, n: int = LARGE_VAULT_PROPS, seed: int = 11) -> None:
+    rng = random.Random(seed)
+    kg = ws / "knowledge-graph"
+    kg.mkdir(parents=True)
+    (ws / "chapters").mkdir()
+    now = datetime(2026, 11, 27, tzinfo=timezone.utc)
+    statuses = ["solid", "shaky", "learning", "planned", "misconception"]
+    ratings = ["again", "hard", "good", "easy"]
+    with (kg / "propositions.jsonl").open("w", encoding="utf-8") as f:
+        for i in range(n):
+            row = {
+                "id": f"p{i}",
+                "title": f"Concept {i} about topic {i % 97}",
+                "statement": f"Statement {i} " + "word " * 25,
+                "chapter": f"ch{i % 40}",
+                "status": rng.choice(statuses),
+                "nextReview": (now + timedelta(days=rng.randint(-20, 30))).date().isoformat(),
+                "stability": round(rng.random() * 30, 3),
+                "difficulty": round(rng.random() * 10, 3),
+            }
+            f.write(json.dumps(row) + "\n")
+    with (kg / "chains.jsonl").open("w", encoding="utf-8") as f:
+        for i in range(1, n):
+            for j in rng.sample(range(i), min(2, i)):
+                f.write(json.dumps({"id": f"c{i}-{j}", "from": f"p{j}", "to": f"p{i}", "relation": "implies"}) + "\n")
+    with (kg / "revlog.jsonl").open("w", encoding="utf-8") as f:
+        for _ in range(n * 10):
+            f.write(
+                json.dumps(
+                    {
+                        "propId": f"p{rng.randrange(n)}",
+                        "ts": (now - timedelta(days=rng.random() * 365)).isoformat(),
+                        "rating": rng.choice(ratings),
+                        "elapsedDays": rng.randint(0, 30),
+                        "durationMs": rng.randint(5000, 90000),
+                    }
+                )
+                + "\n"
+            )
+
+
+class TestLargeVaultBudget(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls) -> None:
+        cls._tmp = tempfile.TemporaryDirectory(prefix="synt-bigvault-")
+        cls.ws = Path(cls._tmp.name)
+        _write_large_vault(cls.ws)
+
+    @classmethod
+    def tearDownClass(cls) -> None:
+        cls._tmp.cleanup()
+
+    def _timed_cli(self, *args: str) -> tuple[float, dict]:
+        start = time.perf_counter()
+        proc = subprocess.run(
+            [sys.executable, "-B", "-m", "syntopik.cli", *args, "--workspace", str(self.ws), "--json"],
+            cwd=str(ROOT),
+            capture_output=True,
+            text=True,
+            timeout=120,
+            check=False,
+        )
+        elapsed = time.perf_counter() - start
+        self.assertEqual(proc.returncode, 0, proc.stderr[-2000:])
+        return elapsed, json.loads(proc.stdout)
+
+    def test_daily_commands_stay_fast_on_a_3000_concept_vault(self) -> None:
+        for cmd in ("next", "review", "readiness"):
+            with self.subTest(cmd=cmd):
+                elapsed, payload = self._timed_cli(cmd)
+                self.assertIsInstance(payload, dict)
+                self.assertLess(
+                    elapsed,
+                    LARGE_VAULT_BUDGET_SEC,
+                    f"syntopik {cmd} took {elapsed:.2f}s on {LARGE_VAULT_PROPS} concepts (budget {LARGE_VAULT_BUDGET_SEC}s)",
+                )
 
 
 if __name__ == "__main__":
