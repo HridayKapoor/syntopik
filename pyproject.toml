@@ -41,6 +41,9 @@ fsrs = [
   "genanki>=0.13",
   "scipy>=1.13",
 ]
+sync = [
+  "cryptography>=42",
+]
 pdf = [
   "pymupdf>=1.24",
   "pymupdf4llm>=0.0.17",
@@ -65,6 +68,7 @@ stem = [
   "py2opsin>=0.2",
 ]
 all = [
+  "cryptography>=42",
   "fsrs>=6.0",
   "genanki>=0.13",
   "scipy>=1.13",

@@ -94,6 +94,9 @@ __all__ = [
 SCHEMA_VERSION = 1
 DELTA_FORMAT = "syntopik-delta-v1"
 MAX_DELTA_BYTES = 10 * 1024 * 1024  # 10 MiB hard cap
+# Encrypted files hold a base64 ciphertext of a <= 10 MiB delta (+ ~33% and a small header).
+MAX_ENCRYPTED_DELTA_BYTES = MAX_DELTA_BYTES * 4 // 3 + 64 * 1024
+ENCRYPTED_FORMAT_MARKER = b'"syntopik-delta-enc-v1"'
 TRACKER_SLUG_RE = re.compile(r"^[a-z0-9][a-z0-9_-]{0,63}$")
 SYNC_STATE_FILENAME = "sync-state.json"
 TRACKER_SUFFIX = "-tracker.json"
@@ -1804,8 +1807,41 @@ def _strip_profile_updated_at(prof: dict[str, Any] | None) -> dict[str, Any]:
 # ---------------------------------------------------------------------------
 
 
-def _load_delta_source(delta_source: Path | str | dict[str, Any]) -> tuple[dict[str, Any] | None, int, list[str]]:
+def _open_encrypted(
+    parsed: dict[str, Any], passphrase: str | None, outer_len: int
+) -> tuple[dict[str, Any] | None, int, list[str]]:
+    """Decrypt a `syntopik-delta-enc-v1` envelope into the plaintext delta (fail-closed)."""
+    from syntopik.sync_crypto import DeltaCryptoError, decrypt_delta_envelope, passphrase_from_env
+
+    try:
+        plain = decrypt_delta_envelope(parsed, passphrase if passphrase is not None else passphrase_from_env())
+    except DeltaCryptoError as exc:
+        return None, outer_len, [str(exc)]
+    if len(plain) > MAX_DELTA_BYTES:
+        return None, len(plain), [f"Decrypted delta exceeds MAX_DELTA_BYTES ({len(plain)} > {MAX_DELTA_BYTES})."]
+    try:
+        inner = json.loads(plain.decode("utf-8"), parse_constant=_reject_non_finite)
+    except Exception as exc:  # noqa: BLE001
+        return None, len(plain), [f"Malformed JSON inside encrypted delta: {exc}"]
+    if not isinstance(inner, dict):
+        return None, len(plain), ["Delta root must be a JSON object."]
+    return inner, len(plain), []
+
+
+def _load_delta_source(
+    delta_source: Path | str | dict[str, Any], passphrase: str | None = None
+) -> tuple[dict[str, Any] | None, int, list[str]]:
+    from syntopik.sync_crypto import is_encrypted_envelope
+
     errors: list[str] = []
+    if isinstance(delta_source, dict) and is_encrypted_envelope(delta_source):
+        try:
+            outer = len(json.dumps(delta_source, ensure_ascii=False, allow_nan=False).encode("utf-8"))
+        except Exception as exc:  # noqa: BLE001
+            return None, 0, [f"Encrypted delta object is not JSON-serializable: {exc}"]
+        if outer > MAX_ENCRYPTED_DELTA_BYTES:
+            return None, outer, [f"Encrypted delta exceeds {MAX_ENCRYPTED_DELTA_BYTES} bytes."]
+        return _open_encrypted(delta_source, passphrase, outer)
     if isinstance(delta_source, dict):
         envelope = delta_source["delta"] if (
             isinstance(delta_source.get("delta"), dict) and "payload" not in delta_source
@@ -1826,13 +1862,17 @@ def _load_delta_source(delta_source: Path | str | dict[str, Any]) -> tuple[dict[
             size = p.stat().st_size
         except OSError as exc:
             return None, 0, [f"Cannot stat delta file: {exc}"]
-        if size > MAX_DELTA_BYTES:
+        if size > MAX_ENCRYPTED_DELTA_BYTES:
             return None, size, [f"Delta file exceeds MAX_DELTA_BYTES ({size} > {MAX_DELTA_BYTES})."]
         try:
             raw_bytes = p.read_bytes()
         except OSError as exc:
             return None, 0, [f"Cannot read delta file: {exc}"]
-        if len(raw_bytes) > MAX_DELTA_BYTES:
+        if len(raw_bytes) > MAX_ENCRYPTED_DELTA_BYTES or (
+            # Only encrypted envelopes (base64 grows ~33%) get headroom above the plain 10 MiB cap;
+            # anything else is rejected before parsing.
+            len(raw_bytes) > MAX_DELTA_BYTES and ENCRYPTED_FORMAT_MARKER not in raw_bytes[:512]
+        ):
             return None, len(raw_bytes), [f"Delta payload exceeds MAX_DELTA_BYTES ({len(raw_bytes)} > {MAX_DELTA_BYTES})."]
         try:
             parsed = json.loads(raw_bytes.decode("utf-8"), parse_constant=_reject_non_finite)
@@ -1840,6 +1880,11 @@ def _load_delta_source(delta_source: Path | str | dict[str, Any]) -> tuple[dict[
             return None, len(raw_bytes), [f"Malformed JSON in delta file: {exc}"]
         if not isinstance(parsed, dict):
             return None, len(raw_bytes), ["Delta root must be a JSON object."]
+        if is_encrypted_envelope(parsed):
+            return _open_encrypted(parsed, passphrase, len(raw_bytes))
+        # Plain deltas keep the original 10 MiB ceiling; only encrypted files get base64 headroom.
+        if len(raw_bytes) > MAX_DELTA_BYTES:
+            return None, len(raw_bytes), [f"Delta payload exceeds MAX_DELTA_BYTES ({len(raw_bytes)} > {MAX_DELTA_BYTES})."]
         return parsed, len(raw_bytes), errors
 
     return None, 0, [f"Unsupported delta_source type: {type(delta_source).__name__}"]
@@ -1868,8 +1913,21 @@ def export_sync_delta(
     since: str | None = None,
     *,
     device_id: str | None = None,
+    passphrase: str | None = None,
 ) -> dict[str, Any]:
-    """Export a tamper-evident `syntopik-delta-v1` JSON snapshot (full or filtered by `since`)."""
+    """Export a tamper-evident `syntopik-delta-v1` JSON snapshot (full or filtered by `since`).
+
+    With `passphrase`, the file written to `out_path` is a `syntopik-delta-enc-v1`
+    envelope (scrypt + AES-256-GCM, see `syntopik.sync_crypto`); the returned
+    `delta` stays the plaintext envelope for in-process callers.
+    """
+    if passphrase is not None:
+        from syntopik.sync_crypto import crypto_available, DeltaCryptoError, MIN_PASSPHRASE_CHARS, _INSTALL_HINT
+
+        if not crypto_available():
+            raise DeltaCryptoError(_INSTALL_HINT)
+        if len(passphrase) < MIN_PASSPHRASE_CHARS:
+            raise DeltaCryptoError(f"Use a passphrase of at least {MIN_PASSPHRASE_CHARS} characters.")
     ws, kg_dir, chapters_dir = _resolve_ws_kg_ch(workspace)
     since_dt: datetime | None = None
     since_norm: str | None = None
@@ -1979,8 +2037,13 @@ def export_sync_delta(
             raise ValueError(f"Exported delta exceeds MAX_DELTA_BYTES ({encoded_len} > {MAX_DELTA_BYTES}).")
 
         saved_path: Path | None = None
+        file_text = serialized
+        if passphrase is not None:
+            from syntopik.sync_crypto import encrypt_delta_bytes
+
+            file_text = json.dumps(encrypt_delta_bytes(serialized.encode("utf-8"), passphrase), indent=2) + "\n"
         if out_path is not None and str(out_path).strip():
-            saved_path = write_text_atomic(Path(out_path).expanduser().resolve(), serialized)
+            saved_path = write_text_atomic(Path(out_path).expanduser().resolve(), file_text)
 
         # Persist updated Lamport clock & export timestamp
         state.setdefault("schemaVersion", SCHEMA_VERSION)
@@ -2006,6 +2069,8 @@ def export_sync_delta(
         "lamportClock": lamport,
         "counts": counts,
         "contentSha256": content_sha,
+        "encrypted": passphrase is not None,
+        "fileBytes": len(file_text.encode("utf-8")),
         "delta": envelope,
     }
 
@@ -2015,9 +2080,12 @@ def export_sync_delta(
 # ---------------------------------------------------------------------------
 
 
-def verify_sync_delta(delta_source: Path | str | dict[str, Any]) -> dict[str, Any]:
-    """Fail-closed verification of delta size limit, schema, tracker slugs, and mandatory `contentSha256`."""
-    envelope, byte_len, load_errors = _load_delta_source(delta_source)
+def verify_sync_delta(delta_source: Path | str | dict[str, Any], *, passphrase: str | None = None) -> dict[str, Any]:
+    """Fail-closed verification of delta size limit, schema, tracker slugs, and mandatory `contentSha256`.
+
+    Encrypted deltas are decrypted first (`passphrase`, else `SYNTOPIK_SYNC_PASSPHRASE`).
+    """
+    envelope, byte_len, load_errors = _load_delta_source(delta_source, passphrase)
     if envelope is None or load_errors:
         return {
             "ok": False,
@@ -2110,9 +2178,11 @@ def merge_sync_delta(
     workspace: Path | str,
     delta_source: Path | str | dict[str, Any],
     dry_run: bool = False,
+    *,
+    passphrase: str | None = None,
 ) -> dict[str, Any]:
     """Verify and merge a `syntopik-delta-v1` envelope into `workspace` using convergent CRDT rules."""
-    ver = verify_sync_delta(delta_source)
+    ver = verify_sync_delta(delta_source, passphrase=passphrase)
     if not ver["ok"]:
         return {
             "ok": False,
@@ -2123,7 +2193,7 @@ def merge_sync_delta(
             "verification": ver,
         }
 
-    envelope, _byte_len, _errs = _load_delta_source(delta_source)
+    envelope, _byte_len, _errs = _load_delta_source(delta_source, passphrase)
     assert envelope is not None
     payload = envelope["payload"]
     remote_dev_id = str(envelope["deviceId"])
