@@ -31,7 +31,7 @@ from syntopik.learner_model import compile_teaching_policy, load_profile
 from syntopik.paths import resolve_chapters_dir, resolve_kg_dir, resolve_workspace
 from syntopik.readiness import detect_taper_mode
 from syntopik.root_cause import find_blast_radius, select_diagnostic_probe
-from syntopik.schemas import LEVEL_RANK, normalize_level_soft, now_iso, slugify, today_iso
+from syntopik.schemas import LEVEL_RANK, normalize_level_soft, now_iso, slugify
 from syntopik.storage import load_json, load_jsonl, save_json_atomic
 
 __all__ = [
@@ -496,7 +496,7 @@ def plan_next_move(
         p0 = pending_pins[0]
         mode = "whiteboard_pin_answer"
         rationale = f"Learner pinned whiteboard step {p0.get('stepIndex')}: {p0.get('note')}"
-        exact_cmd = f"syntopik board status --json"
+        exact_cmd = "syntopik board status --json"
         skill_hint = "teach-chapter"
         wb_hint = f"Resolve pin {p0['id']} directly on step {p0.get('stepIndex')} before advancing."
     elif total_events == 0 and not cal_done and not skip_cal:
@@ -541,7 +541,7 @@ def plan_next_move(
         mode = "fork_replay"
         target_id = f0.get("propId") or f0.get("id")
         rationale = f"Due Blunder Fork '{f0.get('id')}' ready for mutated Woodpecker replay."
-        exact_cmd = f"syntopik run fork_replay due --json"
+        exact_cmd = "syntopik run fork_replay due --json"
         skill_hint = "practice-drill"
         wb_hint = f"Load Blunder Fork '{f0.get('id')}' pre-blunder FEN frame."
     elif due_selected:
@@ -551,7 +551,7 @@ def plan_next_move(
         ko_n = int(comp_due.get("knockedOutCount") or 0)
         ko_note = f" (knocks out {ko_n} prereqs)" if ko_n > 0 else ""
         rationale = f"Due FIRe/SRC review '{target_id}' ({d0['status']}, R={d0['retrievability']}){ko_note}."
-        exact_cmd = f"syntopik review --json"
+        exact_cmd = "syntopik review --json"
         skill_hint = "knowledge-graph"
         wb_hint = f"Push cold-recall prediction_gate for '{target_id}'."
     elif anti_alerts:
@@ -656,7 +656,7 @@ def plan_next_move(
                     if target_id
                     else "Workspace clear; drop sources or start a new chapter."
                 )
-                exact_cmd = "syntopik drop <source>" if target_id is None else f"syntopik run srs_engine list --json"
+                exact_cmd = "syntopik drop <source>" if target_id is None else "syntopik run srs_engine list --json"
                 skill_hint = "topic-onboarding" if target_id is None else "teach-chapter"
                 wb_hint = "Ready for new topic scope or derivation frame."
 

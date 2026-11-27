@@ -129,3 +129,13 @@ artifacts = [
 "BOOTSTRAP.md" = "syntopik/_bundle/BOOTSTRAP.md"
 "packs" = "syntopik/_bundle/packs"
 "benchmarks/syntopik_bench.py" = "syntopik/_bundle/benchmarks/syntopik_bench.py"
+
+[tool.ruff]
+target-version = "py312"
+line-length = 160
+extend-exclude = ["mcp-app", "docs", "demos", "animations", "knowledge-graph"]
+
+[tool.ruff.lint]
+# Correctness-only gate: pyflakes (unused/undefined names, bad f-strings) and
+# syntax errors. Style is intentionally not enforced.
+select = ["F", "E9", "B006", "B008"]

@@ -70,6 +70,9 @@ jobs:
           print(f"Doctor OK: {report['summary']['ok']}/{report['summary']['total']} ok, rule budget {bc['bytes']}/9500 B")
           PY
 
+      - name: Version consistency across manifests
+        run: python -B scripts/check_version.py
+
       - name: Python & Node syntax / warning gate
         run: |
           python -B -W error::SyntaxWarning - <<'PY'
@@ -430,6 +433,23 @@ jobs:
 
           print(f"Hygiene gate OK: {len(tracked)} tracked files, rules={combined}/9500 B, configs Windows-safe & valid.")
           PY
+
+  lint:
+    name: Ruff correctness lint
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Ruff (pyflakes + syntax, config in pyproject.toml)
+        run: |
+          python -m pip install --quiet "ruff>=0.6"
+          ruff check --output-format github .
 
   stem-extras:
     name: Full suite with STEM / PDF / Anki extras (ubuntu)

@@ -22,7 +22,6 @@ import html
 import io
 import json
 import re
-import sys
 import textwrap
 from pathlib import Path
 from typing import Any
@@ -856,7 +855,7 @@ def build_drill_pair(db: dict[str, Any], q1: str, q2: str) -> dict[str, Any]:
         else f"Compare the mechanism classes ({r1['mechanismClass']} vs {r2['mechanismClass']}) and stereochemical pathway."
     )
     hint_r2 = (
-        f"Compare intermediate type & geometry: check whether either path forms a free carbocation, cyclic bridged ion, or radical."
+        "Compare intermediate type & geometry: check whether either path forms a free carbocation, cyclic bridged ion, or radical."
     )
 
     axes: list[str] = []

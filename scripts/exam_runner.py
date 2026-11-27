@@ -16,14 +16,10 @@ import copy
 import html as html_lib
 import json
 import math
-import os
 import re
-import shutil
-import subprocess
 import sys
 import uuid
 from collections import Counter
-from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
@@ -32,7 +28,6 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 from syntopik.paths import (  # noqa: E402
-    find_node as _find_node,
     resolve_exams_dir as _resolve_exams_dir_core,
     resolve_kg_dir as _resolve_kg_dir_core,
     resolve_package_root,

@@ -29,7 +29,6 @@ import matplotlib
 
 matplotlib.use("Agg")
 
-import matplotlib.patches as patches
 import matplotlib.pyplot as plt
 import numpy as np
 from matplotlib.patches import Arc, Circle, FancyArrowPatch, Polygon, Rectangle
@@ -966,8 +965,8 @@ def render_pulley(args: argparse.Namespace) -> dict[str, Any]:
         b2 = Rectangle((+rp - bw / 2, y2_top - bh), bw, bh, facecolor=theme["block2_fill"], edgecolor=theme["block2_edge"], lw=2.0, zorder=6)
         ax.add_patch(b1)
         ax.add_patch(b2)
-        labels.add(-rp, y1_top - bh / 2, rf"$m_1$", color=theme["block_edge"], fontsize=10.5, pill=False, movable=False)
-        labels.add(+rp, y2_top - bh / 2, rf"$m_2$", color=theme["block2_edge"], fontsize=10.5, pill=False, movable=False)
+        labels.add(-rp, y1_top - bh / 2, r"$m_1$", color=theme["block_edge"], fontsize=10.5, pill=False, movable=False)
+        labels.add(+rp, y2_top - bh / 2, r"$m_2$", color=theme["block2_edge"], fontsize=10.5, pill=False, movable=False)
 
         # Force arrows: T upward, m1 g and m2 g downward (proportional)
         fmax = max(args.m1 * args.g, args.m2 * args.g, data["tensionN"], 1e-6)
@@ -977,9 +976,9 @@ def render_pulley(args: argparse.Namespace) -> dict[str, Any]:
         w2_len = args.m2 * args.g * sc
 
         draw_vector(ax, (-rp, y1_top), (-rp, y1_top + t_len), color=theme["primary"], lw=2.3, zorder=9)
-        labels.add(-rp - 0.55, y1_top + 0.55 * t_len, rf"$T$", color=theme["primary"], fontsize=10.0)
+        labels.add(-rp - 0.55, y1_top + 0.55 * t_len, r"$T$", color=theme["primary"], fontsize=10.0)
         draw_vector(ax, (+rp, y2_top), (+rp, y2_top + t_len), color=theme["primary"], lw=2.3, zorder=9)
-        labels.add(+rp + 0.55, y2_top + 0.55 * t_len, rf"$T$", color=theme["primary"], fontsize=10.0)
+        labels.add(+rp + 0.55, y2_top + 0.55 * t_len, r"$T$", color=theme["primary"], fontsize=10.0)
 
         draw_vector(ax, (-rp, y1_top - bh), (-rp, y1_top - bh - w1_len), color=theme["danger"], lw=2.3, zorder=9)
         labels.add(-rp - 0.75, y1_top - bh - 0.65 * w1_len, rf"$m_1 g = {args.m1 * args.g:.1f}\,\mathrm{{N}}$", color=theme["danger"], fontsize=9.2)
@@ -1151,12 +1150,12 @@ def render_pulley(args: argparse.Namespace) -> dict[str, Any]:
         n1_start = m1_com + 0.5 * bh * n_hat
         n1_tip = n1_start + n1_len * n_hat
         draw_vector(ax, tuple(n1_start), tuple(n1_tip), color=theme["primary"], lw=2.2, zorder=9)
-        labels.add(n1_tip[0] - 0.25 * st, n1_tip[1] + 0.28 * ct, rf"$N_1$", color=theme["primary"], fontsize=9.6)
+        labels.add(n1_tip[0] - 0.25 * st, n1_tip[1] + 0.28 * ct, r"$N_1$", color=theme["primary"], fontsize=9.6)
 
         # m1 g downward from bottom contact face of m1
         w1_tip = m1_contact + np.array([0.0, -w1_len])
         draw_vector(ax, tuple(m1_contact), tuple(w1_tip), color=theme["danger"], lw=2.2, zorder=9)
-        labels.add(w1_tip[0] + 0.42, w1_tip[1] - 0.14, rf"$m_1 g$", color=theme["danger"], fontsize=9.6)
+        labels.add(w1_tip[0] + 0.42, w1_tip[1] - 0.14, r"$m_1 g$", color=theme["danger"], fontsize=9.6)
 
         # Friction on m1
         if data["frictionN"] > 1e-6:
@@ -1165,14 +1164,14 @@ def render_pulley(args: argparse.Namespace) -> dict[str, Any]:
             f_s = m1_contact + 0.04 * n_hat
             f_tip = f_s + f_len * f_dir_v
             draw_vector(ax, tuple(f_s), tuple(f_tip), color=theme["accent"], lw=2.2, zorder=9)
-            labels.add(f_tip[0] + 0.35 * f_dir_v[0], f_tip[1] + 0.35 * f_dir_v[1] + 0.22, rf"$f$", color=theme["accent"], fontsize=9.5)
+            labels.add(f_tip[0] + 0.35 * f_dir_v[0], f_tip[1] + 0.35 * f_dir_v[1] + 0.22, r"$f$", color=theme["accent"], fontsize=9.5)
 
         # T and m2 g on m2
         draw_vector(ax, (m2_x, m2_top), (m2_x, m2_top + t_len), color=theme["primary"], lw=2.2, zorder=9)
         labels.add(m2_x + 0.42, m2_top + 0.52 * t_len, r"$T$", color=theme["primary"], fontsize=9.6)
 
         draw_vector(ax, (m2_x, m2_top - bh2), (m2_x, m2_top - bh2 - w2_len), color=theme["danger"], lw=2.2, zorder=9)
-        labels.add(m2_x + 0.52, m2_top - bh2 - 0.65 * w2_len, rf"$m_2 g$", color=theme["danger"], fontsize=9.6)
+        labels.add(m2_x + 0.52, m2_top - bh2 - 0.65 * w2_len, r"$m_2 g$", color=theme["danger"], fontsize=9.6)
 
         # Acceleration arrows
         if data["acceleration"] > 1e-6:
@@ -1951,9 +1950,9 @@ def render_optics_prism(args: argparse.Namespace) -> dict[str, Any]:
             if in1_perp[1] > 0:
                 in1_perp = -in1_perp
             p_lbl_r1 = e1 - 0.65 * n_face1 + 0.28 * in1_perp
-            labels.add(float(p_lbl_r1[0]), float(p_lbl_r1[1]), rf"$r_1$", color=theme["accent"], fontsize=8.8)
+            labels.add(float(p_lbl_r1[0]), float(p_lbl_r1[1]), r"$r_1$", color=theme["accent"], fontsize=8.8)
         else:
-            labels.add(e1[0] + 0.82 * mr1[0], e1[1] + 0.82 * mr1[1], rf"$r_1$", color=theme["accent"], fontsize=8.8)
+            labels.add(e1[0] + 0.82 * mr1[0], e1[1] + 0.82 * mr1[1], r"$r_1$", color=theme["accent"], fontsize=8.8)
 
     pts_bounds = [p_left, p_right, p_apex, p_inc_start, e1 + norm_len * n_face1, e2 + norm_len * n2_draw]
 
@@ -1974,7 +1973,7 @@ def render_optics_prism(args: argparse.Namespace) -> dict[str, Any]:
         ang_d2 = math.degrees(math.atan2(d2[1], d2[0]))
         if abs(r2) > 2.0:
             mr2 = draw_angle_arc(ax, tuple(e2), 0.48, ang_in2, ang_neg_d1, theme["accent"], lw=1.2)
-            labels.add(e2[0] + 0.78 * mr2[0], e2[1] + 0.78 * mr2[1], rf"$r_2$", color=theme["accent"], fontsize=8.8)
+            labels.add(e2[0] + 0.78 * mr2[0], e2[1] + 0.78 * mr2[1], r"$r_2$", color=theme["accent"], fontsize=8.8)
         if abs(i2) > 2.0:
             mi2 = draw_angle_arc(ax, tuple(e2), 0.58, ang_n2, ang_d2, theme["success"], lw=1.3)
             labels.add(e2[0] + 0.90 * mi2[0], e2[1] + 0.90 * mi2[1], rf"$i_2={i2:.1f}^\circ$", color=theme["success"], fontsize=8.8)
@@ -2592,7 +2591,6 @@ def render_projectile(args: argparse.Namespace) -> dict[str, Any]:
     T = float(data["timeOfFlight"])
     x_land, y_land = data["landingPoint"]
     x_apex, y_apex = data["apexPoint"]
-    alpha = math.radians(args.angle)
     beta = math.radians(args.incline)
     vx0, vy0 = data["launchVelocity"]
     vx_land, vy_land = data["landingVelocity"]
@@ -2699,7 +2697,7 @@ def render_projectile(args: argparse.Namespace) -> dict[str, Any]:
     v0_end = (vx0 * v_scale, args.h0 + vy0 * v_scale)
     draw_vector(ax, p0, v0_end, color=theme["success"], lw=2.3, zorder=9)
     ax.plot(0.0, args.h0, "o", color=theme["ink"], ms=5.5, zorder=10)
-    labels.add(v0_end[0] + 0.02 * x_span, v0_end[1] + 0.055 * y_span, rf"$\vec{{v}}_0$", color=theme["success"], fontsize=9.8)
+    labels.add(v0_end[0] + 0.02 * x_span, v0_end[1] + 0.055 * y_span, r"$\vec{v}_0$", color=theme["success"], fontsize=9.8)
 
     # Launch angle alpha arc from horizontal through launch point
     if abs(args.angle) > 2.5:

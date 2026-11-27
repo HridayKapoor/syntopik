@@ -51,7 +51,6 @@ from syntopik.fsrs_core import (  # noqa: E402
     review_card_dict,
 )
 from syntopik.paths import (  # noqa: E402
-    find_node as _find_node,
     resolve_kg_dir as _resolve_kg_dir_core,
     resolve_package_root,
     sync_hub,

@@ -58,7 +58,6 @@ from syntopik.storage import (
     save_json_atomic,
     save_jsonl_atomic,
     workspace_lock,
-    write_text_atomic,
 )
 
 __all__ = [

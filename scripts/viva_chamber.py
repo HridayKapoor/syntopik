@@ -401,8 +401,8 @@ def _build_defense_prompts(
             "turn": 5,
             "stage": "synthesis",
             "prompt": (
-                f"Turn 5 (Final Synthesis): Reconcile your Turn-1 commitment with Turns 2-4. "
-                f"State the sharpened invariant (mechanism + exact boundary + failure signature) in 2-3 sentences."
+                "Turn 5 (Final Synthesis): Reconcile your Turn-1 commitment with Turns 2-4. "
+                "State the sharpened invariant (mechanism + exact boundary + failure signature) in 2-3 sentences."
             ),
         },
     ]

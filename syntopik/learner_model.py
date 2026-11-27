@@ -27,7 +27,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-from syntopik.fsrs_core import card_retrievability, compute_calibration, load_fsrs_parameters
+from syntopik.fsrs_core import card_retrievability, compute_calibration
 from syntopik.schemas import (
     normalize_chain,
     normalize_level_soft,

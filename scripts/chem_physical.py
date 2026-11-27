@@ -671,7 +671,7 @@ def cmd_nernst(args: argparse.Namespace) -> None:
         ak = args.anode.strip().lower()
         if ck not in STANDARD_E0 or ak not in STANDARD_E0:
             raise SystemExit(
-                f"Unknown half-cell. Run `nernst --list-potentials` to see built-in JEE half-cells."
+                "Unknown half-cell. Run `nernst --list-potentials` to see built-in JEE half-cells."
             )
         ec, nc, rc = STANDARD_E0[ck]
         ea, na, ra = STANDARD_E0[ak]

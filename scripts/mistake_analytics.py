@@ -20,11 +20,8 @@ import argparse
 from collections import Counter
 from datetime import date as date_cls, datetime, timedelta, timezone
 import json
-import os
 from pathlib import Path
 import re
-import shutil
-import subprocess
 import sys
 from typing import Any
 import uuid
@@ -35,12 +32,10 @@ if str(ROOT) not in sys.path:
 
 from syntopik.paths import resolve_kg_dir as _resolve_kg_dir_core, resolve_package_root, sync_hub  # noqa: E402
 from syntopik.schemas import (  # noqa: E402
-    MISTAKE_CATEGORY_ALIASES as CATEGORY_ALIASES,
     VALID_MISTAKE_CATEGORIES,
-    VALID_MISTAKE_CATEGORIES_SET as VALID_CATEGORIES_SET,
     normalize_mistake_category as _normalize_cat_core,
 )
-from syntopik.storage import append_jsonl_locked, load_jsonl as _load_jsonl_core, write_text_atomic  # noqa: E402
+from syntopik.storage import append_jsonl_locked, load_jsonl as _load_jsonl_core  # noqa: E402
 
 DEFAULT_KG_DIR = ROOT / "knowledge-graph"
 SYNC_SCRIPT = resolve_package_root() / "scripts" / "sync-graph.mjs"

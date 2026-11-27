@@ -1332,7 +1332,7 @@ def _render_keshav_guide(meta: dict[str, Any], pdf_rel: str | None) -> str:
         "- [ ] **Contributions**: State the 1–3 concrete claims/contributions in your own words.",
         "- [ ] **Clarity**: Is the notation and structure clear enough to warrant Pass 2?",
         "",
-        f"> [!IMPORTANT] Pass-1 Gate",
+        "> [!IMPORTANT] Pass-1 Gate",
         f"> Before starting Pass 2, summarize the paper's central claim in <= 2 sentences using your own words (watch terms: {', '.join(f'`{t}`' for t in key_terms) or 'key claims'}).",
         "",
         "---",

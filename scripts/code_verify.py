@@ -822,7 +822,7 @@ def run_test_cases(
                     exp_stdout = case["expected"] if "expected" in case else case["stdout"]
                 elif ref_prep is not None:
                     ref_ex = _exec_process(
-                        prep_info_cmd := ref_prep["execCmd"],
+                        ref_prep["execCmd"],
                         cwd=ref_dir or work_dir,
                         env=env,
                         stdin_bytes=stdin_val.encode("utf-8"),

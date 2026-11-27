@@ -25,7 +25,6 @@ import os
 import py_compile
 import re
 import shutil
-import socket
 import sqlite3
 import subprocess
 import sys
@@ -7749,7 +7748,7 @@ class TestSyntopikEvalAndStarterPacks(unittest.TestCase):
             for st in dv.get("steps") or []:
                 if st.get("role") != "axiom":
                     self.assertTrue(st.get("hidden"), f"Non-axiom step {st.get('id')} exposed in docs/index.html")
-                    self.assertIsNone(st.get("expr"), f"Non-axiom expr exposed in docs/index.html")
+                    self.assertIsNone(st.get("expr"), "Non-axiom expr exposed in docs/index.html")
 
 
 class TestV31RosettaSyncReplayAndProofDiff(unittest.TestCase):
@@ -10845,7 +10844,6 @@ class TestV32UniversalCompatImportersAndExamReadiness(unittest.TestCase):
         import http.client
         import inspect
         import io
-        import sqlite3
         import threading
         import time
         import zipfile
