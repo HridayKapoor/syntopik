@@ -607,22 +607,24 @@ _POCKET_HTML_TEMPLATE = r"""<!DOCTYPE html>
 <style>
 :root,[data-theme="dark"]{
   --bg:#111315;--bg-elev:#171A1D;--bg-card:#1E2227;--bg-input:#252A30;
-  --border:#2A3038;--border-strong:#3B434E;--text:#E8E6E1;--text-2:#A8B0BC;--muted:#757F8D;
+  --border:#2A3038;--border-strong:#3B434E;--text:#E8E6E1;--text-2:#A8B0BC;--muted:#8E97A4;
   --solid:#4E9F76;--solid-bg:rgba(78,159,118,.16);
   --shaky:#D4943A;--shaky-bg:rgba(212,148,58,.16);
   --mis:#C85A53;--mis-bg:rgba(200,90,83,.16);
   --accent:#7C93C3;--accent-bg:rgba(124,147,195,.16);
+  --solid-ink:#6FC496;--shaky-ink:#E2A85A;--mis-ink:#E88880;--accent-ink:#9DB0DA;
   --font-prose:"Newsreader","Charter",Georgia,serif;
   --font-ui:-apple-system,BlinkMacSystemFont,"SF Pro Text",system-ui,sans-serif;
   --font-mono:"SF Mono",ui-monospace,monospace;
 }
 [data-theme="light"]{
   --bg:#F7F5F0;--bg-elev:#FCFBF8;--bg-card:#FFFFFF;--bg-input:#EFECE4;
-  --border:#E2DDD2;--border-strong:#C8C1B2;--text:#1C2024;--text-2:#495057;--muted:#747B84;
-  --solid:#2B7A52;--solid-bg:rgba(43,122,82,.12);
+  --border:#E2DDD2;--border-strong:#C8C1B2;--text:#1C2024;--text-2:#495057;--muted:#5E656D;
+  --solid:#256B48;--solid-bg:rgba(37,107,72,.12);
   --shaky:#A86814;--shaky-bg:rgba(168,104,20,.12);
   --mis:#B23A34;--mis-bg:rgba(178,58,52,.12);
   --accent:#36538C;--accent-bg:rgba(54,83,140,.12);
+  --solid-ink:#256B48;--shaky-ink:#8A5410;--mis-ink:#B23A34;--accent-ink:#36538C;
 }
 *{box-sizing:border-box;-webkit-tap-highlight-color:transparent;}
 html,body{margin:0;padding:0;min-height:100%;background:var(--bg);color:var(--text);font-family:var(--font-ui);font-variant-numeric:tabular-nums;}
@@ -631,7 +633,7 @@ body{display:flex;flex-direction:column;min-height:100dvh;padding:env(safe-area-
 .brand{display:flex;align-items:center;gap:8px;min-width:0;}
 .mark{width:28px;height:28px;border-radius:8px;background:var(--accent);color:#fff;display:grid;place-items:center;font-weight:700;font-size:13px;flex-shrink:0;}
 .btxt{display:flex;flex-direction:column;min-width:0;}
-.btxt strong{font-size:13.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.btxt strong,.btxt h1{font-size:13.5px;margin:0;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
 .btxt span{font-size:11px;color:var(--muted);}
 .hbtns{display:flex;gap:6px;flex-shrink:0;}
 .ibtn{background:var(--bg-elev);color:var(--text-2);border:1px solid var(--border);border-radius:9px;padding:7px 10px;font-size:12px;font-weight:600;cursor:pointer;}
@@ -672,17 +674,17 @@ main{flex:1;display:flex;flex-direction:column;justify-content:center;max-width:
 .rate-grid.open{display:grid;}
 .rbtn{padding:12px 6px;border-radius:11px;border:1px solid var(--border);background:var(--bg-elev);color:var(--text);font-size:13px;font-weight:650;cursor:pointer;display:flex;flex-direction:column;align-items:center;gap:2px;}
 .rbtn small{font-size:10.5px;font-weight:500;color:var(--muted);}
-.rbtn.again{border-color:var(--mis);background:var(--mis-bg);color:var(--mis);}
-.rbtn.hard{border-color:var(--shaky);background:var(--shaky-bg);color:var(--shaky);}
-.rbtn.good{border-color:var(--solid);background:var(--solid-bg);color:var(--solid);}
-.rbtn.easy{border-color:var(--accent);background:var(--accent-bg);color:var(--accent);}
+.rbtn.again{border-color:var(--mis);background:var(--mis-bg);color:var(--mis-ink);}
+.rbtn.hard{border-color:var(--shaky);background:var(--shaky-bg);color:var(--shaky-ink);}
+.rbtn.good{border-color:var(--solid);background:var(--solid-bg);color:var(--solid-ink);}
+.rbtn.easy{border-color:var(--accent);background:var(--accent-bg);color:var(--accent-ink);}
 .rbtn:active{transform:scale(.97);}
 .done-card{text-align:center;padding:28px 18px;gap:14px;}
 .done-card h2{margin:0;font-family:var(--font-prose);font-size:22px;}
 .done-card p{margin:0;font-size:14px;color:var(--text-2);line-height:1.5;}
 .sync-bar{max-width:560px;width:100%;margin:0 auto;display:flex;gap:8px;padding:8px 0 6px;flex-wrap:wrap;}
 .sbtn{flex:1;min-width:140px;padding:11px 14px;border-radius:11px;border:1px solid var(--border-strong);background:var(--bg-elev);color:var(--text);font-size:13px;font-weight:650;cursor:pointer;}
-.sbtn.primary{border-color:var(--solid);background:var(--solid-bg);color:var(--solid);}
+.sbtn.primary{border-color:var(--solid);background:var(--solid-bg);color:var(--solid-ink);}
 .toast{position:fixed;bottom:20px;left:50%;transform:translateX(-50%);background:var(--bg-card);border:1px solid var(--border-strong);color:var(--text);padding:8px 14px;border-radius:99px;font-size:12.5px;opacity:0;pointer-events:none;transition:opacity .2s;}
 .toast.show{opacity:1;}
 .hint{font-size:11.5px;color:var(--muted);text-align:center;margin-top:4px;}
@@ -694,7 +696,7 @@ code{font-family:var(--font-mono);font-size:.9em;background:var(--bg-input);padd
   <div class="brand">
     <div class="mark">S</div>
     <div class="btxt">
-      <strong id="deckTitle">__DECK_HEADER__</strong>
+      <h1 id="deckTitle">__DECK_HEADER__</h1>
       <span id="deckSub">Offline Pocket Review · Zero CDN</span>
     </div>
   </div>
@@ -703,16 +705,16 @@ code{font-family:var(--font-mono);font-size:.9em;background:var(--bg-input);padd
     <button class="ibtn" id="themeBtn" type="button" title="Toggle theme">Theme</button>
   </div>
 </header>
-<div class="prog-wrap">
+<section class="prog-wrap" aria-label="Progress">
   <div class="prog-bar"><div class="prog-fill" id="progFill"></div></div>
   <div class="prog-meta"><span id="progTxt">0 / 0</span><span id="queuedTxt">0 queued</span></div>
-</div>
+</section>
 <main id="stage"></main>
-<div class="sync-bar">
+<footer class="sync-bar">
   <button class="sbtn primary" id="downloadBtn" type="button">Download pocket-sync.json</button>
   <button class="sbtn" id="lanSyncBtn" type="button" style="display:none;">Push to LAN Studio</button>
   <button class="sbtn" id="resetBtn" type="button">Restart Deck</button>
-</div>
+</footer>
 <div class="toast" id="toast"></div>
 <script>
 (function(){
@@ -856,7 +858,7 @@ function render(){
       renderOcclusion(card) +
       '<div class="conf-box">' +
         '<div class="conf-hdr"><span>Confidence before reveal</span><strong id="confVal">65%</strong></div>' +
-        '<input class="conf-slider" id="confSlider" type="range" min="0" max="100" step="5" value="65" />' +
+        '<input class="conf-slider" id="confSlider" aria-label="Confidence before reveal" type="range" min="0" max="100" step="5" value="65" />' +
       '</div>' +
       '<button class="reveal-btn" id="revealBtn" type="button">Show Answer</button>' +
       '<div class="a-box" id="aBox">' +
