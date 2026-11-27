@@ -164,6 +164,18 @@ def _sandbox_env(work_dir: Path, memory_mb: int) -> dict[str, str]:
             val = os.environ.get(win_key)
             if val:
                 env[win_key] = val
+    # rustup's `rustc` proxy resolves its toolchain from RUSTUP_HOME (default ~/.rustup).
+    # With HOME pointed at the sandbox dir it finds none and every Rust compile fails,
+    # so point it (read-only) at the real toolchain directories.
+    real_home = Path.home()
+    for key, default_dir in (("RUSTUP_HOME", ".rustup"), ("CARGO_HOME", ".cargo")):
+        val = os.environ.get(key)
+        if not val and (real_home / default_dir).is_dir():
+            val = str(real_home / default_dir)
+        if val:
+            env[key] = val
+    if os.environ.get("RUSTUP_TOOLCHAIN"):
+        env["RUSTUP_TOOLCHAIN"] = os.environ["RUSTUP_TOOLCHAIN"]
     if memory_mb > 0:
         env["NODE_OPTIONS"] = f"--max-old-space-size={max(64, int(memory_mb))}"
     return env
@@ -179,23 +191,136 @@ def _is_node_cmd(cmd: list[str]) -> bool:
     return exe in ("node", "nodejs", "node.exe") or exe.startswith("node-")
 
 
-def _make_preexec_fn(memory_mb: int, *, apply_rlimit_as: bool = True):
-    """Apply safe POSIX resource limits on Linux (skipping RLIMIT_AS on Darwin and Node/V8)."""
+SANDBOX_MAX_FILE_MB = 64  # largest file a learner program may write inside its temp dir
+
+
+def _make_preexec_fn(memory_mb: int, *, apply_rlimit_as: bool = True, cpu_seconds: int | None = None):
+    """Apply safe POSIX resource limits (skipping RLIMIT_AS on Darwin and Node/V8).
+
+    - RLIMIT_CORE 0: no core dumps
+    - RLIMIT_AS: address-space cap on Linux (memory)
+    - RLIMIT_FSIZE: caps any single written file (disk-fill guard)
+    - RLIMIT_CPU: CPU-time backstop behind the wall-clock timeout, generous
+      enough that multi-threaded programs are never cut short before it
+    """
     if resource is None or os.name == "nt":
         return None
     is_linux = sys.platform.startswith("linux")
     mem_bytes = max(64, int(memory_mb)) * 1024 * 1024
+    fsize_bytes = SANDBOX_MAX_FILE_MB * 1024 * 1024
 
-    def _limits() -> None:
+    def _set(kind: str, value: int) -> None:
+        lim = getattr(resource, kind, None)
+        if lim is None:
+            return
         try:
-            if hasattr(resource, "RLIMIT_CORE"):
-                resource.setrlimit(resource.RLIMIT_CORE, (0, 0))
-            if apply_rlimit_as and is_linux and memory_mb > 0 and hasattr(resource, "RLIMIT_AS"):
-                resource.setrlimit(resource.RLIMIT_AS, (mem_bytes, mem_bytes))
+            _soft, hard = resource.getrlimit(lim)
+            if hard != resource.RLIM_INFINITY:
+                value = min(value, hard)
+            resource.setrlimit(lim, (value, value))
         except Exception:
             pass
 
+    def _limits() -> None:
+        _set("RLIMIT_CORE", 0)
+        if apply_rlimit_as and is_linux and memory_mb > 0:
+            _set("RLIMIT_AS", mem_bytes)
+        _set("RLIMIT_FSIZE", fsize_bytes)
+        if cpu_seconds and cpu_seconds > 0:
+            _set("RLIMIT_CPU", int(cpu_seconds))
+
     return _limits
+
+
+_NETWORK_ISOLATION_PROBE: dict[str, Any] = {}
+
+
+def _network_isolation_prefix() -> list[str]:
+    """Return a command prefix that runs the child without network access, or [] if unavailable.
+
+    Linux: `unshare -rn` (unprivileged user + network namespace: only a down
+    loopback interface exists). Probed once per process; disabled with
+    SYNT_SANDBOX_NETWORK=allow. Other platforms: [] (reported in `sandbox`).
+    """
+    if os.environ.get("SYNT_SANDBOX_NETWORK", "").strip().lower() == "allow":
+        return []
+    if not sys.platform.startswith("linux"):
+        return []
+    if "prefix" not in _NETWORK_ISOLATION_PROBE:
+        prefix: list[str] = []
+        unshare = shutil.which("unshare")
+        if unshare:
+            try:
+                probe = subprocess.run([unshare, "-rn", "--", "true"], capture_output=True, timeout=3, check=False)
+                if probe.returncode == 0:
+                    prefix = [unshare, "-rn", "--"]
+            except (OSError, subprocess.SubprocessError):
+                prefix = []
+        _NETWORK_ISOLATION_PROBE["prefix"] = prefix
+    return list(_NETWORK_ISOLATION_PROBE["prefix"])
+
+
+def _windows_job_memory_limit(proc: subprocess.Popen, memory_mb: int) -> Any:
+    """Cap a Windows child's committed memory via a Job Object. Returns the job handle or None."""
+    if os.name != "nt" or memory_mb <= 0:
+        return None
+    try:
+        import ctypes
+        from ctypes import wintypes
+
+        k32 = ctypes.WinDLL("kernel32", use_last_error=True)
+
+        class IO_COUNTERS(ctypes.Structure):
+            _fields_ = [(n, ctypes.c_ulonglong) for n in (
+                "ReadOperationCount", "WriteOperationCount", "OtherOperationCount",
+                "ReadTransferCount", "WriteTransferCount", "OtherTransferCount")]
+
+        class JOBOBJECT_BASIC_LIMIT_INFORMATION(ctypes.Structure):
+            _fields_ = [
+                ("PerProcessUserTimeLimit", ctypes.c_longlong),
+                ("PerJobUserTimeLimit", ctypes.c_longlong),
+                ("LimitFlags", wintypes.DWORD),
+                ("MinimumWorkingSetSize", ctypes.c_size_t),
+                ("MaximumWorkingSetSize", ctypes.c_size_t),
+                ("ActiveProcessLimit", wintypes.DWORD),
+                ("Affinity", ctypes.c_size_t),
+                ("PriorityClass", wintypes.DWORD),
+                ("SchedulingClass", wintypes.DWORD),
+            ]
+
+        class JOBOBJECT_EXTENDED_LIMIT_INFORMATION(ctypes.Structure):
+            _fields_ = [
+                ("BasicLimitInformation", JOBOBJECT_BASIC_LIMIT_INFORMATION),
+                ("IoInfo", IO_COUNTERS),
+                ("ProcessMemoryLimit", ctypes.c_size_t),
+                ("JobMemoryLimit", ctypes.c_size_t),
+                ("PeakProcessMemoryUsed", ctypes.c_size_t),
+                ("PeakJobMemoryUsed", ctypes.c_size_t),
+            ]
+
+        JOB_OBJECT_LIMIT_PROCESS_MEMORY = 0x00000100
+        JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE = 0x00002000
+        JobObjectExtendedLimitInformation = 9
+
+        k32.CreateJobObjectW.restype = wintypes.HANDLE
+        k32.CreateJobObjectW.argtypes = (ctypes.c_void_p, wintypes.LPCWSTR)
+        k32.SetInformationJobObject.argtypes = (wintypes.HANDLE, ctypes.c_int, ctypes.c_void_p, wintypes.DWORD)
+        k32.AssignProcessToJobObject.argtypes = (wintypes.HANDLE, wintypes.HANDLE)
+        k32.CloseHandle.argtypes = (wintypes.HANDLE,)
+
+        job = k32.CreateJobObjectW(None, None)
+        if not job:
+            return None
+        info = JOBOBJECT_EXTENDED_LIMIT_INFORMATION()
+        info.BasicLimitInformation.LimitFlags = JOB_OBJECT_LIMIT_PROCESS_MEMORY | JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE
+        info.ProcessMemoryLimit = max(64, int(memory_mb)) * 1024 * 1024
+        ok = k32.SetInformationJobObject(job, JobObjectExtendedLimitInformation, ctypes.byref(info), ctypes.sizeof(info))
+        if ok and k32.AssignProcessToJobObject(job, wintypes.HANDLE(int(proc._handle))):  # type: ignore[attr-defined]
+            return (k32, job)
+        k32.CloseHandle(job)
+    except Exception:
+        return None
+    return None
 
 
 def _truncate_bytes(raw: bytes, cap: int) -> tuple[str, bool]:
@@ -251,6 +376,20 @@ def _exec_process(
     apply_rlimit_as: bool | None = None,
 ) -> dict[str, Any]:
     t0 = time.perf_counter()
+    is_node = _is_node_cmd(cmd)
+    net_prefix = _network_isolation_prefix()
+    if net_prefix:
+        cmd = [*net_prefix, *cmd]
+    cpu_seconds = int(math.ceil(max(2.0 * float(timeout_sec), float(timeout_sec) + 5.0)))
+    sandbox: dict[str, Any] = {
+        "networkIsolated": bool(net_prefix),
+        "memoryLimit": "none",
+        "memoryMb": int(memory_mb),
+        "cpuSecondsBackstop": cpu_seconds if os.name != "nt" else None,
+        "maxFileMb": SANDBOX_MAX_FILE_MB if os.name != "nt" else None,
+    }
+    if memory_mb > 0 and is_node:
+        sandbox["memoryLimit"] = "node_heap"
     popen_kwargs: dict[str, Any] = {
         "cwd": str(cwd),
         "env": env,
@@ -264,12 +403,19 @@ def _exec_process(
         popen_kwargs["start_new_session"] = True
         # Skip RLIMIT_AS for Node/V8 on Linux (V8 reserves multi-GB virtual memory for
         # pointer compression / CodeRange; NODE_OPTIONS=--max-old-space-size caps heap cleanly).
-        use_rlimit_as = (not _is_node_cmd(cmd)) if apply_rlimit_as is None else bool(apply_rlimit_as)
-        preexec = _make_preexec_fn(memory_mb, apply_rlimit_as=use_rlimit_as)
+        use_rlimit_as = (not is_node) if apply_rlimit_as is None else bool(apply_rlimit_as)
+        preexec = _make_preexec_fn(memory_mb, apply_rlimit_as=use_rlimit_as, cpu_seconds=cpu_seconds)
         if preexec is not None:
             popen_kwargs["preexec_fn"] = preexec
+            if use_rlimit_as and memory_mb > 0 and sys.platform.startswith("linux"):
+                sandbox["memoryLimit"] = "rlimit_as"
 
     proc = subprocess.Popen(cmd, **popen_kwargs)
+    job = None
+    if os.name == "nt" and not is_node:
+        job = _windows_job_memory_limit(proc, memory_mb)
+        if job is not None:
+            sandbox["memoryLimit"] = "job_object"
     out_buf = bytearray()
     err_buf = bytearray()
     out_trunc = [False]
@@ -303,8 +449,15 @@ def _exec_process(
     t_out.join(timeout=1.0)
     t_err.join(timeout=1.0)
 
+    if job is not None:
+        try:
+            job[0].CloseHandle(job[1])
+        except Exception:
+            pass
+
     elapsed_ms = round((time.perf_counter() - t0) * 1000.0, 2)
     return {
+        "sandbox": sandbox,
         "exitCode": -1 if timed_out else int(proc.returncode or 0),
         "timedOut": timed_out,
         "runtimeMs": elapsed_ms,
