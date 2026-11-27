@@ -38,7 +38,7 @@ function wrapSingleFileHtml({ title, css, js }) {
 <style>${escapeInlineStyle(css)}</style>
 </head>
 <body>
-<div id="app"></div>
+<main id="app"></main>
 <script type="module">${escapeInlineScript(js)}</script>
 </body>
 </html>

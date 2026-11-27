@@ -11,12 +11,12 @@
 
   --mlh-fg: var(--color-text-primary, #1C2024);
   --mlh-fg-2: var(--color-text-secondary, #495057);
-  --mlh-fg-3: var(--color-text-tertiary, #747B84);
+  --mlh-fg-3: var(--color-text-tertiary, #5D626A);
   --mlh-fg-inv: var(--color-text-inverse, #FCFBF8);
   --mlh-fg-info: var(--color-text-info, #36538C);
-  --mlh-fg-success: var(--color-text-success, #2B7A52);
+  --mlh-fg-success: var(--color-text-success, #2A7650);
   --mlh-fg-danger: var(--color-text-danger, #B23A34);
-  --mlh-fg-warning: var(--color-text-warning, #A86814);
+  --mlh-fg-warning: var(--color-text-warning, #945C12);
 
   --mlh-border: var(--color-border-primary, #E2DDD2);
   --mlh-border-2: var(--color-border-secondary, #C8C1B2);
@@ -28,7 +28,7 @@
   --mlh-accent: var(--color-ring-primary, #36538C);
   --mlh-accent-strong: #284070;
   --mlh-accent-soft: rgba(54, 83, 140, 0.11);
-  --mlh-teal: #2A7B76;
+  --mlh-teal: #27746F;
   --font-prose: "Newsreader", "Source Serif 4", "Charter", Georgia, serif;
   --font-ui: var(--font-sans, "Inter", -apple-system, BlinkMacSystemFont, "SF Pro Text", system-ui, sans-serif);
   --font-mono: var(--font-mono, "JetBrains Mono", "SF Mono", ui-monospace, monospace);
@@ -51,11 +51,11 @@
 
   --mlh-fg: var(--color-text-primary, #E8E6E1);
   --mlh-fg-2: var(--color-text-secondary, #A8B0BC);
-  --mlh-fg-3: var(--color-text-tertiary, #757F8D);
+  --mlh-fg-3: var(--color-text-tertiary, #959CA7);
   --mlh-fg-inv: var(--color-text-inverse, #111315);
-  --mlh-fg-info: var(--color-text-info, #7C93C3);
-  --mlh-fg-success: var(--color-text-success, #4E9F76);
-  --mlh-fg-danger: var(--color-text-danger, #C85A53);
+  --mlh-fg-info: var(--color-text-info, #869CC8);
+  --mlh-fg-success: var(--color-text-success, #53A27A);
+  --mlh-fg-danger: var(--color-text-danger, #D47E79);
   --mlh-fg-warning: var(--color-text-warning, #D4943A);
 
   --mlh-border: var(--color-border-primary, #2A3038);
