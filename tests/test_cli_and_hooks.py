@@ -158,6 +158,30 @@ class TestSyntaxAndCLI(unittest.TestCase):
             self.assertIn("not inside a git repository", deb.stdout)
             self.assertNotIn("usage: git diff", deb.stdout + deb.stderr)
 
+    def test_hint_after_drop_and_sunset_unknown_chapter(self) -> None:
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as tmp:
+            env = {**os.environ, "SYNT_WORKSPACE": tmp, "PYTHONPATH": str(ROOT)}
+
+            def run(*args: str) -> subprocess.CompletedProcess[str]:
+                return subprocess.run(
+                    [sys.executable, "-B", "-m", "syntopik", *args],
+                    cwd=tmp, env=env, capture_output=True, text=True, timeout=60, check=False,
+                )
+
+            self.assertEqual(run("init").returncode, 0)
+            chapters = Path(tmp) / "chapters"
+            chapters.mkdir(exist_ok=True)
+            (chapters / "optics-tracker.json").write_text('{"slug": "optics"}', encoding="utf-8")
+            rev = run("review")
+            self.assertIn("not studied any of it yet", rev.stdout)
+            self.assertNotIn("syntopik drop", rev.stdout)
+            bad = run("sunset", "optcs")
+            self.assertEqual(bad.returncode, 1)
+            self.assertIn("Known chapters: optics", bad.stdout)
+            self.assertEqual(run("sunset", "optics").returncode, 0)
+
     def test_all_cli_scripts_help_exit_zero(self) -> None:
         cli_scripts = [
             "pdf_studio.py",

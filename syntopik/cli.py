@@ -365,9 +365,24 @@ def _vault_is_empty(kg_dir: Path) -> bool:
         return True
 
 
+STARTED_VAULT_HINT = (
+    "  You have added material but have not studied any of it yet.\n"
+    "  Ask your AI agent to start the chapter, or run `syntopik next` to see the first step."
+)
+
+
+def _has_chapters(kg_dir: Path) -> bool:
+    try:
+        chapters = resolve_chapters_dir(Path(kg_dir).parent)
+        return any(chapters.glob("*-tracker.json"))
+    except OSError:
+        return False
+
+
 def _with_empty_hint(lines: list[str], kg_dir: Path) -> list[str]:
     if _vault_is_empty(kg_dir):
-        return [*lines, *EMPTY_VAULT_HINT.split("\n")]
+        hint = STARTED_VAULT_HINT if _has_chapters(kg_dir) else EMPTY_VAULT_HINT
+        return [*lines, *hint.split("\n")]
     return lines
 
 
@@ -1522,6 +1537,24 @@ def _cmd_sunset(args: argparse.Namespace) -> int:
 
     keep_ids = _extract_id_set(plan.get("keepAxioms"))
     archive_ids = _extract_id_set(plan.get("archiveLeaves"))
+
+    if not keep_ids and not archive_ids:
+        known = sorted(
+            {p.name[: -len("-tracker.json")] for p in chapters_dir.glob("*-tracker.json")}
+            | {
+                str(r.get("chapter")).strip()
+                for r in load_jsonl(kg_dir / "propositions.jsonl")
+                if isinstance(r, dict) and r.get("chapter")
+            }
+        )
+        if slug not in known:
+            hint = ", ".join(known[:12]) if known else "none yet"
+            _emit(
+                {"ok": False, "error": f"unknown chapter '{slug}'", "knownChapters": known},
+                bool(args.json),
+                [f"No chapter named '{slug}'. Known chapters: {hint}"],
+            )
+            return 1
 
     applied = False
     pack_snapshot: dict[str, Any] | None = None
