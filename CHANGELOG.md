@@ -26,6 +26,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - **CI on current GitHub Actions**: `actions/checkout@v5`, `actions/setup-node@v5` and `actions/setup-python@v6` (Node 24 runtime), clearing the Node 20 deprecation warning on every job.
 
 ### Fixed
+- Pocket phone deck accessibility: readable muted text and rating-button colors in both themes (WCAG AA), a labelled confidence slider, a real page heading, and proper page regions. axe reports 0 violations before and after reveal, in light and dark.
 - `syntopik drop` with a missing file no longer creates an empty chapter named after it. It reports what was skipped, keeps the readable sources, and exits 1 when nothing could be read.
 - `syntopik import` with a missing file or unknown target prints one clear line instead of a Python traceback.
 - After `syntopik drop`, the empty-vault hint now says the material is added but not studied yet, instead of asking you to add notes again.
