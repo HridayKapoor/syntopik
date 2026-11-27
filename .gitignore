@@ -34,6 +34,7 @@ knowledge-graph/evidence-ledger.jsonl
 knowledge-graph/viva-sessions.jsonl
 knowledge-graph/review-queue.md
 knowledge-graph/graph-data.js
+knowledge-graph/.quarantine/
 exports/
 chapters/*
 !chapters/.gitkeep

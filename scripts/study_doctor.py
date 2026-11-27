@@ -961,6 +961,30 @@ def check_knowledge_hub(ws: Path, kg_dir: Path, pkg_root: Path | None = None) ->
     return {"name": "Knowledge Graph & Hub", "category": "workspace", "status": "ok" if has_dashboard else "warn", "required": True, "detail": detail}
 
 
+def check_ledger_integrity(kg_dir: Path) -> dict[str, Any]:
+    """Corrupted JSONL lines, duplicate proposition ids and dangling chains in learner ledgers."""
+    name = "Learner Ledger Integrity"
+    try:
+        root_str = str(ROOT)
+        if root_str not in sys.path:
+            sys.path.insert(0, root_str)
+        from syntopik.ledger_check import scan_ledgers, summarize
+    except Exception as exc:  # pragma: no cover - packaging fallback
+        return {"name": name, "category": "workspace", "status": "warn", "required": False, "detail": f"ledger check unavailable: {exc}"}
+    rep = scan_ledgers(kg_dir)
+    return {
+        "name": name,
+        "category": "workspace",
+        "status": "ok" if rep["ok"] else "warn",
+        "required": False,
+        "issues": rep["issues"],
+        "corruptLines": rep["corruptLines"],
+        "duplicateIds": rep["duplicateIds"][:10],
+        "danglingChains": rep["danglingChains"],
+        "detail": summarize(rep),
+    }
+
+
 def check_rule_budget(ws: Path, *, is_repo: bool = True) -> dict[str, Any]:
     if not is_repo:
         return {
@@ -1073,6 +1097,7 @@ def run_doctor(workspace: str | Path | None = None, *, core_only: bool = False) 
             check_multi_harness_configs(ws),
             check_skills(ws, pkg_root),
             check_knowledge_hub(ws, kg_dir, pkg_root),
+            check_ledger_integrity(kg_dir),
             check_reagents_db(ws, pkg_root),
             check_archetypes_db(ws, pkg_root),
             check_rule_budget(ws, is_repo=is_repo),
@@ -1131,6 +1156,7 @@ def run_doctor(workspace: str | Path | None = None, *, core_only: bool = False) 
             check_multi_harness_configs(ws),
             check_skills(ws, pkg_root),
             check_knowledge_hub(ws, kg_dir, pkg_root),
+            check_ledger_integrity(kg_dir),
             check_reagents_db(ws, pkg_root),
             check_archetypes_db(ws, pkg_root),
             check_rule_budget(ws, is_repo=is_repo),
@@ -1208,6 +1234,17 @@ def main(argv: list[str] | None = None) -> None:
             ROOT if _is_repo_checkout(ROOT) else (HOME / ".syntopik").resolve()
         )
         boot = ensure_learner_workspace(target_ws, run_sync=True, repair_skills=True)
+        try:
+            root_str = str(ROOT)
+            if root_str not in sys.path:
+                sys.path.insert(0, root_str)
+            from syntopik.ledger_check import repair_ledgers
+
+            lrep = repair_ledgers(Path(boot.get("kgDir") or (target_ws / "knowledge-graph")))
+            if lrep["quarantinedLines"]:
+                fix_actions.append(f"quarantined {lrep['quarantinedLines']} corrupted ledger line(s) to knowledge-graph/.quarantine/")
+        except Exception as exc:
+            fix_actions.append(f"ledger repair skipped: {exc}")
         if boot.get("createdDirs"):
             fix_actions.append(f"created {len(boot['createdDirs'])} dir(s)")
         if boot.get("createdFiles"):
