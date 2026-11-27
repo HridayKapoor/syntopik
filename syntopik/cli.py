@@ -909,6 +909,11 @@ def _cmd_doctor(args: argparse.Namespace) -> int:
         target_ws = ws if ws is not None else resolve_workspace()
         setup = _ensure_script_import("setup_harness", target_ws)
         boot = setup.ensure_learner_workspace(target_ws, run_sync=True, repair_skills=True)
+        from syntopik.ledger_check import repair_ledgers
+
+        lrep = repair_ledgers(Path(boot.get("kgDir") or resolve_kg_dir(target_ws)))
+        if lrep["quarantinedLines"]:
+            fix_actions.append(f"quarantined {lrep['quarantinedLines']} corrupted ledger line(s) to knowledge-graph/.quarantine/")
         if boot.get("createdDirs"):
             fix_actions.append(f"created {len(boot['createdDirs'])} dir(s)")
         if boot.get("createdFiles"):
