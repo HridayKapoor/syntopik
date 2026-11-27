@@ -132,6 +132,32 @@ class TestSyntaxAndCLI(unittest.TestCase):
             proc = run("review", "--json")
             self.assertNotIn("syntopik drop", proc.stdout)
 
+    def test_bare_mode_reports_and_debrief_outside_git_is_friendly(self) -> None:
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as tmp:
+            env = {**os.environ, "SYNT_WORKSPACE": tmp, "PYTHONPATH": str(ROOT),
+                   "GIT_CEILING_DIRECTORIES": str(Path(tmp).resolve().parent)}
+
+            def run(*args: str) -> subprocess.CompletedProcess[str]:
+                return subprocess.run(
+                    [sys.executable, "-B", "-m", "syntopik", *args],
+                    cwd=tmp, env=env, capture_output=True, text=True, timeout=60, check=False,
+                )
+
+            self.assertEqual(run("init").returncode, 0)
+            cfg = Path(tmp) / "knowledge-graph" / "mentor-config.json"
+            bare = run("mode")
+            self.assertEqual(bare.returncode, 0, bare.stderr)
+            self.assertIn("study (mentor off)", bare.stdout)
+            self.assertFalse(cfg.exists(), "bare `mode` must not change the setting")
+            self.assertEqual(run("mode", "mentor").returncode, 0)
+            self.assertIn("mentor (active)", run("mode").stdout)
+            deb = run("debrief")
+            self.assertEqual(deb.returncode, 1)
+            self.assertIn("not inside a git repository", deb.stdout)
+            self.assertNotIn("usage: git diff", deb.stdout + deb.stderr)
+
     def test_all_cli_scripts_help_exit_zero(self) -> None:
         cli_scripts = [
             "pdf_studio.py",

@@ -499,6 +499,16 @@ def debrief_git_diff(
         eff_ref = "supplied_diff"
     else:
         eff_ref = validate_git_ref(ref)
+        inside = subprocess.run(
+            ["git", "rev-parse", "--is-inside-work-tree"],
+            cwd=str(ws),
+            capture_output=True,
+            text=True,
+            timeout=15,
+            check=False,
+        )
+        if inside.returncode != 0 or inside.stdout.strip() != "true":
+            raise RuntimeError(f"{ws} is not inside a git repository")
         proc = subprocess.run(
             ["git", "diff", "--no-ext-diff", "--unified=3", eff_ref],
             cwd=str(ws),
@@ -508,7 +518,8 @@ def debrief_git_diff(
             check=False,
         )
         if proc.returncode != 0:
-            raise RuntimeError(f"git diff failed ({proc.returncode}): {proc.stderr.strip() or 'unknown error'}")
+            detail = (proc.stderr.strip().splitlines() or ["unknown error"])[0]
+            raise RuntimeError(f"git diff {eff_ref} failed: {detail}")
         raw_diff = proc.stdout
 
     parsed_files = _parse_unified_diff(raw_diff)
