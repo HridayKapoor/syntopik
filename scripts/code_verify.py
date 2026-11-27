@@ -468,9 +468,22 @@ def _exec_process(
     }
 
 
-def prepare_program(code: str, lang: str, work_dir: Path, compile_timeout_sec: float = 15.0) -> dict[str, Any]:
+# rustc -O plus the platform linker is far slower than gcc, and a cold first compile on a
+# Windows runner (MSVC link.exe) routinely takes 10-20 s, so Rust gets a larger budget.
+DEFAULT_COMPILE_TIMEOUT_SEC: dict[str, float] = {"c": 15.0, "cpp": 15.0, "rust": 45.0}
+
+
+def _compile_failure(comp: dict[str, Any], compiler: str, timeout_sec: float) -> str:
+    if comp["timedOut"]:
+        return f"{compiler} compilation timed out after {timeout_sec:g}s."
+    return comp["stderr"].strip() or f"{compiler} compilation failed (exit code {comp['exitCode']})."
+
+
+def prepare_program(code: str, lang: str, work_dir: Path, compile_timeout_sec: float | None = None) -> dict[str, Any]:
     """Stage source into `work_dir` and compile if needed, returning `execCmd` or `error`."""
     env = _sandbox_env(work_dir, memory_mb=512)
+    if compile_timeout_sec is None:
+        compile_timeout_sec = DEFAULT_COMPILE_TIMEOUT_SEC.get(lang, 15.0)
 
     if lang == "python":
         src = work_dir / "solution.py"
@@ -511,7 +524,7 @@ def prepare_program(code: str, lang: str, work_dir: Path, compile_timeout_sec: f
             return {
                 "ok": False,
                 "status": "compile_error",
-                "error": comp["stderr"].strip() or "C++ compilation failed.",
+                "error": _compile_failure(comp, "C++", compile_timeout_sec),
                 "compileMs": comp["runtimeMs"],
                 "compileStderr": comp["stderr"],
             }
@@ -535,7 +548,7 @@ def prepare_program(code: str, lang: str, work_dir: Path, compile_timeout_sec: f
             return {
                 "ok": False,
                 "status": "compile_error",
-                "error": comp["stderr"].strip() or "C compilation failed.",
+                "error": _compile_failure(comp, "C", compile_timeout_sec),
                 "compileMs": comp["runtimeMs"],
                 "compileStderr": comp["stderr"],
             }
@@ -559,7 +572,7 @@ def prepare_program(code: str, lang: str, work_dir: Path, compile_timeout_sec: f
             return {
                 "ok": False,
                 "status": "compile_error",
-                "error": comp["stderr"].strip() or "Rust compilation failed.",
+                "error": _compile_failure(comp, "Rust", compile_timeout_sec),
                 "compileMs": comp["runtimeMs"],
                 "compileStderr": comp["stderr"],
             }
