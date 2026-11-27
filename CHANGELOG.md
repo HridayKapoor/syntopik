@@ -9,6 +9,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 ### Added
 - **Importer plugins (`syntopik/importer_api.py`, `syntopik/kindle_clippings.py`)**: a small, versioned plugin API so new source formats can be added without touching the core. Plugins come from installed packages (entry-point group `syntopik.importers`) or, only after opting in with `"allowLocalImporters": true` in `study-config.json`, from `<workspace>/importers/*.py`. Ships a built-in Kindle `My Clippings.txt` importer. New `syntopik import --list-importers` and `--limit`. Plugins can never inject scheduling state, and every imported item still starts as `planned`.
 - **Passphrase-encrypted sync deltas (`syntopik/sync_crypto.py`)**: `syntopik sync-delta export --encrypt` wraps a delta in a `syntopik-delta-enc-v1` envelope (scrypt key derivation, AES-256-GCM, header bound as associated data). Opening is fail-closed on a wrong passphrase, any tampered byte, or unsafe key-derivation settings. The passphrase comes from `SYNTOPIK_SYNC_PASSPHRASE` or a hidden prompt, never the command line. Needs the new optional `sync` extra (`pip install "syntopik[sync]"`); plain deltas are unchanged.
+- **Friendlier CLI start**: running `syntopik` with no command prints a short "Start here" guide instead of an error, and a mistyped command suggests the closest match (`Did you mean: review?`).
 - **"In plain words" README intro** for new, non-technical learners.
 
 ### Changed
@@ -16,6 +17,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - **Accessibility**: all colour tokens in the dashboard, viewer, exam template and MCP Studio now meet WCAG AA contrast in light and dark themes; added a skip link, landmarks, a consistent heading order, visible focus rings and arrow-key navigation for tabs. axe-core reports zero violations.
 - **Tests split by area**: the single large regression file is now 11 focused `tests/test_*.py` modules sharing `tests/_helpers.py`; `syntopik doctor` checks the new layout.
 - **Clearer code-runner limits**: compile timeouts are per language (C/C++ 15 s, Rust 45 s) and a timeout now says so plainly instead of reporting a vague failure.
+- **CI on current GitHub Actions**: `actions/checkout@v5`, `actions/setup-node@v5` and `actions/setup-python@v6` (Node 24 runtime), clearing the Node 20 deprecation warning on every job.
+
+### Fixed
+- **`code_verify complexity` no longer calls a linear solution O(N log N) on noisy timings**: when the measurements cannot decisively separate the two classes, the simpler O(N) is kept with low confidence.
 
 ## [3.2.0] - 2026-11-27
 
