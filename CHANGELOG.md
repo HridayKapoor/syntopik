@@ -7,6 +7,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 ## [Unreleased]
 
 ### Added
+- `python -m syntopik` now works, for setups where the `syntopik` command is not on PATH.
+- Empty-vault guidance: `review`, `readiness`, `interleave`, `triage` and `report` now say how to add material (`syntopik drop`, `syntopik demo`) instead of printing bare zeros.
 - **Importer plugins (`syntopik/importer_api.py`, `syntopik/kindle_clippings.py`)**: a small, versioned plugin API so new source formats can be added without touching the core. Plugins come from installed packages (entry-point group `syntopik.importers`) or, only after opting in with `"allowLocalImporters": true` in `study-config.json`, from `<workspace>/importers/*.py`. Ships a built-in Kindle `My Clippings.txt` importer. New `syntopik import --list-importers` and `--limit`. Plugins can never inject scheduling state, and every imported item still starts as `planned`.
 - **Passphrase-encrypted sync deltas (`syntopik/sync_crypto.py`)**: `syntopik sync-delta export --encrypt` wraps a delta in a `syntopik-delta-enc-v1` envelope (scrypt key derivation, AES-256-GCM, header bound as associated data). Opening is fail-closed on a wrong passphrase, any tampered byte, or unsafe key-derivation settings. The passphrase comes from `SYNTOPIK_SYNC_PASSPHRASE` or a hidden prompt, never the command line. Needs the new optional `sync` extra (`pip install "syntopik[sync]"`); plain deltas are unchanged.
 - **Friendlier CLI start**: running `syntopik` with no command prints a short "Start here" guide instead of an error, and a mistyped command suggests the closest match (`Did you mean: review?`).

@@ -100,6 +100,38 @@ class TestSyntaxAndCLI(unittest.TestCase):
         self.assertIn("Did you mean: review", typo.stderr)
         self.assertEqual(run("--version").returncode, 0)
 
+    def test_python_dash_m_and_empty_vault_hint(self) -> None:
+        import tempfile
+
+        from syntopik import cli as synt_cli
+
+        with tempfile.TemporaryDirectory() as tmp:
+            env = {**os.environ, "SYNT_WORKSPACE": tmp, "PYTHONPATH": str(ROOT)}
+
+            def run(*args: str) -> subprocess.CompletedProcess[str]:
+                return subprocess.run(
+                    [sys.executable, "-B", "-m", "syntopik", *args],
+                    cwd=tmp,
+                    env=env,
+                    capture_output=True,
+                    text=True,
+                    timeout=60,
+                    check=False,
+                )
+
+            self.assertEqual(run("init").returncode, 0)
+            for cmd in (["review"], ["readiness"], ["interleave"], ["report"]):
+                proc = run(*cmd)
+                self.assertEqual(proc.returncode, 0, proc.stderr)
+                self.assertIn("syntopik drop", proc.stdout, cmd)
+                self.assertIn("syntopik demo", proc.stdout, cmd)
+            # The hint names commands that really exist.
+            names = set(synt_cli._command_names(synt_cli.build_parser()))
+            self.assertTrue({"drop", "demo"} <= names)
+            # JSON output stays machine-clean.
+            proc = run("review", "--json")
+            self.assertNotIn("syntopik drop", proc.stdout)
+
     def test_all_cli_scripts_help_exit_zero(self) -> None:
         cli_scripts = [
             "pdf_studio.py",
