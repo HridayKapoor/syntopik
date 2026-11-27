@@ -544,12 +544,53 @@ def _cmd_import(args: argparse.Namespace) -> int:
         )
         return 0
 
+    if getattr(args, "list_importers", False):
+        from syntopik.importer_api import list_importers
+
+        listing = list_importers(ws)
+        lines = [f"Importer plugins (API v{listing['apiVersion']}):"]
+        lines += [f"  {p['name']:<14} {p['description']}  [{p['source']}]" for p in listing["plugins"]] or ["  (none)"]
+        lines.append(f"  Built-in kinds: {', '.join(listing['builtinKinds'])}")
+        state = "on" if listing["localImportersEnabled"] else "off (set allowLocalImporters: true in study-config.json)"
+        lines.append(f"  Local plugins in {listing['localImportersDir']}: {state}")
+        lines += [f"  ! {e['source']}: {e['error']}" for e in listing["errors"]]
+        _emit(listing, bool(args.json), lines)
+        return 0
+
     if not args.target:
-        raise SystemExit("Provide a source target OR pass --pocket-sync <pocket-sync.json>.")
+        raise SystemExit("Provide a source target OR pass --pocket-sync <pocket-sync.json> (or --list-importers).")
 
     kind = str(args.kind or "auto").strip().lower()
     dry_run = bool(getattr(args, "dry_run", False))
     kg_dir = resolve_kg_dir(ws)
+    builtin_kinds = ("auto", "youtube", "arxiv", "repo", "url", "notes", "anki", "cards", "notebook", "notes_batch")
+
+    if kind not in builtin_kinds:
+        from syntopik.importer_api import run_plugin_import
+
+        res = run_plugin_import(
+            kind,
+            args.target,
+            workspace=ws,
+            kg_dir=kg_dir,
+            subject=args.subject,
+            chapter=args.slug,
+            limit=getattr(args, "limit", None),
+            dry_run=dry_run,
+        )
+        if res.get("ok") and not dry_run:
+            sync_hub(workspace=ws, quiet=True)
+        _emit(
+            res,
+            bool(args.json),
+            [
+                f"Imported ({kind}): {res.get('importedCount', 0)} new, {res.get('deduplicatedCount', 0)} merged into existing"
+                if res.get("ok")
+                else f"Import failed ({kind}): {res.get('error')}",
+                f"  Output : {res.get('propsFile') or ws}",
+            ],
+        )
+        return 0 if res.get("ok") else 1
 
     if kind in ("anki", "cards", "notebook", "notes_batch"):
         importers = _lazy_import("syntopik.importers")
@@ -2097,9 +2138,12 @@ def build_parser() -> argparse.ArgumentParser:
     p_imp.add_argument("--dry-run", action="store_true", help="Preview import without mutating ledgers")
     p_imp.add_argument(
         "--kind",
-        choices=["auto", "youtube", "arxiv", "repo", "url", "notes", "anki", "cards", "notebook", "notes_batch"],
         default="auto",
+        help="auto, youtube, arxiv, repo, url, notes, anki, cards, notebook, notes_batch, or an importer plugin "
+        "name such as kindle (see --list-importers)",
     )
+    p_imp.add_argument("--list-importers", action="store_true", help="List importer plugins (built-in, installed, local)")
+    p_imp.add_argument("--limit", type=int, default=None, help="Max cards a plugin importer may add (default 500, cap 2000)")
     p_imp.add_argument("--workspace", default=None, help="Syntopik workspace directory")
     p_imp.add_argument("--slug", "--chapter", dest="slug", default=None, help="Chapter/source slug override (alias: --chapter)")
     p_imp.add_argument("--subject", default="General", help="Subject tag")
