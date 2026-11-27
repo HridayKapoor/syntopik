@@ -753,6 +753,22 @@ class TestMathPlot(unittest.TestCase):
 class TestCodeVerifyEngine(unittest.TestCase):
     """18. Deterministic CS / Algorithms code verification engine (scripts/code_verify.py)."""
 
+    def test_linear_vs_linearithmic_needs_decisive_evidence(self) -> None:
+        cv = load_script_module("code_verify.py")
+        # Real macOS runner timings of a plain linear loop: ~6% extra per doubling from noise.
+        noisy_linear = [
+            {"n": 5000, "medianNs": 143417.0},
+            {"n": 10000, "medianNs": 304000.0},
+            {"n": 20000, "medianNs": 650417.0},
+            {"n": 40000, "medianNs": 1381500.0},
+        ]
+        fit = cv.classify_measurements(noisy_linear)
+        self.assertEqual(fit["estimatedComplexity"], "O(N)")
+        self.assertLessEqual(fit["confidence"], 0.6)
+        # A genuine N log N curve is still recognized.
+        nlogn = [{"n": n, "medianNs": n * math.log(n) * 10} for n in (5000, 10000, 20000, 40000)]
+        self.assertEqual(cv.classify_measurements(nlogn)["estimatedComplexity"], "O(N log N)")
+
     def test_run_test_cases_complexity_and_ast_check(self) -> None:
         cv = load_script_module("code_verify.py")
 
