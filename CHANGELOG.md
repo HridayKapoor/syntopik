@@ -4,6 +4,19 @@ All notable changes to **Syntopik** are documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+- **Importer plugins (`syntopik/importer_api.py`, `syntopik/kindle_clippings.py`)**: a small, versioned plugin API so new source formats can be added without touching the core. Plugins come from installed packages (entry-point group `syntopik.importers`) or, only after opting in with `"allowLocalImporters": true` in `study-config.json`, from `<workspace>/importers/*.py`. Ships a built-in Kindle `My Clippings.txt` importer. New `syntopik import --list-importers` and `--limit`. Plugins can never inject scheduling state, and every imported item still starts as `planned`.
+- **Passphrase-encrypted sync deltas (`syntopik/sync_crypto.py`)**: `syntopik sync-delta export --encrypt` wraps a delta in a `syntopik-delta-enc-v1` envelope (scrypt key derivation, AES-256-GCM, header bound as associated data). Opening is fail-closed on a wrong passphrase, any tampered byte, or unsafe key-derivation settings. The passphrase comes from `SYNTOPIK_SYNC_PASSPHRASE` or a hidden prompt, never the command line. Needs the new optional `sync` extra (`pip install "syntopik[sync]"`); plain deltas are unchanged.
+- **"In plain words" README intro** for new, non-technical learners.
+
+### Changed
+- **Faster on large vaults**: on a 20,000-concept workspace, `syntopik next` went from 3.1 s to 1.0 s, `review` from 2.1 s to 0.8 s and `interleave` from 4.9 s to 1.2 s (lazy-greedy due-queue compression, shared ledger loading in the brainstem, cached phrase patterns).
+- **Accessibility**: all colour tokens in the dashboard, viewer, exam template and MCP Studio now meet WCAG AA contrast in light and dark themes; added a skip link, landmarks, a consistent heading order, visible focus rings and arrow-key navigation for tabs. axe-core reports zero violations.
+- **Tests split by area**: the single large regression file is now 11 focused `tests/test_*.py` modules sharing `tests/_helpers.py`; `syntopik doctor` checks the new layout.
+- **Clearer code-runner limits**: compile timeouts are per language (C/C++ 15 s, Rust 45 s) and a timeout now says so plainly instead of reporting a vague failure.
+
 ## [3.2.0] - 2026-11-27
 
 Adds **14-coding-agent universal compatibility**, a **zero-Node loopback Streamable-HTTP MCP server (`POST /mcp`)**, **4 pure-stdlib student ecosystem importers** (Anki `.apkg`, Quizlet/Anki CSV/TSV, zero-exec Jupyter `.ipynb`, Notion `.zip`/Obsidian MD folders), a **6-type EV-calibrated CBT exam engine** with sealed Why-Wrong Distractor Autopsies, an **Exam-Day Readiness Forecaster with `<= 72h` Pre-Exam Taper Mode & non-fabricated Pre-Mortem Shield**, **Rohrer Blind-Chapter Interleaved Drills**, and a calm **Day-1 Zero-State 4-Door Launchpad** — expanding to **`27` pure-stdlib `syntopik/` modules**, **`28` unified CLI verbs**, and **`23` MCP tools** (`15 synt_* + 8 mlh_*`) while tightening `AGENTS.md + GEMINI.md` strictly **`<= 7,000 B`** and keeping exact `17` skills.

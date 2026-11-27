@@ -1419,6 +1419,7 @@ def classify_measurements(points: list[dict[str, Any]]) -> dict[str, Any]:
 
     candidates.sort(key=lambda item: item["score"])
     best = candidates[0]["complexity"]
+    ambiguous_linear = False
 
     # Disambiguate O(1) vs O(log N) and O(N) vs O(N log N) using empirical exponent & doubling ratios
     if best in ("O(1)", "O(log N)") and span_ratio >= 16.0:
@@ -1432,11 +1433,20 @@ def classify_measurements(points: list[dict[str, Any]]) -> dict[str, Any]:
             best = "O(N)"
         elif tail_med >= 2.13 and empirical_exponent >= 1.08:
             best = "O(N log N)"
+        else:
+            # Over a small input span, O(N) and O(N log N) differ by only a few percent per
+            # doubling, which is the same size as runner noise (cache, allocator, CPU clock).
+            # Without decisive evidence for the extra log factor, keep the simpler class so a
+            # linear solution is never reported as too slow.
+            best = "O(N)"
+            ambiguous_linear = True
     elif step_increments and statistics.median(step_increments[-2:]) >= 1.72 and max(ns) <= 35:
         best = "O(2^N)"
 
     gap = (candidates[1]["score"] - candidates[0]["score"]) if len(candidates) > 1 else 0.5
     conf = round(min(0.98, max(0.55, 0.65 + gap * 1.2)), 2)
+    if ambiguous_linear:
+        conf = 0.55
 
     return {
         "estimatedComplexity": best,

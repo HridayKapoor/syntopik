@@ -73,6 +73,33 @@ class TestSyntaxAndCLI(unittest.TestCase):
                 proc = run_cli(["node", "--check", str(nf)])
                 self.assertEqual(proc.returncode, 0, f"node --check failed for {nf}: {proc.stderr}")
 
+    def test_bare_cli_prints_quickstart_and_typos_get_suggestions(self) -> None:
+        from syntopik import cli as synt_cli
+
+        def run(*args: str) -> subprocess.CompletedProcess[str]:
+            return subprocess.run(
+                [sys.executable, "-B", "-m", "syntopik.cli", *args],
+                cwd=str(ROOT),
+                capture_output=True,
+                text=True,
+                timeout=60,
+                check=False,
+            )
+
+        bare = run()
+        self.assertEqual(bare.returncode, 0, bare.stderr)
+        self.assertIn("Start here", bare.stdout)
+        # Every command the guide mentions must really exist.
+        names = set(synt_cli._command_names(synt_cli.build_parser()))
+        for line in bare.stdout.splitlines():
+            m = re.match(r"\s*syntopik ([a-z-]+)", line)
+            if m:
+                self.assertIn(m.group(1), names, line)
+        typo = run("reveiw")
+        self.assertEqual(typo.returncode, 2)
+        self.assertIn("Did you mean: review", typo.stderr)
+        self.assertEqual(run("--version").returncode, 0)
+
     def test_all_cli_scripts_help_exit_zero(self) -> None:
         cli_scripts = [
             "pdf_studio.py",
