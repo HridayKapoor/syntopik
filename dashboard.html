@@ -27,7 +27,7 @@
     --shaky-bg: rgba(212, 148, 58, 0.14);
     --misconception: #D47E79;
     --misconception-bg: rgba(200, 90, 83, 0.14);
-    --planned: #7797A3;
+    --planned: #84A3AF;
     --planned-bg: rgba(107, 142, 155, 0.14);
     --accent: #869CC8;
     --accent-strong: #5B76B0;
@@ -40,6 +40,7 @@
     --edge-contrasts: #D4943A;
     --edge-rosetta: #6D8FE8;
     --rosetta-bg: rgba(109, 143, 232, 0.14);
+    --rosetta-ink: #93ABF0;
     --bar-track: #252A30;
     --cluster-bg: rgba(30, 34, 39, 0.62);
     --shadow: 0 10px 28px rgba(0, 0, 0, 0.36);
@@ -69,7 +70,7 @@
     --dot-grid: #DDD7CB;
     --solid: #2A7650;
     --solid-bg: rgba(43, 122, 82, 0.10);
-    --sage: #387559;
+    --sage: #2F6A4F;
     --sage-bg: rgba(56, 117, 89, 0.11);
     --shaky: #945C12;
     --shaky-bg: rgba(168, 104, 20, 0.11);
@@ -88,6 +89,7 @@
     --edge-contrasts: #A86814;
     --edge-rosetta: #3B5BC0;
     --rosetta-bg: rgba(59, 91, 192, 0.11);
+    --rosetta-ink: #3B5BC0;
     --bar-track: #E5E0D5;
     --cluster-bg: rgba(239, 236, 228, 0.72);
     --shadow: 0 8px 24px rgba(28, 32, 36, 0.07);
@@ -2375,7 +2377,7 @@
   .deriv-step-card.clickable { cursor: pointer; }
 
   /* v3.1 Rosetta, Proof-Graph Diff Nudges, Replay & Multi-Device Sync */
-  .pill.rosetta { color: var(--edge-rosetta); background: var(--rosetta-bg); border-color: transparent; }
+  .pill.rosetta { color: var(--rosetta-ink); background: var(--rosetta-bg); border-color: transparent; }
   .rosetta-card {
     background: var(--bg-card);
     border: 1px solid var(--border);
@@ -2975,7 +2977,7 @@
         </div>
       </div>
     </div>
-    <aside id="graphInspector"></aside>
+    <aside id="graphInspector" tabindex="0" aria-label="Concept details"></aside>
   </div>
 </section>
 
@@ -6570,7 +6572,7 @@
             <span>Topics Mastered</span>
             <span class="ap-meter-stat">${tDone} / ${tTot} (${tPct}%)</span>
           </div>
-          <div class="seg-bar" role="progressbar" aria-valuenow="${tPct}" aria-valuemin="0" aria-valuemax="100">
+          <div class="seg-bar" role="progressbar" aria-label="Topics mastered" aria-valuenow="${tPct}" aria-valuemin="0" aria-valuemax="100">
             <span style="width:${tPct}%;background:var(--solid)"></span>
           </div>
           ${topicsArr.length > 0 ? `
@@ -6593,7 +6595,7 @@
             <span>Question Ledger</span>
             <span class="ap-meter-stat">${qSolved} / ${qTot} solved${qRetest > 0 ? ` · ${qRetest} retest` : ""}</span>
           </div>
-          <div class="seg-bar" role="progressbar" aria-valuenow="${Math.round(qSolvedPct)}" aria-valuemin="0" aria-valuemax="100">
+          <div class="seg-bar" role="progressbar" aria-label="Questions solved" aria-valuenow="${Math.round(qSolvedPct)}" aria-valuemin="0" aria-valuemax="100">
             <span style="width:${qSolvedPct}%;background:var(--solid)"></span>
             ${qRetest > 0 ? `<span style="width:${qRetestPct}%;background:var(--shaky)"></span>` : ""}
           </div>
@@ -8245,7 +8247,7 @@
       <div class="kpi-card">
         <div class="kpi-label"><span>Knowledge Graph Nodes</span><span>${getGraphEdges().length} edges</span></div>
         <div class="kpi-big">${total}</div>
-        <div class="seg-bar" aria-label="Mastery status breakdown">
+        <div class="seg-bar" role="img" aria-label="Mastery status breakdown: ${counts.solid} solid, ${counts.shaky} shaky, ${counts.misconception} misconception, ${counts.planned} planned">
           <span style="width:${pct(counts.solid)}%;background:var(--solid)"></span>
           <span style="width:${pct(counts.shaky)}%;background:var(--shaky)"></span>
           <span style="width:${pct(counts.misconception)}%;background:var(--misconception)"></span>
@@ -8576,7 +8578,7 @@
             </span>
             <span class="mistake-bar-val">${item.count} (${pctVal}%)</span>
           </div>
-          <div class="mistake-bar-track" role="progressbar" aria-valuenow="${pctVal}" aria-valuemin="0" aria-valuemax="100">
+          <div class="mistake-bar-track" role="progressbar" aria-label="${esc(formatCategoryLabel(item.category))} share of mistakes" aria-valuenow="${pctVal}" aria-valuemin="0" aria-valuemax="100">
             <div class="mistake-bar-fill" style="width:${pctVal}%;background:${fillColor};"></div>
           </div>
         </div>
@@ -10163,7 +10165,7 @@
             <strong>Claim under attack:</strong> ${esc(cur.claim || "")}
           </div>
 
-          <div class="seg-bar" style="height:9px;" role="progressbar" aria-valuenow="${killPct}" aria-valuemin="0" aria-valuemax="100">
+          <div class="seg-bar" style="height:9px;" role="progressbar" aria-label="Mutants killed" aria-valuenow="${killPct}" aria-valuemin="0" aria-valuemax="100">
             <span style="width:${killPct}%;background:var(--solid)"></span>
           </div>
 
