@@ -88,6 +88,10 @@ COMPLEXITY_ORDER: list[str] = [
     "O(2^N)",
 ]
 
+# Max score gap (log-RMSE + Occam penalty) within which an expected complexity class
+# is treated as a match for the winning class. Absorbs runner timing jitter.
+COMPLEXITY_NOISE_TOLERANCE = 0.02
+
 
 def _find_tool(names: tuple[str, ...]) -> str | None:
     for name in names:
@@ -1386,12 +1390,25 @@ def analyze_complexity(
 
     fit = classify_measurements(points)
     meets_expected: bool | None = None
+    within_tolerance = False
     if expected:
         exp_norm = expected.strip()
         if exp_norm in COMPLEXITY_ORDER and fit["estimatedComplexity"] in COMPLEXITY_ORDER:
             meets_expected = COMPLEXITY_ORDER.index(fit["estimatedComplexity"]) <= COMPLEXITY_ORDER.index(exp_norm)
         else:
             meets_expected = fit["estimatedComplexity"].lower() == exp_norm.lower()
+        # Adjacent classes (O(N) vs O(N log N)) are often indistinguishable on a noisy
+        # machine. If the expected class fits essentially as well as the winner, do not
+        # tell the learner their solution is too slow.
+        if meets_expected is False:
+            scores = [c.get("score") for c in fit.get("candidates") or [] if isinstance(c.get("score"), (int, float))]
+            exp_score = next(
+                (c.get("score") for c in fit.get("candidates") or [] if str(c.get("complexity")).lower() == exp_norm.lower()),
+                None,
+            )
+            if scores and isinstance(exp_score, (int, float)) and exp_score <= min(scores) + COMPLEXITY_NOISE_TOLERANCE:
+                meets_expected = True
+                within_tolerance = True
 
     return {
         "ok": True if meets_expected is None else meets_expected,
@@ -1403,6 +1420,7 @@ def analyze_complexity(
         **fit,
         "expectedComplexity": expected,
         "meetsExpected": meets_expected,
+        "withinNoiseTolerance": within_tolerance,
     }
 
 

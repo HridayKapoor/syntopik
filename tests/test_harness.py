@@ -5,7 +5,10 @@ Standard-library `unittest` only. 100% sandboxed in `tempfile.TemporaryDirectory
 — NEVER mutates real `knowledge-graph/`, `chapters/`, `demos/`, `animations/`, or `exams/`.
 
 Run via:
-    .venv/bin/python -B -m unittest discover -s tests -v
+    python3 -B -m unittest discover -s tests -t tests -v
+
+Tests for optional engines skip (not fail) when their extras are missing; see
+`requires()` below. Set SYNTOPIK_TEST_FULL_STACK=1 to also run the full-stack doctor.
 """
 
 from __future__ import annotations
@@ -53,6 +56,58 @@ SKILLS_DIR = ROOT / ".agents" / "skills"
 HOOKS_JSON = ROOT / ".agents" / "hooks.json"
 
 _MODULE_CACHE: dict[str, Any] = {}
+
+# Hooks and CLIs change their output format when they detect a host agent
+# (Claude Code, Codex, a Claude plugin). Running the suite from inside one of
+# those agents must not change results, so scrub the detection variables for
+# this process and every subprocess it spawns. Tests that need them pass an
+# explicit `env=`.
+_HOST_AGENT_ENV_VARS = (
+    "CLAUDECODE",
+    "CLAUDE_PROJECT_DIR",
+    "CLAUDE_PLUGIN_ROOT",
+    "CODEX_HOME",
+)
+for _var in _HOST_AGENT_ENV_VARS:
+    os.environ.pop(_var, None)
+
+_MISSING_MODULE_RE = re.compile(r"No module named '([A-Za-z0-9_.]+)'")
+
+
+def _module_available(name: str) -> bool:
+    try:
+        return importlib.util.find_spec(name) is not None
+    except (ImportError, ValueError):
+        return False
+
+
+def requires(*modules: str, binaries: tuple[str, ...] = ()):
+    """Skip a test (instead of failing it) when optional extras are not installed.
+
+    Core tests run on the bare stdlib; STEM/PDF/Anki engines need the optional
+    extras from pyproject (`pip install .[all]`) and some need CLI tools such as
+    Typst. A missing module discovered at run time (in-process import) is also
+    converted to a skip so the stdlib-only suite stays green on a fresh clone.
+    """
+    import functools
+
+    def deco(fn):
+        @functools.wraps(fn)
+        def wrapper(self, *args, **kwargs):
+            missing = [m for m in modules if not _module_available(m)]
+            missing += [b for b in binaries if shutil.which(b) is None]
+            if missing:
+                self.skipTest(f"optional dependency not installed: {', '.join(missing)}")
+            try:
+                return fn(self, *args, **kwargs)
+            except ModuleNotFoundError as exc:
+                if exc.name and not _module_available(exc.name):
+                    self.skipTest(f"optional dependency not installed: {exc.name}")
+                raise
+
+        return wrapper
+
+    return deco
 
 
 def load_script_module(script_name: str) -> Any:
@@ -229,6 +284,10 @@ class TestSyntaxAndCLI(unittest.TestCase):
 
         for name, rc, out, err in results:
             with self.subTest(script=name):
+                if rc != 0:
+                    m = _MISSING_MODULE_RE.search(err or "")
+                    if m and not _module_available(m.group(1).split(".")[0]):
+                        self.skipTest(f"{name}: optional dependency not installed: {m.group(1)}")
                 self.assertEqual(rc, 0, f"{name} --help failed (rc={rc}): {err}")
                 self.assertTrue(out.strip(), f"{name} --help produced empty stdout")
                 self.assertNotIn("Traceback", err)
@@ -240,6 +299,7 @@ class TestSyntaxAndCLI(unittest.TestCase):
 class TestStemEngines(unittest.TestCase):
     """2. Existing STEM engines & Blueprint Section 2.5 Regression Watchlist."""
 
+    @requires("sympy")
     def test_math_verify_ast_injection_refusal_and_core(self) -> None:
         mv = load_script_module("math_verify.py")
 
@@ -295,6 +355,7 @@ class TestStemEngines(unittest.TestCase):
         self.assertAlmostEqual(err["maxRelPercent_JEE"], 3.0, places=3)
         self.assertAlmostEqual(err["rssRelPercent"], 2.2361, places=3)
 
+    @requires("chempy", "molmass", "scipy", "sympy")
     def test_chem_physical_dilute_hcl_ph_and_redox_conservation(self) -> None:
         cp = load_script_module("chem_physical.py")
 
@@ -332,6 +393,7 @@ class TestStemEngines(unittest.TestCase):
         self.assertEqual(lhs_q, rhs_q)
         self.assertEqual(lhs_q, 17)
 
+    @requires("rdkit", "py2opsin")
     def test_chem_3d_offline_py2opsin_and_cip_stereo(self) -> None:
         c3d = load_script_module("chem_3d.py")
 
@@ -387,6 +449,7 @@ class TestStemEngines(unittest.TestCase):
                     "chem_3d 3D HTML must not embed external https:// <script src=> tags",
                 )
 
+    @requires("genanki")
     def test_srs_engine_bkt_non_inflation_and_mathjax_anki(self) -> None:
         srs = load_script_module("srs_engine.py")
 
@@ -465,6 +528,7 @@ class TestStemEngines(unittest.TestCase):
             self.assertIn(r"\(W = \Delta K\)", flds)
             self.assertNotIn("$x^2", flds)
 
+    @requires("pymupdf", "pymupdf4llm")
     def test_pdf_studio_inspect_tree_index_tables_and_clean_json(self) -> None:
         import pymupdf as fitz
 
@@ -551,6 +615,7 @@ class TestStemEngines(unittest.TestCase):
             parsed_ext = json.loads(proc.stdout)
             self.assertEqual(parsed_ext["pagesExtracted"], 1)
 
+    @requires(binaries=("typst",))
     def test_cheatsheet_pdf_typst_compile(self) -> None:
         cs = load_script_module("cheatsheet_pdf.py")
 
@@ -594,6 +659,7 @@ class TestStemEngines(unittest.TestCase):
             self.assertEqual(res["pages"], 1)
             self.assertTrue(res["withinTwoPages"])
 
+    @requires("srt", "PIL")
     def test_narrate_video_pillow_caption_and_overlay_burn(self) -> None:
         from PIL import Image
 
@@ -734,6 +800,7 @@ class TestHooksSkillsBudget(unittest.TestCase):
 class TestMistakeAnalytics(unittest.TestCase):
     """4. P0.1 Mistake Taxonomy, Analytics, Cheatsheet Export & Turn-0 Hook Injection."""
 
+    @requires(binaries=("typst",))
     def test_mistake_log_summary_export_typst_and_session_hook(self) -> None:
         ma = load_script_module("mistake_analytics.py")
         cs = load_script_module("cheatsheet_pdf.py")
@@ -1161,6 +1228,7 @@ class TestExamRunner(unittest.TestCase):
 class TestPhysicsDraw(unittest.TestCase):
     """7. P1.1 Precision Physics Diagram Engine (all 7 parametric presets + edge cases)."""
 
+    @requires("matplotlib", "numpy")
     def test_all_seven_presets_and_physics_edge_cases(self) -> None:
         pd = load_script_module("physics_draw.py")
 
@@ -1248,6 +1316,7 @@ class TestPhysicsDraw(unittest.TestCase):
 class TestOrganicReagents(unittest.TestCase):
     """8. P1.2 Organic Chemistry Reagent DB (RDKit validation) & Discrimination Matrix CLI."""
 
+    @requires("rdkit", "PIL")
     def test_reagents_db_rdkit_valid_and_cli_subcommands(self) -> None:
         from rdkit import Chem
 
@@ -1335,6 +1404,7 @@ class TestOrganicReagents(unittest.TestCase):
 class TestMathPlot(unittest.TestCase):
     """9. P1.4 Coordinate Geometry, 3D Vectors & Calculus Plotter (SymPy + Zero-CDN HTML)."""
 
+    @requires("matplotlib", "numpy", "scipy", "sympy")
     def test_math_plot_all_subcommands_offline_html_and_safe_parser(self) -> None:
         mp = load_script_module("math_plot.py")
 
@@ -1459,6 +1529,7 @@ class TestMathPlot(unittest.TestCase):
 class TestPdfStudioUpgrades(unittest.TestCase):
     """10. LearnHarness Parity Slice B: PDF math_density triage & white-halo annotate."""
 
+    @requires("pymupdf", "pymupdf4llm")
     def test_pdf_inspect_math_density_and_annotate_svg_png_html(self) -> None:
         import pymupdf as fitz
 
@@ -1544,6 +1615,7 @@ class TestPdfStudioUpgrades(unittest.TestCase):
 class TestKgHyperedgesAndMultiCue(unittest.TestCase):
     """11. LearnHarness Parity Slice C: Lexical dedup, Multi-Cue FSRS-6 & Joint Hyperedges."""
 
+    @requires("genanki")
     def test_find_similar_multicue_fsrs_anki_and_hyperedge_sync(self) -> None:
         srs = load_script_module("srs_engine.py")
 
@@ -2129,6 +2201,7 @@ class TestMcpAppStudio(unittest.TestCase):
 class TestChapterAutopilot(unittest.TestCase):
     """13. Autonomous Chapter Autopilot (chapter_tracker.py + session-start.mjs)."""
 
+    @requires("pymupdf", "pymupdf4llm")
     def test_full_autopilot_lifecycle_zero_repetition_and_turn0_hook(self) -> None:
         import pymupdf as fitz
 
@@ -2245,6 +2318,11 @@ class TestChapterAutopilot(unittest.TestCase):
 class TestP2CrossChapterIntel(unittest.TestCase):
     """14. P2.1–P2.4: graph_intel, Visual Anki media, audio_brief & daily_plan."""
 
+    @requires("genanki", binaries=("ffmpeg",))
+    @unittest.skipUnless(
+        any(shutil.which(b) for b in ("say", "espeak-ng", "espeak")),
+        "offline TTS engine (macOS say or espeak-ng) not installed",
+    )
     def test_graph_intel_visual_anki_audio_brief_and_daily_plan(self) -> None:
         from PIL import Image
 
@@ -2499,6 +2577,10 @@ class TestSelfImproveAndDoctor(unittest.TestCase):
                     self.assertIn("research_scout", text)
                     self.assertIn("manifest", text)
 
+    @unittest.skipUnless(
+        os.environ.get("SYNTOPIK_TEST_FULL_STACK") == "1",
+        "full-stack doctor needs every STEM extra plus LaTeX, dvisvgm and Typst; set SYNTOPIK_TEST_FULL_STACK=1",
+    )
     def test_study_doctor_zero_warn_zero_fail(self) -> None:
         proc = run_cli([sys.executable, "-B", str(SCRIPTS_DIR / "study_doctor.py"), "--json"])
         self.assertEqual(proc.returncode, 0, f"study_doctor.py exited {proc.returncode}: {proc.stderr}\n{proc.stdout}")
@@ -2512,6 +2594,7 @@ class TestSelfImproveAndDoctor(unittest.TestCase):
         self.assertGreaterEqual(checks_by_name["Workspace Scripts (scripts/)"]["count"], 32)
         self.assertGreaterEqual(checks_by_name["Project Skills (.agents/skills)"]["count"], 17)
 
+    def test_study_doctor_core_only_zero_warn_zero_fail(self) -> None:
         # Bare system python3 --core-only mode (zero third-party .venv packages required)
         # On Windows avoid Microsoft Store python3.exe stub; use sys.executable directly.
         bare_py = sys.executable if os.name == "nt" else (shutil.which("python3") or sys.executable)

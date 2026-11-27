@@ -55,13 +55,18 @@ node --check bin/syntopik.mjs scripts/sync-graph.mjs .agents/hooks/session-start
 # 4. TutorBench pedagogical golden suite (15/15 PASS):
 python3 -B scripts/pedagogy_eval.py bench --json
 
-# 5. Sandboxed stdlib unittest regression suite (100% PASS in tempfile.TemporaryDirectory):
-.venv/bin/python -B -m unittest discover -s tests -v
+# 5. Sandboxed unittest regression suite (100% PASS in tempfile.TemporaryDirectory).
+#    On a bare stdlib Python, tests for optional engines (SymPy, RDKit, PyMuPDF, genanki,
+#    Typst, offline TTS) are reported as skipped, not failed. Install the extras to run them:
+#    pip install ".[fsrs,pdf,stem]" networkx srt
+python3 -B -m unittest discover -s tests -t tests -v
+#    Full-stack doctor check (needs every extra plus LaTeX, dvisvgm and Typst):
+SYNTOPIK_TEST_FULL_STACK=1 python3 -B -m unittest test_harness.TestSelfImproveAndDoctor -v
 
 # 6. Always-on context-budget check (v2.0.0 baseline: 6,548 B <= 9,500 B), manifest JSON check & zero path leaks:
 wc -c AGENTS.md GEMINI.md CLAUDE.md
 python3 -B -c "import json, pathlib; [json.loads(pathlib.Path(p).read_text()) for p in ['package.json','gemini-extension.json','.mcp.json','.claude-plugin/plugin.json','.claude-plugin/marketplace.json','.claude-plugin/hooks.json']]"
-.venv/bin/python -B -m unittest tests.test_harness.TestGitHubHygieneAndPortability -v
+python3 -B -m unittest discover -s tests -t tests -k TestGitHubHygieneAndPortability -v
 ```
 
 If you modify `mcp-app/mlh-studio/src/**`, rebuild the zero-CDN bundles via:
