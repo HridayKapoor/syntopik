@@ -7,6 +7,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 ## [Unreleased]
 
 ### Added
+- `syntopik run` with no engine lists the available engines, and a mistyped engine name gets a "Did you mean" suggestion.
 - `python -m syntopik` now works, for setups where the `syntopik` command is not on PATH.
 - Empty-vault guidance: `review`, `readiness`, `interleave`, `triage` and `report` now say how to add material (`syntopik drop`, `syntopik demo`) instead of printing bare zeros.
 - **Importer plugins (`syntopik/importer_api.py`, `syntopik/kindle_clippings.py`)**: a small, versioned plugin API so new source formats can be added without touching the core. Plugins come from installed packages (entry-point group `syntopik.importers`) or, only after opting in with `"allowLocalImporters": true` in `study-config.json`, from `<workspace>/importers/*.py`. Ships a built-in Kindle `My Clippings.txt` importer. New `syntopik import --list-importers` and `--limit`. Plugins can never inject scheduling state, and every imported item still starts as `planned`.
@@ -25,6 +26,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - **CI on current GitHub Actions**: `actions/checkout@v5`, `actions/setup-node@v5` and `actions/setup-python@v6` (Node 24 runtime), clearing the Node 20 deprecation warning on every job.
 
 ### Fixed
+- `syntopik drop` with a missing file no longer creates an empty chapter named after it. It reports what was skipped, keeps the readable sources, and exits 1 when nothing could be read.
+- `syntopik import` with a missing file or unknown target prints one clear line instead of a Python traceback.
 - After `syntopik drop`, the empty-vault hint now says the material is added but not studied yet, instead of asking you to add notes again.
 - `syntopik sunset <slug>` with an unknown chapter now says so and lists the known chapters, instead of previewing an empty archive.
 - `syntopik mode` with no argument now shows the current mode instead of silently switching Mentor mode on.

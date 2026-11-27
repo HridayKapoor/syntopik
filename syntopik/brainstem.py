@@ -796,11 +796,14 @@ def drop_sources(
 
     # 1. Classify every input & enforce Teacher-First Law ordering
     classified: list[dict[str, Any]] = []
+    failed: list[dict[str, Any]] = []
     for raw in cleaned_inputs:
         try:
             kind = detect_source_type(raw)
-        except Exception:  # noqa: BLE001
-            kind = "notes"
+        except Exception as exc:  # noqa: BLE001
+            # Missing file / unrecognized target: report it, never let it become the spine.
+            failed.append({"input": raw, "role": "unknown", "error": str(exc)})
+            continue
         role, rank, reason = _classify_input_role(raw, kind)
         classified.append(
             {
@@ -811,6 +814,16 @@ def drop_sources(
                 "reason": reason,
             }
         )
+
+    if not classified:
+        return {
+            "ok": False,
+            "error": "None of the sources could be read.",
+            "workspace": str(ws),
+            "classifiedSources": [],
+            "ingested": [],
+            "failed": failed,
+        }
 
     # Guarantee at least one spine if all inputs looked like references/banks
     if not any(c["role"] == "teacher_spine" for c in classified):
@@ -834,7 +847,6 @@ def drop_sources(
 
     # 2. Safely ingest each source in Teacher-First order
     ingested: list[dict[str, Any]] = []
-    failed: list[dict[str, Any]] = []
     for idx, item in enumerate(classified):
         sub_slug = final_slug if idx == 0 else slugify(f"{final_slug}-{Path(item['input']).stem or idx}", max_len=64)
         try:
@@ -852,6 +864,21 @@ def drop_sources(
         except Exception as exc:  # noqa: BLE001
             failed.append({"input": item["input"], "role": item["role"], "error": str(exc)})
 
+    if failed and not ingested:
+        # Nothing usable was added: do not leave an empty chapter behind.
+        return {
+            "ok": False,
+            "error": "None of the sources could be read.",
+            "slug": final_slug,
+            "title": final_title,
+            "workspace": str(ws),
+            "classifiedSources": classified,
+            "ingested": [],
+            "failed": failed,
+        }
+    failed_inputs = {f["input"] for f in failed}
+    classified_ok = [c for c in classified if c["input"] not in failed_inputs]
+
     # 3. Initialize or non-destructively update chapter tracker
     tracker_path = ch_dir / f"{final_slug}-tracker.json"
     existing_tracker = load_json(tracker_path, default=None)
@@ -866,7 +893,7 @@ def drop_sources(
             "order": i + 1,
             "notes": c["reason"],
         }
-        for i, c in enumerate(classified)
+        for i, c in enumerate(classified_ok)
     ]
 
     if isinstance(existing_tracker, dict) and existing_tracker.get("slug"):
