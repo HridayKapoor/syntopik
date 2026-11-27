@@ -144,6 +144,8 @@ Full Studio & Engine Commands (Python 3.12+ stdlib):
       Generate a Pareto 48h exam triage plan and optional 1-page Anti-Mastery crib sheet.
   readiness [--exam-date YYYY-MM-DD] [--subject <name>] [--max-marks <n>] [--premortem-only] [--json]
       Compute Exam-Day Readiness forecast, <=72h Pre-Exam Taper Mode, and evidence-backed Pre-Mortem Shield.
+  report [--days 7] [--md <path>] [--json]
+      Weekly progress report: reviews, streak, true retention, mastery, due load, most-lapsed concepts and focus.
   interleave [build|check|complete|stats|export-cbt] [--n 6] [--subjects ...] [--mode principle_first] [--seed N] [--json]
       Run Rohrer blind-chapter interleaved drills with Newman Tier-1 governing-principle discrimination.
   debrief [--ref HEAD~1..HEAD] [--dry-run] [--json]

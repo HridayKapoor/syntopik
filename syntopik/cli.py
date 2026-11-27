@@ -1835,6 +1835,24 @@ def _call_with_supported_kwargs(fn: Any, *pos_args: Any, **kwargs: Any) -> Any:
     return fn(*pos_args, **filtered)
 
 
+def _cmd_report(args: argparse.Namespace) -> int:
+    ws = resolve_workspace(getattr(args, "workspace", None))
+    kg_dir = resolve_kg_dir(ws)
+    rp = _lazy_import("syntopik.report")
+    rep = rp.build_progress_report(kg_dir, days=max(1, int(args.days)))
+    md_path = getattr(args, "md", None)
+    if md_path:
+        out = Path(md_path).expanduser()
+        out.parent.mkdir(parents=True, exist_ok=True)
+        out.write_text(rp.render_report_markdown(rep), encoding="utf-8")
+        rep["markdownPath"] = str(out.resolve())
+    lines = rp.render_report_lines(rep)
+    if md_path:
+        lines.append(f"  Markdown       : {rep['markdownPath']}")
+    _emit({"workspace": str(ws), **rep}, bool(args.json), lines)
+    return 0
+
+
 def _cmd_readiness(args: argparse.Namespace) -> int:
     ws = resolve_workspace(getattr(args, "workspace", None))
     kg_dir = resolve_kg_dir(ws)
@@ -2293,6 +2311,13 @@ def build_parser() -> argparse.ArgumentParser:
     p_rdy.add_argument("--workspace", default=None, help="Syntopik workspace directory")
     p_rdy.add_argument("--json", action="store_true", help="Emit JSON output")
     p_rdy.set_defaults(func=_cmd_readiness)
+
+    p_rep = sub.add_parser("report", help="Weekly progress report: reviews, streak, true retention, mastery, due load and focus")
+    p_rep.add_argument("--days", type=int, default=7, help="Window length in days, compared with the window before (default: 7)")
+    p_rep.add_argument("--md", default=None, help="Also write the report as Markdown to this path")
+    p_rep.add_argument("--workspace", default=None, help="Syntopik workspace directory")
+    p_rep.add_argument("--json", action="store_true", help="Emit JSON output")
+    p_rep.set_defaults(func=_cmd_report)
 
     p_ilv = sub.add_parser("interleave", help="Blind-Chapter Interleaved Drill Generator (Rohrer interleaving + Newman Tier-1)")
     p_ilv.add_argument("action", nargs="?", choices=["build", "check", "complete", "stats", "export-cbt"], default="build")
