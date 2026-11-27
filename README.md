@@ -18,6 +18,19 @@
 > uvx --from git+https://github.com/HridayKapoor/syntopik syntopik demo --open
 > ```
 
+### In plain words
+
+Syntopik is a private tutor that lives on your own computer. Give it a topic, your lecture notes, a PDF, a video or an existing flashcard deck, and it:
+
+1. **Breaks the material into small ideas** and links each one to the ideas it depends on.
+2. **Teaches and quizzes you one idea at a time**, aiming for understanding rather than memorising, and always lets you answer "I don't know".
+3. **Remembers what you have learned** and brings each idea back just before you would forget it. When something keeps going wrong, it looks for the earlier idea that is actually missing.
+4. **Tells you honestly how ready you are** for an exam, and what to study next for the biggest gain.
+
+Everything stays on your machine: no account, no tracking, and your study history is plain files you own. You can use it through an AI coding assistant you already have (Claude Code, Cursor, Codex, Gemini CLI and 10 others) or in your browser with `syntopik serve --open`.
+
+**New here?** Run the demo command above, then just tell your assistant what you want to learn, for example *"Teach me Raft Consensus from scratch"* or *"Import my Anki deck"*. You never need to type the commands below yourself; they are there for people who like to.
+
 Syntopik turns **any of 14 coding-agent harnesses** (**Google Antigravity 2.0**, **Anthropic Claude Code**, **OpenAI Codex / T3 Code**, **Cursor**, **Windsurf**, **VS Code / Copilot**, **Gemini CLI**, **OpenCode**, **Cline**, **Roo Code**, **Zed**, **Aider**, **Continue**, **Kiro**) — or a standalone loopback browser — into a calm, mathematically verified **Private Teacher & Deep-Mastery OS** for **any subject**: Computer Science, Distributed Systems, Machine Learning, Mathematics, Physics, Chemistry, Medicine, Research Papers, University Courses, and Competitive Exams (JEE, GATE, USMLE, Technical Screens).
 
 ---
