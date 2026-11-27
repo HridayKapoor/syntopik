@@ -1741,6 +1741,32 @@ def _cmd_rosetta(args: argparse.Namespace) -> int:
     raise SystemExit(f"Unknown rosetta action: {action}")
 
 
+def _sync_passphrase(*, confirm: bool) -> str:
+    """Passphrase from SYNTOPIK_SYNC_PASSPHRASE, else an interactive no-echo prompt (never a CLI arg)."""
+    from syntopik.sync_crypto import PASSPHRASE_ENV, passphrase_from_env
+
+    env_val = passphrase_from_env()
+    if env_val:
+        return env_val
+    if not sys.stdin.isatty():
+        raise SystemExit(f"Encrypted sync needs a passphrase: set {PASSPHRASE_ENV} or run in a terminal.")
+    import getpass
+
+    first = getpass.getpass("Sync passphrase: ")
+    if confirm and getpass.getpass("Repeat passphrase: ") != first:
+        raise SystemExit("Passphrases did not match.")
+    return first
+
+
+def _delta_file_is_encrypted(path: str) -> bool:
+    try:
+        with open(path, "rb") as fh:
+            head = fh.read(256)
+    except OSError:
+        return False
+    return b"syntopik-delta-enc-v1" in head
+
+
 def _cmd_sync_delta(args: argparse.Namespace) -> int:
     ws = resolve_workspace(getattr(args, "workspace", None))
     sd = _lazy_import("syntopik.sync_delta")
@@ -1758,10 +1784,19 @@ def _cmd_sync_delta(args: argparse.Namespace) -> int:
         return 0
 
     if action == "export":
-        res = sd.export_sync_delta(ws, out_path=args.out, since=args.since)
+        passphrase = _sync_passphrase(confirm=True) if getattr(args, "encrypt", False) else None
+        if passphrase is not None and not args.out:
+            raise SystemExit("--encrypt needs --out <file>.")
+        try:
+            res = sd.export_sync_delta(ws, out_path=args.out, since=args.since, passphrase=passphrase)
+        except ValueError as exc:
+            _emit({"ok": False, "action": "export", "error": str(exc)}, bool(args.json), [f"Export failed: {exc}"])
+            return 1
         payload = {"ok": bool(res.get("ok", True)), "action": "export", "workspace": str(ws), **(res if isinstance(res, dict) else {})}
+        if payload.get("encrypted"):
+            payload.pop("delta", None)  # never echo plaintext study data next to an encrypted file
         lines = [
-            f"Exported CRDT sync delta ({ws})",
+            f"Exported {'encrypted ' if payload.get('encrypted') else ''}CRDT sync delta ({ws})",
             f"  Output : {payload.get('outPath') or payload.get('path') or '(in-memory)'}",
         ]
         _emit(payload, bool(args.json), lines)
@@ -1771,7 +1806,8 @@ def _cmd_sync_delta(args: argparse.Namespace) -> int:
         target_file = args.file or args.out
         if not target_file:
             raise SystemExit("Provide --file <delta_path> for 'syntopik sync-delta verify'.")
-        res = sd.verify_sync_delta(target_file)
+        passphrase = _sync_passphrase(confirm=False) if _delta_file_is_encrypted(target_file) else None
+        res = sd.verify_sync_delta(target_file, passphrase=passphrase)
         ok = bool(res.get("ok", False)) if isinstance(res, dict) else False
         payload = {"ok": ok, "action": "verify", **(res if isinstance(res, dict) else {})}
         _emit(payload, bool(args.json), [f"Sync delta verify ({target_file}): {'VALID' if ok else 'INVALID'}"])
@@ -1781,7 +1817,8 @@ def _cmd_sync_delta(args: argparse.Namespace) -> int:
         target_file = args.file or args.out
         if not target_file:
             raise SystemExit("Provide --file <delta_path> for 'syntopik sync-delta merge'.")
-        res = sd.merge_sync_delta(ws, target_file, dry_run=bool(args.dry_run))
+        passphrase = _sync_passphrase(confirm=False) if _delta_file_is_encrypted(target_file) else None
+        res = sd.merge_sync_delta(ws, target_file, dry_run=bool(args.dry_run), passphrase=passphrase)
         ok = bool(res.get("ok", True)) if isinstance(res, dict) else False
         if ok and not args.dry_run:
             sync_hub(workspace=ws, quiet=True)
@@ -2330,6 +2367,12 @@ def build_parser() -> argparse.ArgumentParser:
     p_sd.add_argument("--file", default=None, help="Input delta file path (for verify/merge)")
     p_sd.add_argument("--since", default=None, help="Optional ISO-8601 cutoff timestamp (for export)")
     p_sd.add_argument("--dry-run", dest="dry_run", action="store_true", help="Preview merge without mutating workspace files")
+    p_sd.add_argument(
+        "--encrypt",
+        action="store_true",
+        help="Encrypt the exported file with a passphrase (AES-256-GCM; needs the 'sync' extra). "
+        "Passphrase comes from SYNTOPIK_SYNC_PASSPHRASE or a prompt; verify/merge detect encrypted files",
+    )
     p_sd.add_argument("--workspace", default=None, help="Syntopik workspace directory")
     p_sd.add_argument("--json", action="store_true", help="Emit JSON output")
     p_sd.set_defaults(func=_cmd_sync_delta)
