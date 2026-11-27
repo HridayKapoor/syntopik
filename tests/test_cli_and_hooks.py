@@ -182,6 +182,49 @@ class TestSyntaxAndCLI(unittest.TestCase):
             self.assertIn("Known chapters: optics", bad.stdout)
             self.assertEqual(run("sunset", "optics").returncode, 0)
 
+    def test_run_lists_engines_and_suggests_typos(self) -> None:
+        def run(*args: str) -> subprocess.CompletedProcess[str]:
+            return subprocess.run(
+                [sys.executable, "-B", "-m", "syntopik", *args],
+                cwd=str(ROOT), capture_output=True, text=True, timeout=60, check=False,
+            )
+
+        bare = run("run")
+        self.assertEqual(bare.returncode, 0, bare.stderr)
+        self.assertIn("  math_verify", bare.stdout)
+        typo = run("run", "math_verfy")
+        self.assertEqual(typo.returncode, 1)
+        self.assertIn("Did you mean: math_verify", typo.stderr)
+
+    def test_drop_and_import_reject_missing_sources_cleanly(self) -> None:
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as tmp:
+            env = {**os.environ, "SYNT_WORKSPACE": tmp, "PYTHONPATH": str(ROOT)}
+
+            def run(*args: str) -> subprocess.CompletedProcess[str]:
+                return subprocess.run(
+                    [sys.executable, "-B", "-m", "syntopik", *args],
+                    cwd=tmp, env=env, capture_output=True, text=True, timeout=60, check=False,
+                )
+
+            self.assertEqual(run("init").returncode, 0)
+            chapters = Path(tmp) / "chapters"
+            bad = run("drop", "missing-file.pdf")
+            self.assertEqual(bad.returncode, 1)
+            self.assertIn("Nothing was added", bad.stdout)
+            self.assertEqual(list(chapters.glob("*-tracker.json")), [])
+            good = Path(tmp) / "optics.md"
+            good.write_text("# Optics\n\nLight bends at an interface (Snell's law).\n", encoding="utf-8")
+            mixed = run("drop", str(good), "missing-file.pdf")
+            self.assertEqual(mixed.returncode, 0, mixed.stderr)
+            self.assertIn("Skipped missing-file.pdf", mixed.stdout)
+            self.assertEqual([p.name for p in chapters.glob("*-tracker.json")], ["optics-tracker.json"])
+            imp = run("import", "missing-deck.apkg")
+            self.assertEqual(imp.returncode, 1)
+            self.assertIn("Import failed", imp.stdout)
+            self.assertNotIn("Traceback", imp.stderr)
+
     def test_all_cli_scripts_help_exit_zero(self) -> None:
         cli_scripts = [
             "pdf_studio.py",

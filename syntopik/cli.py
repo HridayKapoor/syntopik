@@ -559,6 +559,15 @@ def _cmd_serve(args: argparse.Namespace) -> int:
 
 
 def _cmd_import(args: argparse.Namespace) -> int:
+    try:
+        return _cmd_import_impl(args)
+    except (ValueError, FileNotFoundError) as exc:
+        msg = str(exc).splitlines()[0] if str(exc) else exc.__class__.__name__
+        _emit({"ok": False, "error": msg}, bool(getattr(args, "json", False)), [f"Import failed: {msg}"])
+        return 1
+
+
+def _cmd_import_impl(args: argparse.Namespace) -> int:
     ws = resolve_workspace(getattr(args, "workspace", None))
     pocket_sync = getattr(args, "pocket_sync", None)
     if pocket_sync:
@@ -1205,7 +1214,23 @@ def _cmd_sync(args: argparse.Namespace) -> int:
 def _cmd_run(args: argparse.Namespace) -> int:
     ws = resolve_workspace(getattr(args, "workspace", None))
     pkg_root = resolve_package_root()
-    engine = str(args.engine).strip()
+    bases = (ws / "scripts", pkg_root / "scripts")
+    available = sorted(
+        {
+            p.stem
+            for base in bases
+            if base.is_dir()
+            for p in base.iterdir()
+            if p.is_file() and p.suffix in (".py", ".mjs") and not p.name.startswith("_")
+        }
+    )
+    engine = str(args.engine or "").strip()
+    if not engine:
+        print("Usage: syntopik run <engine> [args...]   (add --help after the engine for its options)")
+        print("Available engines:")
+        for name in available:
+            print(f"  {name}")
+        return 0
     if "/" in engine or "\\" in engine or ".." in engine:
         raise SystemExit(f"Invalid engine name: {engine!r}")
 
@@ -1214,7 +1239,7 @@ def _cmd_run(args: argparse.Namespace) -> int:
         candidates_names.extend([f"{engine}.py", f"{engine}.mjs"])
 
     script_path: Path | None = None
-    for base in (ws / "scripts", pkg_root / "scripts"):
+    for base in bases:
         for name in candidates_names:
             cand = base / name
             if cand.is_file():
@@ -1224,7 +1249,9 @@ def _cmd_run(args: argparse.Namespace) -> int:
             break
 
     if script_path is None:
-        raise SystemExit(f"Engine script '{engine}' not found in workspace or bundled scripts/.")
+        close = difflib.get_close_matches(engine.rsplit(".", 1)[0], available, n=3, cutoff=0.6)
+        hint = f" Did you mean: {', '.join(close)}?" if close else " Run `syntopik run` to list engines."
+        raise SystemExit(f"Engine script '{engine}' not found in workspace or bundled scripts/.{hint}")
 
     rest = list(args.engine_args or [])
     if rest and rest[0] == "--":
@@ -1371,10 +1398,21 @@ def _cmd_drop(args: argparse.Namespace) -> int:
     ws = resolve_workspace(getattr(args, "workspace", None))
     brainstem = _lazy_import("syntopik.brainstem")
     res = brainstem.drop_sources(ws, list(args.inputs), slug=args.slug, title=args.title)
+    failed = [f for f in (res.get("failed") or []) if isinstance(f, dict)]
+    ingested = list(res.get("ingested") or [])
+    fail_lines = [f"  Skipped {f.get('input')}: {str(f.get('error') or 'unreadable').splitlines()[0]}" for f in failed]
+    if not ingested:
+        _emit(res, bool(args.json), [
+            "Nothing was added: none of the sources could be read.",
+            *fail_lines,
+            "  Check the file path, or pass a full http(s) URL or an arXiv ID.",
+        ])
+        return 1
     sync_hub(workspace=ws, quiet=True)
     lines = [
-        f"Dropped {len(args.inputs)} source(s) into {ws}",
+        f"Dropped {len(ingested)} source(s) into {ws}",
         f"  Slug : {res.get('slug') or args.slug or 'auto'}",
+        *fail_lines,
     ]
     if res.get("probeOneHint"):
         lines.append(f"  Next : {res['probeOneHint']}")
@@ -2329,7 +2367,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     p_run = sub.add_parser("run", help="Run any bundled Syntopik engine script from any workspace")
     p_run.add_argument("--workspace", default=None, help="Syntopik workspace directory")
-    p_run.add_argument("engine", help="Engine script name (e.g. srs_engine, math_verify, sync-graph.mjs)")
+    p_run.add_argument("engine", nargs="?", default=None, help="Engine script name (e.g. srs_engine, math_verify, sync-graph.mjs); omit to list engines")
     p_run.add_argument("engine_args", nargs=argparse.REMAINDER, help="Arguments forwarded to the engine script")
     p_run.set_defaults(func=_cmd_run)
 
