@@ -10,6 +10,7 @@ Verbs:
 from __future__ import annotations
 
 import argparse
+import difflib
 import importlib
 import inspect
 import json
@@ -2431,9 +2432,47 @@ def build_parser() -> argparse.ArgumentParser:
     return parser
 
 
+QUICKSTART = """Syntopik v{version} — study anything until it clicks.
+
+Start here:
+  syntopik demo              Try it with a ready-made sample course
+  syntopik drop <file|url>   Add your own notes, PDF, slides, video or website
+  syntopik next              See the one best thing to do right now
+  syntopik review            Go through what is due for review today
+  syntopik serve --open      Open the study dashboard in your browser
+
+Getting ready for a test:
+  syntopik readiness         How ready you are, and what to fix first
+  syntopik triage --exam-in 48h   Short plan when the exam is close
+
+Something wrong?  syntopik doctor --fix
+All commands:     syntopik --help
+"""
+
+
+def _command_names(parser: argparse.ArgumentParser) -> list[str]:
+    for action in parser._actions:
+        if isinstance(action, argparse._SubParsersAction):
+            return list(action.choices)
+    return []
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = build_parser()
-    args = parser.parse_args(argv)
+    raw = list(sys.argv[1:] if argv is None else argv)
+    if not raw:
+        print(QUICKSTART.format(version=__version__), end="")
+        return 0
+    first = raw[0]
+    if not first.startswith("-"):
+        names = _command_names(parser)
+        if names and first not in names:
+            close = difflib.get_close_matches(first, names, n=3, cutoff=0.6)
+            hint = f" Did you mean: {', '.join(close)}?" if close else ""
+            print(f"syntopik: unknown command '{first}'.{hint}", file=sys.stderr)
+            print("Run 'syntopik' on its own for a short guide, or 'syntopik --help' for every command.", file=sys.stderr)
+            return 2
+    args = parser.parse_args(raw)
     return int(args.func(args))
 
 
