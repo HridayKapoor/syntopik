@@ -303,14 +303,25 @@ def _build_downstream_metrics(chains: list[dict[str, Any]]) -> tuple[dict[str, i
     return out_deg, desc
 
 
-def compute_evidence_summary(workspace: Path | str) -> dict[str, Any]:
-    """Deterministically infer T1..T4 epistemic tiers and anti-inflation alerts from all logs."""
+def compute_evidence_summary(
+    workspace: Path | str, *, preloaded: dict[str, list[dict[str, Any]]] | None = None
+) -> dict[str, Any]:
+    """Deterministically infer T1..T4 epistemic tiers and anti-inflation alerts from all logs.
+
+    `preloaded` maps ledger file names (e.g. "revlog.jsonl") to rows the caller already
+    loaded, so large vaults are not parsed twice. Rows are read, never mutated.
+    """
     _ws, kg_dir = _resolve_ws_and_kg(workspace)
-    props = load_jsonl(kg_dir / "propositions.jsonl")
-    chains = load_jsonl(kg_dir / "chains.jsonl")
-    revlog = load_jsonl(kg_dir / "revlog.jsonl")
-    forks = load_jsonl(kg_dir / "forks.jsonl")
-    arenas = load_jsonl(kg_dir / "arenas.jsonl")
+    pre = preloaded or {}
+
+    def _rows(name: str) -> list[dict[str, Any]]:
+        return pre[name] if name in pre else load_jsonl(kg_dir / name)
+
+    props = _rows("propositions.jsonl")
+    chains = _rows("chains.jsonl")
+    revlog = _rows("revlog.jsonl")
+    forks = _rows("forks.jsonl")
+    arenas = _rows("arenas.jsonl")
     ledger_rows = load_jsonl(kg_dir / LEDGER_FILENAME)
     viva_rows = load_jsonl(kg_dir / "viva-sessions.jsonl")
     deriv_rows = load_jsonl(kg_dir / "derivations.jsonl")

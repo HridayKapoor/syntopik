@@ -9,6 +9,7 @@ lazily ONLY inside `optimize_fsrs_params()`.
 
 from __future__ import annotations
 
+import heapq
 import math
 import random
 import time
@@ -1148,33 +1149,43 @@ def compress_due_queue(
     remaining_coverable = set(coverable)
 
     # Greedy set-cover selecting high-leverage composites covering >= min_knockouts due prereqs.
-    while True:
-        best_pid: str | None = None
-        best_hits: list[str] = []
-        best_key: tuple[int, float, int] = (0, 0.0, 0)
+    # Lazy greedy: a candidate's key (hits, urgency, -order) can only fall as nodes get covered,
+    # so a popped key that is still current is the true maximum. Keys are unique (order_index),
+    # which makes the result identical to a full rescan per round, in O(n log n) not O(n^2).
+    def _urgency(pid: str) -> float:
+        retr = item_by_id[pid].get("retrievability")
+        return 1.0 - float(retr) if isinstance(retr, (int, float)) else 0.5
 
-        for pid in due_ids:
-            if pid in selected_set or pid in knocked_out_by:
-                continue
-            active_hits = [anc for anc in covers_map.get(pid, {}) if anc in remaining_coverable]
-            if len(active_hits) < min_knockouts:
-                continue
-            retr = item_by_id[pid].get("retrievability")
-            urgency = 1.0 - float(retr) if isinstance(retr, (int, float)) else 0.5
-            key = (len(active_hits), urgency, -order_index[pid])
-            if key > best_key:
-                best_key = key
-                best_pid = pid
-                best_hits = sorted(active_hits)
+    urgency_by_id = {pid: _urgency(pid) for pid in due_ids}
 
-        if best_pid is None:
-            break
+    def _key(pid: str) -> tuple[int, float, int] | None:
+        n_hits = sum(1 for anc in covers_map.get(pid, {}) if anc in remaining_coverable)
+        if n_hits < min_knockouts:
+            return None
+        return (n_hits, urgency_by_id[pid], -order_index[pid])
 
-        selected_ids.append(best_pid)
-        selected_set.add(best_pid)
-        remaining_coverable.discard(best_pid)
+    heap: list[tuple[int, float, int, str]] = []
+    for pid in due_ids:
+        k = _key(pid)
+        if k is not None:
+            heap.append((-k[0], -k[1], -k[2], pid))
+    heapq.heapify(heap)
+    while heap:
+        neg_hits, neg_urg, neg_ord, pid = heapq.heappop(heap)
+        if pid in selected_set or pid in knocked_out_by:
+            continue
+        current = _key(pid)
+        if current is None:
+            continue
+        if current != (-neg_hits, -neg_urg, -neg_ord):
+            heapq.heappush(heap, (-current[0], -current[1], -current[2], pid))
+            continue
+        best_hits = sorted(anc for anc in covers_map[pid] if anc in remaining_coverable)
+        selected_ids.append(pid)
+        selected_set.add(pid)
+        remaining_coverable.discard(pid)
         for anc in best_hits:
-            knocked_out_by[anc] = (best_pid, covers_map[best_pid][anc])
+            knocked_out_by[anc] = (pid, covers_map[pid][anc])
             remaining_coverable.discard(anc)
 
     # Retain all remaining non-knocked-out due items in their original urgency order.
@@ -1184,9 +1195,13 @@ def compress_due_queue(
             selected_set.add(pid)
 
     # Keep misconceptions first, then compressed composites / urgency order.
+    knocks_by: dict[str, list[str]] = {}
+    for anc, (by_id, _w) in knocked_out_by.items():
+        knocks_by.setdefault(by_id, []).append(anc)
+
     def _final_sort(pid: str) -> tuple[int, int, int]:
         st = str(item_by_id[pid].get("status") or "").lower()
-        knocks = [anc for anc, (by_id, _) in knocked_out_by.items() if by_id == pid]
+        knocks = knocks_by.get(pid, [])
         return (
             0 if st == "misconception" else (1 if knocks else 2),
             -len(knocks),
@@ -1198,7 +1213,7 @@ def compress_due_queue(
     selected_out: list[dict[str, Any]] = []
     for pid in selected_ids:
         entry = dict(item_by_id[pid])
-        knocks = sorted(anc for anc, (by_id, _) in knocked_out_by.items() if by_id == pid)
+        knocks = sorted(knocks_by.get(pid, []))
         if knocks:
             entry["knocksOut"] = knocks
             entry["knocksOutCount"] = len(knocks)

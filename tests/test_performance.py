@@ -24,6 +24,7 @@ from syntopik.fsrs_core import (  # noqa: E402
     compress_due_queue,
     fire_ancestor_footprint,
 )
+from syntopik.interleave import strip_chapter_cues  # noqa: E402
 from syntopik.isomorphism import _keyword_matches, match_proposition_archetypes  # noqa: E402
 
 
@@ -60,6 +61,44 @@ class TestFireScale(unittest.TestCase):
         )
         # Previously ~O(due x chains): tens of seconds at this size. Generous CI budget.
         self.assertLess(elapsed, 5.0, f"compress_due_queue took {elapsed:.2f}s for {len(due)} due items")
+
+
+    def test_compress_due_queue_scales_to_large_vaults(self) -> None:
+        # 12k due items: the old full-rescan greedy loop took ~14s here; lazy greedy ~0.3s.
+        props, chains = _synthetic_graph(12000)
+        t0 = time.perf_counter()
+        res = compress_due_queue(props, chains)
+        elapsed = time.perf_counter() - t0
+        self.assertGreater(res["knockedOutCount"], 0)
+        self.assertEqual(res["compressedCount"] + res["knockedOutCount"], len(props))
+        self.assertLess(elapsed, 4.0, f"compress_due_queue took {elapsed:.2f}s for {len(props)} due items")
+
+    def test_compress_due_queue_greedy_order_is_deterministic(self) -> None:
+        props, chains = _synthetic_graph(400, seed=11)
+        due = props[::2]
+        a = compress_due_queue(due, chains, min_knockouts=1)
+        b = compress_due_queue(list(due), list(chains), min_knockouts=1)
+        self.assertEqual(a, b)
+        # Composites come first and each knocks out >= min_knockouts prerequisites
+        knocked = {k["id"] for k in a["knockedOut"]}
+        self.assertFalse(knocked & {s["id"] for s in a["selected"]})
+
+
+class TestInterleaveCueStripping(unittest.TestCase):
+    def test_strip_chapter_cues_is_fast_on_large_vaults(self) -> None:
+        # One regex compile per proposition used to dominate `syntopik interleave` (~5s on 20k props).
+        t0 = time.perf_counter()
+        for i in range(20000):
+            strip_chapter_cues(f"Concept {i} in Simple Harmonic Motion", chapter=f"Ch{i % 40} Waves", topic="SHM", prop_id=f"prop-{i}")
+        elapsed = time.perf_counter() - t0
+        self.assertLess(elapsed, 2.5, f"strip_chapter_cues took {elapsed:.2f}s for 20k propositions")
+
+    def test_strip_chapter_cues_semantics(self) -> None:
+        self.assertEqual(strip_chapter_cues("In SHM, the period is 2pi sqrt(m/k)", chapter="Simple Harmonic Motion (SHM)"), "The period is 2pi sqrt(m/k)")
+        self.assertEqual(strip_chapter_cues("prop-7 restoring force [Kinematics]", chapter="Ch1 Kinematics", prop_id="prop-7"), "Restoring force")
+        self.assertEqual(strip_chapter_cues("PROP-7: quorum overlap", prop_id="prop-7"), "Quorum overlap")
+        # Non-ASCII text skips the fast pre-check and still matches case-insensitively
+        self.assertEqual(strip_chapter_cues("Größe in Ämter, Einheit", chapter="ämter"), "Größe Einheit")
 
 
 class TestRosettaKeywordMatching(unittest.TestCase):

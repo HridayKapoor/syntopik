@@ -222,6 +222,16 @@ def _extract_failed_node_from_event(
     return None
 
 
+def _same_kg(ws: Path, kg_dir: Path) -> bool:
+    """True when the evidence engine resolves `ws` to the same knowledge-graph dir we loaded."""
+    try:
+        from syntopik.evidence import _resolve_ws_and_kg
+
+        return _resolve_ws_and_kg(ws)[1] == Path(kg_dir).resolve()
+    except Exception:
+        return False
+
+
 def _compute_compressed_due(
     props: list[dict[str, Any]],
     chains: list[dict[str, Any]],
@@ -439,9 +449,16 @@ def plan_next_move(
     due_forks = due_forks_resp.get("items") or due_forks_resp.get("forks") or []
     comp_due = _compute_compressed_due(props, chains, kg_dir, now_dt)
     due_selected = comp_due.get("selected") or []
-    ev_summary = compute_evidence_summary(ws)
+    loaded = {
+        "propositions.jsonl": props,
+        "chains.jsonl": chains,
+        "revlog.jsonl": revlog,
+        "mistakes.jsonl": mistakes,
+        "arenas.jsonl": arenas,
+    }
+    ev_summary = compute_evidence_summary(ws, preloaded=loaded) if _same_kg(ws, kg_dir) else compute_evidence_summary(ws)
     anti_alerts = ev_summary.get("antiInflationAlerts") or []
-    blast_list = find_blast_radius(kg_dir, limit=3)
+    blast_list = find_blast_radius(kg_dir, limit=3, preloaded=loaded)
 
     # Fast O(1) Pre-Exam Taper Mode check (<= 72h)
     try:
