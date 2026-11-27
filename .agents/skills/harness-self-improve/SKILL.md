@@ -54,7 +54,7 @@ python3 -B benchmarks/syntopik_bench.py --replay --workspace <dir> --json   # Di
 Write explicit disjoint file ownership and interface contracts before editing.
 
 ### Step 4 — Implement + Independent Read-Only `/tmp` Verification
-- Add sandboxed `unittest` tests to `tests/test_harness.py` (`tempfile.TemporaryDirectory()`, `-B` flag so zero `__pycache__` is created).
+- Add sandboxed `unittest` tests to the matching `tests/test_<area>.py` module (shared fixtures in `tests/_helpers.py`; `tempfile.TemporaryDirectory()`, `-B` flag so zero `__pycache__` is created).
 - Run an **independent read-only verifier** purely in `/tmp`:
   1. `.venv/bin/python -B scripts/study_doctor.py` → `0 warn, 0 fail`, `< 500 ms`
   2. `.venv/bin/python -B scripts/pedagogy_eval.py bench --json` → **`40/40`** TutorBench v3.0 rubric pass (and `lint` / `check-card` on any edited prompt templates!)

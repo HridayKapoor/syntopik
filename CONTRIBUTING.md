@@ -61,7 +61,7 @@ python3 -B scripts/pedagogy_eval.py bench --json
 #    pip install ".[fsrs,pdf,stem]" networkx srt
 python3 -B -m unittest discover -s tests -t tests -v
 #    Full-stack doctor check (needs every extra plus LaTeX, dvisvgm and Typst):
-SYNTOPIK_TEST_FULL_STACK=1 python3 -B -m unittest test_harness.TestSelfImproveAndDoctor -v
+SYNTOPIK_TEST_FULL_STACK=1 python3 -B -m unittest discover -s tests -t tests -k TestSelfImproveAndDoctor -v
 
 # 6. Always-on context-budget check (v2.0.0 baseline: 6,548 B <= 9,500 B), manifest JSON check & zero path leaks:
 wc -c AGENTS.md GEMINI.md CLAUDE.md

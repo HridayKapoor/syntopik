@@ -68,6 +68,13 @@ class TestCodeSandboxLimits(unittest.TestCase):
         self.assertNotIn("WROTE", res["stdout"])
         self.assertNotEqual(res["exitCode"], 0)
 
+    def test_compile_timeout_is_reported_not_hidden(self) -> None:
+        self.assertGreater(cv.DEFAULT_COMPILE_TIMEOUT_SEC["rust"], cv.DEFAULT_COMPILE_TIMEOUT_SEC["c"])
+        timed_out = {"timedOut": True, "exitCode": -9, "stderr": ""}
+        self.assertEqual(cv._compile_failure(timed_out, "Rust", 45.0), "Rust compilation timed out after 45s.")
+        crashed = {"timedOut": False, "exitCode": 3, "stderr": "  "}
+        self.assertIn("exit code 3", cv._compile_failure(crashed, "C", 15.0))
+
     @unittest.skipUnless(shutil.which("rustc"), "rustc not installed")
     def test_rust_compiles_with_rustup_toolchain(self) -> None:
         res = cv.run_sandboxed('fn main() { println!("{}", 6 * 7); }', lang="rust", timeout_sec=10)

@@ -1034,21 +1034,24 @@ def check_rule_budget(ws: Path, *, is_repo: bool = True) -> dict[str, Any]:
 
 
 def check_regression_suite(ws: Path, *, is_repo: bool = True) -> dict[str, Any]:
+    name = "Regression Suite (tests/)"
     if not is_repo:
         return {
-            "name": "Regression Suite (test_harness.py)",
+            "name": name,
             "category": "workspace",
             "status": "ok",
             "required": False,
             "detail": "external vault / wheel mode (repo test suite check skipped)",
         }
-    test_file = ws / "tests" / "test_harness.py"
-    if not test_file.exists():
-        return {"name": "Regression Suite (test_harness.py)", "category": "workspace", "status": "fail", "required": True, "detail": "tests/test_harness.py missing"}
-    size = test_file.stat().st_size
-    if size == 0:
-        return {"name": "Regression Suite (test_harness.py)", "category": "workspace", "status": "fail", "required": True, "detail": "tests/test_harness.py is empty"}
-    return {"name": "Regression Suite (test_harness.py)", "category": "workspace", "status": "ok", "required": True, "detail": f"tests/test_harness.py present ({size} B)"}
+    tests_dir = ws / "tests"
+    helpers = tests_dir / "_helpers.py"
+    if not helpers.is_file() or helpers.stat().st_size == 0:
+        return {"name": name, "category": "workspace", "status": "fail", "required": True, "detail": "tests/_helpers.py missing or empty"}
+    modules = sorted(p for p in tests_dir.glob("test_*.py") if p.is_file() and p.stat().st_size > 0)
+    if not modules:
+        return {"name": name, "category": "workspace", "status": "fail", "required": True, "detail": "no tests/test_*.py modules found"}
+    size = sum(p.stat().st_size for p in modules)
+    return {"name": name, "category": "workspace", "status": "ok", "required": True, "detail": f"{len(modules)} test modules present ({size} B)"}
 
 
 def run_doctor(workspace: str | Path | None = None, *, core_only: bool = False) -> dict[str, Any]:

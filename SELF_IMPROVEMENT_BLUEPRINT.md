@@ -18,7 +18,7 @@ Any self-improvement pass **MUST** preserve every invariant below:
    - **Never install** multi-GB local VLM/ML/TTS/Docker stacks (`PyTorch`, `Docling`, `MinerU`, `Marker`/`Surya`, `olmOCR`, `MolScribe`, `DECIMER`, `kokoro-onnx`, `piper-tts`, `DeepTutor`/`OpenTutor`).
    - Keep `syntopik/` **100% pure Python 3.12+ stdlib** (`dependencies = []`, `27` modules + `syntopik/data/archetypes.json`) and keep optional `.venv/` fast, deterministic, and lightweight (CAS math, SciPy L-BFGS-B, cheminformatics, vector rendering, RapidOCR, Typst/FFmpeg glue).
 3. **Multi-Harness Context Budget & Portable Skill Hygiene**:
-   - `GEMINI.md` and `AGENTS.md` have **no YAML frontmatter**, stay **under 24 KB per file**, and stay **strictly `<= 9,500` bytes combined** (`<= 7,000 B` v3.2 tightened target enforced by `study_doctor.py`, CI, and `tests/test_harness.py`).
+   - `GEMINI.md` and `AGENTS.md` have **no YAML frontmatter**, stay **under 24 KB per file**, and stay **strictly `<= 9,500` bytes combined** (`<= 7,000 B` v3.2 tightened target enforced by `study_doctor.py`, CI, and `tests/test_cli_and_hooks.py`).
    - Both `CLAUDE.md` (`21` lines `< 45`) and `GEMINI.md` start with `@AGENTS.md` on line 1 with zero frontmatter.
    - Exact **17 skills** in `.agents/skills/<name>/SKILL.md` (mirrored at `.claude/skills/`): portable YAML frontmatter (`name` matching folder name + concise `description <= 215` chars target / `<= 1,024` hard spec with **zero literal `<...>` angle brackets** and **zero `.py`/`.mjs` script filenames** inside `description`; total `<= 3,400 B`).
 4. **GitHub-Clean Learner Privacy, Plugin-Cache Safety & 3-OS Windows Portability**:
