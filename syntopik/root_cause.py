@@ -442,12 +442,18 @@ def select_diagnostic_probe(
 # ---------------------------------------------------------------------------
 
 
-def find_blast_radius(kg_dir: Path | str, *, limit: int = 5) -> list[dict[str, Any]]:
-    """Find shaky/misconception ancestors explaining the most downstream weak nodes & misses across chapters."""
+def find_blast_radius(
+    kg_dir: Path | str, *, limit: int = 5, preloaded: dict[str, list[dict[str, Any]]] | None = None
+) -> list[dict[str, Any]]:
+    """Find shaky/misconception ancestors explaining the most downstream weak nodes & misses across chapters.
+
+    `preloaded` maps ledger file names to rows the caller already loaded (read, never mutated).
+    """
     kdir = _resolve_kg_dir(kg_dir)
-    props = load_jsonl(kdir / "propositions.jsonl")
-    chains = load_jsonl(kdir / "chains.jsonl")
-    mistakes = load_jsonl(kdir / "mistakes.jsonl")
+    pre = preloaded or {}
+    props = pre["propositions.jsonl"] if "propositions.jsonl" in pre else load_jsonl(kdir / "propositions.jsonl")
+    chains = pre["chains.jsonl"] if "chains.jsonl" in pre else load_jsonl(kdir / "chains.jsonl")
+    mistakes = pre["mistakes.jsonl"] if "mistakes.jsonl" in pre else load_jsonl(kdir / "mistakes.jsonl")
 
     props_by_id = {str(p.get("id") or ""): p for p in props if isinstance(p, dict) and p.get("id")}
     if not props_by_id or not chains:

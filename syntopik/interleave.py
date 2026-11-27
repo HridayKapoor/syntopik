@@ -18,6 +18,7 @@ Trains cross-chapter principle discrimination before solving:
 
 from __future__ import annotations
 
+import functools
 import math
 import random
 import re
@@ -181,6 +182,29 @@ def _normalize_filter_set(raw: str | list[str] | tuple[str, ...] | set[str] | No
     return out
 
 
+def _may_contain(text: str, needle: str) -> bool:
+    """Cheap pre-check before a case-insensitive regex: False only when a match is impossible.
+
+    Only trusted for ASCII text, where re.IGNORECASE and str.lower() agree exactly.
+    """
+    if not (text.isascii() and needle.isascii()):
+        return True
+    return needle.lower() in text.lower()
+
+
+@functools.lru_cache(maxsize=4096)
+def _phrase_patterns(phrase: str) -> tuple[re.Pattern[str], ...]:
+    """Compiled chapter/topic cue patterns, cached: a vault reuses a few dozen labels thousands of times."""
+    esc = re.escape(phrase)
+    return (
+        # Bracketed/parenthesized forms like "(SHM)" or "[Electrostatics]"
+        re.compile(rf"[\[\(]\s*{esc}\s*[\]\)]", re.IGNORECASE),
+        # Prefix form "In SHM, ..." or "SHM: ..."
+        re.compile(rf"\b(?:in|for|from|under|of)\s+{esc}\b\s*[,:\-–—]?", re.IGNORECASE),
+        re.compile(rf"(?<![A-Za-z0-9]){esc}(?![A-Za-z0-9])\s*[:\-–—]?", re.IGNORECASE),
+    )
+
+
 def strip_chapter_cues(
     text: str,
     *,
@@ -200,7 +224,7 @@ def strip_chapter_cues(
 
     # Remove exact propId if embedded
     pid = str(prop_id or "").strip()
-    if pid and len(pid) >= 3:
+    if pid and len(pid) >= 3 and _may_contain(s, pid):
         s = re.sub(rf"(?<![A-Za-z0-9_-]){re.escape(pid)}(?![A-Za-z0-9_-])", "", s, flags=re.IGNORECASE)
 
     # Remove explicit chapter / topic strings (longest first, skip ultra-short generic words)
@@ -234,11 +258,10 @@ def strip_chapter_cues(
         uniq_phrases.append(p)
 
     for phrase in uniq_phrases:
-        # Remove bracketed/parenthesized forms like "(SHM)" or "[Electrostatics]"
-        s = re.sub(rf"[\[\(]\s*{re.escape(phrase)}\s*[\]\)]", "", s, flags=re.IGNORECASE)
-        # Remove prefix form "In SHM, ..." or "SHM: ..."
-        s = re.sub(rf"\b(?:in|for|from|under|of)\s+{re.escape(phrase)}\b\s*[,:\-–—]?", "", s, flags=re.IGNORECASE)
-        s = re.sub(rf"(?<![A-Za-z0-9]){re.escape(phrase)}(?![A-Za-z0-9])\s*[:\-–—]?", "", s, flags=re.IGNORECASE)
+        if not _may_contain(s, phrase):
+            continue
+        for pattern in _phrase_patterns(phrase):
+            s = pattern.sub("", s)
 
     # Clean leftover empty punctuation / double spaces
     s = re.sub(r"\(\s*\)|\[\s*\]", "", s)
