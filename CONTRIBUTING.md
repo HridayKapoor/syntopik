@@ -36,6 +36,23 @@ Thank you for helping improve **Syntopik** — the local-first, harness-native A
 
 ---
 
+## Writing an Importer Plugin
+
+`syntopik import --kind <name>` can read new formats through plugins (`syntopik/importer_api.py`, API v1). A plugin **only parses**; core owns size caps, text cleanup, `status: "planned"` propositions, de-duplication and the locked ledger write, so a plugin can never fake mastery or corrupt `propositions.jsonl`.
+
+```python
+def parse(path, options):          # path: pathlib.Path, options: dict
+    for line in path.read_text(encoding="utf-8").splitlines():
+        term, _, meaning = line.partition(" = ")
+        if meaning:
+            yield {"q": f"What does {term} mean?", "a": meaning, "tags": ["glossary"]}
+
+SYNTOPIK_IMPORTER = {"name": "glossary", "description": "term = meaning lines",
+                     "extensions": [".txt"], "accepts": "file", "apiVersion": 1, "parse": parse}
+```
+
+Cards may carry `q`, `a`, `title`, `statement`, `chapter`, `subject`, `tags`, `notes` and `kind` (`recall`/`cloze`); anything else is ignored. Ship a plugin as a package exposing the `syntopik.importers` entry-point group, or drop it into `<workspace>/importers/` and set `"allowLocalImporters": true` in `knowledge-graph/study-config.json` (off by default so shared vaults never run code). `syntopik/kindle_clippings.py` is the reference example.
+
 ## Local Development & Verification Gate
 
 Run all checks before committing (always pass `-B` to Python so zero `__pycache__` directories are left in the repo):

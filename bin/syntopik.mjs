@@ -136,7 +136,7 @@ Full Studio & Engine Commands (Python 3.12+ stdlib):
       Load bundled zero-PII starter packs into a clean demo workspace.
   serve [--port 4173] [--host 127.0.0.1] [--lan] [--open] [--workspace <dir>]
       Launch the 2-way local Studio web server + loopback Streamable-HTTP MCP (127.0.0.1, optional --lan Pocket QR).
-  import <target> [--kind auto|youtube|arxiv|repo|url|notes|anki|cards|notebook|notes_batch] [--slug|--chapter <slug>] [--register-tracker]
+  import <target> [--kind auto|youtube|arxiv|repo|url|notes|anki|cards|notebook|notes_batch|kindle|<plugin>] [--list-importers] [--slug|--chapter <slug>] [--register-tracker]
       Ingest Anki .apkg, CSV/TSV cards, Jupyter .ipynb, Notion/MD folders, PDFs, YouTube captions, arXiv papers, GitHub repos, or URLs.
   review [--web] [--tui] [--recover --daily-cap 15] [--resume] [--energy low|normal|deep] [--limit 25]
       Run FIRe-compressed FSRS-6 review, TUI loop, calm recovery, re-entry, or Studio Flashcards.
