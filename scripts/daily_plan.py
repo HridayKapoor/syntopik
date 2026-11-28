@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
 import sys
 from datetime import date as date_cls, datetime, timedelta, timezone
 import hashlib
@@ -1671,6 +1672,77 @@ def _ics_fold(line: str) -> str:
     return "\r\n".join(chunks)
 
 
+_PACE_GENERIC_WORDS = {"exam", "exams", "final", "finals", "midterm", "midterms", "test", "tests", "quiz", "course", "class", "paper", "mock", "unit", "the", "and", "for"}
+
+
+def _pace_name_tokens(*names: str) -> list[str]:
+    toks: list[str] = []
+    for name in names:
+        for tok in re.split(r"[^a-z0-9]+", str(name or "").lower()):
+            if len(tok) >= 2 and tok not in _PACE_GENERIC_WORDS and tok not in toks:
+                toks.append(tok)
+    return toks
+
+
+def _pace_topics_for_exam(
+    ex: dict[str, Any], props: list[dict[str, Any]], chapters_dir: Path
+) -> list[str]:
+    """Ordered, not-yet-mastered topic titles an exam covers, so each paced block can name
+    what to study. Uses chapter trackers first (teacher order), then weak/unstarted concepts."""
+    slug = ex.get("chapterSlug")
+    subj_low = str(ex.get("subject") or "").lower()
+    tokens = _pace_name_tokens(ex.get("name") or "", ex.get("subject") or "")
+
+    def _matches(*fields: Any) -> bool:
+        hay = " ".join(str(f or "") for f in fields).lower()
+        if subj_low and subj_low in hay:
+            return True
+        words = set(re.split(r"[^a-z0-9]+", hay))
+        # Acronyms such as "ML" for "Machine Learning" or "OS" for "Operating Systems".
+        initials = {
+            "".join(w[0] for w in re.split(r"[^a-z0-9]+", str(f or "").lower()) if w and w not in _PACE_GENERIC_WORDS)
+            for f in fields
+        }
+        for tok in tokens:
+            if tok in words or tok in initials or (len(tok) >= 4 and tok in hay):
+                return True
+        return False
+
+    trackers: list[dict[str, Any]] = []
+    if slug and (chapters_dir / f"{slug}-tracker.json").is_file():
+        tr = _load_json_safe(chapters_dir / f"{slug}-tracker.json")
+        if isinstance(tr, dict):
+            trackers.append(tr)
+    elif chapters_dir.is_dir():
+        for tf in sorted(chapters_dir.glob("*-tracker.json")):
+            tr = _load_json_safe(tf)
+            if isinstance(tr, dict) and _matches(tr.get("subject"), tr.get("title"), tr.get("slug")):
+                trackers.append(tr)
+    topics: list[str] = []
+    for tr in trackers:
+        rows = [t for t in (tr.get("topics") or []) if isinstance(t, dict)]
+        rows.sort(key=lambda t: (t.get("order") if isinstance(t.get("order"), (int, float)) else 1e9))
+        for t in rows:
+            if t.get("status") != "mastered" and str(t.get("title") or "").strip():
+                topics.append(" ".join(str(t["title"]).split()))
+    if topics:
+        return topics
+
+    rank = {"misconception": 0, "shaky": 1}
+    picked = [
+        p
+        for p in props
+        if p.get("archived") is not True
+        and str(p.get("status") or "planned").lower() != "solid"
+        and (
+            _matches(p.get("subject"), p.get("chapter"))
+            or (slug and str(slug).lower() in str(p.get("chapter") or "").lower())
+        )
+    ]
+    picked.sort(key=lambda p: rank.get(str(p.get("status") or "planned").lower(), 2))
+    return [" ".join(str(p.get("title") or p.get("id")).split()) for p in picked if p.get("title") or p.get("id")]
+
+
 def build_pace_plan(
     *,
     kg_dir: Path | str | None = None,
@@ -1772,6 +1844,9 @@ def build_pace_plan(
             continue
         slug = ex["chapterSlug"]
         rem_units = ex["remainingTopics"]
+        topic_list = _pace_topics_for_exam(ex, props, resolved_chapters)
+        if rem_units is None and topic_list:
+            rem_units = len(topic_list)
         if rem_units is None:
             # Estimate remaining units from tracker or non-archived non-solid propositions
             tr_rem = 0
@@ -1822,6 +1897,7 @@ def build_pace_plan(
                 "weight": round(ex["weight"], 2),
                 "urgencyScore": round(urgency, 4),
                 "triageRecommended": effective_study_days < rem_units and remaining_buffer == 0,
+                "topics": topic_list[:200],
             }
         )
 
@@ -1848,6 +1924,7 @@ def build_pace_plan(
 
     schedule: list[dict[str, Any]] = []
     buffer_day_count = 0
+    topic_cursor: dict[str, int] = {c["name"]: 0 for c in courses}
     for offset in range(sched_days):
         day_dt = today_date + timedelta(days=offset)
         day_iso = day_dt.isoformat()
@@ -1884,12 +1961,31 @@ def build_pace_plan(
             for c in active_today:
                 alloc = max(10, int(round(eff_daily * (c["urgencyScore"] / sub_urg))))
                 # Respect learner-profile fatigue cliff by splitting long course blocks
+                chunks: list[int] = []
                 rem_m = alloc
-                part = 1
                 while rem_m > 0:
-                    chunk = min(max_chunk, rem_m)
-                    rem_m -= chunk
-                    part_tag = f" (Part {part})" if alloc > max_chunk else ""
+                    chunks.append(min(max_chunk, rem_m))
+                    rem_m -= chunks[-1]
+                # Hand out today's share of the course's topics, in order, across the day's blocks.
+                course_topics = c.get("topics") or []
+                cur = topic_cursor.get(c["name"], 0)
+                per_day = -(-len(course_topics) // max(1, c["effectiveStudyDays"])) if course_topics else 0
+                todays = course_topics[cur : cur + per_day]
+                topic_cursor[c["name"]] = cur + len(todays)
+                per_chunk = -(-len(todays) // len(chunks)) if todays else 0
+                days_to_exam = c["daysUntilExam"] - offset
+                for part, chunk in enumerate(chunks, start=1):
+                    part_tag = f" (Part {part})" if len(chunks) > 1 else ""
+                    block_topics = todays[(part - 1) * per_chunk : part * per_chunk] if per_chunk else []
+                    if block_topics:
+                        focus = f"{c['name']}{part_tag}: learn {'; '.join(block_topics)}, then recall it without notes ({days_to_exam}d to exam)."
+                    elif course_topics:
+                        focus = f"{c['name']}{part_tag}: mixed recall of earlier topics, no new material ({days_to_exam}d to exam)."
+                    else:
+                        focus = (
+                            f"{c['name']}{part_tag}: active recall + next core topic "
+                            f"({days_to_exam}d to exam, {c['bufferDaysReserved']}d buffer protected)."
+                        )
                     day_blocks.append(
                         {
                             "course": c["name"],
@@ -1897,13 +1993,10 @@ def build_pace_plan(
                             "chapterSlug": c["chapterSlug"],
                             "type": "paced_study",
                             "minutes": chunk,
-                            "focus": (
-                                f"{c['name']}{part_tag}: active recall + next core topic "
-                                f"({c['daysUntilExam'] - offset}d to exam, {c['bufferDaysReserved']}d buffer protected)."
-                            ),
+                            "topics": block_topics,
+                            "focus": focus,
                         }
                     )
-                    part += 1
 
         schedule.append(
             {
@@ -2032,7 +2125,7 @@ def _render_human_plan(plan: dict[str, Any]) -> str:
             lines.append(f"## Active Courses ({len(plan['courses'])})")
             for c in plan["courses"]:
                 lines.append(
-                    f"- **{c['name']}** ({c['subject']}): exam `{c['examDate']}` ({c['daysUntilExam']}d left · "
+                    f"- **{c['name']}**{'' if c['subject'] == c['name'] else ' (' + c['subject'] + ')'}: exam `{c['examDate']}` ({c['daysUntilExam']}d left · "
                     f"{c['bufferDaysReserved']}d slack protected) · {c['dailyMinutesAllocated']}m/day ({c['sharePct']}%)"
                 )
             lines.append("")
@@ -2050,7 +2143,10 @@ def _render_human_plan(plan: dict[str, Any]) -> str:
             tag = " [GUILT-FREE BUFFER]" if day.get("isBufferDay") else ""
             lines.append(f"- **`{day['date']}`** ({day['totalMinutes']}m){tag}:")
             for blk in day.get("blocks") or []:
-                lines.append(f"  - {blk['course']} ({blk['minutes']}m): {blk['focus']}")
+                if str(blk["focus"]).startswith(str(blk["course"])):
+                    lines.append(f"  - ({blk['minutes']}m) {blk['focus']}")
+                else:
+                    lines.append(f"  - {blk['course']} ({blk['minutes']}m): {blk['focus']}")
         if plan.get("icsExportPath"):
             lines.append("")
             lines.append(f"**iCalendar Export:** `{plan['icsExportPath']}`")
