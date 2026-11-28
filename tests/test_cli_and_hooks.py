@@ -416,6 +416,8 @@ class TestSyntaxAndCLI(unittest.TestCase):
             self.assertEqual(tui.returncode, 0, tui.stderr)
             self.assertIn("0 due + 1 new", tui.stdout)
             self.assertIn("Recorded 'good'", tui.stdout)
+            last = json.loads((Path(tmp) / "knowledge-graph" / "revlog.jsonl").read_text(encoding="utf-8").splitlines()[-1])
+            self.assertIsInstance(last.get("durationMs"), int)  # feeds "Study time" in `syntopik report`
             self.assertIn("2 concept(s) not started yet", run("review").stdout)
             notes = Path(tmp) / "lecture.md"
             notes.write_text("# Cells\n\nMitochondria make ATP.\n", encoding="utf-8")
