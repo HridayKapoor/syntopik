@@ -1657,6 +1657,58 @@ def _ask_calibration_questions() -> dict[str, Any]:
     return answers
 
 
+_SCAFFOLD_PLAIN = {
+    "worked_example_parsons": "fully worked examples first; you put the steps in order",
+    "faded": "worked examples with some steps left for you to fill in",
+    "standard": "problems you solve yourself, with hints when you need them",
+    "challenge_transfer": "harder problems that take the idea to new cases",
+}
+
+
+def _profile_plain_lines(profile: dict[str, Any], policy: dict[str, Any]) -> list[str]:
+    """How Syntopik is currently teaching this learner, in plain words."""
+    cal = profile.get("calibration") if isinstance(profile.get("calibration"), dict) else {}
+    out = ["How Syntopik teaches you right now:"]
+    mode = str(policy.get("scaffoldingMode") or "")
+    if mode in _SCAFFOLD_PLAIN:
+        out.append(f"  Lessons      : {_SCAFFOLD_PLAIN[mode]}.")
+    words = policy.get("maxProseWords")
+    if isinstance(words, (int, float)) and words > 0:
+        out.append(f"  Explanations : short, about {int(words)} words at a time.")
+    habits = []
+    if policy.get("requirePredictionFirst"):
+        habits.append("you guess the answer before it is shown")
+    if policy.get("allowProductiveFailure"):
+        habits.append("sometimes you try a problem before it is taught")
+    if habits:
+        out.append(f"  Habits       : {'; '.join(habits)}.")
+    minutes = cal.get("sessionTargetMinutes")
+    if isinstance(minutes, (int, float)) and minutes > 0:
+        out.append(f"  Session      : about {int(minutes)} minutes.")
+    domains = profile.get("domains") if isinstance(profile.get("domains"), dict) else {}
+    levels = [
+        f"{name}: {d.get('expertiseBand')}"
+        for name, d in sorted(domains.items())
+        if isinstance(d, dict) and d.get("expertiseBand") and int(d.get("n") or 0) > 0
+    ]
+    if levels:
+        out.append(f"  Level        : {' · '.join(levels)}.")
+    meta = profile.get("metacognition") if isinstance(profile.get("metacognition"), dict) else {}
+    if int(meta.get("windowCount") or 0) >= 2:
+        label = str(meta.get("label") or "")
+        conf = {
+            "overconfident": "you tend to feel surer than your answers turn out to be.",
+            "underconfident": "you tend to know more than you think.",
+            "calibrated": "how sure you feel matches your results well.",
+        }.get(label)
+        if conf:
+            out.append(f"  Confidence   : {conf}")
+    if not cal.get("completed"):
+        out.append("  Not tuned to you yet: `syntopik profile calibrate` asks 4 quick questions (optional).")
+    out.append("  Change any of this: `syntopik profile override --help`, or tell your AI assistant.")
+    return out
+
+
 def _cmd_profile(args: argparse.Namespace) -> int:
     ws = resolve_workspace(getattr(args, "workspace", None))
     kg_dir = resolve_kg_dir(ws)
@@ -1667,7 +1719,13 @@ def _cmd_profile(args: argparse.Namespace) -> int:
         profile = lm.load_profile(kg_dir)
         policy_lines = lm.format_compact_policy_lines(profile, domain=args.domain)
         payload = {"ok": True, "action": "status", "workspace": str(ws), "profile": profile, "policyLines": policy_lines}
-        _emit(payload, bool(args.json), ["Syntopik Learner Profile:", *[f"  {ln}" for ln in policy_lines]])
+        try:
+            policy = lm.compile_teaching_policy(profile, domain=args.domain, energy="normal")
+        except Exception:
+            policy = {}
+        lines = _profile_plain_lines(profile, policy if isinstance(policy, dict) else {})
+        lines += ["", "Summary for your AI assistant:", *[f"  {ln}" for ln in policy_lines]]
+        _emit(payload, bool(args.json), lines)
         return 0
 
     if action == "calibrate":
