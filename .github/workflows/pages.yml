@@ -5,7 +5,15 @@ on:
     branches: [main]
     paths:
       - "docs/**"
+      - "dashboard.html"
+      - "knowledge-graph/viewer.html"
+      - "syntopik/**"
+      - "scripts/build_demo_site.py"
+      - "packs/**"
       - ".github/workflows/pages.yml"
+  schedule:
+    # Weekly rebuild so the demo's due dates and streaks stay relative to today.
+    - cron: "17 6 * * 1"
   workflow_dispatch:
 
 permissions:
@@ -27,6 +35,14 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v5
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+
+      - name: Rebuild demo site from current sources (+ static checks)
+        run: python -B scripts/build_demo_site.py --check
 
       - name: Configure GitHub Pages
         uses: actions/configure-pages@v5
