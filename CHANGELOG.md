@@ -7,6 +7,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 ## [Unreleased]
 
 ### Added
+- `syntopik interleave --tui`: a mixed drill right in the terminal. Each question comes from a shuffled chapter; you pick the idea it needs (with an "I don't know" option), work it out, see the answer and say whether you got it. Results feed the same review schedule, mistake log and chapter mix-up stats as the dashboard drill. Quitting before answering records nothing.
 - `syntopik review --tui`: a card rated "again" comes back once at the end of the same session (a quick second look), like Anki's learning steps. Both answers are recorded.
 - `syntopik review --tui` now introduces up to 10 never-reviewed concepts after the due ones (`--new N`, 0 turns it off), like new cards in Anki. Imported flashcard decks were previously impossible to start from the terminal because nothing was "due" yet. `syntopik drop` of a flashcard file now says how many cards were added and points to `review --tui` instead of asking a lesson question.
 - `syntopik export anki` now works without the optional genanki package: it writes a tab-separated file that Anki imports directly (File > Import), with cloze cards kept as cloze. Also available as `syntopik export anki-text` and `srs_engine.py export-anki-text`.
