@@ -356,6 +356,22 @@ class TestSyntaxAndCLI(unittest.TestCase):
             self.assertIn("Confidence:not yet measured", cal.stdout)
             picked = run("profile", "calibrate", "--entry-ramp", "intuition_first", "--prose-density", "rich")
             self.assertNotIn("default answers", picked.stdout)
+            from syntopik.cli import _stem_extras_installed
+
+            doc = run("doctor")
+            if not _stem_extras_installed():
+                # A plain install must not be reported as broken just because optional extras are absent.
+                self.assertEqual(doc.returncode, 0, doc.stdout)
+                self.assertIn("HEALTHY", doc.stdout)
+                self.assertIn("doctor --full", doc.stdout)
+            self.assertNotIn("Traceback", doc.stderr)
+            if os.name == "nt":
+                return
+            piped = subprocess.run(
+                f'"{sys.executable}" -B -m syntopik bench | "{sys.executable}" -c "import sys; sys.stdin.readline()"',
+                shell=True, cwd=tmp, env=env, capture_output=True, text=True, timeout=120, check=False,
+            )
+            self.assertNotIn("BrokenPipeError", piped.stderr)
 
     def test_review_tui_reprompts_typos_and_summarises(self) -> None:
         import json as _json

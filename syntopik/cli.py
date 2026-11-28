@@ -1038,7 +1038,15 @@ def _cmd_doctor(args: argparse.Namespace) -> int:
         ws = target_ws
 
     doctor = _ensure_script_import("study_doctor", ws)
-    report = doctor.run_doctor(workspace=ws, core_only=bool(args.core_only))
+    core_only = bool(args.core_only)
+    auto_core = False
+    if not core_only and not getattr(args, "full", False) and not _stem_extras_installed():
+        # Without the optional maths/PDF/chemistry/video extras, the full check would list
+        # ~24 missing packages as failures; the core install is what matters here.
+        core_only = auto_core = True
+    report = doctor.run_doctor(workspace=ws, core_only=core_only)
+    if auto_core:
+        report["autoCoreOnly"] = True
     if getattr(args, "fix", False):
         report["fixApplied"] = True
         report["fixActions"] = fix_actions
@@ -1056,7 +1064,26 @@ def _cmd_doctor(args: argparse.Namespace) -> int:
             tag = {"ok": "[ OK ]", "warn": "[WARN]", "fail": "[FAIL]"}[c["status"]]
             print(f"{tag} {c['name']:<36} {c['detail']}")
         print("-" * 88)
+        if auto_core:
+            print("Checked the core install. The optional maths, PDF, chemistry and video extras are not installed,")
+            print("which is fine unless you need them. `syntopik doctor --full` lists every optional extra.")
     return 0 if report.get("healthy") else 1
+
+
+STEM_EXTRA_SENTINELS = ("sympy", "pymupdf", "matplotlib", "rdkit", "manim", "scipy")
+
+
+def _stem_extras_installed() -> bool:
+    """True when any of the optional STEM extras is installed in this interpreter."""
+    import importlib.metadata as md
+
+    for dist in STEM_EXTRA_SENTINELS:
+        try:
+            md.version(dist)
+            return True
+        except md.PackageNotFoundError:
+            continue
+    return False
 
 
 def _build_json_export(ws: Path, kg_dir: Path, chapters_dir: Path, chapter: str | None = None) -> dict[str, Any]:
@@ -2494,6 +2521,7 @@ def build_parser() -> argparse.ArgumentParser:
     p_doc = sub.add_parser("doctor", help="Run workspace, runtime, and packaging health diagnostics")
     p_doc.add_argument("--workspace", default=None, help="Workspace directory override")
     p_doc.add_argument("--core-only", action="store_true", help="Check pure-stdlib core without optional STEM .venv")
+    p_doc.add_argument("--full", action="store_true", help="Also check every optional STEM extra, even when none are installed")
     p_doc.add_argument("--compat", action="store_true", help="Show cross-OS 14-coding-agent compatibility matrix")
     p_doc.add_argument("--fix", action="store_true", help="Non-destructively initialize missing ledgers, repair .claude/skills, and sync graph-data.js before checking")
     p_doc.add_argument("--json", action="store_true", help="Emit JSON output")
@@ -2754,6 +2782,14 @@ def main(argv: list[str] | None = None) -> int:
     except KeyboardInterrupt:
         print("\nStopped.", file=sys.stderr)
         return 130
+    except BrokenPipeError:
+        # Output piped into something that stopped reading (e.g. `| head`): exit quietly.
+        try:
+            devnull = os.open(os.devnull, os.O_WRONLY)
+            os.dup2(devnull, sys.stdout.fileno())
+        except (OSError, ValueError):
+            pass
+        return 141
     except (ValueError, FileNotFoundError, PermissionError, TimeoutError) as exc:
         # Bad input or a missing/locked file: a plain one-line message, not a traceback.
         if os.environ.get("SYNTOPIK_DEBUG", "").strip() in ("1", "true", "yes"):
