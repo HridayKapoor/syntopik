@@ -611,7 +611,9 @@ def _cmd_import_impl(args: argparse.Namespace) -> int:
             res,
             bool(args.json),
             [
-                f"Pocket sync imported ({res.get('importedCount', 0)} new, {res.get('skippedDuplicates', 0)} duplicate(s))",
+                f"Phone reviews saved: {res.get('importedCount', 0)} new"
+                + (f", {res.get('skippedDuplicates', 0)} already imported before" if res.get("skippedDuplicates") else "")
+                + ("  (dry run: nothing written)" if getattr(args, "dry_run", False) else "."),
                 f"  Workspace : {ws}",
             ],
         )
@@ -1306,6 +1308,32 @@ def _build_json_export(ws: Path, kg_dir: Path, chapters_dir: Path, chapter: str 
     }
 
 
+def _pocket_export_lines(res: dict[str, Any], limit: int) -> list[str]:
+    """Plain summary of a pocket deck: what is in it, what was left out, and how to bring results back."""
+    cards = int(res.get("cardCount") or 0)
+    due = int(res.get("dueCount") or 0)
+    in_deck_due = min(due, cards)
+    if cards == 0:
+        return [
+            "Pocket deck is empty: nothing to review yet.",
+            "  Study a chapter first, then export again.",
+        ]
+    parts = []
+    if in_deck_due:
+        parts.append(f"{in_deck_due} due now")
+    if cards > in_deck_due:
+        parts.append(f"{cards - in_deck_due} extra for practice")
+    lines = [
+        f"Pocket deck ready: {cards} card(s) ({', '.join(parts)}).",
+        f"  File: {res.get('outPath')}",
+        "  Copy it to your phone and open it in any browser. It works offline.",
+    ]
+    if due > cards:
+        lines.append(f"  {due - cards} more due card(s) did not fit. For all of them: syntopik export pocket --limit {due}")
+    lines.append("  Afterwards, tap 'Download pocket-sync.json' and run: syntopik import --pocket-sync pocket-sync.json")
+    return lines
+
+
 def _cmd_export(args: argparse.Namespace) -> int:
     ws = resolve_workspace(getattr(args, "workspace", None))
     kg_dir = resolve_kg_dir(ws)
@@ -1337,7 +1365,7 @@ def _cmd_export(args: argparse.Namespace) -> int:
             chapter=args.chapter,
             kg_dir=kg_dir,
         )
-        _emit(res, bool(args.json), [f"Exported Pocket deck ({res.get('cardCount')} cards) -> {res.get('outPath')}"])
+        _emit(res, bool(args.json), _pocket_export_lines(res, int(args.limit)))
         return 0
 
     if fmt == "pack":

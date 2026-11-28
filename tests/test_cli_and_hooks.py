@@ -474,6 +474,19 @@ class TestSyntaxAndCLI(unittest.TestCase):
             )
             self.assertIn("Nothing was recorded.", quit_early.stdout)
 
+    def test_pocket_export_summary_says_what_is_in_the_deck(self) -> None:
+        from syntopik import cli
+
+        text = "\n".join(cli._pocket_export_lines({"cardCount": 25, "dueCount": 40, "outPath": "/x/pocket.html"}, 25))
+        self.assertIn("25 card(s) (25 due now)", text)
+        self.assertIn("15 more due card(s) did not fit", text)
+        self.assertIn("--limit 40", text)
+        self.assertIn("syntopik import --pocket-sync", text)
+        mixed = "\n".join(cli._pocket_export_lines({"cardCount": 10, "dueCount": 3, "outPath": "/x"}, 10))
+        self.assertIn("3 due now, 7 extra for practice", mixed)
+        self.assertNotIn("did not fit", mixed)
+        self.assertIn("empty", cli._pocket_export_lines({"cardCount": 0, "dueCount": 0}, 25)[0])
+
     def test_readiness_steps_are_plain_words_with_a_way_to_start(self) -> None:
         from syntopik import cli
 

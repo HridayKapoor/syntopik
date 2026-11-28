@@ -24,6 +24,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - **"In plain words" README intro** for new, non-technical learners.
 
 ### Changed
+- `syntopik export pocket` now says how many cards are due versus extra practice, warns when due cards did not fit (with the `--limit` to use), and explains how to bring phone reviews back; `import --pocket-sync` reports results in plain words.
 - `syntopik sunset` (wrap up a finished chapter) now lists by name which ideas stay in light review and which are paused, says when a chapter is already wrapped up, and has a new `--undo` that brings paused ideas back into reviews.
 - `syntopik profile` now starts with "How Syntopik teaches you right now" in plain words: the lesson style, how long explanations are, study habits it asks for, session length, your level per subject, how well your confidence matches your results, and how to change any of it. The short technical summary that AI assistants read is still shown below it, and `--json` is unchanged.
 - `syntopik next` now says what to do in plain words, using concept titles, with one line on how to start it (a command, or what to ask your AI assistant). Before, it printed internal move names, ids and details such as "causal_probe" or "cuts 0.50 bits". The `--json` output is unchanged.
