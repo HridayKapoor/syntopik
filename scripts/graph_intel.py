@@ -30,6 +30,7 @@ import hashlib
 import heapq
 import json
 import math
+import os
 import re
 import sys
 import unicodedata
@@ -1139,6 +1140,55 @@ def _char_trigrams(terms: set[str]) -> set[str]:
 
 _CONFUSABLE_CACHE: dict[str, list[tuple[Any, ...]]] = {}
 _CONFUSABLE_CACHE_MAX = 8
+# Bump when the pair scoring in `find_confusables` changes, so on-disk results are recomputed.
+_CONFUSABLE_ALGO_VERSION = 1
+_CONFUSABLE_DISK_FILE = Path(".cache") / "confusables.json"
+
+
+def _confusable_rows_to_json(rows: list[tuple[Any, ...]]) -> list[list[Any]]:
+    return [[*r[:4], sorted(r[4]), sorted(r[5]), *r[6:]] for r in rows]
+
+
+def _confusable_rows_from_json(rows: Any) -> list[tuple[Any, ...]] | None:
+    try:
+        return [(r[0], r[1], r[2], r[3], set(r[4]), set(r[5]), r[6], r[7], r[8], bool(r[9])) for r in rows]
+    except (TypeError, IndexError, KeyError):
+        return None
+
+
+def _read_confusable_disk_cache(kg_dir: Path | None, key: str) -> list[tuple[Any, ...]] | None:
+    """Pair-scan results survive between CLI runs; reviews do not change the key, edits do."""
+    if kg_dir is None:
+        return None
+    try:
+        data = json.loads((kg_dir / _CONFUSABLE_DISK_FILE).read_text(encoding="utf-8"))
+        entry = data.get("entries", {}).get(key) if isinstance(data, dict) else None
+    except (OSError, ValueError):
+        return None
+    return _confusable_rows_from_json(entry) if isinstance(entry, list) else None
+
+
+def _write_confusable_disk_cache(kg_dir: Path | None, key: str, rows: list[tuple[Any, ...]]) -> None:
+    if kg_dir is None or not kg_dir.is_dir():
+        return
+    path = kg_dir / _CONFUSABLE_DISK_FILE
+    try:
+        try:
+            data = json.loads(path.read_text(encoding="utf-8"))
+            entries = data.get("entries", {}) if isinstance(data, dict) else {}
+        except (OSError, ValueError):
+            entries = {}
+        entries.pop(key, None)
+        entries[key] = _confusable_rows_to_json(rows)
+        while len(entries) > _CONFUSABLE_CACHE_MAX:
+            entries.pop(next(iter(entries)))
+        path.parent.mkdir(parents=True, exist_ok=True)
+        tmp = path.with_name(f"{path.name}.{os.getpid()}.tmp")
+        tmp.write_text(json.dumps({"entries": entries}), encoding="utf-8")
+        os.replace(tmp, path)
+    except OSError:
+        # Read-only vaults (plugin caches, CI checkouts) just skip the disk cache.
+        return
 
 
 def find_confusables(
@@ -1350,7 +1400,7 @@ def find_confusables(
     # everything a score depends on (terms, themes, chapter, premises, confusions, contrasts);
     # titles and statuses are only displayed and are re-read from the current graph below.
     fp = hashlib.blake2b(digest_size=16)
-    fp.update(repr((top_n, float(min_similarity))).encode("utf-8"))
+    fp.update(repr((_CONFUSABLE_ALGO_VERSION, top_n, float(min_similarity))).encode("utf-8"))
     for info in sorted(nodes_info, key=lambda x: str(x["id"])):
         fp.update(
             repr(
@@ -1368,7 +1418,10 @@ def find_confusables(
     cache_key = fp.hexdigest()
     cached = _CONFUSABLE_CACHE.get(cache_key)
     if cached is None:
-        cached = _best_pairs()
+        cached = _read_confusable_disk_cache(resolved_kg, cache_key)
+        if cached is None:
+            cached = _best_pairs()
+            _write_confusable_disk_cache(resolved_kg, cache_key, cached)
         if len(_CONFUSABLE_CACHE) >= _CONFUSABLE_CACHE_MAX:
             _CONFUSABLE_CACHE.pop(next(iter(_CONFUSABLE_CACHE)))
         _CONFUSABLE_CACHE[cache_key] = cached

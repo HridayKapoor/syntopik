@@ -63,6 +63,7 @@ EXCLUDED_DIR_NAMES: frozenset[str] = frozenset(
         ".venv",
         "node_modules",
         ".git",
+        ".cache",
         "__pycache__",
         "_extracted",
         "partial_movie_files",
