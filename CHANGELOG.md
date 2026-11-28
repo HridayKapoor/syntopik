@@ -20,6 +20,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - **"In plain words" README intro** for new, non-technical learners.
 
 ### Changed
+- Bottleneck ranking (daily plan, 5-minute review, `graph_intel`) is much faster on large graphs without NetworkX. The stdlib betweenness only tracks nodes reachable from each source and skips sources with no outgoing edges. On a 3,000-concept vault that took it from 2.1 s to 5 ms, with bit-identical results.
 - Studio `/api/state` is about 6x faster on large notebooks (about 5 s to 0.8 s on a 3,000-concept vault): it now builds only the re-entry brief it uses (`daily_plan.build_reentry_only`) instead of the whole daily plan with its graph scans.
 - `syntopik next` shows its suggested command without the machine-only `--json` flag (JSON output is unchanged), and `syntopik review` ends its due list with how to start reviewing.
 - Terminal review (`syntopik review --tui`): a mistyped rating now asks again instead of silently skipping the card, each rating shows when the card comes back, and the session ends with a short tally and how many cards are still due.

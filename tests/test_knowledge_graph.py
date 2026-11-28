@@ -171,6 +171,52 @@ class TestKgHyperedgesAndMultiCue(unittest.TestCase):
             self.assertEqual(hyper[0]["conclusion"], "phy-work-energy")
 
 
+class TestStdlibBetweenness(unittest.TestCase):
+    def test_sparse_brandes_matches_brute_force_shortest_paths(self) -> None:
+        """The stdlib betweenness must equal the textbook definition (count of shortest paths)."""
+        from collections import deque
+        from itertools import permutations
+
+        gi = load_script_module("graph_intel.py")
+        G = gi.StdlibDiGraph()
+        for n in "abcdefgh":
+            G.add_node(n)
+        for u, v in [("a", "b"), ("a", "c"), ("b", "d"), ("c", "d"), ("d", "e"), ("e", "f"), ("b", "e"), ("g", "a")]:
+            G.add_edge(u, v)
+        # "h" is isolated on purpose.
+
+        def all_shortest(s: str, t: str) -> list[list[str]]:
+            paths: list[list[str]] = []
+            q = deque([[s]])
+            best = None
+            while q:
+                path = q.popleft()
+                if best is not None and len(path) > best:
+                    break
+                if path[-1] == t:
+                    best = len(path)
+                    paths.append(path)
+                    continue
+                for w in G.successors(path[-1]):
+                    if w not in path:
+                        q.append([*path, w])
+            return paths
+
+        nodes = list(G.nodes())
+        expected = dict.fromkeys(nodes, 0.0)
+        for s, t in permutations(nodes, 2):
+            paths = all_shortest(s, t)
+            for v in nodes:
+                if v not in (s, t) and paths:
+                    expected[v] += sum(1 for p in paths if v in p) / len(paths)
+        n = len(nodes)
+        got = gi._graph_betweenness(G)
+        for v in nodes:
+            self.assertAlmostEqual(got[v], expected[v] / ((n - 1) * (n - 2)), places=12, msg=v)
+        self.assertGreater(got["d"], 0.0)
+        self.assertEqual(got["h"], 0.0)
+
+
 class TestP2CrossChapterIntel(unittest.TestCase):
     """14. P2.1–P2.4: graph_intel, Visual Anki media, audio_brief & daily_plan."""
 

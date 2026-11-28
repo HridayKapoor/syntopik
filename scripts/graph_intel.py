@@ -438,31 +438,40 @@ def _graph_betweenness(G: Any) -> dict[Any, float]:
     if nx is not None and isinstance(G, nx.DiGraph):
         return dict(nx.betweenness_centrality(G, normalized=True))
     # Pure-stdlib Brandes algorithm for unweighted directed graphs.
+    # Per-source state is kept only for nodes reachable from `s` (sparse dicts), so a
+    # source costs O(reachable) instead of O(n); sources with no successors add nothing.
     cb: dict[Any, float] = {v: 0.0 for v in G.nodes()}
     for s in G.nodes():
+        if not any(True for _ in G.successors(s)):
+            continue
         S: list[Any] = []
-        P: dict[Any, list[Any]] = {w: [] for w in G.nodes()}
-        sigma: dict[Any, float] = {w: 0.0 for w in G.nodes()}
-        sigma[s] = 1.0
-        dist: dict[Any, int] = {w: -1 for w in G.nodes()}
-        dist[s] = 0
+        P: dict[Any, list[Any]] = {s: []}
+        sigma: dict[Any, float] = {s: 1.0}
+        dist: dict[Any, int] = {s: 0}
         Q: deque[Any] = deque([s])
         while Q:
             v = Q.popleft()
             S.append(v)
+            dv = dist[v]
+            sv = sigma[v]
             for w in G.successors(v):
-                if dist[w] < 0:
+                dw = dist.get(w)
+                if dw is None:
                     Q.append(w)
-                    dist[w] = dist[v] + 1
-                if dist[w] == dist[v] + 1:
-                    sigma[w] += sigma[v]
+                    dist[w] = dw = dv + 1
+                    sigma[w] = 0.0
+                    P[w] = []
+                if dw == dv + 1:
+                    sigma[w] += sv
                     P[w].append(v)
-        delta: dict[Any, float] = {w: 0.0 for w in G.nodes()}
+        delta: dict[Any, float] = dict.fromkeys(S, 0.0)
         while S:
             w = S.pop()
-            for v in P[w]:
-                if sigma[w] > 0:
-                    delta[v] += (sigma[v] / sigma[w]) * (1.0 + delta[w])
+            sw = sigma[w]
+            if sw > 0:
+                dw1 = 1.0 + delta[w]
+                for v in P[w]:
+                    delta[v] += (sigma[v] / sw) * dw1
             if w != s:
                 cb[w] += delta[w]
     scale = 1.0 / ((n - 1) * (n - 2))
