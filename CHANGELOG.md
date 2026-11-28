@@ -24,6 +24,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - **"In plain words" README intro** for new, non-technical learners.
 
 ### Changed
+- `syntopik sunset` (wrap up a finished chapter) now lists by name which ideas stay in light review and which are paused, says when a chapter is already wrapped up, and has a new `--undo` that brings paused ideas back into reviews.
 - `syntopik profile` now starts with "How Syntopik teaches you right now" in plain words: the lesson style, how long explanations are, study habits it asks for, session length, your level per subject, how well your confidence matches your results, and how to change any of it. The short technical summary that AI assistants read is still shown below it, and `--json` is unchanged.
 - `syntopik next` now says what to do in plain words, using concept titles, with one line on how to start it (a command, or what to ask your AI assistant). Before, it printed internal move names, ids and details such as "causal_probe" or "cuts 0.50 bits". The `--json` output is unchanged.
 - `syntopik readiness` lists its top three next steps in plain words, each with roughly how long it takes and how to start it (a command, or what to ask your AI assistant). Before, it printed internal labels such as "Clear 6 due Blunder Fork(s)" or "Verify bottleneck 'phys-shm-linearization' to T3 transfer". The `--json` output is unchanged.
