@@ -768,6 +768,7 @@ def _run_review_tui(ws: Path, kg_dir: Path, payload: dict[str, Any], *, energy: 
         "easy": "easy",
     }
 
+    tally: dict[str, int] = {}
     for idx, item in enumerate(items, 1):
         pid = str(item.get("id") or "")
         prop = props_by_id.get(pid) or {}
@@ -792,20 +793,29 @@ def _run_review_tui(ws: Path, kg_dir: Path, payload: dict[str, Any], *, energy: 
         if notes_text:
             print(f"  Notes : {notes_text}")
 
-        try:
-            raw_rate = input("  Rate [1=again, 2=hard, 3=good, 4=easy, s=skip, q=quit] (+ optional confidence %): ").strip()
-        except (EOFError, KeyboardInterrupt):
-            print("")
+        rating: str | None = None
+        parts: list[str] = []
+        stop = False
+        for _attempt in range(3):
+            try:
+                raw_rate = input("  Rate [1=again, 2=hard, 3=good, 4=easy, s=skip, q=quit] (+ optional confidence %): ").strip()
+            except (EOFError, KeyboardInterrupt):
+                print("")
+                stop = True
+                break
+            if not raw_rate or raw_rate.lower() in ("s", "skip"):
+                break
+            if raw_rate.lower() in ("q", "quit"):
+                stop = True
+                break
+            parts = raw_rate.split()
+            rating = rating_map.get(parts[0].lower())
+            if rating:
+                break
+            print(f"  {parts[0]!r} is not a rating. Type 1, 2, 3 or 4 (or s to skip).")
+        if stop:
             break
-        if not raw_rate or raw_rate.lower() in ("s", "skip"):
-            continue
-        if raw_rate.lower() in ("q", "quit"):
-            break
-
-        parts = raw_rate.split()
-        rating = rating_map.get(parts[0].lower())
         if not rating:
-            print(f"  Unrecognized rating {parts[0]!r}; skipped.")
             continue
         conf: float | None = None
         if len(parts) >= 2:
@@ -814,7 +824,7 @@ def _run_review_tui(ws: Path, kg_dir: Path, payload: dict[str, Any], *, energy: 
             except ValueError:
                 conf = None
 
-        srs_mod.record_review(
+        rec = srs_mod.record_review(
             kg_dir,
             pid,
             rating,
@@ -823,11 +833,22 @@ def _run_review_tui(ws: Path, kg_dir: Path, payload: dict[str, Any], *, energy: 
             no_sync=True,
         )
         reviewed += 1
-        print(f"  Recorded '{rating}' for {pid}.")
+        tally[rating] = tally.get(rating, 0) + 1
+        days = (rec or {}).get("intervalDays") if isinstance(rec, dict) else None
+        when = ""
+        if isinstance(days, int) and days > 0:
+            when = " Next review tomorrow." if days == 1 else f" Next review in {days} days."
+        print(f"  Recorded '{rating}' for {pid}.{when}")
 
     if reviewed > 0:
         sync_hub(workspace=ws, quiet=True)
     print(f"Review TUI complete: {reviewed}/{len(items)} card(s) recorded.")
+    if tally:
+        order = ("again", "hard", "good", "easy")
+        print("  " + " · ".join(f"{tally[k]} {k}" for k in order if tally.get(k)))
+    left = len(items) - reviewed
+    if left > 0:
+        print(f"  {left} card(s) still due. Run `syntopik review --tui` again whenever you have a few minutes.")
     return 0
 
 
