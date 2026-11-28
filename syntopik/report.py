@@ -18,6 +18,7 @@ from datetime import date, datetime, time, timedelta, timezone
 from pathlib import Path
 from typing import Any
 
+from syntopik.fsrs_core import apply_sibling_burying
 from syntopik.storage import load_jsonl
 
 __all__ = ["build_progress_report", "render_report_lines", "render_report_markdown"]
@@ -137,15 +138,21 @@ def build_progress_report(
     status_counts = Counter(str(p.get("status") or "planned").lower() for p in live)
     today_s = today.isoformat()
     week_s = (today + timedelta(days=7)).isoformat()
-    due_now = 0
+    due_list: list[dict[str, Any]] = []
     due_week = 0
     for p in live:
         st = str(p.get("status") or "planned").lower()
         nr = p.get("nextReview")
         if st in ("misconception", "shaky") or (isinstance(nr, str) and nr[:10] <= today_s):
-            due_now += 1
+            due_list.append({"id": str(p["id"])})
         elif isinstance(nr, str) and nr[:10] <= week_s:
             due_week += 1
+    # Same rule as `syntopik review`: a card reviewed in the last 24 hours rests until tomorrow,
+    # so the report never says something is due that the review queue will not show.
+    past_rows = [r for r in revlog if (_row_ts(r) or now_dt) <= now_dt]
+    due_kept, due_rested = apply_sibling_burying(due_list, past_rows, now=now_dt)
+    due_now = len(due_kept)
+    due_week += len(due_rested)
 
     chapters: dict[str, Counter[str]] = defaultdict(Counter)
     for p in live:
