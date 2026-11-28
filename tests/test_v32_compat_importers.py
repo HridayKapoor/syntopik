@@ -2060,7 +2060,9 @@ class TestV32UniversalCompatImportersAndExamReadiness(unittest.TestCase):
                 )
             self.assertEqual(rc_rd, 0)
             rd_txt = buf_rd.getvalue()
-            self.assertIn("Lever #1", rd_txt)
+            self.assertIn("Best next steps", rd_txt)
+            self.assertIn("    1. ", rd_txt)
+            self.assertNotIn("Blunder Fork", rd_txt)
             self.assertNotIn("{'kind':", rd_txt, f"_cmd_readiness dumped raw dict repr: {rd_txt}")
 
             buf_ilv = io.StringIO()

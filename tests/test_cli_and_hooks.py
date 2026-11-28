@@ -434,6 +434,21 @@ class TestSyntaxAndCLI(unittest.TestCase):
             )
             self.assertIn("Nothing was recorded.", quit_early.stdout)
 
+    def test_readiness_steps_are_plain_words_with_a_way_to_start(self) -> None:
+        from syntopik import cli
+
+        levers = [
+            {"kind": "clear_forks", "title": "Clear 6 due Blunder Fork(s)", "effortMinutes": 15},
+            {"kind": "upgrade_evidence", "title": "Verify bottleneck 'p-q' to T3 transfer", "effortMinutes": 18},
+            {"kind": "interleave_drill", "title": "Run blind-chapter interleave across 3 chapters", "effortMinutes": 18},
+        ]
+        text = "\n".join(cli._readiness_lever_lines(levers, {"p-q": "Quorum overlap"}))
+        self.assertIn("1. Retry 6 past mistake(s) that are due again (~15 min)", text)
+        self.assertIn("2. Show you can use Quorum overlap on a new problem (~18 min)", text)
+        self.assertIn("`syntopik interleave --tui`", text)
+        for jargon in ("Blunder Fork", "T3", "p-q", "bottleneck"):
+            self.assertNotIn(jargon, text)
+
     def test_review_with_nothing_due_says_what_comes_next(self) -> None:
         import tempfile
 
