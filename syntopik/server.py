@@ -524,6 +524,13 @@ def _compute_triage_recommended(kg_dir: Path, hub: dict[str, Any]) -> bool:
                     exam_dates.append(date.fromisoformat(raw.strip()[:10]))
                 except ValueError:
                     pass
+        for ex in cfg.get("exams") or []:
+            raw = ex.get("examDate") or ex.get("date") if isinstance(ex, dict) else None
+            if isinstance(raw, str) and len(raw.strip()) >= 10:
+                try:
+                    exam_dates.append(date.fromisoformat(raw.strip()[:10]))
+                except ValueError:
+                    pass
     active = hub.get("activeChapterTracker")
     if isinstance(active, dict):
         for key in ("examDate", "targetDate"):
