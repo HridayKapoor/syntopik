@@ -843,7 +843,16 @@ def _run_review_tui(
     }
 
     tally: dict[str, int] = {}
-    for idx, item in enumerate(items, 1):
+    # Cards rated "again" come back once at the end of the session, like Anki's learning steps:
+    # a second retrieval a few minutes later is what makes a missed card stick.
+    queue = list(items)
+    retried = 0
+    pos = 0
+    while pos < len(queue):
+        item = queue[pos]
+        pos += 1
+        is_retry = bool(item.get("_retry"))
+        idx = pos
         pid = str(item.get("id") or "")
         prop = props_by_id.get(pid) or {}
         cues = [c for c in (prop.get("cues") or []) if isinstance(c, dict) and (c.get("q") or c.get("a"))]
@@ -853,7 +862,10 @@ def _run_review_tui(
         notes_text = str(item.get("notes") or prop.get("notes") or "")
 
         print("")
-        print(f"[{idx}/{len(items)}] {pid} ({item.get('chapter') or 'General'} · {item.get('status') or 'due'})")
+        if is_retry:
+            print(f"[second look] {pid} (missed earlier this session)")
+        else:
+            print(f"[{idx}/{len(items)}] {pid} ({item.get('chapter') or 'General'} · {item.get('status') or 'due'})")
         print(f"  Prompt: {prompt_text}")
         shown_at = time.monotonic()
         try:
@@ -913,16 +925,25 @@ def _run_review_tui(
             no_sync=True,
         )
         reviewed += 1
-        tally[rating] = tally.get(rating, 0) + 1
+        if not is_retry:
+            tally[rating] = tally.get(rating, 0) + 1
         days = (rec or {}).get("intervalDays") if isinstance(rec, dict) else None
         when = ""
         if isinstance(days, int) and days > 0:
             when = " Next review tomorrow." if days == 1 else f" Next review in {days} days."
         print(f"  Recorded '{rating}' for {pid}.{when}")
+        if is_retry:
+            retried += 1
+            reviewed -= 1  # the summary counts distinct cards
+        elif rating == "again":
+            queue.append({**item, "_retry": True})
+            print("  It comes back once more at the end of this session.")
 
     if reviewed > 0:
         sync_hub(workspace=ws, quiet=True)
     print(f"Review TUI complete: {reviewed}/{len(items)} card(s) recorded.")
+    if retried:
+        print(f"  {retried} missed card(s) got a second look.")
     if tally:
         order = ("again", "hard", "good", "easy")
         print("  " + " · ".join(f"{tally[k]} {k}" for k in order if tally.get(k)))
