@@ -14,6 +14,7 @@ animations/_cache/
 animations/media/
 
 # Learner Personal State & Generated Study Artifacts (Never Commit to GitHub)
+knowledge-graph/.cache/
 knowledge-graph/propositions.jsonl
 knowledge-graph/chains.jsonl
 knowledge-graph/mistakes.jsonl

@@ -183,6 +183,18 @@ class TestConfusablePairs(unittest.TestCase):
         self.assertEqual(again[0]["nodeA"]["status"], "misconception")
         self.assertEqual([p["confusableScore"] for p in again], [p["confusableScore"] for p in first])
 
+    def test_disk_cache_survives_restarts_and_bad_files(self) -> None:
+        gi = _graph_intel()
+        first = gi.find_confusables(gi._ensure_graph(self.kg), kg_dir=self.kg, top=6)
+        cache_file = self.kg / ".cache" / "confusables.json"
+        self.assertTrue(cache_file.is_file())
+        gi._CONFUSABLE_CACHE.clear()  # a new process starts with an empty in-memory cache
+        self.assertEqual(gi.find_confusables(gi._ensure_graph(self.kg), kg_dir=self.kg, top=6), first)
+        cache_file.write_text("{not json", encoding="utf-8")
+        gi._CONFUSABLE_CACHE.clear()
+        self.assertEqual(gi.find_confusables(gi._ensure_graph(self.kg), kg_dir=self.kg, top=6), first)
+        self.assertIn("entries", json.loads(cache_file.read_text(encoding="utf-8")))
+
 
 def _graph_intel():
     scripts = str(ROOT / "scripts")
