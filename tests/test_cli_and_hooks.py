@@ -467,6 +467,27 @@ class TestSyntaxAndCLI(unittest.TestCase):
         odd = "\n".join(cli._next_move_lines({"recommendedMode": "new_mode", "rationale": "r", "exactCmd": "syntopik x --json"}, {}))
         self.assertIn("Start: syntopik x", odd)
 
+    def test_profile_status_explains_the_teaching_setup_in_plain_words(self) -> None:
+        from syntopik import cli
+
+        profile = {
+            "calibration": {"completed": True, "sessionTargetMinutes": 25},
+            "domains": {"Physics": {"expertiseBand": "developing", "n": 3}, "Chemistry": {"expertiseBand": "novice", "n": 0}},
+            "metacognition": {"windowCount": 5, "label": "overconfident"},
+        }
+        policy = {"scaffoldingMode": "faded", "maxProseWords": 120, "requirePredictionFirst": True, "allowProductiveFailure": False}
+        text = "\n".join(cli._profile_plain_lines(profile, policy))
+        self.assertIn("worked examples with some steps left for you to fill in", text)
+        self.assertIn("about 120 words at a time", text)
+        self.assertIn("you guess the answer before it is shown", text)
+        self.assertNotIn("try a problem before it is taught", text)
+        self.assertIn("about 25 minutes", text)
+        self.assertIn("Level        : Physics: developing.", text)  # subjects with no activity are left out
+        self.assertIn("feel surer than your answers turn out to be", text)
+        self.assertNotIn("Not tuned to you yet", text)
+        fresh = "\n".join(cli._profile_plain_lines({"calibration": {"completed": False}}, {}))
+        self.assertIn("`syntopik profile calibrate`", fresh)
+
     def test_review_with_nothing_due_says_what_comes_next(self) -> None:
         import tempfile
 
