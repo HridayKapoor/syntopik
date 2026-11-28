@@ -2885,6 +2885,32 @@ SHIM_JS = r"""
       }
       return { ok: true, slug: body.slug, topicId: body.topicId, status: body.status };
     }
+    if (p === "/api/exams") {
+      state = loadState();
+      const today = new Date().toISOString().slice(0, 10);
+      const dayMs = 86400000;
+      let list = Array.isArray(state.exams) ? state.exams : [];
+      if (method === "POST") {
+        const name = String((body && body.name) || "").trim().slice(0, 80);
+        const key = name.toLowerCase();
+        if (body && body.action === "remove") {
+          if (!list.some((e) => e.name.toLowerCase() === key)) return { ok: false, error: `No exam named '${name}'.` };
+          list = list.filter((e) => e.name.toLowerCase() !== key);
+        } else {
+          const d = String((body && body.examDate) || "").slice(0, 10);
+          if (!name) return { ok: false, error: "Give the exam a name." };
+          if (!/^\d{4}-\d{2}-\d{2}$/.test(d)) return { ok: false, error: "Give the exam date as YYYY-MM-DD." };
+          if (d <= today) return { ok: false, error: `${d} is not in the future, so there is nothing to pace toward.` };
+          list = list.filter((e) => e.name.toLowerCase() !== key).concat([{ name, examDate: d }]);
+        }
+        state.exams = list;
+        saveState(state);
+      }
+      const exams = list
+        .map((e) => ({ ...e, daysAway: Math.round((Date.parse(e.examDate) - Date.parse(today)) / dayMs) }))
+        .sort((a, b) => a.examDate.localeCompare(b.examDate));
+      return { ok: true, exams };
+    }
     if (p === "/api/tracker/milestone") {
       state = loadState();
       const tr = (state.hub.chapterTrackers || []).find((t) => t.slug === body.slug);

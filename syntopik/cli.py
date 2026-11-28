@@ -18,7 +18,6 @@ import os
 import re
 import subprocess
 import sys
-from datetime import date as date_cls
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -1679,78 +1678,37 @@ def _cmd_sunset(args: argparse.Namespace) -> int:
     return 0
 
 
-def _study_config_path(kg_dir: Path) -> Path:
-    """Same lookup order the pacer and readiness use: study-config.json, then exam-config.json."""
-    for fname in ("study-config.json", "exam-config.json"):
-        if (kg_dir / fname).is_file():
-            return kg_dir / fname
-    return kg_dir / "study-config.json"
-
-
 def _edit_exams(args: argparse.Namespace, kg_dir: Path) -> tuple[int, list[str]] | None:
     """Handle `pace --add-exam/--remove-exam/--minutes`. Returns None when no edit was asked for."""
-    add_name = (getattr(args, "add_exam", None) or "").strip()
+    ex_mod = _lazy_import("syntopik.exams")
+    add_raw = getattr(args, "add_exam", None)
     remove_name = (getattr(args, "remove_exam", None) or "").strip()
     minutes = getattr(args, "minutes", None)
-    if not add_name and not remove_name and minutes is None:
+    if add_raw is None and not remove_name and minutes is None:
         return None
-    if getattr(args, "add_exam", None) is not None and not add_name:
-        return 1, ["Give the exam a name, for example: syntopik pace --add-exam \"Biology final\" --date 2026-12-20"]
-    exam_date = None
-    if add_name:
-        raw_date = (getattr(args, "date", None) or "").strip()
-        try:
-            exam_date = date_cls.fromisoformat(raw_date[:10]) if raw_date else None
-        except ValueError:
-            exam_date = None
-        if exam_date is None:
-            return 1, [f"Add a date in YYYY-MM-DD form, for example: syntopik pace --add-exam \"{add_name}\" --date 2026-12-20"]
-        if exam_date <= date_cls.today():
-            return 1, [f"{exam_date.isoformat()} is not in the future, so there is nothing to pace toward."]
-    if minutes is not None and not 15 <= int(minutes) <= 720:
-        return 1, ["Daily study time must be between 15 and 720 minutes."]
-
-    cfg_path = _study_config_path(kg_dir)
-    cfg = load_json(cfg_path, default={})
-    if not isinstance(cfg, dict):
-        cfg = {}
-    exams = [ex for ex in (cfg.get("exams") or []) if isinstance(ex, dict)]
-    if not exams and cfg.get("examDate"):
-        # Carry a legacy single `examDate` over so adding a second exam doesn't silently drop it.
-        exams.append({"name": str(cfg.get("targetExam") or "Exam"), "examDate": str(cfg["examDate"])[:10]})
-        cfg.pop("examDate", None)
-
-    def _name_of(ex: dict[str, Any]) -> str:
-        return str(ex.get("name") or ex.get("title") or ex.get("subject") or "").strip()
-
+    add_name = (add_raw or "").strip()
+    if add_raw is not None and not add_name:
+        return 1, ['Give the exam a name, for example: syntopik pace --add-exam "Biology final" --date 2026-12-20']
     lines: list[str] = []
-    if remove_name:
-        kept = [ex for ex in exams if _name_of(ex).casefold() != remove_name.casefold()]
-        if len(kept) == len(exams):
-            known = ", ".join(_name_of(ex) for ex in exams if _name_of(ex)) or "none yet"
-            return 1, [f"No exam named '{remove_name}'. Exams set: {known}."]
-        exams = kept
-        lines.append(f"Removed exam '{remove_name}'.")
-    if add_name:
-        entry: dict[str, Any] = {"name": add_name, "examDate": exam_date.isoformat()}
-        chapter = (getattr(args, "chapter", None) or "").strip()
-        if chapter:
-            entry["chapterSlug"] = chapter
-        replaced = False
-        for i, ex in enumerate(exams):
-            if _name_of(ex).casefold() == add_name.casefold():
-                exams[i] = {**ex, **entry}
-                replaced = True
-        if not replaced:
-            exams.append(entry)
-        days = (exam_date - date_cls.today()).days
-        verb = "Updated" if replaced else "Added"
-        lines.append(f"{verb} exam '{add_name}' on {exam_date.isoformat()} ({days} day(s) away).")
-    if minutes is not None:
-        cfg["dailyMinutes"] = int(minutes)
-        lines.append(f"Daily study time set to {int(minutes)} minutes.")
-    cfg["exams"] = exams
-    save_json_atomic(cfg_path, cfg)
+    try:
+        if add_raw is not None:
+            if not (getattr(args, "date", None) or "").strip():
+                return 1, [f'Add a date in YYYY-MM-DD form, for example: syntopik pace --add-exam "{add_name}" --date 2026-12-20']
+            exam_date = ex_mod.parse_exam_date(args.date)
+        if minutes is not None and not 15 <= int(minutes) <= 720:
+            raise ValueError("Daily study time must be between 15 and 720 minutes.")
+        if remove_name:
+            ex_mod.remove_exam(kg_dir, remove_name)
+            lines.append(f"Removed exam '{remove_name}'.")
+        if add_raw is not None:
+            res = ex_mod.set_exam(kg_dir, add_name, exam_date, chapter=getattr(args, "chapter", None))
+            verb = "Updated" if res["replaced"] else "Added"
+            lines.append(f"{verb} exam '{res['name']}' on {res['examDate']} ({res['daysAway']} day(s) away).")
+        if minutes is not None:
+            ex_mod.set_daily_minutes(kg_dir, int(minutes))
+            lines.append(f"Daily study time set to {int(minutes)} minutes.")
+    except ValueError as exc:
+        return 1, [*lines, str(exc)]
     return 0, lines
 
 

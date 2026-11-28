@@ -3478,6 +3478,9 @@
   let zeroStatePreviewTelemetry = false;
   let readinessOverride = null;
   let readinessBusy = false;
+  let examsList = null;
+  let examsBusy = false;
+  const examDraft = { name: "", date: "" };
   let serverExtras = {
     forksDue: 0,
     arenasCount: 0,
@@ -8962,9 +8965,21 @@
           <p style="margin:0;font-size:12px;color:var(--muted);">Deterministic FSRS-6 exam-day retention projection, T1–T4 transfer depth, top ROI study levers, and non-fabricated personal Failure Shield.</p>
         </div>
         <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;">
-          <input type="date" id="readinessDateInput" value="${esc(String(rd?.examDate || "").slice(0, 10))}" aria-label="Target exam date" style="padding:4px 8px;font-size:12px;" />
+          <input type="date" id="readinessDateInput" value="${esc(examDraft.date || String(rd?.examDate || "").slice(0, 10))}" aria-label="Target exam date" style="padding:4px 8px;font-size:12px;" />
           <button type="button" id="readinessRefreshBtn" ${readinessBusy ? "disabled" : ""}>${readinessBusy ? "Projecting…" : "Forecast"}</button>
         </div>
+      </div>
+
+      <div class="exam-dates-row" style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin:-2px 0 12px;font-size:12px;">
+        <span style="color:var(--muted);">Your exams:</span>
+        ${(examsList || []).filter((ex) => ex.daysAway >= 0).map((ex) => `
+          <span class="pill accent" style="display:inline-flex;align-items:center;gap:4px;">
+            ${esc(ex.name)} · ${esc(ex.examDate)} (${ex.daysAway === 0 ? "today" : `${esc(String(ex.daysAway))}d`})
+            <button type="button" class="exam-remove-btn" data-exam-name="${esc(ex.name)}" aria-label="Remove exam ${esc(ex.name)}" style="padding:0 4px;min-height:0;line-height:1.2;font-size:12px;" ${examsBusy ? "disabled" : ""}>×</button>
+          </span>
+        `).join("") || `<span style="color:var(--muted);">${examsList === null && liveCaps.live ? "loading…" : "none set yet"}</span>`}
+        <input type="text" id="examNameInput" maxlength="80" placeholder="Exam name" value="${esc(examDraft.name)}" aria-label="Exam name" style="padding:4px 8px;font-size:12px;width:130px;" />
+        <button type="button" id="examSaveBtn" ${examsBusy ? "disabled" : ""}>Save the date above as an exam</button>
       </div>
 
       <div class="readiness-grid">
@@ -9049,6 +9064,60 @@
         </div>
       </div>
     `;
+
+    if (liveCaps.live && examsList === null && !examsBusy) {
+      examsBusy = true;
+      apiGet("/api/exams")
+        .then((res) => { examsList = Array.isArray(res.exams) ? res.exams : []; })
+        .catch(() => { examsList = []; })
+        .finally(() => { examsBusy = false; renderExamReadinessCard(examAttempts); });
+    }
+
+    // Keep what the learner typed when a live refresh re-renders this card.
+    document.getElementById("readinessDateInput")?.addEventListener("input", (ev) => { examDraft.date = String(ev.target.value || ""); });
+    document.getElementById("examNameInput")?.addEventListener("input", (ev) => { examDraft.name = String(ev.target.value || ""); });
+
+    async function updateExams(payload, okMsg) {
+      examsBusy = true;
+      renderExamReadinessCard(examAttempts);
+      try {
+        const res = await apiPost("/api/exams", payload);
+        examsList = Array.isArray(res.exams) ? res.exams : [];
+        readinessOverride = null;
+        if (payload.action === "set") examDraft.name = "";
+        showToast(okMsg);
+        if (typeof refreshLiveState === "function") refreshLiveState();
+      } catch (err) {
+        showToast(err?.message || "Could not update exams");
+      } finally {
+        examsBusy = false;
+        renderExamReadinessCard(examAttempts);
+      }
+    }
+
+    document.getElementById("examSaveBtn")?.addEventListener("click", () => {
+      const dateVal = String(document.getElementById("readinessDateInput")?.value || "").trim();
+      const nameVal = String(document.getElementById("examNameInput")?.value || "").trim() || "Exam";
+      if (!dateVal) {
+        showToast("Pick the exam date first");
+        document.getElementById("readinessDateInput")?.focus();
+        return;
+      }
+      if (!liveCaps.live) {
+        const cmd = `syntopik pace --add-exam "${nameVal.replace(/"/g, "")}" --date ${dateVal}`;
+        copyText(cmd, `Offline mode — copied "${cmd}" ✓`);
+        return;
+      }
+      updateExams({ action: "set", name: nameVal, examDate: dateVal }, `Saved ${nameVal} on ${dateVal} ✓`);
+    });
+
+    card.querySelectorAll(".exam-remove-btn").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        const nameVal = btn.getAttribute("data-exam-name") || "";
+        if (!liveCaps.live) return;
+        updateExams({ action: "remove", name: nameVal }, `Removed ${nameVal} ✓`);
+      });
+    });
 
     document.getElementById("readinessRefreshBtn")?.addEventListener("click", async () => {
       const dateVal = String(document.getElementById("readinessDateInput")?.value || "").trim();

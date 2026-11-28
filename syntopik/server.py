@@ -1870,6 +1870,7 @@ class SyntopikRequestHandler(BaseHTTPRequestHandler):
             "/api/readiness": lambda: self._handle_readiness_get(query),
             "/api/interleave": lambda: self._handle_interleave_get(),
             "/api/report": lambda: self._handle_report_get(query),
+            "/api/exams": lambda: self._handle_exams_get(),
         }
         get_handler = get_api_routes.get(path)
         if get_handler is not None:
@@ -1907,6 +1908,7 @@ class SyntopikRequestHandler(BaseHTTPRequestHandler):
             "/api/exam/submit": self._handle_exam_submit,
             "/api/tracker/topic": self._handle_tracker_topic,
             "/api/tracker/milestone": self._handle_tracker_milestone,
+            "/api/exams": self._handle_exams_post,
             "/api/import": self._handle_import,
             "/api/export/obsidian": self._handle_export_obsidian,
             "/api/export/pocket": self._handle_export_pocket,
@@ -2870,6 +2872,28 @@ class SyntopikRequestHandler(BaseHTTPRequestHandler):
             "status": status,
             "topic": topic,
         })
+
+    def _handle_exams_get(self) -> None:
+        from syntopik.exams import list_exams
+
+        self._send_json({"ok": True, "exams": list_exams(self.server.kg_dir)})
+
+    def _handle_exams_post(self) -> None:
+        from syntopik.exams import list_exams, remove_exam, set_exam
+
+        body = self._read_json_body()
+        if body is None:
+            return
+        action = str(body.get("action") or "set").strip().lower()
+        name = str(body.get("name") or "").strip()
+        if action == "set":
+            res = set_exam(self.server.kg_dir, name, str(body.get("examDate") or ""))
+        elif action == "remove":
+            res = remove_exam(self.server.kg_dir, name)
+        else:
+            raise ValueError("'action' must be 'set' or 'remove'.")
+        self.server.notify_change("exams")
+        self._send_json({"ok": True, "action": action, "result": res, "exams": list_exams(self.server.kg_dir)})
 
     def _handle_tracker_milestone(self) -> None:
         body = self._read_json_body()
