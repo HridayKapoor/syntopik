@@ -387,6 +387,23 @@ class TestUniversalAutopilot(unittest.TestCase):
 class TestLearnerPsychologyAndBrainstem(unittest.TestCase):
     """29. Syntopik v3.0 3-Cadence Learner Psychology, Causal Root-Cause, 4-Tier Evidence, Brainstem & Zero-PII Packs."""
 
+    def test_brainstem_buries_concepts_reviewed_in_last_day_like_review(self) -> None:
+        # `syntopik next` must not point at a shaky card that `syntopik review` is hiding.
+        from syntopik.brainstem import _compute_compressed_due
+
+        now = datetime(2026, 11, 28, 12, tzinfo=timezone.utc)
+        props = [
+            {"id": "a", "status": "shaky", "nextReview": "2026-11-29"},
+            {"id": "b", "status": "shaky", "nextReview": "2026-11-29"},
+        ]
+        revlog = [{"propId": "a", "ts": (now - timedelta(hours=1)).isoformat(), "rating": "again"}]
+        with tempfile.TemporaryDirectory() as tmp:
+            kept = _compute_compressed_due(props, [], Path(tmp), now, revlog)
+            both = _compute_compressed_due(props, [], Path(tmp), now)
+        ids = lambda comp: sorted(str(it.get("id")) for it in comp.get("selected") or [])  # noqa: E731
+        self.assertEqual(ids(kept), ["b"])
+        self.assertEqual(ids(both), ["a", "b"])
+
     def test_tier1_tier2_tier3_all_six_affects_expertise_reversal_and_overrides(self) -> None:
         import syntopik.learner_model as lm
 

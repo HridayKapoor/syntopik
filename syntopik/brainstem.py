@@ -23,7 +23,7 @@ from typing import Any
 
 from syntopik.evidence import compute_evidence_summary
 from syntopik.forks import list_due_forks
-from syntopik.fsrs_core import card_retrievability, compress_due_queue, load_fsrs_parameters
+from syntopik.fsrs_core import apply_sibling_burying, card_retrievability, compress_due_queue, load_fsrs_parameters
 from syntopik.ingest import detect_source_type, ingest_auto
 from syntopik.interleave import get_interleave_stats
 from syntopik.isomorphism import build_bijection_opener
@@ -237,6 +237,7 @@ def _compute_compressed_due(
     chains: list[dict[str, Any]],
     kg_dir: Path,
     now_dt: datetime,
+    revlog: list[dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
     today_str = now_dt.date().isoformat()
     params = load_fsrs_parameters(kg_dir)
@@ -274,6 +275,10 @@ def _compute_compressed_due(
             x["id"],
         )
     )
+    if revlog:
+        # Same rule as `syntopik review`: a concept reviewed in the last 24h is buried, so the
+        # brainstem never points at a card the review queue is hiding.
+        due_items, _buried = apply_sibling_burying(due_items, revlog, now=now_dt)
     return compress_due_queue(due_items, chains)
 
 
@@ -447,7 +452,7 @@ def plan_next_move(
 
     due_forks_resp = list_due_forks(workspace=ws, kg_dir=kg_dir, limit=5, today=now_dt.date().isoformat())
     due_forks = due_forks_resp.get("items") or due_forks_resp.get("forks") or []
-    comp_due = _compute_compressed_due(props, chains, kg_dir, now_dt)
+    comp_due = _compute_compressed_due(props, chains, kg_dir, now_dt, revlog)
     due_selected = comp_due.get("selected") or []
     loaded = {
         "propositions.jsonl": props,
