@@ -1053,6 +1053,24 @@ def _cap_blocks_for_fatigue(
     return out, capped_any
 
 
+def _nearest_listed_exam(cfg: dict[str, Any], today_date: date_cls) -> tuple[str, str] | None:
+    """Earliest not-yet-past `(date, name)` in `exams[]` (the format `syntopik pace --add-exam` writes)."""
+    best: date_cls | None = None
+    best_name = ""
+    for ex in cfg.get("exams") or []:
+        if not isinstance(ex, dict):
+            continue
+        raw = str(ex.get("examDate") or ex.get("date") or "").strip()
+        try:
+            d = date_cls.fromisoformat(raw[:10])
+        except ValueError:
+            continue
+        if d >= today_date and (best is None or d < best):
+            best = d
+            best_name = str(ex.get("name") or ex.get("title") or ex.get("subject") or "").strip()
+    return (best.isoformat(), best_name) if best else None
+
+
 def build_daily_plan(
     *,
     minutes: int | None = None,
@@ -1087,6 +1105,11 @@ def build_daily_plan(
     fatigue_capped_total = False
 
     exam_date_str = str(cfg.get("examDate") or "").strip() or None
+    listed_exam_name = ""
+    if not exam_date_str:
+        nearest = _nearest_listed_exam(cfg, today_date)
+        if nearest:
+            exam_date_str, listed_exam_name = nearest
     days_to_exam: int | None = None
     exam_phase = "standard"
     if exam_date_str:
@@ -1517,7 +1540,11 @@ def build_daily_plan(
     else:
         suggested_prompt = f"Run today's {total_minutes}-minute study plan."
 
-    target_label = _default_target_label(cfg, active_tracker)
+    target_label = (
+        listed_exam_name
+        if listed_exam_name and not str(cfg.get("targetExam") or cfg.get("targetGoal") or "").strip()
+        else _default_target_label(cfg, active_tracker)
+    )
 
     out: dict[str, Any] = {
         "brand": "Syntopik",

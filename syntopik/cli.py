@@ -2669,6 +2669,7 @@ Start here:
   syntopik serve --open      Open the study dashboard in your browser
 
 Getting ready for a test:
+  syntopik pace --add-exam NAME --date YYYY-MM-DD   Set an exam date and get a study pace
   syntopik readiness         How ready you are, and what to fix first
   syntopik triage --exam-in 48h   Short plan when the exam is close
 

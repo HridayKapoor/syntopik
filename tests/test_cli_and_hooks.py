@@ -256,6 +256,21 @@ class TestSyntaxAndCLI(unittest.TestCase):
             self.assertEqual(cfg["exams"], [{"name": "Biology final", "examDate": when}])
             rdy = _json.loads(run("readiness", "--json").stdout)
             self.assertEqual(rdy["examDate"], when)
+            plan = subprocess.run(
+                [sys.executable, "-B", str(ROOT / "scripts" / "daily_plan.py"), "--kg-dir", str(Path(tmp) / "knowledge-graph"), "--json"],
+                cwd=tmp, env=env, capture_output=True, text=True, encoding="utf-8", timeout=60, check=False,
+            )
+            self.assertEqual(plan.returncode, 0, plan.stderr)
+            exam = _json.loads(plan.stdout)["exam"]
+            self.assertEqual((exam["examDate"], exam["targetExam"], exam["daysToExam"]), (when, "Biology final", 20))
+            import syntopik.server as srv_mod
+
+            kg = Path(tmp) / "knowledge-graph"
+            self.assertFalse(srv_mod._compute_triage_recommended(kg, {}))
+            soon = (date.today() + timedelta(days=2)).isoformat()
+            self.assertEqual(run("pace", "--add-exam", "Quiz", "--date", soon).returncode, 0)
+            self.assertTrue(srv_mod._compute_triage_recommended(kg, {}))
+            self.assertEqual(run("pace", "--remove-exam", "Quiz").returncode, 0)
             missing = run("pace", "--remove-exam", "nope")
             self.assertEqual(missing.returncode, 1)
             self.assertIn("Exams set: Biology final", missing.stdout)
