@@ -2497,6 +2497,7 @@ SHIM_JS = r"""
 
   function stripBlindCues(txt, ch, sub) {
     let s = String(txt || "").trim();
+    const startsUpper = /^[A-Z]/.test(s);
     for (const lbl of [ch, sub, "SHM", "Raft"]) {
       const clean = String(lbl || "").trim();
       if (clean.length < 3) continue;
@@ -2504,8 +2505,9 @@ SHIM_JS = r"""
       s = s.replace(new RegExp("\\b(?:in|for|from|of)\\s+" + escRe + "\\b[,:\\s-]*", "gi"), "");
       s = s.replace(new RegExp("(?<![A-Za-z0-9])" + escRe + "(?![A-Za-z0-9])\\s*[:\\-]?", "gi"), "");
     }
-    s = s.replace(/\s{2,}/g, " ").replace(/^[,;:\-.\s]+/, "").trim();
-    return s ? s[0].toUpperCase() + s.slice(1) : "Identify the governing invariant and regime conditions for this problem.";
+    s = s.replace(/[ \t]{2,}/g, " ").replace(/^[,;:\-.\s]+/, "").trim();
+    if (s && startsUpper) s = s[0].toUpperCase() + s.slice(1);
+    return s ? s : "Identify the governing invariant and regime conditions for this problem.";
   }
 
   function handleInterleaveGet() {

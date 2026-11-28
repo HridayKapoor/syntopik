@@ -10718,7 +10718,7 @@
           </div>
         </div>
 
-        <div style="font-family:var(--font-prose);font-size:16px;line-height:1.55;">${esc(item.prompt || "")}</div>
+        <div style="font-family:var(--font-prose);font-size:16px;line-height:1.55;white-space:pre-wrap;">${esc(item.prompt || "")}</div>
 
         <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:12px;">
           ${renderChoices("killCue", "1. Decisive Kill-Cue", choices.killCue)}
