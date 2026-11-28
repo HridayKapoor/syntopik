@@ -17,6 +17,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - **"In plain words" README intro** for new, non-technical learners.
 
 ### Changed
+- Terminal review (`syntopik review --tui`): a mistyped rating now asks again instead of silently skipping the card, each rating shows when the card comes back, and the session ends with a short tally and how many cards are still due.
 - The GitHub Pages demo is now rebuilt from current sources at deploy time (with the static checks), on code changes and weekly, so the live demo can no longer drift behind the Studio or show stale dates.
 - CI now also runs the core suite on Python 3.13 and 3.14 (Ubuntu), and 3.14 is listed as supported. The full suite was verified locally on 3.14.
 - **Faster on large vaults**: on a 20,000-concept workspace, `syntopik next` went from 3.1 s to 1.0 s, `review` from 2.1 s to 0.8 s and `interleave` from 4.9 s to 1.2 s (lazy-greedy due-queue compression, shared ledger loading in the brainstem, cached phrase patterns).

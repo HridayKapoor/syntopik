@@ -225,6 +225,35 @@ class TestSyntaxAndCLI(unittest.TestCase):
             self.assertIn("Import failed", imp.stdout)
             self.assertNotIn("Traceback", imp.stderr)
 
+    def test_review_tui_reprompts_typos_and_summarises(self) -> None:
+        import json as _json
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as tmp:
+            env = {**os.environ, "SYNT_WORKSPACE": tmp, "PYTHONPATH": str(ROOT)}
+            kg = Path(tmp) / "knowledge-graph"
+            kg.mkdir()
+            (Path(tmp) / "chapters").mkdir()
+            with (kg / "propositions.jsonl").open("w", encoding="utf-8") as fh:
+                for i in range(3):
+                    fh.write(_json.dumps({
+                        "id": f"t{i}", "title": f"Idea {i}", "statement": f"Answer {i}",
+                        "chapter": "demo", "status": "shaky", "nextReview": "2020-01-01",
+                    }) + "\n")
+            proc = subprocess.run(
+                [sys.executable, "-B", "-m", "syntopik", "review", "--tui", "--limit", "3"],
+                cwd=tmp, env={**env, "PYTHONIOENCODING": "utf-8"}, input="\nzz\n3\n\n1\n\nq\n",
+                capture_output=True, text=True, encoding="utf-8", timeout=60, check=False,
+            )
+            self.assertEqual(proc.returncode, 0, proc.stderr)
+            out = proc.stdout
+            self.assertIn("'zz' is not a rating", out)
+            self.assertIn("Recorded 'good'", out)
+            self.assertIn("Next review", out)
+            self.assertIn("2/3 card(s) recorded", out)
+            self.assertIn("1 again · 1 good", out)
+            self.assertIn("1 card(s) still due", out)
+
     def test_all_cli_scripts_help_exit_zero(self) -> None:
         cli_scripts = [
             "pdf_studio.py",
