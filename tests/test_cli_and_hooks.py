@@ -417,6 +417,11 @@ class TestSyntaxAndCLI(unittest.TestCase):
             self.assertIn("0 due + 1 new", tui.stdout)
             self.assertIn("Recorded 'good'", tui.stdout)
             self.assertIn("2 concept(s) not started yet", run("review").stdout)
+            notes = Path(tmp) / "lecture.md"
+            notes.write_text("# Cells\n\nMitochondria make ATP.\n", encoding="utf-8")
+            dropped = run("drop", str(notes))
+            self.assertEqual(dropped.returncode, 0, dropped.stderr)
+            self.assertIn('say "Start"', dropped.stdout)
 
     def test_export_anki_text_needs_no_optional_packages(self) -> None:
         import tempfile

@@ -1669,8 +1669,12 @@ def _cmd_drop(args: argparse.Namespace) -> int:
     if card_rows and len(card_rows) == len(ingested):
         # Flashcard decks are ready to study as they are; a "what do you expect" probe does not fit.
         lines.append("  Next : `syntopik review --tui` to start learning them as flashcards.")
-    elif res.get("probeOneHint"):
-        lines.append(f"  Next : {res['probeOneHint']}")
+    else:
+        # Lecture notes, PDFs, videos and links are taught by the AI assistant from this spine.
+        lines.append("  Next : open your AI assistant in this folder and say \"Start\"; it teaches from this source first.")
+        lines.append("         Or browse it in the study dashboard: `syntopik serve --open`.")
+        if res.get("probeOneHint"):
+            lines.append(f"  Warm-up question: {res['probeOneHint']}")
     _emit(res, bool(args.json), lines)
     return 0
 
