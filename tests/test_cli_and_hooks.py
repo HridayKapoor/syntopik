@@ -278,6 +278,49 @@ class TestSyntaxAndCLI(unittest.TestCase):
             cfg = _json.loads((Path(tmp) / "knowledge-graph" / "study-config.json").read_text(encoding="utf-8"))
             self.assertEqual(cfg["exams"], [])
 
+    def test_studio_exams_api_sets_and_removes_dates(self) -> None:
+        import json as _json
+        import tempfile
+        import threading
+        from datetime import date, timedelta
+
+        import syntopik.server as srv_mod
+
+        with tempfile.TemporaryDirectory() as tmp:
+            ws = Path(tmp)
+            (ws / "knowledge-graph").mkdir()
+            srv = srv_mod.create_server(workspace=ws, host="127.0.0.1", port=0, lan=False)
+            threading.Thread(target=srv.serve_forever, kwargs={"poll_interval": 0.05}, daemon=True).start()
+
+            def req(method: str, path: str, body: dict | None = None, token: str = "") -> tuple[int, dict]:
+                conn = http.client.HTTPConnection("127.0.0.1", srv.bound_port, timeout=15.0)
+                try:
+                    hdrs = {"Content-Type": "application/json", "X-Syntopik-Token": token} if body is not None else {}
+                    conn.request(method, path, body=_json.dumps(body) if body is not None else None, headers=hdrs)
+                    resp = conn.getresponse()
+                    return resp.status, _json.loads(resp.read().decode("utf-8"))
+                finally:
+                    conn.close()
+
+            try:
+                token = req("GET", "/api/capabilities")[1]["token"]
+                self.assertEqual(req("GET", "/api/exams"), (200, {"ok": True, "exams": []}))
+                when = (date.today() + timedelta(days=9)).isoformat()
+                code, res = req("POST", "/api/exams", {"action": "set", "name": "  Chem   mock ", "examDate": when}, token)
+                self.assertEqual(code, 200, res)
+                self.assertEqual(res["exams"], [{"name": "Chem mock", "examDate": when, "daysAway": 9}])
+                for bad in ({"action": "set", "name": "X", "examDate": "2001-01-01"},
+                            {"action": "set", "name": "", "examDate": when},
+                            {"action": "remove", "name": "nope"},
+                            {"action": "explode"}):
+                    self.assertEqual(req("POST", "/api/exams", bad, token)[0], 400, bad)
+                self.assertEqual(req("POST", "/api/exams", {"action": "set", "name": "x", "examDate": when}, "wrong")[0], 403)
+                code, res = req("POST", "/api/exams", {"action": "remove", "name": "chem MOCK"}, token)
+                self.assertEqual((code, res["exams"]), (200, []))
+            finally:
+                srv.shutdown()
+                srv.server_close()
+
     def test_review_tui_reprompts_typos_and_summarises(self) -> None:
         import json as _json
         import tempfile
