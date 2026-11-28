@@ -379,6 +379,31 @@ def _has_chapters(kg_dir: Path) -> bool:
         return False
 
 
+def _nothing_due_lines(kg_dir: Path, today: str) -> list[str]:
+    """When the review queue is empty, say what is coming instead of stopping at a bare zero."""
+    try:
+        props = load_jsonl(kg_dir / "propositions.jsonl")
+    except (OSError, ValueError):
+        return []
+    unstarted = 0
+    upcoming: dict[str, int] = {}
+    for p in props:
+        if not isinstance(p, dict) or p.get("archived") is True:
+            continue
+        nxt = p.get("nextReview")
+        if isinstance(nxt, str) and nxt[:10] > today:
+            upcoming[nxt[:10]] = upcoming.get(nxt[:10], 0) + 1
+        elif not isinstance(nxt, str) or not nxt.strip():
+            unstarted += 1
+    out: list[str] = []
+    if upcoming:
+        first = min(upcoming)
+        out.append(f"  Next review: {first} ({upcoming[first]} item(s)).")
+    if unstarted:
+        out.append(f"  {unstarted} concept(s) not started yet. `syntopik next` picks where to begin.")
+    return out
+
+
 def _with_empty_hint(lines: list[str], kg_dir: Path) -> list[str]:
     if _vault_is_empty(kg_dir):
         hint = STARTED_VAULT_HINT if _has_chapters(kg_dir) else EMPTY_VAULT_HINT
@@ -937,9 +962,15 @@ def _cmd_review(args: argparse.Namespace) -> int:
         lines.append(f"  - {it.get('id')} [{it.get('status')}{retr}]: {it.get('title') or it.get('id')}")
     if not items:
         lines.append("  Nothing due right now.")
+        lines.extend(_nothing_due_lines(kg_dir, str(data.get("today") or "")[:10] or datetime.now(timezone.utc).date().isoformat()))
         lines = _with_empty_hint(lines, kg_dir)
     else:
+        due_total = int(data.get("dueCount") or len(items))
+        if due_total > len(items[:25]):
+            lines.append(f"  ... and {due_total - len(items[:25])} more.")
         lines.append("  Start with `syntopik review --tui`, or ask your AI assistant to quiz you on these.")
+        if due_total > 60:
+            lines.append("  Fell behind? `syntopik review --recover` spreads the backlog calmly over the next days.")
     for ln in lines:
         print(ln)
     return 0
