@@ -938,6 +938,8 @@ def _cmd_review(args: argparse.Namespace) -> int:
     if not items:
         lines.append("  Nothing due right now.")
         lines = _with_empty_hint(lines, kg_dir)
+    else:
+        lines.append("  Start with `syntopik review --tui`, or ask your AI assistant to quiz you on these.")
     for ln in lines:
         print(ln)
     return 0
@@ -1314,7 +1316,9 @@ def _cmd_next(args: argparse.Namespace) -> int:
         f"  Rationale: {res.get('rationale', '')}",
     ]
     if res.get("exactCmd"):
-        lines.append(f"  Command  : {res['exactCmd']}")
+        # exactCmd is machine-oriented (agents parse --json); show people the readable form.
+        human_cmd = re.sub(r"\s+--json\b", "", str(res["exactCmd"])).strip()
+        lines.append(f"  Command  : {human_cmd}")
     _emit(res, bool(args.json), lines)
     return 0
 

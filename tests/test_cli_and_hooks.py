@@ -253,6 +253,19 @@ class TestSyntaxAndCLI(unittest.TestCase):
             self.assertIn("2/3 card(s) recorded", out)
             self.assertIn("1 again · 1 good", out)
             self.assertIn("1 card(s) still due", out)
+            listing = subprocess.run(
+                [sys.executable, "-B", "-m", "syntopik", "review"],
+                cwd=tmp, env={**env, "PYTHONIOENCODING": "utf-8"},
+                capture_output=True, text=True, encoding="utf-8", timeout=60, check=False,
+            )
+            self.assertIn("syntopik review --tui", listing.stdout)
+            nxt = subprocess.run(
+                [sys.executable, "-B", "-m", "syntopik", "next"],
+                cwd=tmp, env={**env, "PYTHONIOENCODING": "utf-8"},
+                capture_output=True, text=True, encoding="utf-8", timeout=60, check=False,
+            )
+            self.assertEqual(nxt.returncode, 0, nxt.stderr)
+            self.assertNotIn("--json", nxt.stdout)
 
     def test_all_cli_scripts_help_exit_zero(self) -> None:
         cli_scripts = [
