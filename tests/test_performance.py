@@ -117,6 +117,10 @@ class TestRosettaKeywordMatching(unittest.TestCase):
         self.assertTrue(_keyword_matches("F = -kx", "hooke: f = -kx holds", "hooke: f = -kx holds"))
         self.assertTrue(_keyword_matches("f=-kx", "hooke: f = -kx", "hooke: f = -kx"))
         self.assertFalse(_keyword_matches("", "anything", "anything"))
+        # The substring pre-check must never reject a real match across separators.
+        self.assertTrue(_keyword_matches("spring-mass system", "a spring mass   system", "a spring mass   system"))
+        self.assertTrue(_keyword_matches("rc circuit", "an rc-circuit", "an rc-circuit"))
+        self.assertFalse(_keyword_matches("rc circuit", "a circuit", "a circuit"))
 
     def test_match_handles_empty_and_invalid_props(self) -> None:
         self.assertEqual(match_proposition_archetypes({}), [])
