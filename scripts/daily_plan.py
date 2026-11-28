@@ -1053,6 +1053,32 @@ def _cap_blocks_for_fatigue(
     return out, capped_any
 
 
+def build_reentry_only(
+    kg_dir: Path | str | None = None,
+    chapters_dir: Path | str | None = None,
+    *,
+    today: str | None = None,
+    resume: bool = False,
+) -> dict[str, Any] | None:
+    """Just the re-entry brief from `build_daily_plan`, without the graph analysis.
+
+    The Studio's `/api/state` only needs this part; the full plan's bottleneck,
+    combo and confusable scans take seconds on large vaults.
+    """
+    resolved_kg = resolve_kg_dir(kg_dir)
+    resolved_chapters = resolve_chapters_dir(chapters_dir)
+    today_date, now_dt = _parse_today(today)
+    return _build_reentry_brief(
+        _load_jsonl(resolved_kg / "propositions.jsonl"),
+        _load_jsonl(resolved_kg / "revlog.jsonl"),
+        _inspect_active_tracker(resolved_chapters),
+        today_date,
+        now_dt,
+        resolved_kg,
+        force_resume=bool(resume),
+    )
+
+
 def _nearest_listed_exam(cfg: dict[str, Any], today_date: date_cls) -> tuple[str, str] | None:
     """Earliest not-yet-past `(date, name)` in `exams[]` (the format `syntopik pace --add-exam` writes)."""
     best: date_cls | None = None
