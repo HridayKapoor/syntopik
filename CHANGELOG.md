@@ -7,6 +7,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 ## [Unreleased]
 
 ### Added
+- `syntopik export anki` now works without the optional genanki package: it writes a tab-separated file that Anki imports directly (File > Import), with cloze cards kept as cloze. Also available as `syntopik export anki-text` and `srs_engine.py export-anki-text`.
 - `syntopik profile calibrate` run in a terminal now asks its 4 short questions (Enter skips each). Run without a terminal and with no flags, it still saves defaults but says so.
 - Dashboard Exams tab: "Your exams" row on the readiness card to save the picked date as a named exam and remove exams, backed by new `GET/POST /api/exams` (also in the offline demo). Typed values now survive live refreshes of the card. The exam-date logic lives in the new `syntopik/exams.py`, shared with `syntopik pace`.
 - `syntopik pace --add-exam NAME --date YYYY-MM-DD`, `--remove-exam NAME` and `--minutes N` set exam dates and daily study time without hand-editing `study-config.json`; readiness and the taper pick the dates up too. With no exams set, `pace` now says how to add one instead of printing a week of empty days.

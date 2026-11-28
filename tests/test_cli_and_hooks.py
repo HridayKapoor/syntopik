@@ -373,6 +373,49 @@ class TestSyntaxAndCLI(unittest.TestCase):
             )
             self.assertNotIn("BrokenPipeError", piped.stderr)
 
+    def test_export_anki_text_needs_no_optional_packages(self) -> None:
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as tmp:
+            env = {**os.environ, "SYNT_WORKSPACE": tmp, "PYTHONPATH": str(ROOT), "PYTHONIOENCODING": "utf-8"}
+
+            def run(*args: str) -> subprocess.CompletedProcess[str]:
+                return subprocess.run(
+                    [sys.executable, "-B", "-m", "syntopik", *args],
+                    cwd=tmp, env=env, capture_output=True, text=True, encoding="utf-8",
+                    stdin=subprocess.DEVNULL, timeout=60, check=False,
+                )
+
+            self.assertEqual(run("init").returncode, 0)
+            props = [
+                {"id": "a1", "subject": "Bio", "chapter": "Cells", "title": "Mitochondria",
+                 "statement": "Mitochondria make ATP.",
+                 "cues": [{"id": "c1", "q": "What do mitochondria make?", "a": "ATP"}]},
+                {"id": "a2", "subject": "Bio", "chapter": "Cells", "title": "Nucleus",
+                 "statement": "The nucleus holds DNA.",
+                 "prompt": "The {{c1::nucleus}} holds DNA."},
+                {"id": "a3", "subject": "Bio", "chapter": "Cells", "title": "Old", "statement": "gone", "archived": True},
+            ]
+            kg = Path(tmp) / "knowledge-graph"
+            (kg / "propositions.jsonl").write_text(
+                "".join(json.dumps(p) + "\n" for p in props), encoding="utf-8"
+            )
+            res = run("export", "anki-text")
+            self.assertEqual(res.returncode, 0, res.stderr)
+            self.assertIn("Exported 2 Anki card(s)", res.stdout)
+            out = Path(tmp) / "exports" / "syntopik-anki.txt"
+            lines = out.read_text(encoding="utf-8").splitlines()
+            self.assertIn("#separator:tab", lines)
+            rows = [ln.split("\t") for ln in lines if not ln.startswith("#")]
+            self.assertEqual(len(rows), 2)
+            self.assertTrue(all(len(r) == 4 for r in rows))
+            self.assertEqual(sorted(r[0] for r in rows), ["Basic", "Cloze"])
+            self.assertTrue(all("syntopik" in r[3].split() for r in rows))
+            if not _module_available("genanki"):
+                fallback = run("export", "anki", "--out", str(Path(tmp) / "deck.apkg"))
+                self.assertEqual(fallback.returncode, 0, fallback.stderr)
+                self.assertTrue((Path(tmp) / "deck.txt").is_file())
+
     def test_review_tui_reprompts_typos_and_summarises(self) -> None:
         import json as _json
         import tempfile
