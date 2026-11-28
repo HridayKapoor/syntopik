@@ -400,7 +400,7 @@ def _nothing_due_lines(kg_dir: Path, today: str) -> list[str]:
         first = min(upcoming)
         out.append(f"  Next review: {first} ({upcoming[first]} item(s)).")
     if unstarted:
-        out.append(f"  {unstarted} concept(s) not started yet. `syntopik next` picks where to begin.")
+        out.append(f"  {unstarted} concept(s) not started yet. `syntopik review --tui` starts them as flashcards, or `syntopik next` picks a lesson.")
     return out
 
 
@@ -781,10 +781,35 @@ def _run_srs_json(ws: Path, pkg_root: Path, srs_args: list[str]) -> tuple[int, d
         return 0, {"raw": raw}, ""
 
 
-def _run_review_tui(ws: Path, kg_dir: Path, payload: dict[str, Any], *, energy: str | None = None) -> int:
+def _unstarted_items(kg_dir: Path, limit: int, exclude: set[str]) -> list[dict[str, Any]]:
+    """Concepts never reviewed yet (no `nextReview`), in the order they were added, like new cards in Anki."""
+    if limit <= 0:
+        return []
+    out: list[dict[str, Any]] = []
+    for p in load_jsonl(kg_dir / "propositions.jsonl"):
+        if not isinstance(p, dict) or p.get("archived") is True or p.get("suspended"):
+            continue
+        pid = str(p.get("id") or "").strip()
+        nxt = p.get("nextReview")
+        if not pid or pid in exclude or (isinstance(nxt, str) and nxt.strip()):
+            continue
+        if not (p.get("cues") or p.get("statement") or p.get("prompt")):
+            continue
+        out.append({"id": pid, "title": p.get("title"), "chapter": p.get("chapter"), "status": "new"})
+        if len(out) >= limit:
+            break
+    return out
+
+
+def _run_review_tui(
+    ws: Path, kg_dir: Path, payload: dict[str, Any], *, energy: str | None = None, new_limit: int = 0
+) -> int:
     items = list(payload.get("items") or [])
     if energy == "low":
         items = items[:3]
+        new_limit = min(new_limit, 3)
+    new_items = _unstarted_items(kg_dir, new_limit, {str(it.get("id")) for it in items})
+    items.extend(new_items)
     if not items:
         print(f"Syntopik Review TUI ({ws}): 0 items due.")
         return 0
@@ -796,7 +821,10 @@ def _run_review_tui(ws: Path, kg_dir: Path, payload: dict[str, Any], *, energy: 
     }
     srs_mod = _ensure_script_import("srs_engine", ws)
 
-    print(f"Syntopik Review TUI — {len(items)} due item(s) (Ctrl-C or 'q' to stop)")
+    head = f"{len(items) - len(new_items)} due"
+    if new_items:
+        head += f" + {len(new_items)} new"
+    print(f"Syntopik Review TUI — {head} (Ctrl-C or 'q' to stop)")
     reviewed = 0
     rating_map = {
         "1": "again",
@@ -893,7 +921,7 @@ def _run_review_tui(ws: Path, kg_dir: Path, payload: dict[str, Any], *, energy: 
         print("  " + " · ".join(f"{tally[k]} {k}" for k in order if tally.get(k)))
     left = len(items) - reviewed
     if left > 0:
-        print(f"  {left} card(s) still due. Run `syntopik review --tui` again whenever you have a few minutes.")
+        print(f"  {left} card(s) left for now. Run `syntopik review --tui` again whenever you have a few minutes.")
     return 0
 
 
@@ -966,7 +994,7 @@ def _cmd_review(args: argparse.Namespace) -> int:
         if args.json:
             print(json.dumps({"ok": True, "mode": "tui", "workspace": str(ws), **data}, indent=2, ensure_ascii=False))
             return 0
-        return _run_review_tui(ws, kg_dir, data, energy=args.energy)
+        return _run_review_tui(ws, kg_dir, data, energy=args.energy, new_limit=int(args.new))
 
     if args.json:
         print(json.dumps({"ok": True, "workspace": str(ws), **data}, indent=2, ensure_ascii=False))
@@ -1633,7 +1661,15 @@ def _cmd_drop(args: argparse.Namespace) -> int:
         f"  Slug : {res.get('slug') or args.slug or 'auto'}",
         *fail_lines,
     ]
-    if res.get("probeOneHint"):
+    card_rows = [r for r in ingested if isinstance(r, dict) and "importedCount" in r]
+    if card_rows:
+        new = sum(int(r.get("importedCount") or 0) for r in card_rows)
+        merged = sum(int(r.get("deduplicatedCount") or 0) for r in card_rows)
+        lines.append(f"  Items: {new} new" + (f", {merged} already there (merged)" if merged else ""))
+    if card_rows and len(card_rows) == len(ingested):
+        # Flashcard decks are ready to study as they are; a "what do you expect" probe does not fit.
+        lines.append("  Next : `syntopik review --tui` to start learning them as flashcards.")
+    elif res.get("probeOneHint"):
         lines.append(f"  Next : {res['probeOneHint']}")
     _emit(res, bool(args.json), lines)
     return 0
@@ -2575,6 +2611,12 @@ def build_parser() -> argparse.ArgumentParser:
     p_rev.add_argument("--energy", choices=["low", "normal", "deep"], default=None, help="Cognitive energy mode")
     p_rev.add_argument("--port", type=int, default=4173, help="Port when using --web")
     p_rev.add_argument("--limit", type=int, default=25, help="Max items")
+    p_rev.add_argument(
+        "--new",
+        type=_int_between(0, 200),
+        default=10,
+        help="With --tui: also introduce up to N never-reviewed concepts after the due ones (default: 10, 0 = off)",
+    )
     p_rev.add_argument("--compress", action="store_true", default=True, help="Apply FIRe SRC compression")
     p_rev.add_argument("--bury-siblings", action="store_true", default=True, help="Bury same-proposition sibling cues")
     p_rev.add_argument("--json", action="store_true", help="Emit JSON output")

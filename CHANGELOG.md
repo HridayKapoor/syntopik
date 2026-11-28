@@ -7,6 +7,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 ## [Unreleased]
 
 ### Added
+- `syntopik review --tui` now introduces up to 10 never-reviewed concepts after the due ones (`--new N`, 0 turns it off), like new cards in Anki. Imported flashcard decks were previously impossible to start from the terminal because nothing was "due" yet. `syntopik drop` of a flashcard file now says how many cards were added and points to `review --tui` instead of asking a lesson question.
 - `syntopik export anki` now works without the optional genanki package: it writes a tab-separated file that Anki imports directly (File > Import), with cloze cards kept as cloze. Also available as `syntopik export anki-text` and `srs_engine.py export-anki-text`.
 - `syntopik profile calibrate` run in a terminal now asks its 4 short questions (Enter skips each). Run without a terminal and with no flags, it still saves defaults but says so.
 - Dashboard Exams tab: "Your exams" row on the readiness card to save the picked date as a named exam and remove exams, backed by new `GET/POST /api/exams` (also in the offline demo). Typed values now survive live refreshes of the card. The exam-date logic lives in the new `syntopik/exams.py`, shared with `syntopik pace`.
