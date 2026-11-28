@@ -27,7 +27,7 @@ import unicodedata
 import urllib.request
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
 
 ROOT = Path(__file__).resolve().parent.parent
 if str(ROOT) not in sys.path:
@@ -526,26 +526,40 @@ def select_weighted_cue(cues: list[dict[str, Any]], seed: int | None = None) -> 
     return selected, weights
 
 
-def _format_why_lines(chains: list[dict[str, Any]], pid: str) -> list[str]:
-    lines: list[str] = []
-    seen_keys: set[str] = set()
+def _why_line(norm: dict[str, Any]) -> str:
+    rel = html.escape(norm["relation"])
+    why_html = md_math_to_anki_mathjax(norm["why"])
+    if norm["isJoint"]:
+        prem_html = " ∧ ".join(f"<code>{html.escape(pr)}</code>" for pr in norm["premises"])
+        suffix = f": {why_html}" if why_html else ""
+        return f"• {prem_html} (joint {rel}){suffix}"
+    prem_html = f"<code>{html.escape(norm['premises'][0])}</code>"
+    return f"• {prem_html} ({rel}): {why_html}"
+
+
+def _why_lines_lookup(chains: list[dict[str, Any]]) -> Callable[[str], list[str]]:
+    """Index `chains` by conclusion once, so exporting n concepts is O(n + chains), not O(n * chains)."""
+    by_conclusion: dict[str, list[dict[str, Any]]] = {}
     for raw in chains:
         norm = normalize_chain(raw)
-        if not norm or norm["conclusion"] != pid:
-            continue
-        if norm["chainKey"] in seen_keys:
-            continue
-        seen_keys.add(norm["chainKey"])
-        rel = html.escape(norm["relation"])
-        why_html = md_math_to_anki_mathjax(norm["why"])
-        if norm["isJoint"]:
-            prem_html = " ∧ ".join(f"<code>{html.escape(pr)}</code>" for pr in norm["premises"])
-            suffix = f": {why_html}" if why_html else ""
-            lines.append(f"• {prem_html} (joint {rel}){suffix}")
-        else:
-            prem_html = f"<code>{html.escape(norm['premises'][0])}</code>"
-            lines.append(f"• {prem_html} ({rel}): {why_html}")
-    return lines
+        if norm:
+            by_conclusion.setdefault(norm["conclusion"], []).append(norm)
+
+    def lookup(pid: str) -> list[str]:
+        lines: list[str] = []
+        seen_keys: set[str] = set()
+        for norm in by_conclusion.get(pid, ()):
+            if norm["chainKey"] in seen_keys:
+                continue
+            seen_keys.add(norm["chainKey"])
+            lines.append(_why_line(norm))
+        return lines
+
+    return lookup
+
+
+def _format_why_lines(chains: list[dict[str, Any]], pid: str) -> list[str]:
+    return _why_lines_lookup(chains)(pid)
 
 
 def _parse_occlusion_arg(raw_occ: str | None, default_src: str | None = None) -> dict[str, Any] | None:
@@ -1566,11 +1580,12 @@ def cmd_export_anki(args: argparse.Namespace) -> None:
             count += 1
         return count
 
+    why_for = _why_lines_lookup(chains)
     for p in props:
         pid = p.get("id", "")
         if not pid:
             continue
-        why_lines = _format_why_lines(chains, pid)
+        why_lines = why_for(pid)
         base_meta = " · ".join(filter(None, [p.get("subject"), p.get("chapter"), p.get("kind"), p.get("status")]))
         base_tags = [_sanitize_tag(t) for t in [p.get("subject", ""), p.get("chapter", ""), p.get("status", "")] if str(t).strip()]
         valid_cues = [c for c in (p.get("cues") or []) if isinstance(c, dict) and (c.get("q") or c.get("a") or c.get("occlusion"))]
@@ -1723,13 +1738,14 @@ def build_anki_text_rows(
     `.apkg` path and are skipped here.
     """
     rows: list[tuple[str, str, str, str]] = []
+    why_for = _why_lines_lookup(chains)
     for p in props:
         pid = str(p.get("id") or "").strip()
         if not pid or p.get("archived") is True:
             continue
         if subject and str(p.get("subject", "")).lower() != subject.lower():
             continue
-        why_lines = _format_why_lines(chains, pid)
+        why_lines = why_for(pid)
         notes = str(p.get("notes") or "")
         base_tags = [_sanitize_tag(t) for t in [p.get("subject", ""), p.get("chapter", ""), p.get("status", "")] if str(t).strip()]
         cues = [c for c in (p.get("cues") or []) if isinstance(c, dict) and (c.get("q") or c.get("a")) and not c.get("occlusion")]
@@ -1821,11 +1837,12 @@ def cmd_push_anki(args: argparse.Namespace) -> None:
     collector = _MediaCollector()
     prepared_notes: list[dict[str, Any]] = []
 
+    why_for = _why_lines_lookup(chains)
     for p in props:
         pid = p.get("id", "")
         if not pid:
             continue
-        why_lines = _format_why_lines(chains, pid)
+        why_lines = why_for(pid)
         base_tags = ["syntopik", f"id::{_sanitize_tag(pid)}"]
         if p.get("subject"):
             base_tags.append(_sanitize_tag(p["subject"]))
