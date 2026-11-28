@@ -7,6 +7,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 ## [Unreleased]
 
 ### Added
+- `syntopik profile calibrate` run in a terminal now asks its 4 short questions (Enter skips each). Run without a terminal and with no flags, it still saves defaults but says so.
 - Dashboard Exams tab: "Your exams" row on the readiness card to save the picked date as a named exam and remove exams, backed by new `GET/POST /api/exams` (also in the offline demo). Typed values now survive live refreshes of the card. The exam-date logic lives in the new `syntopik/exams.py`, shared with `syntopik pace`.
 - `syntopik pace --add-exam NAME --date YYYY-MM-DD`, `--remove-exam NAME` and `--minutes N` set exam dates and daily study time without hand-editing `study-config.json`; readiness and the taper pick the dates up too. With no exams set, `pace` now says how to add one instead of printing a week of empty days.
 - `syntopik run` with no engine lists the available engines, and a mistyped engine name gets a "Did you mean" suggestion.
@@ -33,6 +34,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - **CI on current GitHub Actions**: `actions/checkout@v5`, `actions/setup-node@v5` and `actions/setup-python@v6` (Node 24 runtime), clearing the Node 20 deprecation warning on every job.
 
 ### Fixed
+- CLI bad input: invalid values now get a one-line error instead of a Python traceback. That covers `profile calibrate --entry-ramp/--challenge-appetite`, unparsable `--frame-json`, and any other ValueError/FileNotFoundError/PermissionError reaching the top level (set `SYNTOPIK_DEBUG=1` for the traceback). `readiness --exam-date`, `report --days`, `review --daily-cap/--days` and `pace --minutes` are range-checked rather than silently ignored or clamped. The profile line shows "Confidence:not yet measured" instead of the confusing "Cal:uncalibrated" right after calibrating.
 - The daily plan and the dashboard's "exam is close, try triage" flag now see exams listed in `study-config.json` `exams[]` (what `pace` uses), not only a single top-level `examDate`.
 - Dashboard and graph viewer accessibility: every tab of the Studio dashboard, the graph viewer and the Pocket deck now pass axe-core with 0 violations in light and dark (named progress bars, readable Rosetta/planned/sage pills and Pocket status pills, keyboard-focusable inspector panels).
 - Pocket phone deck accessibility: readable muted text and rating-button colors in both themes (WCAG AA), a labelled confidence slider, a real page heading, and proper page regions. axe reports 0 violations before and after reveal, in light and dark.

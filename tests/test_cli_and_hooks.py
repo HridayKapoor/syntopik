@@ -321,6 +321,42 @@ class TestSyntaxAndCLI(unittest.TestCase):
                 srv.shutdown()
                 srv.server_close()
 
+    def test_bad_input_gets_plain_errors_and_calibrate_explains_defaults(self) -> None:
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as tmp:
+            env = {**os.environ, "SYNT_WORKSPACE": tmp, "PYTHONPATH": str(ROOT), "PYTHONIOENCODING": "utf-8"}
+            env.pop("SYNTOPIK_DEBUG", None)
+
+            def run(*args: str) -> subprocess.CompletedProcess[str]:
+                return subprocess.run(
+                    [sys.executable, "-B", "-m", "syntopik", *args],
+                    cwd=tmp, env=env, capture_output=True, text=True, encoding="utf-8",
+                    stdin=subprocess.DEVNULL, timeout=60, check=False,
+                )
+
+            self.assertEqual(run("init").returncode, 0)
+            for args, needle in (
+                (("readiness", "--exam-date", "nope"), "expected a date"),
+                (("report", "--days", "0"), "must be from 1 to 365"),
+                (("review", "--recover", "--daily-cap", "0"), "must be from 1 to 500"),
+                (("profile", "calibrate", "--entry-ramp", "bogus"), "invalid choice"),
+            ):
+                res = run(*args)
+                self.assertEqual(res.returncode, 2, args)
+                self.assertIn(needle, res.stderr)
+                self.assertNotIn("Traceback", res.stderr)
+            bad_json = run("board", "push", "--frame-json", "{bad")
+            self.assertEqual(bad_json.returncode, 1)
+            self.assertIn("syntopik board:", bad_json.stderr)
+            self.assertNotIn("Traceback", bad_json.stderr)
+            cal = run("profile", "calibrate")
+            self.assertEqual(cal.returncode, 0, cal.stderr)
+            self.assertIn("Saved with the default answers", cal.stdout)
+            self.assertIn("Confidence:not yet measured", cal.stdout)
+            picked = run("profile", "calibrate", "--entry-ramp", "intuition_first", "--prose-density", "rich")
+            self.assertNotIn("default answers", picked.stdout)
+
     def test_review_tui_reprompts_typos_and_summarises(self) -> None:
         import json as _json
         import tempfile
