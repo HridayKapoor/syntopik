@@ -2295,13 +2295,11 @@ class SyntopikRequestHandler(BaseHTTPRequestHandler):
         reentry: dict[str, Any] | None = None
         try:
             daily_plan = _load_script_module("daily_plan", self.server.workspace, self.server.package_root)
-            plan = daily_plan.build_daily_plan(
+            reentry = daily_plan.build_reentry_only(
                 kg_dir=self.server.kg_dir,
                 chapters_dir=self.server.chapters_dir,
-                energy=energy,
                 resume=resume,
             )
-            reentry = plan.get("reentry")
         except Exception:
             reentry = None
 

@@ -706,6 +706,13 @@ class TestFireCalibrationAndStdlibCore(unittest.TestCase):
             self.assertTrue(p_resume["reentry"]["suppressOverdueCount"])
             self.assertEqual(p_resume["reentry"]["warmStartPropId"], "p-warm")
             self.assertIn("Paused right after phasor Q2", str(p_resume["reentry"]["breadcrumb"]))
+            # The Studio's fast path must return exactly the same brief as the full plan.
+            for resume_flag in (True, False):
+                full = dp.build_daily_plan(kg_dir=kg_dp, chapters_dir=ch_dp, today=today_str, resume=resume_flag)
+                self.assertEqual(
+                    dp.build_reentry_only(kg_dir=kg_dp, chapters_dir=ch_dp, today=today_str, resume=resume_flag),
+                    full["reentry"],
+                )
 
             triage = _cap(dp.main, ["--triage-hours", "48", "--sleep-hours", "7", "--kg-dir", str(kg_dp), "--chapters-dir", str(ch_dp), "--today", today_str, "--json"])
             self.assertEqual(triage["mode"], "exam_triage")
