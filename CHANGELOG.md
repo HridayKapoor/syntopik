@@ -51,6 +51,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - **CI on current GitHub Actions**: `actions/checkout@v5`, `actions/setup-node@v5` and `actions/setup-python@v6` (Node 24 runtime), clearing the Node 20 deprecation warning on every job.
 
 ### Fixed
+- The study dashboard no longer scrolls sideways on phones. On a 390px-wide screen, the top-bar buttons, the activity heatmap and the exam-readiness cards used to push the page up to 201px past the edge; they now wrap or scroll inside their own box. Checked on every dashboard tab.
 - `syntopik report` no longer says a card is "due now" when `syntopik review` shows nothing due. A card you reviewed in the last 24 hours rests until tomorrow in both, and the report counts it under "more in 7 days".
 - Exam triage blocks are never longer than 90 minutes and are labelled with their real length (the protect block could say "90m" while lasting 264m). Every kept salvage target is now scheduled in a block, and when nothing is solid yet the protect time becomes a closed-book re-test of the salvage targets instead of a placeholder.
 - `syntopik review --tui` now records how long each card took (capped at 10 minutes), so `syntopik report` can show study time instead of "n/a". A confidence typed after the rating is always read as a percentage, so `3 1` means 1%, not 100%.

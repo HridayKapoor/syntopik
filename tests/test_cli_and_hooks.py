@@ -488,6 +488,16 @@ class TestSyntaxAndCLI(unittest.TestCase):
         fresh = "\n".join(cli._profile_plain_lines({"calibration": {"completed": False}}, {}))
         self.assertIn("`syntopik profile calibrate`", fresh)
 
+    def test_dashboard_has_phone_width_guards(self) -> None:
+        html = (ROOT / "dashboard.html").read_text(encoding="utf-8")
+        css = html[: html.index("</style>")]
+        # A 390px phone screen must not scroll sideways (checked in a browser when this was added).
+        phone = css[css.rindex("@media (max-width: 560px)"):]
+        self.assertIn(".topbar-right { flex-wrap: wrap;", phone)
+        self.assertIn(".pill { white-space: normal;", phone)
+        self.assertIn("#retentionHeatmapContainer { max-width: 100%; overflow-x: auto; }", css)
+        self.assertIn(".launchpad-grid, .readiness-grid { grid-template-columns: minmax(0, 1fr); }", css)
+
     def test_review_with_nothing_due_says_what_comes_next(self) -> None:
         import tempfile
 

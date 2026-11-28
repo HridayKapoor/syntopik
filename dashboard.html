@@ -2643,8 +2643,11 @@
   }
   .gym-mode-btn.active { background: var(--accent); color: #fff; }
   @media (max-width: 900px) {
-    .launchpad-grid, .readiness-grid { grid-template-columns: 1fr; }
+    /* minmax(0, 1fr): a wide child (bar, long label) must not stretch the column past the screen */
+    .launchpad-grid, .readiness-grid { grid-template-columns: minmax(0, 1fr); }
   }
+  /* Phones: nothing may push the page sideways */
+  #retentionHeatmapContainer { max-width: 100%; overflow-x: auto; }
 
   @media (max-width: 1380px) {
     .topbar {
@@ -2745,6 +2748,9 @@
     .kpi-grid { grid-template-columns: 1fr; }
     .exam-kpi-grid { grid-template-columns: 1fr; }
     .container { padding: 16px 14px 36px; }
+    /* Phones: let the top-bar controls wrap instead of pushing the page sideways */
+    .topbar-right { flex-wrap: wrap; flex-shrink: 1; min-width: 0; max-width: 100%; margin-left: 0; }
+    .pill { white-space: normal; max-width: 100%; }
   }
 </style>
 </head>
