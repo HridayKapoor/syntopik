@@ -705,6 +705,7 @@ def _cmd_import_impl(args: argparse.Namespace) -> int:
             bool(args.json),
             [
                 f"Imported ({(res.get('kind') if isinstance(res, dict) else None) or kind}): {(res.get('title') if isinstance(res, dict) else None) or args.target}",
+                *_import_count_lines(res),
                 f"  Output : {out_ref}",
             ],
         )
@@ -739,10 +740,29 @@ def _cmd_import_impl(args: argparse.Namespace) -> int:
         bool(args.json),
         [
             f"Imported ({(res.get('kind') if isinstance(res, dict) else None) or kind}): {(res.get('title') if isinstance(res, dict) else None) or args.target}",
+            *_import_count_lines(res),
             f"  Output : {(res.get('outputPath') or res.get('outDir') or ws) if isinstance(res, dict) else ws}",
         ],
     )
     return 0 if ok_flag else 1
+
+
+def _import_count_lines(res: Any) -> list[str]:
+    """Say how many items an import added, so a re-import of the same file is not a mystery."""
+    if not isinstance(res, dict) or "importedCount" not in res:
+        return []
+    new = int(res.get("importedCount") or 0)
+    merged = int(res.get("deduplicatedCount") or 0)
+    skipped = int(res.get("skippedCount") or 0)
+    parts = [f"{new} new"]
+    if merged:
+        parts.append(f"{merged} already there (merged)")
+    if skipped:
+        parts.append(f"{skipped} skipped")
+    lines = [f"  Items  : {', '.join(parts)}"]
+    if res.get("dryRun"):
+        lines.append("  Dry run: nothing was saved.")
+    return lines
 
 
 def _run_srs_json(ws: Path, pkg_root: Path, srs_args: list[str]) -> tuple[int, dict[str, Any] | None, str]:

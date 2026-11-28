@@ -400,6 +400,13 @@ class TestSyntaxAndCLI(unittest.TestCase):
             self.assertIn("Nothing due right now.", res.stdout)
             self.assertIn("Next review: 2999-01-02 (1 item(s)).", res.stdout)
             self.assertIn("2 concept(s) not started yet.", res.stdout)
+            cards = Path(tmp) / "cards.tsv"
+            cards.write_text("Q\tA\nOsmosis\tWater crosses a membrane\n", encoding="utf-8")
+            first = run("import", str(cards))
+            self.assertEqual(first.returncode, 0, first.stderr)
+            self.assertIn("Items  : 1 new", first.stdout)
+            again = run("import", str(cards))
+            self.assertIn("0 new, 1 already there (merged)", again.stdout)
 
     def test_export_anki_text_needs_no_optional_packages(self) -> None:
         import tempfile
