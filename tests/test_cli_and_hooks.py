@@ -416,6 +416,16 @@ class TestSyntaxAndCLI(unittest.TestCase):
             self.assertEqual(tui.returncode, 0, tui.stderr)
             self.assertIn("0 due + 1 new", tui.stdout)
             self.assertIn("Recorded 'good'", tui.stdout)
+            # A missed card comes back once at the end of the session.
+            (Path(tmp) / "more.tsv").write_text("Q\tA\nDiffusion\tParticles spread out\n", encoding="utf-8")
+            run("import", str(Path(tmp) / "more.tsv"))
+            again_tui = subprocess.run(
+                [sys.executable, "-B", "-m", "syntopik", "review", "--tui", "--new", "1"],
+                cwd=tmp, env=env, capture_output=True, text=True, encoding="utf-8",
+                input="\n1\n\n3\n", timeout=60, check=False,
+            )
+            self.assertIn("[second look]", again_tui.stdout)
+            self.assertIn("1 missed card(s) got a second look.", again_tui.stdout)
             last = json.loads((Path(tmp) / "knowledge-graph" / "revlog.jsonl").read_text(encoding="utf-8").splitlines()[-1])
             self.assertIsInstance(last.get("durationMs"), int)  # feeds "Study time" in `syntopik report`
             self.assertIn("2 concept(s) not started yet", run("review").stdout)
