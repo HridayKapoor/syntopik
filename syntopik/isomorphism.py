@@ -110,7 +110,17 @@ def _keyword_matches(kw: str, raw_blob: str, word_blob: str) -> bool:
         return len(compact_k) >= 4 and compact_k in _compact_blob(raw_blob)
     if pat is None:
         return False
+    # Every match contains the keyword's longest piece verbatim; a substring test rules
+    # out most keywords before the regex runs (`rosetta` scans every concept x keyword).
+    if _keyword_anchor(k) not in word_blob:
+        return False
     return bool(pat.search(word_blob))
+
+
+@functools.lru_cache(maxsize=4096)
+def _keyword_anchor(k: str) -> str:
+    parts = [p for p in _KW_SPLIT_RE.split(k) if p]
+    return max(parts, key=len) if parts else ""
 
 
 @functools.lru_cache(maxsize=4096)
