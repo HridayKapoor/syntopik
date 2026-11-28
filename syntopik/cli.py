@@ -1237,6 +1237,32 @@ def _cmd_export(args: argparse.Namespace) -> int:
         pkg_root = resolve_package_root()
         srs_script = pkg_root / "scripts" / "srs_engine.py"
         py_bin = _find_python_for_workspace(ws, pkg_root)
+        has_genanki = subprocess.run(
+            [py_bin, "-c", "import genanki"], capture_output=True, check=False
+        ).returncode == 0
+        if not has_genanki:
+            fmt = "anki-text"
+            if not args.json:
+                print("The optional Anki package builder (genanki) is not installed, so this writes a text file")
+                print("that Anki imports directly instead (Anki: File > Import). Picture-hiding cards need the full .apkg.")
+
+    if fmt == "anki-text":
+        srs = _ensure_script_import("srs_engine", ws)
+        if args.out:
+            out_path = Path(args.out).expanduser().resolve()
+            if out_path.suffix.lower() == ".apkg":
+                out_path = out_path.with_suffix(".txt")
+        else:
+            out_path = (ws / "exports" / "syntopik-anki.txt").resolve()
+        res = srs.export_anki_text(kg_dir, out_path, subject=getattr(args, "subject", None))
+        _emit(
+            {"ok": True, **res},
+            bool(args.json),
+            [f"Exported {res['exportedCards']} Anki card(s) -> {res['output']}", "  In Anki: File > Import, pick this file, then Import."],
+        )
+        return 0
+
+    if fmt == "anki":
         cmd = [py_bin, "-B", str(srs_script), "export-anki", "--kg-dir", str(kg_dir)]
         if args.out:
             cmd.extend(["--out", str(Path(args.out).expanduser().resolve())])
@@ -2531,7 +2557,7 @@ def build_parser() -> argparse.ArgumentParser:
     p_exp.add_argument(
         "format",
         nargs="?",
-        choices=["obsidian", "pocket", "anki", "pack", "json", "dossier"],
+        choices=["obsidian", "pocket", "anki", "anki-text", "pack", "json", "dossier"],
         default=None,
         help="Export target format",
     )

@@ -1705,6 +1705,92 @@ def cmd_export_anki(args: argparse.Namespace) -> None:
     }, indent=2))
 
 
+def _anki_text_cell(value: str) -> str:
+    """One field for a tab-separated Anki import: no tabs or newlines inside a cell."""
+    return re.sub(r"[\t\r\n]+", " ", str(value or "")).strip()
+
+
+def build_anki_text_rows(
+    props: list[dict[str, Any]],
+    chains: list[dict[str, Any]],
+    *,
+    subject: str | None = None,
+) -> list[tuple[str, str, str, str]]:
+    """`(notetype, front, back, tags)` rows for Anki's built-in text import (no genanki needed).
+
+    Mirrors `export-anki` for text cards: one note per cue, else one per concept; cloze prompts
+    use Anki's stock "Cloze" note type, everything else "Basic". Image-occlusion cards need the
+    `.apkg` path and are skipped here.
+    """
+    rows: list[tuple[str, str, str, str]] = []
+    for p in props:
+        pid = str(p.get("id") or "").strip()
+        if not pid or p.get("archived") is True:
+            continue
+        if subject and str(p.get("subject", "")).lower() != subject.lower():
+            continue
+        why_lines = _format_why_lines(chains, pid)
+        notes = str(p.get("notes") or "")
+        base_tags = [_sanitize_tag(t) for t in [p.get("subject", ""), p.get("chapter", ""), p.get("status", "")] if str(t).strip()]
+        cues = [c for c in (p.get("cues") or []) if isinstance(c, dict) and (c.get("q") or c.get("a")) and not c.get("occlusion")]
+        items: list[tuple[str, str, list[str]]] = []
+        if cues:
+            for idx, cue in enumerate(cues):
+                cid = str(cue.get("id") or f"c{idx + 1}")
+                prompt = str(cue.get("q") or p.get("prompt") or f"State and justify: {p.get('title', pid)}")
+                answer = str(cue.get("a") or p.get("title", ""))
+                items.append((prompt, answer, [*base_tags, f"cue::{_sanitize_tag(cid)}"]))
+        elif not _iter_occlusion_specs(p):
+            prompt = str(p.get("prompt") or f"State and justify: {p.get('title', pid)}")
+            answer = str(p.get("statement") or p.get("title", ""))
+            items.append((prompt, answer, base_tags))
+        for prompt, answer, tags in items:
+            is_cloze = bool(CLOZE_PATTERN.search(prompt))
+            back_parts = [md_math_to_anki_mathjax(answer)] if answer and not (is_cloze and answer == p.get("title")) else []
+            if notes:
+                back_parts.append(f"<em>Notes / Traps:</em> {md_math_to_anki_mathjax(notes)}")
+            if why_lines:
+                back_parts.append("<strong>Why / Dependencies:</strong><br>" + "<br>".join(why_lines))
+            rows.append((
+                "Cloze" if is_cloze else "Basic",
+                _anki_text_cell(md_math_to_anki_mathjax(prompt)),
+                _anki_text_cell("<br><br>".join(back_parts)),
+                _anki_text_cell(" ".join([*tags, "syntopik", *(["cloze"] if is_cloze else [])])),
+            ))
+    return rows
+
+
+def export_anki_text(kg_dir: Path | str | None, out_path: Path | str, *, subject: str | None = None) -> dict[str, Any]:
+    """Write a UTF-8 `.txt` that Anki's File > Import reads directly (Anki 2.1.55+ header syntax)."""
+    kg, props_file, chains_file, _queue_file, _is_default = resolve_kg_paths(kg_dir)
+    rows = build_anki_text_rows(load_jsonl(props_file), load_jsonl(chains_file), subject=subject)
+    deck_name = f"Syntopik::{subject}" if subject else "Syntopik"
+    header = [
+        "#separator:tab",
+        "#html:true",
+        "#notetype column:1",
+        f"#deck:{deck_name}",
+        "#tags column:4",
+    ]
+    body = ["\t".join(r) for r in rows]
+    out = Path(out_path).expanduser().resolve()
+    out.parent.mkdir(parents=True, exist_ok=True)
+    out.write_text("\n".join(header + body) + "\n", encoding="utf-8")
+    return {
+        "deck": deck_name,
+        "exportedCards": len(rows),
+        "clozeCards": sum(1 for r in rows if r[0] == "Cloze"),
+        "output": str(out),
+        "format": "anki-text",
+    }
+
+
+def cmd_export_anki_text(args: argparse.Namespace) -> None:
+    kg_dir, _pf, _cf, _qf, _d = resolve_kg_paths(getattr(args, "kg_dir", None))
+    out = Path(args.out).expanduser().resolve() if args.out else (kg_dir / "syntopik-anki.txt")
+    print(json.dumps(export_anki_text(kg_dir, out, subject=args.subject), indent=2))
+
+
 def anki_connect(action: str, params: dict[str, Any] | None = None, url: str = "http://127.0.0.1:8765") -> Any:
     body = json.dumps({"action": action, "version": 6, "params": params or {}}).encode("utf-8")
     req = urllib.request.Request(url, data=body, headers={"Content-Type": "application/json"})
@@ -1918,6 +2004,12 @@ def main(argv: list[str] | None = None) -> None:
     p3.add_argument("--out", help="Output .apkg path (default: knowledge-graph/syntopik.apkg)")
     _add_kg_dir_flag(p3)
     p3.set_defaults(func=cmd_export_anki)
+
+    p3t = sub.add_parser("export-anki-text", help="Export cards as a tab-separated .txt for Anki's File > Import (no genanki needed)")
+    p3t.add_argument("--subject", help="Optional subject filter")
+    p3t.add_argument("--out", help="Output .txt path (default: knowledge-graph/syntopik-anki.txt)")
+    _add_kg_dir_flag(p3t)
+    p3t.set_defaults(func=cmd_export_anki_text)
 
     p4 = sub.add_parser("push-anki", help="Push cards (and embedded media) live into running Anki Desktop via AnkiConnect (code 2055492159)")
     p4.add_argument("--subject", help="Optional subject filter")
