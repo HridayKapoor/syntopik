@@ -24,6 +24,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - **"In plain words" README intro** for new, non-technical learners.
 
 ### Changed
+- `syntopik readiness` lists its top three next steps in plain words, each with roughly how long it takes and how to start it (a command, or what to ask your AI assistant). Before, it printed internal labels such as "Clear 6 due Blunder Fork(s)" or "Verify bottleneck 'phys-shm-linearization' to T3 transfer". The `--json` output is unchanged.
 - `syntopik pace` now names what to study each day: it hands out the exam's not-yet-mastered topics in order (chapter outline first, otherwise weak concepts before unstarted ones), then switches to mixed recall once everything has been covered. Before, every block said "active recall + next core topic". Exams are matched to your material by name too, including short forms such as "ML" for Machine Learning.
 - `syntopik triage` now prints a block-by-block plan in plain words (what to fix, re-test or refresh in each block, by concept title) plus a short guilt-free skip list, instead of only three bucket counts. Each plan block also carries a `targets` list in `--json`.
 - `syntopik drop` of notes, PDFs, videos or links now says what to do next in plain words: open your AI assistant in that folder and say "Start", or browse it with `syntopik serve --open`. The tutor's warm-up question is labelled as such instead of appearing as the "Next" step.

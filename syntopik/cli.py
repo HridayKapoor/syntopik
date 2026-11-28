@@ -2457,7 +2457,7 @@ def _cmd_readiness(args: argparse.Namespace) -> int:
     pred = payload.get("predictedScorePct") or {}
     taper = payload.get("taperMode") or {}
     lines = [
-        f"Exam Readiness ({ws}) — Index {payload.get('readinessIndex', 0)}/100 ({payload.get('band', 'unknown')})",
+        f"Exam Readiness ({ws}) — Index {payload.get('readinessIndex', 0)}/100 ({str(payload.get('band', 'unknown')).replace('_', ' ')})",
     ]
     if isinstance(pred, dict) and pred:
         lines.append(
@@ -2465,12 +2465,55 @@ def _cmd_readiness(args: argparse.Namespace) -> int:
         )
     if taper.get("active"):
         lines.append(f"  Taper Mode      : ACTIVE ({taper.get('phase')} · {taper.get('hoursRemaining')}h remaining)")
-    for idx, lv in enumerate(list(payload.get("topLevers") or [])[:3], 1):
-        if isinstance(lv, dict):
-            title = lv.get("title") or lv.get("label") or lv.get("chapter") or lv.get("propId") or str(lv)
-            lines.append(f"  Lever #{idx}        : {title}")
+    levers = [lv for lv in list(payload.get("topLevers") or [])[:3] if isinstance(lv, dict)]
+    if levers:
+        titles = {
+            str(p.get("id")): str(p.get("title") or p.get("id"))
+            for p in load_jsonl(kg_dir / "propositions.jsonl")
+            if isinstance(p, dict) and p.get("id")
+        }
+        lines.append("  Best next steps (biggest gain for the time):")
+        lines.extend(_readiness_lever_lines(levers, titles))
     _emit(payload, bool(args.json), _with_empty_hint(lines, kg_dir))
     return 0 if payload.get("ok", True) else 1
+
+
+_LEVER_PLAIN: dict[str, tuple[str, str]] = {
+    "repair_misconception": ("Fix a mix-up: {title}", 'Ask your AI assistant: "re-teach {title}".'),
+    "clear_forks": ("Retry the past mistakes that are due again", 'Ask your AI assistant: "replay my due mistakes".'),
+    "upgrade_evidence": ("Show you can use {title} on a new problem", 'Ask your AI assistant: "give me a new problem on {title}".'),
+    "plug_ev_leak": ("Stop losing marks to wrong guesses", "See where: `syntopik readiness --premortem-only`."),
+    "refresh_decay": ("Review the cards you are starting to forget", "`syntopik review --tui`"),
+    "interleave_drill": ("Practise mixed questions from all your chapters", "`syntopik interleave --tui`"),
+    "timed_baseline": ("Take one timed practice exam", 'Ask your AI assistant: "give me a timed mock exam".'),
+}
+
+
+def _readiness_lever_lines(levers: list[dict[str, Any]], titles: dict[str, str]) -> list[str]:
+    """Readiness levers in plain words, each with how long it takes and how to start it."""
+    out: list[str] = []
+    for idx, lv in enumerate(levers, 1):
+        kind = str(lv.get("kind") or "")
+        raw_title = str(lv.get("title") or lv.get("label") or lv.get("chapter") or lv.get("propId") or "")
+        name = ""
+        m = re.search(r"'([^']+)'", raw_title)
+        if m:
+            name = titles.get(m.group(1), m.group(1))
+        elif ":" in raw_title:
+            name = raw_title.split(":", 1)[1].strip()
+        name = _short(name, 60) if name else "this topic"
+        what, how = _LEVER_PLAIN.get(kind, (raw_title, str(lv.get("exactCmd") or "")))
+        count = re.search(r"\b(\d+)\b", raw_title)
+        if kind == "clear_forks" and count and "Fork" in raw_title:
+            what = f"Retry {count.group(1)} past mistake(s) that are due again"
+        elif kind == "refresh_decay" and count:
+            what = f"Review {count.group(1)} card(s) you are starting to forget"
+        mins = lv.get("effortMinutes")
+        when = f" (~{int(mins)} min)" if isinstance(mins, (int, float)) and mins > 0 else ""
+        out.append(f"    {idx}. {what.format(title=name)}{when}")
+        if how:
+            out.append(f"       {how.format(title=name)}")
+    return out
 
 
 def _flatten_subjects(raw_subjects: Any) -> list[str] | None:
