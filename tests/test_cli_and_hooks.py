@@ -449,6 +449,24 @@ class TestSyntaxAndCLI(unittest.TestCase):
         for jargon in ("Blunder Fork", "T3", "p-q", "bottleneck"):
             self.assertNotIn(jargon, text)
 
+    def test_next_move_is_plain_words_with_a_way_to_start(self) -> None:
+        from syntopik import cli
+
+        titles = {"p-root": "Restoring force", "p-leaf": "Energy in SHM"}
+        probe = {"recommendedMode": "causal_probe", "targetNodeId": "p-root", "rationale": "Leaf 'p-leaf' failed; probe ancestor 'p-root' first (cuts 0.50 bits)."}
+        text = "\n".join(cli._next_move_lines(probe, titles))
+        self.assertIn("Next: Check the idea underneath first: Restoring force.", text)
+        self.assertIn("Why  : you missed Energy in SHM, which builds on it.", text)
+        self.assertIn('quiz me on Restoring force', text)
+        for jargon in ("causal_probe", "bits", "p-root", "srs_engine"):
+            self.assertNotIn(jargon, text)
+        empty = "\n".join(cli._next_move_lines({"recommendedMode": "teach_frontier", "targetNodeId": None}, {}))
+        self.assertIn("syntopik drop", empty)
+        drill = "\n".join(cli._next_move_lines({"recommendedMode": "blind_interleave"}, {}))
+        self.assertIn("`syntopik interleave --tui`", drill)
+        odd = "\n".join(cli._next_move_lines({"recommendedMode": "new_mode", "rationale": "r", "exactCmd": "syntopik x --json"}, {}))
+        self.assertIn("Start: syntopik x", odd)
+
     def test_review_with_nothing_due_says_what_comes_next(self) -> None:
         import tempfile
 
