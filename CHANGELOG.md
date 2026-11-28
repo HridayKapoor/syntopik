@@ -44,6 +44,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - **CI on current GitHub Actions**: `actions/checkout@v5`, `actions/setup-node@v5` and `actions/setup-python@v6` (Node 24 runtime), clearing the Node 20 deprecation warning on every job.
 
 ### Fixed
+- `syntopik review --tui` now records how long each card took (capped at 10 minutes), so `syntopik report` can show study time instead of "n/a". A confidence typed after the rating is always read as a percentage, so `3 1` means 1%, not 100%.
 - `syntopik next` no longer recommends reviewing a card you already reviewed in the last 24 hours. It now hides those the same way `syntopik review` does, so the two never disagree.
 - Blind interleave drills no longer mangle code and multi-line setups: line breaks and indentation are kept (in the dashboard too), and code such as `def f(...)` or `scores = ...` is no longer capitalised to `Def`/`Scores`.
 - `syntopik doctor`, the command the start screen suggests when something is wrong, no longer reports "ISSUES DETECTED" with about 24 failures on a normal install just because the optional maths, PDF, chemistry and video extras are absent. When none of them are installed it checks the core and says so. The new `--full` flag lists every extra. Piping CLI output into `head` no longer prints a BrokenPipeError traceback.

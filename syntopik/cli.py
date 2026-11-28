@@ -18,6 +18,7 @@ import os
 import re
 import subprocess
 import sys
+import time
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -854,6 +855,7 @@ def _run_review_tui(
         print("")
         print(f"[{idx}/{len(items)}] {pid} ({item.get('chapter') or 'General'} · {item.get('status') or 'due'})")
         print(f"  Prompt: {prompt_text}")
+        shown_at = time.monotonic()
         try:
             reveal = input("  Press Enter to reveal (or 'q' to quit): ").strip().lower()
         except (EOFError, KeyboardInterrupt):
@@ -893,9 +895,13 @@ def _run_review_tui(
         conf: float | None = None
         if len(parts) >= 2:
             try:
-                conf = float(parts[1].rstrip("%"))
+                # The prompt asks for a percentage, so "3 1" means 1%, not 100%.
+                conf = max(0.0, min(100.0, float(parts[1].rstrip("%")))) / 100.0
             except ValueError:
                 conf = None
+        # Time from showing the prompt to rating it, capped so a card left open over lunch
+        # does not count as hours of study.
+        duration_ms = int(min(time.monotonic() - shown_at, 600.0) * 1000)
 
         rec = srs_mod.record_review(
             kg_dir,
@@ -903,6 +909,7 @@ def _run_review_tui(
             rating,
             cue_id=(cue or {}).get("id"),
             confidence=conf,
+            duration_ms=duration_ms,
             no_sync=True,
         )
         reviewed += 1
