@@ -830,6 +830,54 @@ class TestLearnerPsychologyAndBrainstem(unittest.TestCase):
 class TestV3PedagogyAndWorkMentor(unittest.TestCase):
     """30. Syntopik v3.0 Explorable RPN Sandbox, Derivation Forge, Viva Chamber, Work Mentor, Sunset, Auto-Pacer & Whiteboard."""
 
+    def test_pacer_names_the_topics_to_study_each_day(self) -> None:
+        dp = load_script_module("daily_plan.py")
+        with tempfile.TemporaryDirectory() as tmp:
+            kg = Path(tmp) / "knowledge-graph"
+            ch = Path(tmp) / "chapters"
+            kg.mkdir()
+            ch.mkdir()
+            (ch / "attn-tracker.json").write_text(
+                json.dumps({
+                    "slug": "attn",
+                    "title": "Transformers & Attention",
+                    "subject": "Machine Learning",
+                    "topics": [
+                        {"order": 2, "title": "Masking", "status": "pending"},
+                        {"order": 1, "title": "Scaled dot product", "status": "pending"},
+                        {"order": 3, "title": "Already known", "status": "mastered"},
+                    ],
+                }),
+                encoding="utf-8",
+            )
+            (kg / "propositions.jsonl").write_text(
+                json.dumps({"id": "p1", "subject": "Physics", "chapter": "SHM", "title": "Phasor circle", "status": "shaky"}) + "\n"
+                + json.dumps({"id": "p2", "subject": "Physics", "chapter": "SHM", "title": "Spring combos", "status": "planned"}) + "\n"
+                + json.dumps({"id": "p3", "subject": "Physics", "chapter": "SHM", "title": "Solid one", "status": "solid"}) + "\n",
+                encoding="utf-8",
+            )
+            (kg / "study-config.json").write_text(
+                json.dumps({"exams": [
+                    {"name": "ML midterm", "examDate": "2026-12-10"},
+                    {"name": "Physics final", "examDate": "2026-12-10"},
+                ]}),
+                encoding="utf-8",
+            )
+            plan = dp.build_pace_plan(kg_dir=kg, chapters_dir=ch, today="2026-12-01", horizon_days=8)
+            by_name = {c["name"]: c for c in plan["courses"]}
+            # "ML" matches "Machine Learning" by its initials; tracker order wins, mastered topics are left out.
+            self.assertEqual(by_name["ML midterm"]["topics"], ["Scaled dot product", "Masking"])
+            # Without a tracker, weak concepts come before unstarted ones and solid ones are left out.
+            self.assertEqual(by_name["Physics final"]["topics"], ["Phasor circle", "Spring combos"])
+            scheduled = [t for day in plan["schedule"] for b in day["blocks"] for t in b.get("topics", [])]
+            self.assertEqual(sorted(scheduled), sorted(["Scaled dot product", "Masking", "Phasor circle", "Spring combos"]))
+            first_day = " ".join(b["focus"] for b in plan["schedule"][0]["blocks"])
+            self.assertIn("learn Scaled dot product", first_day)
+            self.assertIn("learn Phasor circle", first_day)
+            text = dp._render_human_plan(plan)
+            self.assertIn("learn Scaled dot product", text)
+            self.assertNotIn("ML midterm (45m): ML midterm", text)
+
     def test_explorable_parser_rpn_curves_limit_check_and_ast_sandbox(self) -> None:
         import syntopik.explorable as ex
 
