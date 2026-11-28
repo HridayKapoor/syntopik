@@ -1962,8 +1962,14 @@ def _render_human_plan(plan: dict[str, Any]) -> str:
                 )
             lines.append("")
         else:
-            lines.append("_No future exams found in study-config.json `exams[]`._")
+            lines.append("_No upcoming exams set yet, so there is nothing to pace toward._")
             lines.append("")
+            lines.append('Add one with `syntopik pace --add-exam "Biology final" --date YYYY-MM-DD`,')
+            lines.append("or ask your AI assistant to set your exam dates.")
+            if plan.get("icsExportPath"):
+                lines.append("")
+                lines.append(f"**iCalendar Export:** `{plan['icsExportPath']}`")
+            return "\n".join(lines)
         lines.append("## Upcoming Paced Schedule")
         for day in (plan.get("schedule") or [])[:7]:
             tag = " [GUILT-FREE BUFFER]" if day.get("isBufferDay") else ""

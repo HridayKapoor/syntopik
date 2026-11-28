@@ -18,6 +18,7 @@ import os
 import re
 import subprocess
 import sys
+from datetime import date as date_cls
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -1678,8 +1679,91 @@ def _cmd_sunset(args: argparse.Namespace) -> int:
     return 0
 
 
+def _study_config_path(kg_dir: Path) -> Path:
+    """Same lookup order the pacer and readiness use: study-config.json, then exam-config.json."""
+    for fname in ("study-config.json", "exam-config.json"):
+        if (kg_dir / fname).is_file():
+            return kg_dir / fname
+    return kg_dir / "study-config.json"
+
+
+def _edit_exams(args: argparse.Namespace, kg_dir: Path) -> tuple[int, list[str]] | None:
+    """Handle `pace --add-exam/--remove-exam/--minutes`. Returns None when no edit was asked for."""
+    add_name = (getattr(args, "add_exam", None) or "").strip()
+    remove_name = (getattr(args, "remove_exam", None) or "").strip()
+    minutes = getattr(args, "minutes", None)
+    if not add_name and not remove_name and minutes is None:
+        return None
+    if getattr(args, "add_exam", None) is not None and not add_name:
+        return 1, ["Give the exam a name, for example: syntopik pace --add-exam \"Biology final\" --date 2026-12-20"]
+    exam_date = None
+    if add_name:
+        raw_date = (getattr(args, "date", None) or "").strip()
+        try:
+            exam_date = date_cls.fromisoformat(raw_date[:10]) if raw_date else None
+        except ValueError:
+            exam_date = None
+        if exam_date is None:
+            return 1, [f"Add a date in YYYY-MM-DD form, for example: syntopik pace --add-exam \"{add_name}\" --date 2026-12-20"]
+        if exam_date <= date_cls.today():
+            return 1, [f"{exam_date.isoformat()} is not in the future, so there is nothing to pace toward."]
+    if minutes is not None and not 15 <= int(minutes) <= 720:
+        return 1, ["Daily study time must be between 15 and 720 minutes."]
+
+    cfg_path = _study_config_path(kg_dir)
+    cfg = load_json(cfg_path, default={})
+    if not isinstance(cfg, dict):
+        cfg = {}
+    exams = [ex for ex in (cfg.get("exams") or []) if isinstance(ex, dict)]
+    if not exams and cfg.get("examDate"):
+        # Carry a legacy single `examDate` over so adding a second exam doesn't silently drop it.
+        exams.append({"name": str(cfg.get("targetExam") or "Exam"), "examDate": str(cfg["examDate"])[:10]})
+        cfg.pop("examDate", None)
+
+    def _name_of(ex: dict[str, Any]) -> str:
+        return str(ex.get("name") or ex.get("title") or ex.get("subject") or "").strip()
+
+    lines: list[str] = []
+    if remove_name:
+        kept = [ex for ex in exams if _name_of(ex).casefold() != remove_name.casefold()]
+        if len(kept) == len(exams):
+            known = ", ".join(_name_of(ex) for ex in exams if _name_of(ex)) or "none yet"
+            return 1, [f"No exam named '{remove_name}'. Exams set: {known}."]
+        exams = kept
+        lines.append(f"Removed exam '{remove_name}'.")
+    if add_name:
+        entry: dict[str, Any] = {"name": add_name, "examDate": exam_date.isoformat()}
+        chapter = (getattr(args, "chapter", None) or "").strip()
+        if chapter:
+            entry["chapterSlug"] = chapter
+        replaced = False
+        for i, ex in enumerate(exams):
+            if _name_of(ex).casefold() == add_name.casefold():
+                exams[i] = {**ex, **entry}
+                replaced = True
+        if not replaced:
+            exams.append(entry)
+        days = (exam_date - date_cls.today()).days
+        verb = "Updated" if replaced else "Added"
+        lines.append(f"{verb} exam '{add_name}' on {exam_date.isoformat()} ({days} day(s) away).")
+    if minutes is not None:
+        cfg["dailyMinutes"] = int(minutes)
+        lines.append(f"Daily study time set to {int(minutes)} minutes.")
+    cfg["exams"] = exams
+    save_json_atomic(cfg_path, cfg)
+    return 0, lines
+
+
 def _cmd_pace(args: argparse.Namespace) -> int:
     ws = resolve_workspace(getattr(args, "workspace", None))
+    edit = _edit_exams(args, resolve_kg_dir(ws))
+    if edit is not None:
+        rc, msg = edit
+        if rc != 0:
+            _emit({"ok": False, "messages": msg}, bool(args.json), msg)
+            return rc
+        if not args.json:
+            print("\n".join(msg) + "\n", flush=True)
     pkg_root = resolve_package_root()
     daily_script = pkg_root / "scripts" / "daily_plan.py"
     py_bin = _find_python_for_workspace(ws, pkg_root)
@@ -2460,6 +2544,11 @@ def build_parser() -> argparse.ArgumentParser:
     p_pace = sub.add_parser("pace", help="Multi-course buffer-protected Auto-Pacer with RFC-5545 .ics export")
     p_pace.add_argument("--rebalance", action="store_true", help="Rebalance schedule across remaining buffer days")
     p_pace.add_argument("--ics", default=None, help="Export calendar schedule to an .ics file")
+    p_pace.add_argument("--add-exam", dest="add_exam", default=None, metavar="NAME", help="Add (or update) an exam to pace toward; needs --date")
+    p_pace.add_argument("--date", default=None, help="Exam date for --add-exam (YYYY-MM-DD)")
+    p_pace.add_argument("--chapter", default=None, help="Optional chapter slug the exam covers (with --add-exam)")
+    p_pace.add_argument("--remove-exam", dest="remove_exam", default=None, metavar="NAME", help="Remove an exam by name")
+    p_pace.add_argument("--minutes", type=int, default=None, help="Set daily study time in minutes (15-720)")
     p_pace.add_argument("--workspace", default=None, help="Syntopik workspace directory")
     p_pace.add_argument("--json", action="store_true", help="Emit JSON output")
     p_pace.set_defaults(func=_cmd_pace)

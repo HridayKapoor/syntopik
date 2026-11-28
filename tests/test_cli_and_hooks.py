@@ -225,6 +225,44 @@ class TestSyntaxAndCLI(unittest.TestCase):
             self.assertIn("Import failed", imp.stdout)
             self.assertNotIn("Traceback", imp.stderr)
 
+    def test_pace_add_and_remove_exams(self) -> None:
+        import json as _json
+        import tempfile
+        from datetime import date, timedelta
+
+        with tempfile.TemporaryDirectory() as tmp:
+            env = {**os.environ, "SYNT_WORKSPACE": tmp, "PYTHONPATH": str(ROOT), "PYTHONIOENCODING": "utf-8"}
+
+            def run(*args: str) -> subprocess.CompletedProcess[str]:
+                return subprocess.run(
+                    [sys.executable, "-B", "-m", "syntopik", *args],
+                    cwd=tmp, env=env, capture_output=True, text=True, encoding="utf-8", timeout=60, check=False,
+                )
+
+            self.assertEqual(run("init").returncode, 0)
+            empty = run("pace")
+            self.assertEqual(empty.returncode, 0, empty.stderr)
+            self.assertIn("No upcoming exams set yet", empty.stdout)
+            self.assertNotIn("Upcoming Paced Schedule", empty.stdout)
+            self.assertEqual(run("pace", "--add-exam", "Bio").returncode, 1)
+            self.assertEqual(run("pace", "--add-exam", "Bio", "--date", "2000-01-01").returncode, 1)
+            when = (date.today() + timedelta(days=20)).isoformat()
+            added = run("pace", "--add-exam", "Biology final", "--date", when, "--minutes", "60")
+            self.assertEqual(added.returncode, 0, added.stderr)
+            self.assertIn("Added exam 'Biology final'", added.stdout)
+            self.assertIn("Biology final", added.stdout.split("Active Courses", 1)[1])
+            cfg = _json.loads((Path(tmp) / "knowledge-graph" / "study-config.json").read_text(encoding="utf-8"))
+            self.assertEqual(cfg["dailyMinutes"], 60)
+            self.assertEqual(cfg["exams"], [{"name": "Biology final", "examDate": when}])
+            rdy = _json.loads(run("readiness", "--json").stdout)
+            self.assertEqual(rdy["examDate"], when)
+            missing = run("pace", "--remove-exam", "nope")
+            self.assertEqual(missing.returncode, 1)
+            self.assertIn("Exams set: Biology final", missing.stdout)
+            self.assertEqual(run("pace", "--remove-exam", "biology FINAL").returncode, 0)
+            cfg = _json.loads((Path(tmp) / "knowledge-graph" / "study-config.json").read_text(encoding="utf-8"))
+            self.assertEqual(cfg["exams"], [])
+
     def test_review_tui_reprompts_typos_and_summarises(self) -> None:
         import json as _json
         import tempfile

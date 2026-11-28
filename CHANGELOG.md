@@ -7,6 +7,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 ## [Unreleased]
 
 ### Added
+- `syntopik pace --add-exam NAME --date YYYY-MM-DD`, `--remove-exam NAME` and `--minutes N` set exam dates and daily study time without hand-editing `study-config.json`; readiness and the taper pick the dates up too. With no exams set, `pace` now says how to add one instead of printing a week of empty days.
 - `syntopik run` with no engine lists the available engines, and a mistyped engine name gets a "Did you mean" suggestion.
 - `python -m syntopik` now works, for setups where the `syntopik` command is not on PATH.
 - Empty-vault guidance: `review`, `readiness`, `interleave`, `triage` and `report` now say how to add material (`syntopik drop`, `syntopik demo`) instead of printing bare zeros.
