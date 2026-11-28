@@ -103,8 +103,12 @@ class TestProgressReport(unittest.TestCase):
         rep = build_progress_report(self.kg, days=7, now=NOW)
         self.assertEqual(rep["mastery"]["total"], 4)  # archived excluded
         self.assertEqual(rep["mastery"]["byStatus"]["solid"], 1)
-        self.assertEqual(rep["due"]["now"], 3)  # shaky, misconception, overdue c
-        self.assertEqual(rep["due"]["next7Days"], 0)
+        # misconception d and overdue c are due; shaky b was reviewed 24h ago, so like
+        # `syntopik review` it rests until tomorrow and counts as coming up this week.
+        self.assertEqual(rep["due"]["now"], 2)
+        self.assertEqual(rep["due"]["next7Days"], 1)
+        later = build_progress_report(self.kg, days=7, now=NOW + timedelta(hours=2))
+        self.assertEqual(later["due"]["now"], 3)
         self.assertEqual(rep["struggling"][0]["id"], "b")
         self.assertEqual(rep["struggling"][0]["lapses"], 2)
         self.assertEqual(rep["focus"]["id"], "b")
