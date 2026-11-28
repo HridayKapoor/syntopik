@@ -1498,6 +1498,50 @@ def _cmd_run(args: argparse.Namespace) -> int:
 # ---------------------------------------------------------------------------
 
 
+# What each Brainstem move means for the learner, and how they start it. `--json` keeps the
+# machine fields (recommendedMode, exactCmd, skillHint) for AI assistants.
+_NEXT_MOVE_PLAIN: dict[str, tuple[str, str]] = {
+    "whiteboard_pin_answer": ("Get an answer to the question you pinned on the whiteboard", 'Ask your AI assistant: "answer my pinned question".'),
+    "onboarding_calibration": ("Answer 4 quick questions so lessons fit how you like to learn (optional)", "`syntopik profile calibrate`"),
+    "cold_start_reentry": ("Welcome back: a short, easy catch-up review", "`syntopik review --recover --daily-cap 15`"),
+    "calm_wrapup": ("You seem tired: one light review, then stop for today", "`syntopik review --energy low --tui`"),
+    "bridge_worked_example": ("Step back to a fully worked example of {title}", 'Ask your AI assistant: "show me a worked example of {title}".'),
+    "causal_probe": ("Check the idea underneath first: {title}", 'Ask your AI assistant: "quiz me on {title}".'),
+    "fork_replay": ("Retry a mistake you made before, on {title}", 'Ask your AI assistant: "replay my due mistakes".'),
+    "fire_review": ("Review what is due, starting with {title}", "`syntopik review --tui`"),
+    "transfer_verify": ("Use {title} on a new kind of problem", 'Ask your AI assistant: "give me a new problem on {title}".'),
+    "pre_exam_taper": ("Exam soon: light review only, no new topics", "`syntopik readiness`"),
+    "blind_interleave": ("Practise mixed questions from all your chapters", "`syntopik interleave --tui`"),
+    "teach_frontier": ("Learn something new: {title}", 'Open your AI assistant in this folder and say "Start".'),
+}
+
+
+def _next_move_lines(res: dict[str, Any], titles: dict[str, str]) -> list[str]:
+    mode = str(res.get("recommendedMode") or "")
+    target = str(res.get("targetNodeId") or "")
+    title = _short(titles.get(target, target), 60) if target else "the next topic"
+    what, how = _NEXT_MOVE_PLAIN.get(mode, ("", ""))
+    if mode == "teach_frontier" and not target:
+        what, how = ("Add something to study", "`syntopik drop <file-or-url>`, or try `syntopik demo`.")
+    if not what:
+        # Unknown move: fall back to the raw fields rather than hiding them.
+        human_cmd = re.sub(r"\s+--json\b", "", str(res.get("exactCmd") or "")).strip()
+        lines = [f"Next: {mode or 'unknown'}", f"  Why  : {res.get('rationale', '')}"]
+        if human_cmd:
+            lines.append(f"  Start: {human_cmd}")
+        return lines
+    lines = [f"Next: {what.format(title=title)}."]
+    if mode == "cold_start_reentry" or mode == "pre_exam_taper":
+        lines.append(f"  Why  : {res.get('rationale', '')}")
+    elif mode == "causal_probe":
+        m = re.search(r"Leaf '([^']+)' failed", str(res.get("rationale") or ""))
+        if m:
+            missed = _short(titles.get(m.group(1), m.group(1)), 60)
+            lines.append(f"  Why  : you missed {missed}, which builds on it.")
+    lines.append(f"  Start: {how.format(title=title)}")
+    return lines
+
+
 def _cmd_next(args: argparse.Namespace) -> int:
     ws = resolve_workspace(getattr(args, "workspace", None))
     brainstem = _lazy_import("syntopik.brainstem")
@@ -1507,16 +1551,12 @@ def _cmd_next(args: argparse.Namespace) -> int:
         energy=getattr(args, "energy", None),
         domain=getattr(args, "domain", None),
     )
-    lines = [
-        f"Next Move: {res.get('recommendedMode', 'unknown')}",
-        f"  Target   : {res.get('targetNodeId') or res.get('chapterSlug') or 'frontier'}",
-        f"  Rationale: {res.get('rationale', '')}",
-    ]
-    if res.get("exactCmd"):
-        # exactCmd is machine-oriented (agents parse --json); show people the readable form.
-        human_cmd = re.sub(r"\s+--json\b", "", str(res["exactCmd"])).strip()
-        lines.append(f"  Command  : {human_cmd}")
-    _emit(res, bool(args.json), lines)
+    titles = {
+        str(p.get("id")): str(p.get("title") or p.get("id"))
+        for p in load_jsonl(resolve_kg_dir(ws) / "propositions.jsonl")
+        if isinstance(p, dict) and p.get("id")
+    }
+    _emit(res, bool(args.json), _next_move_lines(res, titles))
     return 0
 
 
