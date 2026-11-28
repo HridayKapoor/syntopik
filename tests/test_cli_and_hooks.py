@@ -182,6 +182,46 @@ class TestSyntaxAndCLI(unittest.TestCase):
             self.assertIn("Known chapters: optics", bad.stdout)
             self.assertEqual(run("sunset", "optics").returncode, 0)
 
+    def test_sunset_preview_names_ideas_and_undo_restores_them(self) -> None:
+        import json
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as tmp:
+            env = {**os.environ, "SYNT_WORKSPACE": tmp, "PYTHONPATH": str(ROOT)}
+
+            def run(*args: str) -> subprocess.CompletedProcess[str]:
+                return subprocess.run(
+                    [sys.executable, "-B", "-m", "syntopik", *args],
+                    cwd=tmp, env=env, capture_output=True, text=True, timeout=60, check=False,
+                )
+
+            self.assertEqual(run("init").returncode, 0)
+            kg = Path(tmp) / "knowledge-graph"
+            rows = [
+                {"id": "opt-root", "title": "Light travels in straight lines", "chapter": "optics", "kind": "axiom"},
+                {"id": "opt-snell", "title": "Snell's law of refraction", "chapter": "optics", "dependsOn": ["opt-root"]},
+                {"id": "opt-lens", "title": "Thin lens equation", "chapter": "optics", "dependsOn": ["opt-root"]},
+                {"id": "opt-mirror", "title": "Mirror equation", "chapter": "optics", "dependsOn": ["opt-root"]},
+            ]
+            (kg / "propositions.jsonl").write_text("".join(json.dumps(r) + "\n" for r in rows), encoding="utf-8")
+
+            preview = run("sunset", "optics")
+            self.assertEqual(preview.returncode, 0, preview.stderr)
+            self.assertIn("nothing changed yet", preview.stdout)
+            self.assertIn("Will pause from reviews", preview.stdout)
+            self.assertIn("Thin lens equation", preview.stdout)
+
+            applied = run("sunset", "optics", "--apply")
+            self.assertIn("Wrapped up 'optics'", applied.stdout)
+            self.assertIn("--undo", applied.stdout)
+            again = run("sunset", "optics")
+            self.assertIn("already wrapped up", again.stdout)
+
+            undo = run("sunset", "optics", "--undo")
+            self.assertIn("Brought back", undo.stdout)
+            props = [json.loads(x) for x in (kg / "propositions.jsonl").read_text(encoding="utf-8").splitlines() if x.strip()]
+            self.assertFalse(any(p.get("archived") is True for p in props))
+
     def test_run_lists_engines_and_suggests_typos(self) -> None:
         def run(*args: str) -> subprocess.CompletedProcess[str]:
             return subprocess.run(

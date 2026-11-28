@@ -1979,6 +1979,51 @@ def _extract_id_set(items: Any) -> set[str]:
     return ids
 
 
+def _sunset_lines(
+    slug: str,
+    keep_ids: set[str],
+    archive_ids: set[str],
+    titles: dict[str, str],
+    applied: bool,
+    already: bool,
+    archive_path: Path,
+    pack_snapshot: dict[str, Any] | None,
+) -> list[str]:
+    """Plain-language summary of a chapter wrap-up (preview or applied)."""
+
+    def names(ids: set[str], limit: int = 6) -> list[str]:
+        ordered = sorted(ids, key=lambda i: titles.get(i, i).lower())
+        out = [f"    - {_short(titles.get(i, i), 70)}" for i in ordered[:limit]]
+        if len(ordered) > limit:
+            out.append(f"    - ...and {len(ordered) - limit} more")
+        return out
+
+    if applied:
+        head = f"Wrapped up '{slug}'."
+    elif already:
+        head = f"'{slug}' is already wrapped up. To bring its ideas back: syntopik sunset {slug} --undo"
+    else:
+        head = f"Preview: wrapping up '{slug}' (nothing changed yet)."
+    lines = [head]
+    if keep_ids:
+        verb = "Still reviewed, lightly," if applied or already else "Will keep reviewing, lightly,"
+        lines.append(f"  {verb} because later topics build on them ({len(keep_ids)}):")
+        lines += names(keep_ids)
+    if archive_ids:
+        verb = "Paused from reviews" if applied or already else "Will pause from reviews"
+        lines.append(f"  {verb} ({len(archive_ids)}):")
+        lines += names(archive_ids)
+    if applied:
+        if isinstance(pack_snapshot, dict) and pack_snapshot.get("ok") is False:
+            lines.append(f"  Backup could not be saved: {pack_snapshot.get('error')}")
+        else:
+            lines.append(f"  Backup saved: {archive_path}")
+        lines.append(f"  Changed your mind? syntopik sunset {slug} --undo")
+    elif not already:
+        lines.append(f"  Nothing is deleted. To do it: syntopik sunset {slug} --apply")
+    return lines
+
+
 def _cmd_sunset(args: argparse.Namespace) -> int:
     ws = resolve_workspace(getattr(args, "workspace", None))
     kg_dir = resolve_kg_dir(ws)
@@ -2015,6 +2060,36 @@ def _cmd_sunset(args: argparse.Namespace) -> int:
                 [f"No chapter named '{slug}'. Known chapters: {hint}"],
             )
             return 1
+
+    if getattr(args, "undo", False):
+        props_file = kg_dir / "propositions.jsonl"
+        props = load_jsonl(props_file)
+        restored = 0
+        for p in props:
+            if str(p.get("id") or "") in archive_ids and p.get("archived") is True:
+                p["archived"] = False
+                restored += 1
+        if restored:
+            save_jsonl_atomic(props_file, props)
+            sync_hub(workspace=ws, quiet=True)
+        msg = (
+            f"Brought back {restored} paused idea(s) from '{slug}'. They are back in your reviews."
+            if restored
+            else f"Nothing to bring back: no ideas from '{slug}' are paused."
+        )
+        _emit({"ok": True, "slug": slug, "undone": True, "restoredCount": restored}, bool(args.json), [msg])
+        return 0
+
+    titles = {
+        str(item.get("id")): str(item.get("title") or item.get("id"))
+        for item in [*(plan.get("keepAxioms") or []), *(plan.get("archiveLeaves") or [])]
+        if isinstance(item, dict) and item.get("id")
+    }
+    already = bool(archive_ids) and all(
+        p.get("archived") is True
+        for p in load_jsonl(kg_dir / "propositions.jsonl")
+        if isinstance(p, dict) and str(p.get("id") or "") in archive_ids
+    )
 
     applied = False
     pack_snapshot: dict[str, Any] | None = None
@@ -2065,13 +2140,8 @@ def _cmd_sunset(args: argparse.Namespace) -> int:
         "keptAxiomCount": kept_axiom_count if applied else len(keep_ids),
         "plan": plan,
     }
-    lines = [
-        f"Semester Sunset ({slug}) — {'APPLIED' if applied else 'PREVIEW (pass --apply to archive)'}",
-        f"  Keep axioms (R=0.80): {len(keep_ids)}",
-        f"  Archive leaves      : {len(archive_ids)}",
-        f"  Archive pack        : {archive_path}",
-    ]
-    _emit(payload, bool(args.json), lines)
+    payload["alreadySunset"] = already
+    _emit(payload, bool(args.json), _sunset_lines(slug, keep_ids, archive_ids, titles, applied, already, archive_path, pack_snapshot))
     return 0
 
 
@@ -3057,6 +3127,7 @@ def build_parser() -> argparse.ArgumentParser:
     p_sun = sub.add_parser("sunset", help="Semester Sunset: snapshot chapter pack, keep core axioms at R=0.80, archive leaves")
     p_sun.add_argument("slug", help="Chapter slug to sunset")
     p_sun.add_argument("--apply", action="store_true", help="Write archive snapshot and mark archived leaves / axiom retention")
+    p_sun.add_argument("--undo", action="store_true", help="Bring a wrapped-up chapter's paused ideas back into reviews")
     p_sun.add_argument("--workspace", default=None, help="Syntopik workspace directory")
     p_sun.add_argument("--json", action="store_true", help="Emit JSON output")
     p_sun.set_defaults(func=_cmd_sunset)
