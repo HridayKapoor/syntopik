@@ -894,53 +894,75 @@ def build_triage_plan(
             assigned += alloc
         item["allocatedMin"] = alloc
 
-    # Build hard-cutoff 90m blocks + sleep protection + final Anti-Mastery 1-page crib sheet slot.
+    # Build hard-cutoff blocks of at most 90 minutes. Every kept salvage target lands in
+    # a block (none silently dropped), and no block is labelled shorter than it really is.
+    def _chunks(total: int) -> list[int]:
+        out: list[int] = []
+        left = int(total)
+        while left > 0:
+            out.append(min(90, left))
+            left -= out[-1]
+        return out
+
+    def _targets(items: list[dict[str, Any]]) -> list[dict[str, str]]:
+        return [{"propId": x["propId"], "title": x["title"]} for x in items]
+
     blocks: list[dict[str, Any]] = []
-    block_num = 1
-    rem_salvage = salvage_budget
-    s_cursor = 0
-    while rem_salvage > 0 and block_num <= 12:
-        slot_min = min(90, rem_salvage)
-        target_slice = salvage_keep[s_cursor : s_cursor + 2]
-        s_cursor = (s_cursor + 2) % len(salvage_keep) if salvage_keep else 0
-        goal_ids = ", ".join(x["propId"] for x in target_slice) if target_slice else "top bottleneck invariants"
+
+    def _add_block(minutes: int, bucket: str, goal: str, targets: list[dict[str, str]]) -> None:
+        n = len(blocks) + 1
         blocks.append(
             {
-                "order": block_num,
-                "slot": f"Block {block_num} ({slot_min}m)",
-                "minutes": slot_min,
-                "bucket": "salvage_70pct",
+                "order": n,
+                "slot": f"Block {n} ({minutes}m)",
+                "minutes": minutes,
+                "bucket": bucket,
                 "hardCutoff": True,
-                "goal": f"Salvage high-yield gaps & traps: {goal_ids} (hard cutoff at {slot_min}m — no rabbit holes).",
+                "goal": goal,
+                "targets": targets,
             }
         )
-        rem_salvage -= slot_min
-        block_num += 1
+
+    salvage_slots = _chunks(salvage_budget)[:12]
+    per_block = max(1, -(-len(salvage_keep) // max(1, len(salvage_slots)))) if salvage_keep else 0
+    for i, slot_min in enumerate(salvage_slots):
+        if salvage_keep:
+            start_i = (i * per_block) % len(salvage_keep)
+            target_slice = salvage_keep[start_i : start_i + per_block]
+            retest = i * per_block >= len(salvage_keep)
+        else:
+            target_slice, retest = [], False
+        goal_ids = ", ".join(x["propId"] for x in target_slice) if target_slice else "top bottleneck invariants"
+        verb = "Closed-book re-test of salvage targets" if retest else "Salvage high-yield gaps & traps"
+        _add_block(
+            slot_min,
+            "salvage_70pct",
+            f"{verb}: {goal_ids} (hard cutoff at {slot_min}m — no rabbit holes).",
+            _targets(target_slice),
+        )
 
     if protect_budget > 0:
-        prot_ids = ", ".join(x["propId"] for x in protect_raw[:4]) if protect_raw else "solid core formulas"
-        blocks.append(
-            {
-                "order": block_num,
-                "slot": f"Block {block_num} ({min(90, protect_budget)}m)",
-                "minutes": protect_budget,
-                "bucket": "protect_20pct",
-                "hardCutoff": True,
-                "goal": f"Rapid active-recall refresh on solid marks: {prot_ids}.",
-            }
-        )
-        block_num += 1
+        prot_slots = _chunks(protect_budget)
+        prot_per = max(1, -(-min(len(protect_raw), 4 * len(prot_slots)) // len(prot_slots))) if protect_raw else 0
+        for i, slot_min in enumerate(prot_slots):
+            if protect_raw:
+                prot_slice = protect_raw[i * prot_per : (i + 1) * prot_per] or protect_raw[:prot_per]
+                goal = f"Rapid active-recall refresh on solid marks: {', '.join(x['propId'] for x in prot_slice)}."
+            else:
+                # Nothing is solid yet, so protect time becomes a closed-book re-test of the salvage work.
+                k = min(4, len(salvage_keep))
+                prot_slice = [salvage_keep[(i * k + j) % len(salvage_keep)] for j in range(k)] if k else []
+                ids = ", ".join(x["propId"] for x in prot_slice) or "today's salvage targets"
+                goal = f"Closed-book re-test of today's salvage targets: {ids}."
+            _add_block(slot_min, "protect_20pct", goal, _targets(prot_slice))
 
-    blocks.append(
-        {
-            "order": block_num,
-            "slot": f"Block {block_num} ({crib_budget}m)",
-            "minutes": crib_budget,
-            "bucket": "anti_mastery_crib",
-            "hardCutoff": True,
-            "goal": "Compile 1-page Anti-Mastery Crib Sheet (`cheatsheet_pdf.py build --from-kg --anti-mastery --pages 1`) & do final trap walk-through.",
-        }
-    )
+    crib_slots = _chunks(crib_budget)
+    for i, slot_min in enumerate(crib_slots):
+        if i == 0:
+            goal = "Compile 1-page Anti-Mastery Crib Sheet (`cheatsheet_pdf.py build --from-kg --anti-mastery --pages 1`) & do final trap walk-through."
+        else:
+            goal = "Final trap walk-through from the crib sheet, then stop and rest."
+        _add_block(slot_min, "anti_mastery_crib", goal, [])
 
     return {
         "brand": "Syntopik",

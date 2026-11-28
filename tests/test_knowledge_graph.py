@@ -767,6 +767,13 @@ class TestFireCalibrationAndStdlibCore(unittest.TestCase):
             self.assertEqual(set(triage["buckets"].keys()), {"salvage_70pct", "protect_20pct", "explicitly_cut"})
             salvage_ids = {x["propId"] for x in triage["buckets"]["salvage_70pct"]}
             self.assertIn("p-weak", salvage_ids)
+            # Blocks never run past 90m, are labelled with their real length, and cover every salvage target.
+            for blk in triage["blocks"]:
+                self.assertLessEqual(blk["minutes"], 90)
+                self.assertEqual(blk["slot"], f"Block {blk['order']} ({blk['minutes']}m)")
+            scheduled = {t["propId"] for blk in triage["blocks"] for t in blk.get("targets", [])}
+            self.assertTrue(salvage_ids <= scheduled)
+            self.assertEqual(sum(b["minutes"] for b in triage["blocks"]), int(round(triage["usableStudyHours"] * 60)))
 
             # (h) cheatsheet_pdf.py --from-kg --anti-mastery --spec-only (zero Typst required!)
             crib_spec = _cap(cs.main, ["build", "--from-kg", "--kg-dir", str(kg), "--anti-mastery", "--pages", "1", "--spec-only"])

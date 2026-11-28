@@ -23,6 +23,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - **"In plain words" README intro** for new, non-technical learners.
 
 ### Changed
+- `syntopik triage` now prints a block-by-block plan in plain words (what to fix, re-test or refresh in each block, by concept title) plus a short guilt-free skip list, instead of only three bucket counts. Each plan block also carries a `targets` list in `--json`.
 - `syntopik drop` of notes, PDFs, videos or links now says what to do next in plain words: open your AI assistant in that folder and say "Start", or browse it with `syntopik serve --open`. The tutor's warm-up question is labelled as such instead of appearing as the "Next" step.
 - `syntopik import` of flashcard files (CSV/TSV, Anki decks, notebooks, note folders) now says how many items were new and how many were already there, so importing the same file twice no longer looks like nothing happened.
 - `syntopik rosetta` (cross-subject twin finder) skips keywords whose text cannot appear before running the regex: about 3x faster on a 3,000-concept vault (1.7s to 0.56s), with identical results.
@@ -45,6 +46,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - **CI on current GitHub Actions**: `actions/checkout@v5`, `actions/setup-node@v5` and `actions/setup-python@v6` (Node 24 runtime), clearing the Node 20 deprecation warning on every job.
 
 ### Fixed
+- Exam triage blocks are never longer than 90 minutes and are labelled with their real length (the protect block could say "90m" while lasting 264m). Every kept salvage target is now scheduled in a block, and when nothing is solid yet the protect time becomes a closed-book re-test of the salvage targets instead of a placeholder.
 - `syntopik review --tui` now records how long each card took (capped at 10 minutes), so `syntopik report` can show study time instead of "n/a". A confidence typed after the rating is always read as a percentage, so `3 1` means 1%, not 100%.
 - `syntopik next` no longer recommends reviewing a card you already reviewed in the last 24 hours. It now hides those the same way `syntopik review` does, so the two never disagree.
 - Blind interleave drills no longer mangle code and multi-line setups: line breaks and indentation are kept (in the dashboard too), and code such as `def f(...)` or `scores = ...` is no longer capitalised to `Def`/`Scores`.
