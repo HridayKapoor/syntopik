@@ -918,7 +918,12 @@ class TestCodeVerifyEngine(unittest.TestCase):
             "--sizes", "5000,10000,20000,40000", "--repeats", "7", "--expect", "O(N)", "--json",
         ])
         self.assertEqual(rc_cn, 0, res_cn)
-        self.assertEqual(res_cn["estimatedComplexity"], "O(N)")
+        # Over a 5k..40k span, O(N) and O(N log N) differ by ~7% per doubling, which a busy
+        # CI runner (macOS especially) can match with timing noise, so the exact label of an
+        # adjacent class is not a stable assertion here. What the learner relies on is that a
+        # linear solution is never reported as too slow; the deterministic label boundary is
+        # covered by test_linear_vs_linearithmic_needs_decisive_evidence.
+        self.assertIn(res_cn["estimatedComplexity"], ("O(N)", "O(N log N)"))
         self.assertTrue(res_cn["meetsExpected"])
 
         quad_code = (

@@ -20,6 +20,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - **"In plain words" README intro** for new, non-technical learners.
 
 ### Changed
+- README and BOOTSTRAP document the new `pace --add-exam/--remove-exam/--minutes` flags. They also tell agents to record exam dates that way, and to pass the calibration answers as flags, because `profile calibrate` only asks its questions in a real terminal.
 - Bottleneck ranking (daily plan, 5-minute review, `graph_intel`) is much faster on large graphs without NetworkX. The stdlib betweenness only tracks nodes reachable from each source and skips sources with no outgoing edges. On a 3,000-concept vault that took it from 2.1 s to 5 ms, with bit-identical results.
 - Studio `/api/state` is about 6x faster on large notebooks (about 5 s to 0.8 s on a 3,000-concept vault): it now builds only the re-entry brief it uses (`daily_plan.build_reentry_only`) instead of the whole daily plan with its graph scans.
 - `syntopik next` shows its suggested command without the machine-only `--json` flag (JSON output is unchanged), and `syntopik review` ends its due list with how to start reviewing.
@@ -35,6 +36,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - **CI on current GitHub Actions**: `actions/checkout@v5`, `actions/setup-node@v5` and `actions/setup-python@v6` (Node 24 runtime), clearing the Node 20 deprecation warning on every job.
 
 ### Fixed
+- `syntopik doctor`, the command the start screen suggests when something is wrong, no longer reports "ISSUES DETECTED" with about 24 failures on a normal install just because the optional maths, PDF, chemistry and video extras are absent. When none of them are installed it checks the core and says so. The new `--full` flag lists every extra. Piping CLI output into `head` no longer prints a BrokenPipeError traceback.
 - CLI bad input: invalid values now get a one-line error instead of a Python traceback. That covers `profile calibrate --entry-ramp/--challenge-appetite`, unparsable `--frame-json`, and any other ValueError/FileNotFoundError/PermissionError reaching the top level (set `SYNTOPIK_DEBUG=1` for the traceback). `readiness --exam-date`, `report --days`, `review --daily-cap/--days` and `pace --minutes` are range-checked rather than silently ignored or clamped. The profile line shows "Confidence:not yet measured" instead of the confusing "Cal:uncalibrated" right after calibrating.
 - The daily plan and the dashboard's "exam is close, try triage" flag now see exams listed in `study-config.json` `exams[]` (what `pace` uses), not only a single top-level `examDate`.
 - Dashboard and graph viewer accessibility: every tab of the Studio dashboard, the graph viewer and the Pocket deck now pass axe-core with 0 violations in light and dark (named progress bars, readable Rosetta/planned/sage pills and Pocket status pills, keyboard-focusable inspector panels).
