@@ -373,6 +373,34 @@ class TestSyntaxAndCLI(unittest.TestCase):
             )
             self.assertNotIn("BrokenPipeError", piped.stderr)
 
+    def test_review_with_nothing_due_says_what_comes_next(self) -> None:
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as tmp:
+            env = {**os.environ, "SYNT_WORKSPACE": tmp, "PYTHONPATH": str(ROOT), "PYTHONIOENCODING": "utf-8"}
+
+            def run(*args: str) -> subprocess.CompletedProcess[str]:
+                return subprocess.run(
+                    [sys.executable, "-B", "-m", "syntopik", *args],
+                    cwd=tmp, env=env, capture_output=True, text=True, encoding="utf-8",
+                    stdin=subprocess.DEVNULL, timeout=60, check=False,
+                )
+
+            self.assertEqual(run("init").returncode, 0)
+            props = [
+                {"id": "a1", "title": "Later", "statement": "s", "status": "solid", "nextReview": "2999-01-02"},
+                {"id": "a2", "title": "New one", "statement": "s"},
+                {"id": "a3", "title": "New two", "statement": "s"},
+            ]
+            (Path(tmp) / "knowledge-graph" / "propositions.jsonl").write_text(
+                "".join(json.dumps(p) + "\n" for p in props), encoding="utf-8"
+            )
+            res = run("review")
+            self.assertEqual(res.returncode, 0, res.stderr)
+            self.assertIn("Nothing due right now.", res.stdout)
+            self.assertIn("Next review: 2999-01-02 (1 item(s)).", res.stdout)
+            self.assertIn("2 concept(s) not started yet.", res.stdout)
+
     def test_export_anki_text_needs_no_optional_packages(self) -> None:
         import tempfile
 

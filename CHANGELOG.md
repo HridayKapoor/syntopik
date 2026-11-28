@@ -21,6 +21,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - **"In plain words" README intro** for new, non-technical learners.
 
 ### Changed
+- `syntopik review` with nothing due now says when the next review comes due and how many concepts are not started yet, instead of stopping at "Nothing due right now." A long queue says how many more items are hidden and points to `review --recover`.
 - Anki export (`export anki`, `export anki-text`, the review package export) indexes the why-chains once instead of rescanning every link for every concept: a 3,000-concept text export went from about 6s to 0.2s, with byte-identical output.
 - Lookalike-concept detection (used by the daily plan and the 5-minute review) now remembers its result on disk in `knowledge-graph/.cache/`, so on a 3,000-concept vault repeat runs take about 0.1s instead of about 9s. Reviews do not invalidate it; editing concepts or links does. Backups skip the cache.
 - README and BOOTSTRAP document the new `pace --add-exam/--remove-exam/--minutes` flags. They also tell agents to record exam dates that way, and to pass the calibration answers as flags, because `profile calibrate` only asks its questions in a real terminal.
