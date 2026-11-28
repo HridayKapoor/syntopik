@@ -1173,7 +1173,7 @@ def _cmd_export(args: argparse.Namespace) -> int:
     elif raw_fmt:
         fmt = str(raw_fmt).strip().lower()
     else:
-        raise SystemExit("Specify an export format (obsidian|pocket|anki|pack|json|dossier) or pass --pocket.")
+        raise SystemExit("Specify an export format (obsidian|pocket|anki|anki-text|pack|json|dossier) or pass --pocket.")
 
     if fmt == "obsidian":
         from syntopik.obsidian import export_vault
@@ -2352,7 +2352,7 @@ def _cmd_interleave(args: argparse.Namespace) -> int:
         items = list(payload.get("items") or [])
         lines = [
             f"Blind-Chapter Interleave Set ({payload.get('sessionId') or 'not started'}) — {len(items)} item(s) [mode={payload.get('mode', args.mode)}]",
-            *[f"  - {it.get('itemId') or it.get('id')}: {str(it.get('prompt') or '')[:96]}" for it in items[:10]],
+            *[f"  - {it.get('itemId') or it.get('id')}: {' '.join(str(it.get('prompt') or '').split())[:96]}" for it in items[:10]],
         ]
         _emit(payload, bool(args.json), lines if items else _with_empty_hint(lines, kg_dir))
         return 0 if payload.get("ok", True) else 1

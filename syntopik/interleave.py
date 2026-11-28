@@ -149,7 +149,22 @@ def _normalize_text_key(text: str) -> str:
     return re.sub(r"\s+", " ", str(text or "").strip().lower())
 
 
-def _clip(text: str, max_chars: int = 120) -> str:
+def _tidy_lines(text: str) -> str:
+    """Collapse runs of spaces on each line but keep line breaks and indentation (code, derivations)."""
+    lines = [re.sub(r"(?<=\S)[ \t]{2,}", " ", ln.rstrip()) for ln in str(text or "").replace("\r\n", "\n").split("\n")]
+    return re.sub(r"\n{3,}", "\n\n", "\n".join(lines)).strip("\n").rstrip()
+
+
+def _clip(text: str, max_chars: int = 120, *, keep_lines: bool = False) -> str:
+    if keep_lines and "\n" in str(text or "").strip():
+        s = _tidy_lines(text)
+        max_chars = max(max_chars, 900)
+        if len(s) <= max_chars:
+            return s
+        cut = s[: max_chars - 3]
+        if "\n" in cut:
+            cut = cut.rsplit("\n", 1)[0]
+        return cut.rstrip() + "\n..."
     s = re.sub(r"\s+", " ", str(text or "").strip())
     if len(s) <= max_chars:
         return s
@@ -217,6 +232,9 @@ def strip_chapter_cues(
     s = str(text or "").strip()
     if not s:
         return ""
+    # Re-capitalise only prose that started capitalised or lost a leading label; code like
+    # `def f(...)` or `scores = ...` must stay exactly as written.
+    original = s
 
     # Remove leading bracketed / lecture / chapter prefixes
     s = _LABEL_PREFIX_RE.sub("", s)
@@ -266,10 +284,10 @@ def strip_chapter_cues(
     # Clean leftover empty punctuation / double spaces
     s = re.sub(r"\(\s*\)|\[\s*\]", "", s)
     s = re.sub(r"^\s*[,;:\-–—.]+\s*", "", s)
-    s = re.sub(r"\s+([,.;:?!])", r"\1", s)
-    s = re.sub(r"\s{2,}", " ", s).strip()
+    s = re.sub(r"[ \t]+([,.;:?!])", r"\1", s)
+    s = _tidy_lines(s).strip()
 
-    if s and s[0].islower():
+    if s and s[0].islower() and (original[0].isupper() or not original.startswith(s[:20])):
         s = s[0].upper() + s[1:]
     return s
 
@@ -343,9 +361,9 @@ def _build_candidate_pool(
         if not _matches_scope(subj, chap):
             continue
         prefix = f.get("prefixSteps") or []
-        prefix_str = " ".join(str(x).strip() for x in prefix if str(x).strip()) if isinstance(prefix, list) else str(prefix or "")
+        prefix_str = "\n".join(str(x).rstrip() for x in prefix if str(x).strip()) if isinstance(prefix, list) else str(prefix or "")
         fork_prompt = str(f.get("forkPrompt") or "").strip()
-        raw_prompt = f"{prefix_str} — {fork_prompt}".strip(" —") if prefix_str and fork_prompt else (fork_prompt or prefix_str)
+        raw_prompt = f"{prefix_str}\n\n{fork_prompt}".strip() if prefix_str and fork_prompt else (fork_prompt or prefix_str)
         if not raw_prompt:
             continue
         raw_principle = str(linked.get("title") or f.get("principle") or f.get("title") or f"Governing rule for {pid or fid}").strip()
@@ -366,8 +384,8 @@ def _build_candidate_pool(
                 "chapter": chap,
                 "topic": str(f.get("topic") or ""),
                 "rawPrompt": raw_prompt,
-                "blindPrompt": _clip(blind_prompt, 260),
-                "step2Prompt": _clip(blind_prompt, 260),
+                "blindPrompt": _clip(blind_prompt, 260, keep_lines=True),
+                "step2Prompt": _clip(blind_prompt, 260, keep_lines=True),
                 "principle": _clean_principle_label(raw_principle, chapter=chap, prop_id=pid),
                 "rawPrinciple": raw_principle,
                 "answer": sealed_answer or raw_principle,
@@ -421,16 +439,17 @@ def _build_candidate_pool(
                 "chapter": chap,
                 "topic": str(p.get("topic") or ""),
                 "rawPrompt": raw_prompt,
-                "blindPrompt": _clip(blind_prompt, 260),
+                "blindPrompt": _clip(blind_prompt, 260, keep_lines=True),
                 "step2Prompt": _clip(
                     strip_chapter_cues(cues[0]["q"], chapter=chap, prop_id=pid)
                     if cues
                     else f"Apply the selected principle to derive or state the key result: {blind_prompt}",
                     260,
+                    keep_lines=True,
                 ),
                 "principle": _clean_principle_label(title, chapter=chap, prop_id=pid),
                 "rawPrinciple": title,
-                "answer": _clip(answer, 280),
+                "answer": _clip(answer, 280, keep_lines=True),
                 "surfaceTokens": _surface_tokens(f"{raw_prompt} {stmt} {title}"),
                 "priority": prio,
             }
@@ -464,7 +483,7 @@ def _build_candidate_pool(
                 "chapter": chap,
                 "topic": "",
                 "rawPrompt": raw_prompt,
-                "blindPrompt": _clip(blind_prompt, 260),
+                "blindPrompt": _clip(blind_prompt, 260, keep_lines=True),
                 "step2Prompt": _clip(f"State the kill-cue and exact first move: {blind_prompt}", 260),
                 "principle": _clean_principle_label(first_move, chapter=chap, prop_id=pid),
                 "rawPrinciple": first_move,

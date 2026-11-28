@@ -102,6 +102,10 @@ class TestInterleaveCueStripping(unittest.TestCase):
         self.assertEqual(strip_chapter_cues("In SHM, the period is 2pi sqrt(m/k)", chapter="Simple Harmonic Motion (SHM)"), "The period is 2pi sqrt(m/k)")
         self.assertEqual(strip_chapter_cues("prop-7 restoring force [Kinematics]", chapter="Ch1 Kinematics", prop_id="prop-7"), "Restoring force")
         self.assertEqual(strip_chapter_cues("PROP-7: quorum overlap", prop_id="prop-7"), "Quorum overlap")
+        # Code and multi-line setups keep their case, line breaks and indentation.
+        code = "def is_up_to_date(a, b):\n    # compare terms first\n    return  a >= b"
+        self.assertEqual(strip_chapter_cues(code, chapter="Raft"), "def is_up_to_date(a, b):\n    # compare terms first\n    return a >= b")
+        self.assertEqual(strip_chapter_cues("scores = q @ k.T", chapter="Attention"), "scores = q @ k.T")
         # Non-ASCII text skips the fast pre-check and still matches case-insensitively
         self.assertEqual(strip_chapter_cues("Größe in Ämter, Einheit", chapter="ämter"), "Größe Einheit")
 
