@@ -2487,6 +2487,117 @@ def _flatten_subjects(raw_subjects: Any) -> list[str] | None:
     return out or None
 
 
+def _run_interleave_tui(ws: Path, kg_dir: Path, il: Any, payload: dict[str, Any]) -> int:
+    """Terminal drill for a blind interleave set: name the idea behind each mixed-up question,
+    then try it, see the answer, and say whether you got it. Results go to the same ledgers."""
+    session_id = str(payload.get("sessionId"))
+    items = list(payload.get("items") or [])
+    sealed = {}
+    for row in load_jsonl(kg_dir / il.INTERLEAVE_SESSIONS_FILENAME):
+        if str(row.get("sessionId") or "") == session_id:
+            sealed = {str(it.get("itemId")): it for it in row.get("items") or [] if isinstance(it, dict)}
+    print(f"Mixed drill: {len(items)} question(s) from different chapters, shuffled. ('q' to stop)")
+    print("For each one, first pick the idea it needs. Then work it out and check the answer.")
+    results: dict[str, dict[str, Any]] = {}
+    answered = 0
+    for idx, it in enumerate(items, start=1):
+        iid = str(it.get("itemId") or "")
+        choices = [c for c in it.get("principleChoices") or [] if isinstance(c, dict)]
+        print("")
+        print(f"[{idx}/{len(items)}]")
+        for line in str(it.get("prompt") or "").splitlines():
+            print(f"  {line}" if line.strip() else "")
+        print("  Which idea does this need?")
+        for c in choices:
+            print(f"    {c.get('id')}) {c.get('text')}")
+        ids = {str(c.get("id")).lower(): str(c.get("id")) for c in choices}
+        shown_at = time.monotonic()
+        pick: str | None = None
+        conf = 0.5
+        stop = False
+        for _attempt in range(3):
+            try:
+                raw = input("  Your pick (letter, + optional confidence %): ").strip()
+            except (EOFError, KeyboardInterrupt):
+                print("")
+                stop = True
+                break
+            if raw.lower() in ("q", "quit"):
+                stop = True
+                break
+            parts = raw.split()
+            if parts and parts[0].lower() in ids:
+                pick = ids[parts[0].lower()]
+                if len(parts) >= 2:
+                    try:
+                        conf = max(0.0, min(100.0, float(parts[1].rstrip("%")))) / 100.0
+                    except ValueError:
+                        conf = 0.5
+                break
+            print(f"  Type one of {', '.join(sorted(ids.values()))}.")
+        if stop:
+            break
+        if pick is None:
+            continue
+        duration_ms = int(min(time.monotonic() - shown_at, 600.0) * 1000)
+        chk = il.check_principle_step(
+            ws,
+            session_id=session_id,
+            item_id=iid,
+            selected_principle=pick,
+            confidence=conf,
+            duration_ms=duration_ms,
+            kg_dir=kg_dir,
+        )
+        if not chk.get("ok"):
+            print(f"  Could not check that one: {chk.get('error')}")
+            continue
+        answered += 1
+        chapter = str(chk.get("revealedChapter") or "")
+        where = f" (from {chapter})" if chapter else ""
+        if chk.get("correct"):
+            print(f"  Right: {chk.get('expectedPrinciple')}{where}.")
+        else:
+            print(f"  It needs: {chk.get('expectedPrinciple')}{where}.")
+            if chk.get("confusedChapter"):
+                print(f"  The one you picked belongs to {chk.get('confusedChapter')}, so those two are easy to mix up.")
+        answer = str((sealed.get(iid) or {}).get("sealedAnswer") or "").strip()
+        if not answer:
+            continue
+        try:
+            go = input("  Now work it out. Press Enter to see the answer (or 's' to skip): ").strip().lower()
+        except (EOFError, KeyboardInterrupt):
+            print("")
+            break
+        if go in ("q", "quit"):
+            break
+        if go in ("s", "skip"):
+            continue
+        print(f"  Answer: {answer}")
+        try:
+            got = input("  Did you get it? [y/n]: ").strip().lower()
+        except (EOFError, KeyboardInterrupt):
+            print("")
+            break
+        if got in ("y", "yes", "n", "no"):
+            results[iid] = {"solved": got.startswith("y")}
+    if not answered:
+        print("Stopped before any answers. Nothing was recorded.")
+        return 0
+    done = il.complete_interleave_session(ws, session_id=session_id, results=results, kg_dir=kg_dir)
+    sync_hub(workspace=ws, quiet=True)
+    print("")
+    print(f"Drill done: picked the right idea {done.get('tier1Correct', 0)}/{done.get('tier1Total', 0)} time(s).")
+    if done.get("step2Total"):
+        print(f"  Solved {done.get('step2Correct', 0)}/{done.get('step2Total', 0)} of the ones you worked out.")
+    pairs = done.get("topConfusionPairs") or []
+    if pairs:
+        top = pairs[0]
+        print(f"  Most mixed up: {top.get('trueChapter')} with {top.get('confusedWithChapter')}.")
+    print("  Misses come back in your next review (`syntopik review --tui`).")
+    return 0
+
+
 def _cmd_interleave(args: argparse.Namespace) -> int:
     ws = resolve_workspace(getattr(args, "workspace", None))
     kg_dir = resolve_kg_dir(ws)
@@ -2506,10 +2617,14 @@ def _cmd_interleave(args: argparse.Namespace) -> int:
         )
         payload = {"ok": bool((res or {}).get("ok", True)), "action": "build", "workspace": str(ws), **(res if isinstance(res, dict) else {"result": res})}
         items = list(payload.get("items") or [])
+        if getattr(args, "tui", False) and not args.json and items and payload.get("sessionId"):
+            return _run_interleave_tui(ws, kg_dir, il, payload)
         lines = [
             f"Blind-Chapter Interleave Set ({payload.get('sessionId') or 'not started'}) — {len(items)} item(s) [mode={payload.get('mode', args.mode)}]",
             *[f"  - {it.get('itemId') or it.get('id')}: {' '.join(str(it.get('prompt') or '').split())[:96]}" for it in items[:10]],
         ]
+        if items:
+            lines.append("  Drill it here one question at a time: `syntopik interleave --tui`, or ask your AI assistant for a mixed drill.")
         _emit(payload, bool(args.json), lines if items else _with_empty_hint(lines, kg_dir))
         return 0 if payload.get("ok", True) else 1
 
@@ -2918,6 +3033,7 @@ def build_parser() -> argparse.ArgumentParser:
     p_ilv.add_argument("--out", default=None, help="Optional output file path (for export-cbt)")
     p_ilv.add_argument("--workspace", default=None, help="Syntopik workspace directory")
     p_ilv.add_argument("--json", action="store_true", help="Emit JSON output")
+    p_ilv.add_argument("--tui", action="store_true", help="Build a set and drill it right here in the terminal, one question at a time")
     p_ilv.set_defaults(func=_cmd_interleave)
 
     return parser
@@ -2936,6 +3052,7 @@ Getting ready for a test:
   syntopik pace --add-exam NAME --date YYYY-MM-DD   Set an exam date and get a study pace
   syntopik readiness         How ready you are, and what to fix first
   syntopik triage --exam-in 48h   Short plan when the exam is close
+  syntopik interleave --tui  Mixed questions from all chapters, like a real exam
 
 Something wrong?  syntopik doctor --fix
 All commands:     syntopik --help

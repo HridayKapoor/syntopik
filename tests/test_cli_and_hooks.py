@@ -395,6 +395,45 @@ class TestSyntaxAndCLI(unittest.TestCase):
         self.assertIn("Skip for now, guilt-free: Leaf 0, Leaf 1, Leaf 2 (+2 more).", text)
         self.assertEqual(cli._triage_plan_lines({"buckets": {}, "blocks": []}), [])
 
+    def test_interleave_tui_drills_one_question_at_a_time(self) -> None:
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as tmp:
+            env = {**os.environ, "SYNT_WORKSPACE": tmp, "PYTHONPATH": str(ROOT), "PYTHONIOENCODING": "utf-8"}
+            demo = subprocess.run(
+                [sys.executable, "-B", "-m", "syntopik", "demo", "--workspace", tmp],
+                cwd=tmp, env=env, capture_output=True, text=True, encoding="utf-8",
+                stdin=subprocess.DEVNULL, timeout=120, check=False,
+            )
+            self.assertEqual(demo.returncode, 0, demo.stderr)
+            # Pick "I don't know" (always E) on the first question, look at the answer, say "n", then stop.
+            tui = subprocess.run(
+                [sys.executable, "-B", "-m", "syntopik", "interleave", "--tui", "--seed", "3", "--workspace", tmp],
+                cwd=tmp, env=env, capture_output=True, text=True, encoding="utf-8",
+                input="e\n\nn\nq\n", timeout=120, check=False,
+            )
+            self.assertEqual(tui.returncode, 0, tui.stderr)
+            out = tui.stdout
+            self.assertIn("[1/6]", out)
+            self.assertIn("E) I don't know", out)
+            self.assertIn("It needs: ", out)
+            self.assertIn("Answer: ", out)
+            self.assertIn("Drill done: picked the right idea 0/1 time(s).", out)
+            self.assertIn("Solved 0/1", out)
+            sessions = [
+                json.loads(line)
+                for line in (Path(tmp) / "knowledge-graph" / "interleave-sessions.jsonl").read_text(encoding="utf-8").splitlines()
+                if line.strip()
+            ]
+            self.assertEqual(sessions[-1]["status"], "completed")
+            # Quitting before any answer records nothing.
+            quit_early = subprocess.run(
+                [sys.executable, "-B", "-m", "syntopik", "interleave", "--tui", "--workspace", tmp],
+                cwd=tmp, env=env, capture_output=True, text=True, encoding="utf-8",
+                input="q\n", timeout=120, check=False,
+            )
+            self.assertIn("Nothing was recorded.", quit_early.stdout)
+
     def test_review_with_nothing_due_says_what_comes_next(self) -> None:
         import tempfile
 
