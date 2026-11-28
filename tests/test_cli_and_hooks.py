@@ -407,6 +407,16 @@ class TestSyntaxAndCLI(unittest.TestCase):
             self.assertIn("Items  : 1 new", first.stdout)
             again = run("import", str(cards))
             self.assertIn("0 new, 1 already there (merged)", again.stdout)
+            # New (never-reviewed) concepts are introduced after the due ones, like new cards in Anki.
+            tui = subprocess.run(
+                [sys.executable, "-B", "-m", "syntopik", "review", "--tui", "--new", "1"],
+                cwd=tmp, env=env, capture_output=True, text=True, encoding="utf-8",
+                input="\n3\n", timeout=60, check=False,
+            )
+            self.assertEqual(tui.returncode, 0, tui.stderr)
+            self.assertIn("0 due + 1 new", tui.stdout)
+            self.assertIn("Recorded 'good'", tui.stdout)
+            self.assertIn("2 concept(s) not started yet", run("review").stdout)
 
     def test_export_anki_text_needs_no_optional_packages(self) -> None:
         import tempfile
@@ -478,7 +488,7 @@ class TestSyntaxAndCLI(unittest.TestCase):
             self.assertIn("Next review", out)
             self.assertIn("2/3 card(s) recorded", out)
             self.assertIn("1 again · 1 good", out)
-            self.assertIn("1 card(s) still due", out)
+            self.assertIn("1 card(s) left for now", out)
             listing = subprocess.run(
                 [sys.executable, "-B", "-m", "syntopik", "review"],
                 cwd=tmp, env={**env, "PYTHONIOENCODING": "utf-8"},
