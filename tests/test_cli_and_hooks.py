@@ -373,6 +373,28 @@ class TestSyntaxAndCLI(unittest.TestCase):
             )
             self.assertNotIn("BrokenPipeError", piped.stderr)
 
+    def test_triage_text_output_lists_each_block_in_plain_words(self) -> None:
+        from syntopik import cli
+
+        plan = {
+            "buckets": {
+                "salvage_70pct": [{"propId": "a", "title": "Quorum overlap"}],
+                "protect_20pct": [],
+                "explicitly_cut": [{"propId": f"c{i}", "title": f"Leaf {i}"} for i in range(5)],
+            },
+            "blocks": [
+                {"order": 1, "minutes": 90, "bucket": "salvage_70pct", "goal": "Salvage high-yield gaps & traps: a", "targets": [{"propId": "a", "title": "Quorum overlap"}]},
+                {"order": 2, "minutes": 30, "bucket": "protect_20pct", "goal": "Closed-book re-test of today's salvage targets: a", "targets": [{"propId": "a", "title": "Quorum overlap"}]},
+                {"order": 3, "minutes": 15, "bucket": "anti_mastery_crib", "goal": "Compile 1-page Anti-Mastery Crib Sheet", "targets": []},
+            ],
+        }
+        text = "\n".join(cli._triage_plan_lines(plan))
+        self.assertIn(" 1.  90m  Fix: Quorum overlap", text)
+        self.assertIn(" 2.  30m  Re-test: Quorum overlap", text)
+        self.assertIn(" 3.  15m  Crib sheet: write a 1-page sheet of your traps", text)
+        self.assertIn("Skip for now, guilt-free: Leaf 0, Leaf 1, Leaf 2 (+2 more).", text)
+        self.assertEqual(cli._triage_plan_lines({"buckets": {}, "blocks": []}), [])
+
     def test_review_with_nothing_due_says_what_comes_next(self) -> None:
         import tempfile
 

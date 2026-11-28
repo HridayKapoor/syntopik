@@ -1052,6 +1052,42 @@ def _cmd_review(args: argparse.Namespace) -> int:
     return 0
 
 
+def _short(text: str, limit: int) -> str:
+    text = " ".join(str(text).split())
+    return text if len(text) <= limit else text[: max(1, limit - 1)].rstrip() + "…"
+
+
+def _triage_plan_lines(plan: dict[str, Any], max_blocks: int = 14) -> list[str]:
+    """Plain-language block-by-block plan: what to study in each block, and what to skip."""
+    buckets = plan.get("buckets") or {}
+    if not buckets.get("salvage_70pct") and not buckets.get("protect_20pct"):
+        return []
+    labels = {"salvage_70pct": "Fix", "protect_20pct": "Refresh", "anti_mastery_crib": "Crib sheet"}
+    out = ["", "Plan (one block at a time, stop when the time is up):"]
+    blocks = list(plan.get("blocks") or [])
+    for blk in blocks[:max_blocks]:
+        goal = str(blk.get("goal") or "")
+        label = labels.get(str(blk.get("bucket")), "Study")
+        if goal.startswith("Closed-book re-test"):
+            label = "Re-test"
+        titles = [_short(str(t.get("title") or t.get("propId") or ""), 48) for t in blk.get("targets") or []]
+        if titles:
+            what = "; ".join(titles[:2]) + (f" (+{len(titles) - 2} more)" if len(titles) > 2 else "")
+        elif blk.get("bucket") == "anti_mastery_crib":
+            what = "write a 1-page sheet of your traps" if goal.startswith("Compile") else "walk through your traps, then rest"
+        else:
+            what = _short(goal, 80)
+        out.append(f"  {int(blk.get('order') or 0):>2}. {int(blk.get('minutes') or 0):>3}m  {label}: {what}")
+    if len(blocks) > max_blocks:
+        out.append(f"  ... and {len(blocks) - max_blocks} more block(s).")
+    cut = list(buckets.get("explicitly_cut") or [])
+    if cut:
+        names = ", ".join(_short(str(c.get("title") or c.get("propId")), 40) for c in cut[:3])
+        more = f" (+{len(cut) - 3} more)" if len(cut) > 3 else ""
+        out.append(f"  Skip for now, guilt-free: {names}{more}.")
+    return out
+
+
 def _cmd_triage(args: argparse.Namespace) -> int:
     ws = resolve_workspace(getattr(args, "workspace", None))
     kg_dir = resolve_kg_dir(ws)
@@ -1093,6 +1129,7 @@ def _cmd_triage(args: argparse.Namespace) -> int:
         f"  Protect (20%) : {len((plan.get('buckets') or {}).get('protect_20pct', []))} node(s)",
         f"  Explicitly Cut: {len((plan.get('buckets') or {}).get('explicitly_cut', []))} node(s)",
     ]
+    lines.extend(_triage_plan_lines(plan))
     _emit(payload, bool(args.json), _with_empty_hint(lines, kg_dir))
     return 0
 
