@@ -1343,6 +1343,83 @@ def _parse_kv_overrides(pairs: list[str]) -> dict[str, Any]:
     return out
 
 
+def _int_between(lo: int, hi: int) -> Any:
+    """argparse `type=` that accepts whole numbers in [lo, hi] with a plain error otherwise."""
+
+    def _parse(raw: str) -> int:
+        try:
+            val = int(str(raw).strip())
+        except ValueError:
+            raise argparse.ArgumentTypeError(f"expected a whole number from {lo} to {hi}, got {raw!r}") from None
+        if not lo <= val <= hi:
+            raise argparse.ArgumentTypeError(f"must be from {lo} to {hi}, got {val}")
+        return val
+
+    return _parse
+
+
+def _iso_date_arg(raw: str) -> str:
+    text = str(raw).strip()
+    try:
+        datetime.fromisoformat(text[:10])
+    except ValueError:
+        raise argparse.ArgumentTypeError(f"expected a date like 2026-12-20, got {raw!r}") from None
+    return text
+
+
+CALIBRATION_QUESTIONS: list[tuple[str, str, list[tuple[str, Any]]]] = [
+    (
+        "entry_ramp",
+        "When you meet a new idea, what helps first?",
+        [("An example or picture, then the formal rule", "intuition_first"),
+         ("A bit of both", "balanced"),
+         ("The definition or formula, then examples", "formalism_first")],
+    ),
+    (
+        "challenge_appetite",
+        "How hard should practice push you?",
+        [("Gently, with plenty of hints", "guided"),
+         ("Steady, a few stretches", "balanced"),
+         ("Hard, try to trip me up", "adversarial")],
+    ),
+    (
+        "session_minutes",
+        "How long is a typical study session for you?",
+        [("About 15 minutes", 15), ("About 30 minutes", 30), ("About 45 minutes", 45), ("An hour or more", 60)],
+    ),
+    (
+        "prose_density",
+        "How much explanation per step?",
+        [("Short and to the point", "terse"), ("Normal", "standard"), ("More detail", "rich")],
+    ),
+]
+
+
+def _ask_calibration_questions() -> dict[str, Any]:
+    """Ask the 4 Tier-1 questions in the terminal. Enter keeps the middle/default answer."""
+    defaults = {"entry_ramp": "balanced", "challenge_appetite": "balanced", "session_minutes": 30, "prose_density": "standard"}
+    answers = dict(defaults)
+    print("Four quick questions so lessons fit how you like to learn. Press Enter to skip any.\n")
+    for idx, (key, question, options) in enumerate(CALIBRATION_QUESTIONS, start=1):
+        print(f"{idx}. {question}")
+        default_no = next(i for i, (_label, val) in enumerate(options, start=1) if val == defaults[key])
+        for i, (label, _val) in enumerate(options, start=1):
+            print(f"   {i}) {label}")
+        for _attempt in range(3):
+            try:
+                raw = input(f"   Your choice [{default_no}]: ").strip()
+            except EOFError:
+                raw = ""
+            if not raw:
+                break
+            if raw.isdigit() and 1 <= int(raw) <= len(options):
+                answers[key] = options[int(raw) - 1][1]
+                break
+            print(f"   Please type a number from 1 to {len(options)}, or press Enter to skip.")
+        print()
+    return answers
+
+
 def _cmd_profile(args: argparse.Namespace) -> int:
     ws = resolve_workspace(getattr(args, "workspace", None))
     kg_dir = resolve_kg_dir(ws)
@@ -1357,18 +1434,31 @@ def _cmd_profile(args: argparse.Namespace) -> int:
         return 0
 
     if action == "calibrate":
+        answers = {
+            "entry_ramp": args.entry_ramp,
+            "challenge_appetite": args.challenge_appetite,
+            "session_minutes": args.session_minutes,
+            "prose_density": args.prose_density,
+        }
+        asked = False
+        if all(v is None for v in answers.values()) and not args.json and sys.stdin.isatty() and sys.stdout.isatty():
+            answers = _ask_calibration_questions()
+            asked = True
         profile = lm.load_profile(kg_dir)
         updated = lm.apply_tier1_calibration(
             profile,
-            entry_ramp=args.entry_ramp,
-            challenge_appetite=args.challenge_appetite,
-            session_minutes=args.session_minutes if args.session_minutes is not None else 30,
-            prose_density=args.prose_density or "standard",
+            entry_ramp=answers["entry_ramp"] or "balanced",
+            challenge_appetite=answers["challenge_appetite"] or "balanced",
+            session_minutes=answers["session_minutes"] if answers["session_minutes"] is not None else 30,
+            prose_density=answers["prose_density"] or "standard",
         )
         lm.save_profile(kg_dir, updated)
         policy_lines = lm.format_compact_policy_lines(updated, domain=args.domain)
         payload = {"ok": True, "action": "calibrate", "workspace": str(ws), "profile": updated, "policyLines": policy_lines}
-        _emit(payload, bool(args.json), ["Learner profile calibrated:", *[f"  {ln}" for ln in policy_lines]])
+        lines = ["Learner profile calibrated:", *[f"  {ln}" for ln in policy_lines]]
+        if not asked and all(v is None for v in (args.entry_ramp, args.challenge_appetite, args.session_minutes, args.prose_density)):
+            lines.append("  Saved with the default answers. Run this in a terminal to answer 4 quick questions instead.")
+        _emit(payload, bool(args.json), lines)
         return 0
 
     if action == "policy":
@@ -2374,8 +2464,8 @@ def build_parser() -> argparse.ArgumentParser:
     p_rev.add_argument("--web", action="store_true", help="Launch live Studio in browser")
     p_rev.add_argument("--tui", action="store_true", help="Interactive terminal flashcard loop")
     p_rev.add_argument("--recover", action="store_true", help="Calm backlog recovery plan (smooth overdue tail)")
-    p_rev.add_argument("--daily-cap", type=int, default=15, help="Max reviews/day during --recover (default: 15)")
-    p_rev.add_argument("--days", type=int, default=6, help="Recovery window in days during --recover (default: 6)")
+    p_rev.add_argument("--daily-cap", type=_int_between(1, 500), default=15, help="Max reviews/day during --recover (default: 15)")
+    p_rev.add_argument("--days", type=_int_between(1, 90), default=6, help="Recovery window in days during --recover (default: 6)")
     p_rev.add_argument("--apply", action="store_true", help="Persist smoothed schedule when using --recover")
     p_rev.add_argument("--resume", action="store_true", help="Zero-guilt Cold-Start Re-Entry Brief")
     p_rev.add_argument("--energy", choices=["low", "normal", "deep"], default=None, help="Cognitive energy mode")
@@ -2452,8 +2542,8 @@ def build_parser() -> argparse.ArgumentParser:
     p_prof.add_argument("action", nargs="?", choices=["status", "calibrate", "policy", "override", "reset"], default="status")
     p_prof.add_argument("--domain", default=None, help="Optional domain scope")
     p_prof.add_argument("--energy", choices=["low", "normal", "deep"], default=None, help="Cognitive energy override")
-    p_prof.add_argument("--entry-ramp", dest="entry_ramp", default="balanced", help="Calibration entry ramp preference")
-    p_prof.add_argument("--challenge-appetite", dest="challenge_appetite", default="balanced", help="Challenge appetite preference")
+    p_prof.add_argument("--entry-ramp", dest="entry_ramp", default=None, choices=["intuition_first", "balanced", "formalism_first"], help="Calibration entry ramp preference")
+    p_prof.add_argument("--challenge-appetite", dest="challenge_appetite", default=None, choices=["guided", "balanced", "adversarial"], help="Challenge appetite preference")
     p_prof.add_argument("--session-minutes", dest="session_minutes", type=int, default=None, help="Target session length in minutes")
     p_prof.add_argument("--prose-density", dest="prose_density", choices=["terse", "standard", "rich"], default=None)
     p_prof.add_argument("--set", dest="set_kv", action="append", default=[], help="Override KEY=VALUE (repeatable)")
@@ -2506,7 +2596,7 @@ def build_parser() -> argparse.ArgumentParser:
     p_pace.add_argument("--date", default=None, help="Exam date for --add-exam (YYYY-MM-DD)")
     p_pace.add_argument("--chapter", default=None, help="Optional chapter slug the exam covers (with --add-exam)")
     p_pace.add_argument("--remove-exam", dest="remove_exam", default=None, metavar="NAME", help="Remove an exam by name")
-    p_pace.add_argument("--minutes", type=int, default=None, help="Set daily study time in minutes (15-720)")
+    p_pace.add_argument("--minutes", type=_int_between(15, 720), default=None, help="Set daily study time in minutes (15-720)")
     p_pace.add_argument("--workspace", default=None, help="Syntopik workspace directory")
     p_pace.add_argument("--json", action="store_true", help="Emit JSON output")
     p_pace.set_defaults(func=_cmd_pace)
@@ -2582,7 +2672,7 @@ def build_parser() -> argparse.ArgumentParser:
     # --- v3.2 First-Class Verbs ---
 
     p_rdy = sub.add_parser("readiness", help="Exam-Day Readiness Forecaster, <=72h Pre-Exam Taper Mode & Pre-Mortem Shield")
-    p_rdy.add_argument("--exam-date", dest="exam_date", default=None, help="Target exam date (YYYY-MM-DD)")
+    p_rdy.add_argument("--exam-date", dest="exam_date", default=None, type=_iso_date_arg, help="Target exam date (YYYY-MM-DD)")
     p_rdy.add_argument("--subject", default=None, help="Optional subject filter")
     p_rdy.add_argument("--max-marks", dest="max_marks", type=float, default=None, help="Optional exam maximum marks")
     p_rdy.add_argument("--premortem-only", dest="premortem_only", action="store_true", help="Emit only the evidence-backed Pre-Mortem Shield bullets")
@@ -2591,7 +2681,7 @@ def build_parser() -> argparse.ArgumentParser:
     p_rdy.set_defaults(func=_cmd_readiness)
 
     p_rep = sub.add_parser("report", help="Weekly progress report: reviews, streak, true retention, mastery, due load and focus")
-    p_rep.add_argument("--days", type=int, default=7, help="Window length in days, compared with the window before (default: 7)")
+    p_rep.add_argument("--days", type=_int_between(1, 365), default=7, help="Window length in days, compared with the window before (default: 7)")
     p_rep.add_argument("--md", default=None, help="Also write the report as Markdown to this path")
     p_rep.add_argument("--workspace", default=None, help="Syntopik workspace directory")
     p_rep.add_argument("--json", action="store_true", help="Emit JSON output")
@@ -2659,7 +2749,20 @@ def main(argv: list[str] | None = None) -> int:
             print("Run 'syntopik' on its own for a short guide, or 'syntopik --help' for every command.", file=sys.stderr)
             return 2
     args = parser.parse_args(raw)
-    return int(args.func(args))
+    try:
+        return int(args.func(args))
+    except KeyboardInterrupt:
+        print("\nStopped.", file=sys.stderr)
+        return 130
+    except (ValueError, FileNotFoundError, PermissionError, TimeoutError) as exc:
+        # Bad input or a missing/locked file: a plain one-line message, not a traceback.
+        if os.environ.get("SYNTOPIK_DEBUG", "").strip() in ("1", "true", "yes"):
+            raise
+        cmd = getattr(args, "command", None) or (first if not first.startswith("-") else "")
+        prefix = f"syntopik {cmd}" if cmd else "syntopik"
+        print(f"{prefix}: {exc}", file=sys.stderr)
+        print("(Set SYNTOPIK_DEBUG=1 to see the full error.)", file=sys.stderr)
+        return 1
 
 
 if __name__ == "__main__":

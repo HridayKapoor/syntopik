@@ -1721,7 +1721,7 @@ def format_compact_policy_lines(profile: dict[str, Any], domain: str | None = No
     meta = prof.get("metacognition") or {}
     brier = meta.get("brierScore")
     cal_lbl = str(meta.get("label") or "uncalibrated")
-    brier_part = f"Brier {brier:.2f} ({cal_lbl})" if isinstance(brier, (int, float)) else f"Cal:{cal_lbl}"
+    brier_part = f"Brier {brier:.2f} ({cal_lbl})" if isinstance(brier, (int, float)) else ("Confidence:not yet measured" if cal_lbl == "uncalibrated" else f"Confidence:{cal_lbl}")
 
     dna = prof.get("failureDna") or {}
     dom_tier = dna.get("dominantTier")
